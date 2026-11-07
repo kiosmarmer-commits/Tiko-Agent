@@ -339,7 +339,7 @@ class _ChatPage extends StatelessWidget {
                         border: Border.all(color: _border),
                       ),
                       child: SelectableText(
-                        '${m['text'] ?? ''}',
+                        (m['text'] ?? '').toString(),
                         style: const TextStyle(height: 1.4),
                       ),
                     ),
