@@ -181,8 +181,7 @@ class ContextExpander {
     var out = (result.stdout as String).trim();
     final allLines = out.split('\n');
     if (allLines.length > maxGitLines) {
-      out = allLines.take(maxGitLines).join('\n') +
-          '\n… (truncated at $maxGitLines lines)';
+      out = '${allLines.take(maxGitLines).join('\n')}\n… (truncated at $maxGitLines lines)';
     }
     if (out.isEmpty) out = '(no output)';
     return _envelope('git:$mode', workspaceRoot, out);
@@ -228,7 +227,7 @@ class ContextExpander {
         builder.add(chunk);
         if (builder.length > maxUrlBytes) break;
       }
-      var truncated = builder.length > maxUrlBytes;
+      final truncated = builder.length > maxUrlBytes;
       final bytes = builder.takeBytes();
       var body = utf8.decode(bytes, allowMalformed: true);
       if (truncated) body += '\n… (truncated at $maxUrlBytes bytes)';
@@ -286,7 +285,7 @@ class ContextExpander {
     // Canonicalize the deepest existing ancestor so symlinks cannot smuggle
     // a target outside the workspace.
     var probe = absolute;
-    var tail = <String>[];
+    final tail = <String>[];
     while (!File(probe).existsSync() && !Directory(probe).existsSync()) {
       final parent = _parentOf(probe);
       if (parent == probe || parent.isEmpty) {
@@ -323,7 +322,7 @@ class ContextExpander {
   }
 
   String _normalize(String p) {
-    var path = p.replaceAll('\\', '/');
+    final path = p.replaceAll('\\', '/');
     final isAbs = path.startsWith('/');
     final out = <String>[];
     for (final seg in path.split('/')) {

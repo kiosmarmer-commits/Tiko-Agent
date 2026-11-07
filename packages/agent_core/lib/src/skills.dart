@@ -149,7 +149,9 @@ class SkillRegistry {
         if (realDir != root && !p.isWithin(root, realDir)) continue;
         final skillFile = File(p.join(realDir, 'SKILL.md'));
         if (FileSystemEntity.typeSync(skillFile.path, followLinks: false) !=
-            FileSystemEntityType.file) continue;
+            FileSystemEntityType.file) {
+          continue;
+        }
         final realFile = await skillFile.resolveSymbolicLinks();
         if (!p.isWithin(realDir, realFile)) continue;
         final info = await skillFile.stat();

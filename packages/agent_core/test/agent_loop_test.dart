@@ -97,7 +97,7 @@ void main() {
       config: const AgentConfig(maxIterations: 2),
     );
     await loop.handle(
-      InboundMessage(channel: 'cli', userKey: 'u', sessionKey: 's', text: 'halo'),
+      const InboundMessage(channel: 'cli', userKey: 'u', sessionKey: 's', text: 'halo'),
       session,
     );
     expect(replies.single, contains('Provider gagal'));
@@ -129,7 +129,7 @@ void main() {
       skillRegistry: registry,
     );
     await loop.handle(
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli', userKey: 'user1', sessionKey: 'cli:user1', text: 'waktu sekarang',
       ),
       session,

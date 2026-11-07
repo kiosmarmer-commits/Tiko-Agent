@@ -96,7 +96,7 @@ class FileSessionStore implements SessionStore {
     final next = previous.then((_) async {
       final target = File(path);
       await target.parent.create(recursive: true);
-      final nonce = '${pid}-${DateTime.now().microsecondsSinceEpoch}';
+      final nonce = '$pid-${DateTime.now().microsecondsSinceEpoch}';
       final tmp = File('$path.$nonce.tmp');
       await tmp.writeAsString(snapshot, flush: true);
       await tmp.rename(path);

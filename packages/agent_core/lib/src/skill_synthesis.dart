@@ -87,7 +87,7 @@ class SkillSynthesis {
       final prompt = _reflectionPrompt(goal, outcome, tools);
       final req = ChatRequest(
         messages: [
-          ChatMessage(role: 'system', content: _reflectionSystem),
+          const ChatMessage(role: 'system', content: _reflectionSystem),
           ChatMessage(role: 'user', content: prompt),
         ],
         stream: false,
@@ -170,7 +170,7 @@ class SkillSynthesis {
     String outcome,
     List<String> tools,
   ) {
-    final enc = JsonEncoder.withIndent('  ');
+    const enc = JsonEncoder.withIndent('  ');
     return 'Tugas yang berhasil: ${enc.convert(goal)}\n'
         'Hasil akhir: ${enc.convert(outcome.isEmpty ? '(selesai)' : outcome)}\n'
         'Tool yang dipakai berurutan: ${enc.convert(tools)}\n\n'
