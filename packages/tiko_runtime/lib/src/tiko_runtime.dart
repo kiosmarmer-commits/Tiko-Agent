@@ -224,6 +224,11 @@ class TikoRuntime {
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
     rt.offlineQueue = OfflineQueue(p.join(dataDir, 'offline'));
+    // ALG-04: the subagent tool only works with a runner that executes
+    // a nested runtime turn; a bare tool would just emit SUBAGENT_REQUEST.
+    if (rt.registry.get('spawn_subagent') == null) {
+      rt.registry.register(SpawnSubagentTool(runner: rt._runSubagent));
+    }
     final snap = ResourceMonitor.capture(dataDir: dataDir);
     rt.lastResources = snap;
     rt.resourceProfile = snap.profile;
@@ -541,6 +546,34 @@ class TikoRuntime {
     }
   }
 
+  /// Runs one nested subagent turn (ALG-04). The child gets its own
+  /// session - and therefore its own budget and lock - while inheriting
+  /// the parent's channel and user key; the depth marker keeps nested
+  /// spawn_subagent calls within the tool's max nesting depth.
+  Future<String> _runSubagent({
+    required String goal,
+    required String context,
+    required Session parent,
+    required int depth,
+  }) async {
+    if (_closed) throw StateError('runtime is closed');
+    final sessionId =
+        '${parent.id}/sub/$depth/${DateTime.now().microsecondsSinceEpoch}';
+    final child = await sessions.getOrCreate(
+      sessionId,
+      channel: parent.channel,
+      userKey: parent.userKey,
+    );
+    SpawnSubagentTool.setDepth(child, depth);
+    final prompt = context.isEmpty ? goal : '$goal\n\nKonteks: $context';
+    final outcome = await chatWithStatus(
+      prompt,
+      sessionId: sessionId,
+      channel: parent.channel,
+      userKey: parent.userKey,
+    );
+    return outcome.success ? outcome.text : 'Subagent gagal: ${outcome.text}';
+  }
   /// Start configured MCP child processes after the daemon owns its instance
   /// lock. Creating a runtime/CLI client never launches extension processes.
   Future<int> startMcp() async {
