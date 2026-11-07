@@ -1,0 +1,28 @@
+/// Agent core library — pure Dart, no Flutter dependency.
+library;
+
+export 'src/interfaces.dart';
+export 'src/models.dart';
+export 'src/agent_loop.dart';
+export 'src/context_builder.dart';
+export 'src/compactor.dart';
+export 'src/router.dart';
+export 'src/loop_detector.dart';
+export 'src/budget_guard.dart';
+export 'src/skills.dart';
+export 'src/feedback.dart';
+export 'src/golden.dart';
+export 'src/config.dart';
+export 'src/metrics.dart';
+export 'src/plan_execute.dart';
+export 'src/orchestrator.dart';
+export 'src/trajectory.dart';
+export 'src/self_consistency.dart';
+export 'src/parallel_tools.dart';
+export 'src/trace.dart';
+export 'src/session_lock.dart';
+export 'src/isolate_pool.dart';
+export 'src/skill_scanner.dart';
+export 'src/skill_gate.dart';
+export 'src/context_expander.dart';
+export 'src/skill_synthesis.dart';
