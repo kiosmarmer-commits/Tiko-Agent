@@ -451,11 +451,11 @@ class TikoConfig {
             }
           }
         }
-        if (argsValue != null && (argsValue is! YamlList || argsValue.length > 32 || argsValue.any((v) => v is! String || (v as String).length > 2048))) {
+        if (argsValue != null && (argsValue is! YamlList || argsValue.length > 32 || argsValue.any((v) => v is! String || v.length > 2048))) {
           issues.add(ConfigIssue('$path.args', 'args harus berupa daftar string (maksimal 32)'));
           valid = false;
         }
-        if (allowValue is! YamlList || allowValue.isEmpty || allowValue.length > 128 || allowValue.any((v) => v is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$').hasMatch(v as String))) {
+        if (allowValue is! YamlList || allowValue.isEmpty || allowValue.length > 128 || allowValue.any((v) => v is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$').hasMatch(v))) {
           issues.add(ConfigIssue('$path.allow', 'allow wajib berupa allowlist nama tool yang tidak kosong'));
           valid = false;
         }

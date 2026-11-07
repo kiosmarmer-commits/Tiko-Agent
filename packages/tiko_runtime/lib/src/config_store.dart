@@ -50,7 +50,7 @@ class ConfigStore {
     if (root is! Map) {
       return (revision: 0, issues: [ConfigIssue('config', 'root bukan map')]);
     }
-    final map = Map<String, dynamic>.from(root as Map);
+    final map = Map<String, dynamic>.from(root);
     _setNested(map, dottedPath.split('.'), _parseValue(value));
     return _commit(map, actor: actor, note: 'set $dottedPath');
   }
@@ -65,7 +65,7 @@ class ConfigStore {
     if (root is! Map) {
       return (revision: 0, issues: [ConfigIssue('config', 'invalid yaml')]);
     }
-    return _commit(Map<String, dynamic>.from(root as Map), actor: actor, note: note);
+    return _commit(Map<String, dynamic>.from(root), actor: actor, note: note);
   }
 
   Future<({int revision, List<ConfigIssue> issues})> _commit(

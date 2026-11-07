@@ -24,7 +24,7 @@ void main() {
       provenance: Provenance.web,
       importance: 0.9,
     ));
-    final hits = await safe.search('Ignore');
+    await safe.search('Ignore');
     // text may be stripped; fact stored with pending/low importance
     expect(inner.facts['2']?.importance ?? 1, lessThan(0.5));
   });
@@ -49,10 +49,8 @@ void main() {
     expect(hits.single.provenance, Provenance.user);
     expect(hits.single.confidence, 0.95);
   });
-}
 
-
-test('legacy active facts without trusted provenance are excluded', () async {
+  test('legacy active facts without trusted provenance are excluded', () async {
   final inner = InMemoryStore();
   final safe = SafeMemoryStore(inner);
   await inner.upsertFact(const Fact(
@@ -132,3 +130,4 @@ test('TTL-bound facts expire during retrieval', () async {
     'temporary project preference', ownerKey: 'alice');
   expect(hits, isEmpty);
 });
+}

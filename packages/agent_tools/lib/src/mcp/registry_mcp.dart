@@ -53,7 +53,7 @@ class McpToolLoader {
         continue;
       }
       if (rawAllow is! List || rawAllow.isEmpty || rawAllow.length > 128 ||
-          rawAllow.any((v) => v is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$').hasMatch(v as String))) {
+          rawAllow.any((v) => v is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$').hasMatch(v))) {
         _statuses.add({'id': id, 'status': 'disabled', 'detail': 'explicit non-empty allowlist required'});
         continue;
       }
@@ -118,7 +118,7 @@ class McpToolLoader {
       _statuses.add({'id': id, 'status': 'invalid', 'detail': 'command invalid'});
       return null;
     }
-    if (rawArgs is! List || rawArgs.length > 32 || rawArgs.any((v) => v is! String || (v as String).length > 2048 || (v as String).contains('\u0000'))) {
+    if (rawArgs is! List || rawArgs.length > 32 || rawArgs.any((v) => v is! String || v.length > 2048 || v.contains('\u0000'))) {
       _statuses.add({'id': id, 'status': 'invalid', 'detail': 'args invalid'});
       return null;
     }

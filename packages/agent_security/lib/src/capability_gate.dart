@@ -1,7 +1,5 @@
 import 'package:agent_core/agent_core.dart';
 
-import 'permission_gate.dart';
-
 /// Capability check after matrix gate (PRD §12).
 ///
 /// High-impact tools require a short-lived capability id in
