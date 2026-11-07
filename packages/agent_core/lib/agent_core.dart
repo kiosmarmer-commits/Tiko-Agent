@@ -3,6 +3,7 @@ library;
 
 export 'src/interfaces.dart';
 export 'src/models.dart';
+export 'src/memory_reranker.dart';
 export 'src/agent_loop.dart';
 export 'src/context_builder.dart';
 export 'src/compactor.dart';

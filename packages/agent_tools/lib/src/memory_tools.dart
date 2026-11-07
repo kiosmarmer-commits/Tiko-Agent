@@ -1,8 +1,10 @@
 import 'package:agent_core/agent_core.dart';
 
 class MemorySearchTool implements Tool {
-  MemorySearchTool(this.store);
+  MemorySearchTool(this.store, {this.reranker = const MemoryReranker()});
+
   final MemoryStore store;
+  final MemoryReranker reranker;
 
   @override
   ToolSpec get spec => const ToolSpec(
@@ -30,6 +32,8 @@ class MemorySearchTool implements Tool {
       );
     }
     final k = (args['k'] as num?)?.toInt() ?? 6;
+    // Overfetch candidates so reranking can reorder before pruning.
+    final fetchK = _overfetchK(k);
     final ownerKey = ctx.session.userKey.trim();
     final List<MemoryHit> hits;
     if (store is OwnerScopedMemoryStore) {
@@ -38,15 +42,16 @@ class MemorySearchTool implements Tool {
       hits = ownerKey.isEmpty
           ? const <MemoryHit>[]
           : await (store as OwnerScopedMemoryStore).searchForOwner(
-              q, ownerKey: ownerKey, k: k);
+              q, ownerKey: ownerKey, k: fetchK);
     } else {
       // Plain stores are trusted to already scope their search results.
-      hits = await store.search(q, k: k);
+      hits = await store.search(q, k: fetchK);
     }
     if (hits.isEmpty) {
       return const ToolResult(callId: '', content: '(tidak ada hasil memori)');
     }
-    final lines = hits
+    final ranked = reranker.rerank(q, hits, topK: k);
+    final lines = ranked
         .map((h) => '- [${h.score.toStringAsFixed(2)}; ${h.provenance.name}] ${h.text}')
         .join('\n');
     // Search results are evidence, not instructions. Neutralize any attempt
@@ -58,6 +63,14 @@ class MemorySearchTool implements Tool {
       callId: '',
       content: '<untrusted_data source="memory-search">\n$safeLines\n</untrusted_data>',
     );
+  }
+
+  /// Retrieves extra candidates so reranking can reorder results.
+  int _overfetchK(int k) {
+    final expanded = k * 4;
+    if (expanded > 64) return 64;
+    if (expanded < 1) return 1;
+    return expanded;
   }
 }
 
