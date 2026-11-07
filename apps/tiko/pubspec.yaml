@@ -1,0 +1,20 @@
+name: tiko
+description: Pasitiko (Tiko) - single entry point CLI for the local-first agent.
+version: 0.2.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  agent_core:
+    path: ../../packages/agent_core
+  agent_tools:
+    path: ../../packages/agent_tools
+  tiko_runtime:
+    path: ../../packages/tiko_runtime
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

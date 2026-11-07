@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Agent</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="brand">
+        <span class="dot"></span>
+        <strong>Agent</strong>
+        <span id="statusPill" class="pill offline">offline</span>
+      </div>
+      <nav class="tabs">
+        <button type="button" data-tab="chat" class="active">Chat</button>
+        <button type="button" data-tab="memory">Memori</button>
+        <button type="button" data-tab="status">Status</button>
+        <button type="button" data-tab="help">Bantuan</button>
+        <button type="button" data-tab="approvals">Approvals</button>
+  <button type="button" data-tab="sessions">Sessions</button>
+</nav>
+    </header>
+
+    <main>
+      <!-- CHAT -->
+      <section id="tab-chat" class="tab active">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div id="confirmBox" class="confirm hidden">
+          <p id="confirmText"></p>
+          <div class="row">
+            <button type="button" id="confirmYes" class="primary">Izinkan</button>
+            <button type="button" id="confirmNo">Tolak</button>
+          </div>
+        </div>
+        <form id="chatForm" class="composer">
+          <input id="input" type="text" placeholder="Tulis pesan… (contoh: hitung 12*8)" autocomplete="off" />
+          <button type="submit" id="sendBtn" class="primary" title="Kirim">Kirim</button>
+        </form>
+        <p class="hint">Tips: <code>rencanakan …</code> · <code>/plan …</code> · tanya waktu, hitung, cari file</p>
+      </section>
+
+      <!-- MEMORY -->
+      <section id="tab-memory" class="tab">
+        <div class="toolbar">
+          <button type="button" id="refreshMem" class="primary">Muat ulang</button>
+        </div>
+        <ul id="memList" class="list"></ul>
+        <p class="hint">Fakta disimpan lewat percakapan atau tool memory_add.</p>
+      </section>
+
+      <!-- STATUS -->
+      <section id="tab-status" class="tab">
+        <div class="toolbar">
+          <button type="button" id="refreshStatus" class="primary">Muat ulang</button>
+        </div>
+        <pre id="statusBox" class="code">Memuat…</pre>
+      </section>
+
+      <!-- HELP -->
+      <section id="tab-help" class="tab">
+        <div class="card">
+          <h2>Mulai cepat</h2>
+          <ol>
+            <li>Pastikan daemon jalan dengan <code>--api</code>.</li>
+            <li>Token tidak dicetak ke log. Daemon menyimpannya di <code>data/api.token</code> (permission POSIX 0600); masukkan token dari file itu pada Setelan hanya di perangkat tepercaya.</li>
+            <li>Ketik pertanyaan di Chat seperti biasa.</li>
+          </ol>
+          <h2>Contoh perintah</h2>
+          <ul>
+            <li><code>Jam berapa sekarang?</code></li>
+            <li><code>Hitung (15+5)*2</code></li>
+            <li><code>Baca file README.md</code></li>
+            <li><code>rencanakan ringkas isi proyek ini</code></li>
+          </ul>
+          <h2>Keamanan</h2>
+          <p>Tool berisiko (shell, tulis file) meminta konfirmasi. Mode aman membatasi tool.</p>
+        </div>
+        <div class="card">
+          <h2>Setelan koneksi</h2>
+          <label>API base
+            <input id="cfgBase" type="text" value="" />
+          </label>
+          <label>Token
+            <input id="cfgToken" type="password" value="" />
+          </label>
+          <button type="button" id="saveCfg" class="primary">Simpan</button>
+        </div>
+      </section>
+    
+<section id="tab-approvals" class="tab" hidden>
+  <h2>Approvals</h2>
+  <button id="btn-refresh-approvals">Refresh</button>
+  <ul id="approval-list"></ul>
+</section>
+<section id="tab-sessions" class="tab" hidden>
+  <h2>Sessions</h2>
+  <button id="btn-refresh-sessions">Refresh</button>
+  <ul id="session-list"></ul>
+</section>
+</main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
