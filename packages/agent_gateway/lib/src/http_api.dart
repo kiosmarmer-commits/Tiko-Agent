@@ -50,6 +50,10 @@ class HttpApiServer {
   int get boundPort => _server?.port ?? port;
   final _wsClients = <WebSocket>{};
 
+  /// Bounded idempotency cache for POST /v1/messages.
+  static const _idempotencyLimit = 256;
+  final _idempotencyCache = <String, Future<Map<String, dynamic>>>{};
+
 
   Future<void> start() async {
     _server = await HttpServer.bind(host, port);
@@ -84,11 +88,32 @@ class HttpApiServer {
     return q == authToken;
   }
 
+  /// Executes [run] once per [key]; duplicate requests replay the stored
+  /// response instead of re-running side effects. Failed runs are evicted
+  /// so a retry gets a fresh chance.
+  Future<Map<String, dynamic>> _runIdempotent(
+    String key,
+    Future<Map<String, dynamic>> Function() run,
+  ) {
+    final inFlight = _idempotencyCache[key];
+    if (inFlight != null) return inFlight;
+    final started = run();
+    _idempotencyCache[key] = started;
+    while (_idempotencyCache.length > _idempotencyLimit) {
+      _idempotencyCache.remove(_idempotencyCache.keys.first);
+    }
+    unawaited(started.catchError((Object _) {
+      _idempotencyCache.remove(key);
+      return <String, dynamic>{};
+    }));
+    return started;
+  }
+
   Future<void> _handle(HttpRequest req) async {
     req.response.headers.set('Access-Control-Allow-Origin', '*');
     req.response.headers.set(
       'Access-Control-Allow-Headers',
-      'Authorization, Content-Type',
+      'Authorization, Content-Type, Idempotency-Key',
     );
     if (req.method == 'OPTIONS') {
       req.response.statusCode = 204;
@@ -189,15 +214,39 @@ class HttpApiServer {
         final text = body['text'] as String? ?? '';
         final sessionKey = body['session_key'] as String? ?? 'http:default';
         final userKey = body['user_key'] as String? ?? 'http';
-        final answer = await onMessage(
-          InboundMessage(
-            channel: 'http',
-            userKey: userKey,
-            sessionKey: sessionKey,
-            text: text,
-          ),
-        );
-        _json(req, {'text': answer});
+        final idempotencyKey = req.headers.value('idempotency-key') ?? '';
+        if (idempotencyKey.trim().isEmpty) {
+          final answer = await onMessage(
+            InboundMessage(
+              channel: 'http',
+              userKey: userKey,
+              sessionKey: sessionKey,
+              text: text,
+            ),
+          );
+          _json(req, {'text': answer});
+        } else {
+          final replayed = _idempotencyCache.containsKey(idempotencyKey);
+          final result = await _runIdempotent(idempotencyKey, () async {
+            final answer = await onMessage(
+              InboundMessage(
+                channel: 'http',
+                userKey: userKey,
+                sessionKey: sessionKey,
+                text: text,
+              ),
+            );
+            return {'text': answer};
+          });
+          if (replayed) {
+            req.response.headers.set('Idempotency-Replayed', 'true');
+          }
+          final payload = Map<String, dynamic>.from(result);
+          if (replayed) {
+            payload['idempotent_replay'] = true;
+          }
+          _json(req, payload);
+        }
       } else if (path == '/v1/shutdown' && req.method == 'POST') {
         if (onShutdown == null) {
           req.response.statusCode = 409;
