@@ -24,6 +24,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          set +e
           fail=0
           ef="$(mktemp)"; wf="$(mktemp)"; nf="$(mktemp)"
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
@@ -43,18 +44,20 @@ jobs:
               done <<< "$out"
             fi
           done
-          echo "errors: $(wc -l < "$ef") warnings: $(wc -l < "$wf") infos: $(wc -l < "$nf")"
+          ne="$(wc -l < "$ef")"; nw="$(wc -l < "$wf")"; ni="$(wc -l < "$nf")"
+          echo "analyze done: errors=$ne warnings=$nw infos=$ni"
           head -40 "$ef"
           head -20 "$wf"
           head -20 "$nf"
           if [[ $fail -ne 0 ]]; then
-            echo "::error::Static analysis gagal: errors=$(wc -l < "$ef") warnings=$(wc -l < "$wf") infos=$(wc -l < "$nf") — detail di anotasi per baris"
+            echo "::error::Static analysis gagal: errors=$ne warnings=$nw infos=$ni (detail per baris di anotasi)"
             exit 1
           fi
       - name: Test every Dart workspace member
         shell: bash
         run: |
           set -uo pipefail
+          set +e
           fail=0
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
             if [[ -d "$dir/test" ]]; then
