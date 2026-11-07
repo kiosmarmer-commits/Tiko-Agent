@@ -82,16 +82,59 @@ jobs:
           set -uo pipefail
           set +e
           fail=0
+          tf="$(mktemp)"
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
             if [[ -d "$dir/test" ]]; then
               echo "== dart test: $dir =="
-              if ! (cd "$dir" && dart test --reporter expanded); then
+              out="$(mktemp)"
+              (cd "$dir" && dart test --reporter json) > "$out" 2>&1
+              rc=$?
+              if [[ $rc -ne 0 ]]; then
                 fail=1
-                echo "::error file=$dir::dart test gagal di $dir"
+                echo "::error file=$dir::dart test gagal di $dir (exit $rc)"
+                python3 - "$out" "$dir" >> "$tf" <<'PYEOF'
+          import json, sys
+          path, pkg = sys.argv[1], sys.argv[2]
+          names = {}
+          for raw in open(path, errors='replace'):
+              line = raw.strip()
+              if not line.startswith('{'):
+                  continue
+              try:
+                  ev = json.loads(line)
+              except Exception:
+                  continue
+              et = ev.get('type')
+              if et == 'testStart':
+                  names[ev.get('test', {}).get('id')] = ev.get('test', {}).get('name', '')
+              elif et == 'error':
+                  tid = ev.get('testID')
+                  name = names.get(tid) or '(suite)'
+                  err = (ev.get('error') or '').strip().splitlines()
+                  msg = err[0] if err else 'unknown error'
+                  print((pkg + ' | ' + name[:120] + ' | ' + msg[:170]).replace('%', ''))
+          PYEOF
               fi
+              rm -f "$out"
             fi
           done
+          if [[ -s "$tf" ]]; then cp "$tf" .ci-testfailures.txt; fi
           exit $fail
+      - name: Surface test failures 1-10
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '1,10p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: Surface test failures 11-20
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '11,20p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: Surface test failures 21-30
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '21,30p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
       - name: CLI deterministic command and chat smoke
         run: |
           set -euo pipefail
