@@ -91,7 +91,7 @@ class WebhookEndpoint {
         channel: 'whatsapp',
         userKey: 'wa:${m['from']}',
         sessionKey: 'wa:${m['from']}',
-        text: m['text'],
+        text: m['text'] ?? '',
       ));
       accepted++;
     }
@@ -135,7 +135,7 @@ class WebhookEndpoint {
         channel: 'slack',
         userKey: 'slack:${msg['userId']}',
         sessionKey: 'slack:${msg['channelId']}',
-        text: msg['text'],
+        text: msg['text'] ?? '',
       ));
     }
     _json(req, {'ok': true});

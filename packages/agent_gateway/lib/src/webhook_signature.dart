@@ -44,17 +44,14 @@ abstract final class WebhookSignature {
   static bool _constantTimeEquals(String expected, String actual) {
     final left = utf8.encode(expected);
     final right = utf8.encode(actual);
-    if (left.length != right.length) {
-      // Burn one pass over the expected bytes so the timing stays flat.
-      var sink = 0;
-      for (final byte in left) {
-        sink |= byte;
-      }
-      return false;
-    }
-    var diff = 0;
-    for (var i = 0; i < left.length; i++) {
-      diff |= left[i] ^ right[i];
+    // Compare over the longer input and pad the shorter with zeros so
+    // neither the loop count nor an early return leaks the mismatch.
+    var diff = left.length ^ right.length;
+    final longest = left.length >= right.length ? left : right;
+    final shortest = left.length >= right.length ? right : left;
+    for (var i = 0; i < longest.length; i++) {
+      final other = i < shortest.length ? shortest[i] : 0;
+      diff |= longest[i] ^ other;
     }
     return diff == 0;
   }

@@ -6,13 +6,19 @@ import 'package:agent_gateway/agent_gateway.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
-String metaSig(String secret, String body) => 'sha256=' +
-    Hmac(sha256, utf8.encode(secret)).convert(utf8.encode(body)).toString();
+String metaSig(String secret, String body) {
+  final digest = Hmac(sha256, utf8.encode(secret))
+      .convert(utf8.encode(body))
+      .toString();
+  return 'sha256=$digest';
+}
 
-String slackSig(String secret, String ts, String body) => 'v0=' +
-    Hmac(sha256, utf8.encode(secret))
-        .convert(utf8.encode('v0:$ts:$body'))
-        .toString();
+String slackSig(String secret, String ts, String body) {
+  final digest = Hmac(sha256, utf8.encode(secret))
+      .convert(utf8.encode('v0:$ts:$body'))
+      .toString();
+  return 'v0=$digest';
+}
 
 void main() {
   late HttpApiServer server;
