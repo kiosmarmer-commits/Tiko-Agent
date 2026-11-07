@@ -1,0 +1,17 @@
+name: agent_scheduler
+description: Job scheduler tick loop + cron + schedule_job tools.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  agent_core:
+    path: ../agent_core
+  uuid: ^4.5.1
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
