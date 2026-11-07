@@ -23,21 +23,49 @@ jobs:
       - name: Static analysis (strict release gate)
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          fail=0
+          ef="$(mktemp)"; wf="$(mktemp)"; nf="$(mktemp)"
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+            [[ -d "$dir" ]] || continue
             echo "== analyze: $dir =="
-            (cd "$dir" && dart analyze --fatal-infos --fatal-warnings)
+            out="$( cd "$dir" && dart analyze --fatal-infos --fatal-warnings --format=machine 2>&1 )"
+            rc=$?
+            if [[ $rc -ne 0 ]]; then
+              fail=1
+              while IFS='|' read -r sev typ code file line col len msg; do
+                rel="$(printf '%s' "$file" | sed -e 's|^file://||' -e 's|.*/Tiko-Agent/||')"
+                case "$sev" in
+                  ERROR)   echo "::error file=$rel,line=$line,col=$col::$code: $msg" >> "$ef" ;;
+                  WARNING) echo "::warning file=$rel,line=$line,col=$col::$code: $msg" >> "$wf" ;;
+                  INFO)    echo "::notice file=$rel,line=$line,col=$col::$code: $msg" >> "$nf" ;;
+                esac
+              done <<< "$out"
+            fi
           done
+          echo "errors: $(wc -l < "$ef") warnings: $(wc -l < "$wf") infos: $(wc -l < "$nf")"
+          head -40 "$ef"
+          head -20 "$wf"
+          head -20 "$nf"
+          if [[ $fail -ne 0 ]]; then
+            echo "::error::Static analysis gagal: errors=$(wc -l < "$ef") warnings=$(wc -l < "$wf") infos=$(wc -l < "$nf") — detail di anotasi per baris"
+            exit 1
+          fi
       - name: Test every Dart workspace member
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          fail=0
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
             if [[ -d "$dir/test" ]]; then
               echo "== dart test: $dir =="
-              (cd "$dir" && dart test --reporter expanded)
+              if ! (cd "$dir" && dart test --reporter expanded); then
+                fail=1
+                echo "::error file=$dir::dart test gagal di $dir"
+              fi
             fi
           done
+          exit $fail
       - name: CLI deterministic command and chat smoke
         run: |
           set -euo pipefail
