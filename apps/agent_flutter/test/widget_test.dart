@@ -12,10 +12,14 @@ void main() {
         initialToken: 'test-token',
       ),
     );
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('Agent'), findsOneWidget);
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Memori'), findsOneWidget);
+    // Layout sempit default (800x600) memakai NavigationBar bawah.
+    expect(find.text('Chat'), findsWidgets);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Approve'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('More'), findsOneWidget);
+    expect(find.text('Pesan ke Tiko…'), findsOneWidget);
   });
 }
