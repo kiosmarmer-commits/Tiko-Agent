@@ -12,3 +12,4 @@ export 'src/tts.dart';
 export 'src/hotword.dart';
 export 'src/whatsapp_gateway.dart';
 export 'src/slack_gateway.dart';
+export 'src/webhook_signature.dart';

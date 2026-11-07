@@ -12,6 +12,7 @@ dependencies:
     path: ../agent_core
   http: ^1.2.2
   path: ^1.9.0
+  crypto: ^3.0.0
 
 dev_dependencies:
   lints: ^5.0.0
