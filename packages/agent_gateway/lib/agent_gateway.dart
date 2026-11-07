@@ -10,6 +10,7 @@ export 'src/text_split.dart';
 export 'src/stt.dart';
 export 'src/tts.dart';
 export 'src/hotword.dart';
+export 'src/voice_loop.dart';
 export 'src/whatsapp_gateway.dart';
 export 'src/slack_gateway.dart';
 export 'src/webhook_signature.dart';
