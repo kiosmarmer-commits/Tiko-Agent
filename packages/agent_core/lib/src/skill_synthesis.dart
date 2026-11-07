@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'interfaces.dart';
+import 'models.dart';
 import 'skills.dart';
 
 /// FR-01 (Closed-Loop Self-Learning) — S_eval scoring + skill synthesis.

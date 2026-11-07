@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 /// Detect and run commands inside an OS sandbox (AGD-07, FR-02).
 ///

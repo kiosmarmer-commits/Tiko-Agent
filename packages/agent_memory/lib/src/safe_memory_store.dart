@@ -36,7 +36,11 @@ class SafeMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
     if (ownerKey.trim().isEmpty || k < 1) return const [];
     final scoped = inner;
     if (scoped is! OwnerScopedMemoryStore) return const [];
-    final hits = await scoped.searchForOwner(query, ownerKey: ownerKey, k: k * 8);
+    final hits = await (scoped as OwnerScopedMemoryStore).searchForOwner(
+      query,
+      ownerKey: ownerKey,
+      k: k * 8,
+    );
     return _filterTrusted(
       hits.where((hit) => hit.ownerKey == ownerKey).toList(),
       k: k,

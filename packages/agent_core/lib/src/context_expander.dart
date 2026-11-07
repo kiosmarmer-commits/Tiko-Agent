@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 /// FR-03 (Auto Context Expander): expands `@file:`, `@dir:`, `@git:`, and
 /// `@url:` references in user input before the text reaches the LLM.

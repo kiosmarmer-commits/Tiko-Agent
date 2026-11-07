@@ -10,6 +10,8 @@ class _FailProvider implements LlmProvider {
   Stream<LlmEvent> chat(ChatRequest request) async* {
     yield const LlmError('down');
   }
+  @override
+  Future<List<double>> embed(String text) async => const [];
 }
 
 class _OkProvider implements LlmProvider {
@@ -22,6 +24,8 @@ class _OkProvider implements LlmProvider {
     yield const LlmTextDelta('ok');
     yield const LlmDone();
   }
+  @override
+  Future<List<double>> embed(String text) async => const [];
 }
 
 void main() {

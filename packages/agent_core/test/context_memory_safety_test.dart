@@ -35,6 +35,9 @@ class _Provider implements LlmProvider {
 
   @override
   Stream<LlmEvent> chat(ChatRequest req) => const Stream.empty();
+
+  @override
+  Future<List<double>> embed(String text) async => const [];
 }
 
 void main() {

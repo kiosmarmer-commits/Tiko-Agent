@@ -103,11 +103,13 @@ class ContextBuilder {
     }
 
     // Retrieve relevant memories if available.
-    final memoryStore = memory;
-    if (memoryStore is OwnerScopedMemoryStore &&
+    final scopedMemory = memory is OwnerScopedMemoryStore
+        ? memory as OwnerScopedMemoryStore
+        : null;
+    if (scopedMemory != null &&
         session.userKey.trim().isNotEmpty && m.text.trim().isNotEmpty) {
       try {
-        final hits = await memoryStore.searchForOwner(
+        final hits = await scopedMemory.searchForOwner(
           m.text,
           ownerKey: session.userKey,
           k: 5,
