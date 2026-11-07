@@ -20,18 +20,48 @@ class CronExpression {
     if (parts.length != 5 || parts.any((part) => part.isEmpty)) {
       throw FormatException('cron harus 5 field: "$expr"');
     }
+    final doms = _field(parts[2], 1, 31);
+    final months = _field(parts[3], 1, 12);
+    final dows = _field(parts[4], 0, 6);
+    // A day-of-month schedule that cannot exist in any allowed month
+    // would never fire; reject it at parse time, unless the day-of-week
+    // field is also restricted and can still match via OR semantics.
+    if (!_isWildcard(parts[2]) &&
+        _isWildcard(parts[4]) &&
+        !_domPossible(doms, months)) {
+      throw FormatException(
+        'kombinasi hari-bulan tidak mungkin terjadi: "$expr"',
+      );
+    }
     return CronExpression._(
       _field(parts[0], 0, 59),
       _field(parts[1], 0, 23),
-      _field(parts[2], 1, 31),
-      _field(parts[3], 1, 12),
-      _field(parts[4], 0, 6),
+      doms,
+      months,
+      dows,
       domRestricted: !_isWildcard(parts[2]),
       dowRestricted: !_isWildcard(parts[4]),
     );
   }
 
   static bool _isWildcard(String field) => field == '*' || field == '*/1';
+
+  static const List<int> _daysInMonth = [
+    31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+  ];
+
+  /// True when at least one allowed day exists in an allowed month.
+  /// February is treated as having 29 days because leap years recur
+  /// within the scan horizon of [nextAfter].
+  static bool _domPossible(Set<int> doms, Set<int> months) {
+    for (final month in months) {
+      final limit = _daysInMonth[month - 1];
+      for (final day in doms) {
+        if (day <= limit) return true;
+      }
+    }
+    return false;
+  }
 
   static Set<int> _field(String field, int min, int max) {
     final out = <int>{};
