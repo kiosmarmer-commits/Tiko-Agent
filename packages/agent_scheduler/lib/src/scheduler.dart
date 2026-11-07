@@ -68,46 +68,44 @@ class Scheduler {
   }
 
   Future<void> _runTick() async {
-    try {
-      final due = await store.claimDuePersisted(DateTime.now().toUtc());
-      for (final job in due) {
-        if (_stopped) break;
-        if (!_runningIds.add(job.id)) continue;
-        final scheduled = job.scheduledAt ?? job.pendingRunAt ?? job.nextRun;
-        final runId = '${job.id}@${scheduled.toUtc().toIso8601String()}';
-        if (_runIds.contains(runId)) {
-          _runningIds.remove(job.id);
-          continue;
-        }
-        try {
-          final msg = InboundMessage(
-            channel: 'scheduler',
-            userKey: job.userKey,
-            sessionKey: '${job.channel}:${job.userKey}:job:${job.id}',
-            text: job.prompt,
-            meta: {
-              'job_id': job.id,
-              'run_id': runId,
-              'scheduled_at': scheduled.toUtc().toIso8601String(),
-              'target_channel': job.channel,
-            },
-          );
-          await onJob(msg, job);
-          await store.completeRun(job.id, scheduled);
-          _runIds.add(runId);
-        } catch (error) {
-          try { await store.releaseRun(job.id); } catch (_) {}
-          try { onError?.call(job, error); } catch (_) {}
-        } finally {
-          _runningIds.remove(job.id);
-        }
+    final due = await store.claimDuePersisted(DateTime.now().toUtc());
+    for (final job in due) {
+      if (_stopped) break;
+      if (!_runningIds.add(job.id)) continue;
+      final scheduled = job.scheduledAt ?? job.pendingRunAt ?? job.nextRun;
+      final runId = '${job.id}@${scheduled.toUtc().toIso8601String()}';
+      if (_runIds.contains(runId)) {
+        _runningIds.remove(job.id);
+        continue;
       }
-      if (_runIds.length > 500) {
-        final recent = _runIds.toList();
-        _runIds
-          ..clear()
-          ..addAll(recent.sublist(recent.length - 200));
+      try {
+        final msg = InboundMessage(
+          channel: 'scheduler',
+          userKey: job.userKey,
+          sessionKey: '${job.channel}:${job.userKey}:job:${job.id}',
+          text: job.prompt,
+          meta: {
+            'job_id': job.id,
+            'run_id': runId,
+            'scheduled_at': scheduled.toUtc().toIso8601String(),
+            'target_channel': job.channel,
+          },
+        );
+        await onJob(msg, job);
+        await store.completeRun(job.id, scheduled);
+        _runIds.add(runId);
+      } catch (error) {
+        try { await store.releaseRun(job.id); } catch (_) {}
+        try { onError?.call(job, error); } catch (_) {}
+      } finally {
+        _runningIds.remove(job.id);
       }
+    }
+    if (_runIds.length > 500) {
+      final recent = _runIds.toList();
+      _runIds
+        ..clear()
+        ..addAll(recent.sublist(recent.length - 200));
     }
   }
 }

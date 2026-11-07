@@ -228,7 +228,11 @@ abstract class Gateway {
   Stream<InboundMessage> get inbound;
   Future<void> send(OutboundMessage m);
   Future<void> sendTyping(String sessionKey);
-}
+
+  /// Releases resources owned by the gateway (streams, sockets, child
+  /// processes). Implementations that own such resources must override this;
+  /// the default no-op keeps simple adapters compiling.
+  Future<void> close() async {}
 
 abstract class PermissionGate {
   Future<PermissionResult> check(ToolCall call, Session session);

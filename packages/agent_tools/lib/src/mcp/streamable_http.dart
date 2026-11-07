@@ -17,7 +17,7 @@ import 'package:http/http.dart' as http;
 class McpStreamableHttpClient {
   McpStreamableHttpClient({
     required this.endpoint,
-    Map<String, String>? headers,
+    this.headers,
     this.client,
     this.timeout = const Duration(seconds: 30),
     this.clientInfo = const {

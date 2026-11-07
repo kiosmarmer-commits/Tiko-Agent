@@ -112,7 +112,7 @@ class ApprovalBroker {
   final Duration requestTtl;
   final _items = <String, ApprovalRequest>{};
   final _waiters = <String, Completer<bool>>{};
-  final _fileLock = CrossProcessLock(path, timeout: const Duration(seconds: 10));
+  late final _fileLock = CrossProcessLock(path, timeout: const Duration(seconds: 10));
   bool _loaded = false;
   Future<void>? _loadFuture;
   Future<void> _saveTail = Future<void>.value();

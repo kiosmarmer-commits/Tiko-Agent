@@ -428,7 +428,7 @@ class TikoRuntime {
         taintMark: _taint.mark,
         // FR-01: reuse the first configured provider for skill-synthesis
         // reflection; AgentLoop falls back to the naive draft when absent.
-        synthLlm: _router.providers.isEmpty ? null : _router.providers.first,
+        synthLlm: _router.providers.isEmpty ? null : _router.providers.values.first,
         shouldStop: () => safety.stopRequested,
         config: AgentConfig(
           maxIterations: resourceProfile == 'eco' ? 6 : config.maxIterations,

@@ -37,7 +37,7 @@ class CronExpression {
     final out = <int>{};
     for (final rawPart in field.split(',')) {
       final part = rawPart.trim();
-      if (part.isEmpty) throw FormatException('cron field kosong');
+      if (part.isEmpty) throw const FormatException('cron field kosong');
       final stepParts = part.split('/');
       if (stepParts.length > 2) throw FormatException('step cron invalid: $part');
       final step = stepParts.length == 2 ? int.tryParse(stepParts[1]) : 1;
@@ -69,7 +69,7 @@ class CronExpression {
         out.add(value);
       }
     }
-    if (out.isEmpty) throw FormatException('cron field tidak menghasilkan nilai');
+    if (out.isEmpty) throw const FormatException('cron field tidak menghasilkan nilai');
     return out;
   }
 
@@ -135,7 +135,7 @@ class CronExpression {
         }
       }
     }
-    throw StateError('no next cron match within scan window');
+    throw const StateError('no next cron match within scan window');
   }
 
   static DateTime _toWallTime(DateTime instant, String timezone) =>

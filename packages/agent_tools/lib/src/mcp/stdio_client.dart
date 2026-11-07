@@ -10,6 +10,7 @@ import 'transport.dart';
 /// Minimal client contract shared by stdio and HTTP MCP clients so the
 /// loader and proxy tool can be transport-agnostic.
 abstract class McpToolServer {
+  Future<void> start();
   Future<List<McpToolInfo>> listTools();
   Future<String> callTool(String name, Map<String, dynamic> arguments);
   Future<void> close();
