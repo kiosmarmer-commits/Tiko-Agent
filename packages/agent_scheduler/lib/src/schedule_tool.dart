@@ -76,7 +76,10 @@ class ScheduleJobTool implements Tool {
     return ToolResult(
       callId: '',
       content:
-          'Job dibuat id=${job.id}\ncron=${job.cron}\nnext_run=${job.nextRun.toIso8601String()}\nprompt=${job.prompt}',
+          'Job dibuat id=${job.id}\ncron=${job.cron}'
+          '\ntz=${job.timezone}'
+          '\nnext_run=${job.nextRun.toIso8601String()}'
+          '\nprompt=${job.prompt}',
     );
   }
 }
@@ -100,7 +103,9 @@ class ListJobsTool implements Tool {
       return const ToolResult(callId: '', content: '(tidak ada job)');
     }
     final lines = jobs.map((j) {
-      return '${j.id}  ${j.enabled ? "ON" : "OFF"}  ${j.cron}  next=${j.nextRun.toIso8601String()}\n  ${j.prompt}';
+      return '${j.id}  ${j.enabled ? "ON" : "OFF"}  ${j.cron}'
+          '  tz=${j.timezone}  next=${j.nextRun.toIso8601String()}'
+          '\n  ${j.prompt}';
     });
     return ToolResult(callId: '', content: lines.join('\n'));
   }
