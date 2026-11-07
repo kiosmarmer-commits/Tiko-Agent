@@ -12,6 +12,7 @@ import 'path_safety.dart';
 import 'sandbox.dart';
 
 import 'safe_math.dart';
+import 'readability.dart';
 
 /// Built-in tools for M1 (complete set for DoD).
 List<Tool> createBuiltinTools({
@@ -499,25 +500,8 @@ class WebFetchTool implements Tool {
     }
   }
 
-  String _stripHtml(String html) {
-    final s = html
-        .replaceAll(
-          RegExp(r'<script[^>]*>[\s\S]*?</script>', caseSensitive: false),
-          ' ',
-        )
-        .replaceAll(
-          RegExp(r'<style[^>]*>[\s\S]*?</style>', caseSensitive: false),
-          ' ',
-        )
-        .replaceAll(RegExp(r'<[^>]+>'), ' ')
-        .replaceAll(RegExp(r'&nbsp;'), ' ')
-        .replaceAll(RegExp(r'&amp;'), '&')
-        .replaceAll(RegExp(r'&lt;'), '<')
-        .replaceAll(RegExp(r'&gt;'), '>')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return s;
-  }
+  /// Readability-lite extraction now lives in readability.dart.
+  String _stripHtml(String html) => htmlToText(html);
 }
 
 /// Resolves [relative] under [root]; rejects traversal and symlink escape (PRD #8).
