@@ -25,7 +25,6 @@ Future<void> main(List<String> args) async {
   } on ConfigValidationException catch (error) {
     stderr.writeln(error);
     exit(1);
-    return;
   }
   final lock = RuntimeLock('${rt.dataDir}/tiko.lock');
   final portOverrideText = Platform.environment['API_PORT'];
@@ -35,7 +34,6 @@ Future<void> main(List<String> args) async {
     stderr.writeln('API_PORT harus berupa integer 1 sampai 65535.');
     await rt.close();
     exit(1);
-    return;
   }
   final port = portOverride ?? rt.config.apiPort;
 
@@ -81,7 +79,6 @@ Future<void> main(List<String> args) async {
       await rt.close();
       await lock.release();
       exit(1);
-      return;
     }
     try {
       await ApiTokenStore.write(rt.dataDir, apiToken);
@@ -90,7 +87,6 @@ Future<void> main(List<String> args) async {
       await rt.close();
       await lock.release();
       exit(1);
-      return;
     }
     if (configuredToken == null || configuredToken.isEmpty) {
       stdout.writeln('API token acak dibuat dan disimpan secara lokal.');
@@ -357,7 +353,6 @@ Future<void> main(List<String> args) async {
       }
       await lock.release();
       exit(1);
-      return;
     } catch (error) {
       stderr.writeln('API startup gagal: $error');
       await api?.stop();
@@ -368,7 +363,6 @@ Future<void> main(List<String> args) async {
       }
       await lock.release();
       exit(1);
-      return;
     }
   }
 
