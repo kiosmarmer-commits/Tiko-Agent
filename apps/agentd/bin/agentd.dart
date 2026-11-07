@@ -191,6 +191,60 @@ Future<void> main(List<String> args) async {
     stdout.writeln('Telegram aktif');
   }
 
+  // WhatsApp + Slack webhooks (inbound via HttpApiServer, HMAC-verified).
+  final waPhoneId = Platform.environment['WHATSAPP_PHONE_NUMBER_ID'];
+  final waAccessToken = Platform.environment['WHATSAPP_ACCESS_TOKEN'];
+  final waVerifyToken = Platform.environment['WHATSAPP_VERIFY_TOKEN'];
+  final waAppSecret = Platform.environment['WHATSAPP_APP_SECRET'];
+  WhatsAppGateway? wa;
+  if (waPhoneId != null && waPhoneId.isNotEmpty &&
+      waAccessToken != null && waAccessToken.isNotEmpty &&
+      waVerifyToken != null && waVerifyToken.isNotEmpty &&
+      waAppSecret != null && waAppSecret.isNotEmpty) {
+    final appSecret = waAppSecret;
+    final gateway = WhatsAppGateway(
+      phoneNumberId: waPhoneId,
+      accessToken: waAccessToken,
+      verifyToken: waVerifyToken,
+      signatureVerifier: (raw, header) => WebhookSignature.verifyMeta(
+        rawBody: raw,
+        headerValue: header,
+        appSecret: appSecret,
+      ),
+    );
+    wa = gateway;
+    gateways.add(_WhatsAppReplyGateway(gateway));
+    stdout.writeln('WhatsApp webhook aktif');
+  } else if ((waPhoneId != null && waPhoneId.isNotEmpty) ||
+      (waAccessToken != null && waAccessToken.isNotEmpty)) {
+    stdout.writeln(
+      'WhatsApp webhook dilewati: WHATSAPP_PHONE_NUMBER_ID, '
+      'WHATSAPP_ACCESS_TOKEN, WHATSAPP_VERIFY_TOKEN, dan '
+      'WHATSAPP_APP_SECRET wajib lengkap',
+    );
+  }
+
+  final slackWebhookUrl = Platform.environment['SLACK_WEBHOOK_URL'];
+  final slackBotToken = Platform.environment['SLACK_BOT_TOKEN'];
+  final slackSigningSecret = Platform.environment['SLACK_SIGNING_SECRET'];
+  SlackGateway? slackGw;
+  if (slackSigningSecret != null && slackSigningSecret.isNotEmpty &&
+      (slackWebhookUrl != null && slackWebhookUrl.isNotEmpty ||
+          slackBotToken != null && slackBotToken.isNotEmpty)) {
+    final slack = SlackGateway(
+      webhookUrl: slackWebhookUrl,
+      botToken: slackBotToken,
+    );
+    slackGw = slack;
+    gateways.add(_SlackReplyGateway(slack));
+    stdout.writeln('Slack webhook aktif');
+  } else if (slackSigningSecret != null && slackSigningSecret.isNotEmpty) {
+    stdout.writeln(
+      'Slack webhook dilewati: SLACK_WEBHOOK_URL atau SLACK_BOT_TOKEN '
+      'wajib diisi',
+    );
+  }
+
   Gateway? gatewayForChannel(String channel) {
     for (final g in gateways) {
       if (g.channel == channel) return g;
@@ -267,6 +321,15 @@ Future<void> main(List<String> args) async {
   rt.startScheduler();
   stdout.writeln('Scheduler aktif (dikelola TikoRuntime)');
 
+  final webhooks = (wa != null || slackGw != null)
+      ? WebhookEndpoint(
+          whatsapp: wa,
+          whatsappAppSecret: waAppSecret,
+          slack: slackGw,
+          slackSigningSecret: slackSigningSecret,
+          onMessage: (m) => handleMessage(m),
+        )
+      : null;
   if (useApi) {
     // apiToken was validated and persisted before any background service ran.
     final token = apiToken!;
@@ -275,6 +338,7 @@ Future<void> main(List<String> args) async {
         authToken: token,
         host: Platform.environment['API_HOST'] ?? '127.0.0.1',
         port: port,
+        webhookEndpoint: webhooks,
         webRoot: _findWebRoot(),
         onMessage: (m) async {
           final c = Completer<String>();
@@ -471,6 +535,57 @@ String? _findWebRoot() {
   return null;
 }
 
+class _WhatsAppReplyGateway implements Gateway {
+  _WhatsAppReplyGateway(this.gateway);
+  final WhatsAppGateway gateway;
+
+  @override
+  String get channel => 'whatsapp';
+
+  @override
+  Stream<InboundMessage> get inbound => const Stream.empty();
+
+  @override
+  Future<void> send(OutboundMessage m) async {
+    final session = m.sessionKey.startsWith('wa:')
+        ? m.sessionKey.substring(3)
+        : '';
+    if (session.isEmpty) return;
+    await gateway.sendText(session, m.text);
+  }
+
+  @override
+  Future<void> sendTyping(String sessionKey) async {}
+
+  @override
+  Future<void> close() async {}
+}
+
+class _SlackReplyGateway implements Gateway {
+  _SlackReplyGateway(this.gateway);
+  final SlackGateway gateway;
+
+  @override
+  String get channel => 'slack';
+
+  @override
+  Stream<InboundMessage> get inbound => const Stream.empty();
+
+  @override
+  Future<void> send(OutboundMessage m) async {
+    final channel = m.sessionKey.startsWith('slack:')
+        ? m.sessionKey.substring(6)
+        : '';
+    if (channel.isEmpty) return;
+    await gateway.send(m.text, channel: channel);
+  }
+
+  @override
+  Future<void> sendTyping(String sessionKey) async {}
+
+  @override
+  Future<void> close() async {}
+}
 class _CollectGateway implements Gateway {
   _CollectGateway(this.completer);
   final Completer<String> completer;

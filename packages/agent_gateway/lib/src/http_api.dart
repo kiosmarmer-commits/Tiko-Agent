@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
 
+import 'webhook_endpoint.dart';
+
 typedef MessageHandler = Future<String> Function(InboundMessage message);
 
 /// HTTP + WebSocket API + static web UI for beginners.
@@ -26,6 +28,7 @@ class HttpApiServer {
     this.decideApproval,
     this.eventStream,
     this.onShutdown,
+    this.webhookEndpoint,
   });
 
   final MessageHandler onMessage;
@@ -44,6 +47,9 @@ class HttpApiServer {
   final Future<bool> Function(String id, bool approve)? decideApproval;
   final Stream<Map<String, dynamic>>? eventStream;
   final Future<void> Function()? onShutdown;
+
+  /// Inbound platform webhooks (WhatsApp/Slack) mounted on this server.
+  final WebhookEndpoint? webhookEndpoint;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -126,6 +132,19 @@ class HttpApiServer {
     // Static UI (no auth for assets — local bind only)
     if (req.method == 'GET' && _isStatic(path)) {
       await _serveStatic(req, path);
+      return;
+    }
+
+    // Inbound platform webhooks authenticate with HMAC signatures, not
+    // with the local bearer token, so they are routed before _auth.
+    if (path == '/webhooks/whatsapp' || path == '/webhooks/slack') {
+      final endpoint = webhookEndpoint;
+      if (endpoint == null) {
+        req.response.statusCode = 403;
+        _json(req, {'error': 'webhook endpoint not configured'});
+      } else {
+        await endpoint.handle(req, path);
+      }
       return;
     }
 
