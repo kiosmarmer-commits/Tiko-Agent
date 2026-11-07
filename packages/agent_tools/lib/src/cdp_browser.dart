@@ -237,7 +237,7 @@ class CdpSession {
       final text = exc['exception']?['description'] ?? exc['text'] ?? exc;
       return '[js-error] $text';
     }
-    var value = resp['result']?['result']?['value'];
+    final value = resp['result']?['result']?['value'];
     var out = value == null ? 'null' : jsonEncode(value);
     if (out.length > maxResultBytes) {
       out = '${out.substring(0, maxResultBytes)}… (truncated)';

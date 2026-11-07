@@ -226,7 +226,9 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
             final createdAt = DateTime.tryParse(factRows.first['created_at'] as String? ?? '')?.toUtc();
             final ttl = factRows.first['ttl_days'] as int?;
             if (ttl != null && createdAt != null &&
-                !createdAt.add(Duration(days: ttl)).isAfter(now)) continue;
+                !createdAt.add(Duration(days: ttl)).isAfter(now)) {
+              continue;
+            }
             vecRanked.add(
               MemoryHit(
                 id: v.id,
@@ -378,8 +380,12 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
     // whose origin was not captured. Unknown data must never be upgraded by
     // an agent, web page, MCP server, or other imported source.
     if (a == Provenance.unknown &&
-        (b == Provenance.user || b == Provenance.trustedConfig)) return b;
-    if (a == Provenance.unknown || b == Provenance.unknown) return Provenance.unknown;
+        (b == Provenance.user || b == Provenance.trustedConfig)) {
+      return b;
+    }
+    if (a == Provenance.unknown || b == Provenance.unknown) {
+      return Provenance.unknown;
+    }
     const order = <Provenance>[
       Provenance.web, Provenance.email, Provenance.mcp, Provenance.localFile,
       Provenance.agent, Provenance.memory, Provenance.user, Provenance.trustedConfig,

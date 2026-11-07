@@ -196,7 +196,7 @@ class WorkspaceCheckpointer {
     final root = workspaceRoot.endsWith('/')
         ? workspaceRoot.substring(0, workspaceRoot.length - 1)
         : workspaceRoot;
-    var norm = path.replaceAll('\\', '/');
+    final norm = path.replaceAll('\\', '/');
     final normRoot = root.replaceAll('\\', '/');
     if (!norm.startsWith('$normRoot/')) return null;
     final rel = norm.substring(normRoot.length + 1);

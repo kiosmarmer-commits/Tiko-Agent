@@ -77,7 +77,7 @@ class SafeMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
     if (f.isUntrusted) {
       safeText = _stripInstructionLike(text);
       safeText = sanitizer.toolResult(
-        ToolCall(id: 'mem', name: 'memory', args: const {}),
+        const ToolCall(id: 'mem', name: 'memory', args: {}),
         safeText,
       );
     }

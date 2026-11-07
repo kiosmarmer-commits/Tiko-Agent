@@ -379,8 +379,12 @@ class PersistentMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
     // whose origin was not captured. Unknown data must never be upgraded by
     // an agent, web page, MCP server, or other imported source.
     if (a == Provenance.unknown &&
-        (b == Provenance.user || b == Provenance.trustedConfig)) return b;
-    if (a == Provenance.unknown || b == Provenance.unknown) return Provenance.unknown;
+        (b == Provenance.user || b == Provenance.trustedConfig)) {
+      return b;
+    }
+    if (a == Provenance.unknown || b == Provenance.unknown) {
+      return Provenance.unknown;
+    }
     const order = <Provenance>[
       Provenance.web,
       Provenance.email,

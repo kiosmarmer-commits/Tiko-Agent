@@ -48,7 +48,7 @@ jobs:
           echo "analyze done: errors=$ne warnings=$nw infos=$ni"
           head -40 "$ef"
           head -20 "$wf"
-          head -20 "$nf"
+          head -50 "$nf"
           if [[ $fail -ne 0 ]]; then
             echo "::error::Static analysis gagal: errors=$ne warnings=$nw infos=$ni (detail per baris di anotasi)"
             exit 1
