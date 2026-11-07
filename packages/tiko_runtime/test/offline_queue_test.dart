@@ -61,21 +61,24 @@ void main() {
   });
 
   test('expired worker cannot acknowledge a lease reclaimed by another worker', () async {
-    final shortLease = OfflineQueue(
+    // The replacement claim must still be valid when it is acknowledged, so
+    // use a generous lease: a 10 ms lease made the final ack race with runner
+    // scheduling hiccups on shared CI machines and fail intermittently.
+    final expiring = OfflineQueue(
       temp.path,
-      leaseDuration: const Duration(milliseconds: 10),
+      leaseDuration: const Duration(milliseconds: 500),
     );
-    await shortLease.enqueue(text: 'lease race');
-    final stale = (await shortLease.claim()).single;
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    final current = (await shortLease.claim()).single;
+    await expiring.enqueue(text: 'lease race');
+    final stale = (await expiring.claim()).single;
+    await Future<void>.delayed(const Duration(milliseconds: 750));
+    final current = (await expiring.claim()).single;
     expect(current['claim_token'], isNot(stale['claim_token']));
     expect(
-      await shortLease.ack('${stale['id']}', claimToken: '${stale['claim_token']}'),
+      await expiring.ack('${stale['id']}', claimToken: '${stale['claim_token']}'),
       isFalse,
     );
     expect(
-      await shortLease.ack('${current['id']}', claimToken: '${current['claim_token']}'),
+      await expiring.ack('${current['id']}', claimToken: '${current['claim_token']}'),
       isTrue,
     );
   });
