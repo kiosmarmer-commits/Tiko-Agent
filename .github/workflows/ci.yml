@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dart:
+    name: Dart analysis, tests and CLI smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.4
+      - name: Validate shell and Python scripts
+        run: |
+          set -euo pipefail
+          for script in scripts/*.sh; do bash -n "$script"; done
+          python3 -m compileall -q scripts tools/mock_mcp_server
+      - name: Resolve workspace dependencies
+        run: dart pub get
+      - name: Static analysis (strict release gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+            echo "== analyze: $dir =="
+            (cd "$dir" && dart analyze --fatal-infos --fatal-warnings)
+          done
+      - name: Test every Dart workspace member
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+            if [[ -d "$dir/test" ]]; then
+              echo "== dart test: $dir =="
+              (cd "$dir" && dart test --reporter expanded)
+            fi
+          done
+      - name: CLI deterministic command and chat smoke
+        run: |
+          set -euo pipefail
+          result="$(dart run apps/tiko/bin/tiko.dart calc 5+1)"
+          test "$result" = "6"
+          chat="$(dart run apps/tiko/bin/tiko.dart chat halo)"
+          grep -qi 'mock agent' <<< "$chat"
+      - name: Setup and config schema smoke (mock + Ollama)
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          dart run apps/tiko/bin/tiko.dart --config "$tmp/mock/agent.yaml" setup --provider mock
+          dart run apps/tiko/bin/tiko.dart --config "$tmp/ollama/agent.yaml" setup --provider ollama
+          dart run apps/tiko/bin/tiko.dart --config "$tmp/mock/agent.yaml" config validate
+          dart run apps/tiko/bin/tiko.dart --config "$tmp/ollama/agent.yaml" config validate
+      - name: Compile executable entrypoints
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          dart compile exe apps/tiko/bin/tiko.dart -o build/tiko
+          dart compile exe apps/agentd/bin/agentd.dart -o build/agentd
+          dart compile exe apps/agent_cli/bin/agent_cli.dart -o build/agent_cli
+      - name: Daemon lifecycle and HTTP API smoke
+        run: bash scripts/smoke_agentd.sh
+
+  flutter:
+    name: Flutter client analysis, tests and web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          cache: true
+      - name: Full Flutter client validation
+        run: bash scripts/flutter_validate.sh
