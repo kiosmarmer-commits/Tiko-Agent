@@ -24,7 +24,7 @@ Future<void> main(List<String> args) async {
     rt = await TikoRuntime.create(configPath: configPath, safe: safe);
   } on ConfigValidationException catch (error) {
     stderr.writeln(error);
-    exitCode = 1;
+    exit(1);
     return;
   }
   final lock = RuntimeLock('${rt.dataDir}/tiko.lock');
@@ -34,7 +34,7 @@ Future<void> main(List<String> args) async {
       (portOverride == null || portOverride < 1 || portOverride > 65535)) {
     stderr.writeln('API_PORT harus berupa integer 1 sampai 65535.');
     await rt.close();
-    exitCode = 1;
+    exit(1);
     return;
   }
   final port = portOverride ?? rt.config.apiPort;
@@ -80,7 +80,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('API_TOKEN terlalu pendek; minimal 32 karakter (128-bit).');
       await rt.close();
       await lock.release();
-      exitCode = 1;
+      exit(1);
       return;
     }
     try {
@@ -89,7 +89,7 @@ Future<void> main(List<String> args) async {
       stderr.writeln('Token API tidak dapat disimpan dengan permission aman: $error');
       await rt.close();
       await lock.release();
-      exitCode = 1;
+      exit(1);
       return;
     }
     if (configuredToken == null || configuredToken.isEmpty) {
@@ -356,7 +356,7 @@ Future<void> main(List<String> args) async {
         try { await gateway.close(); } catch (_) {}
       }
       await lock.release();
-      exitCode = 1;
+      exit(1);
       return;
     } catch (error) {
       stderr.writeln('API startup gagal: $error');
@@ -367,7 +367,7 @@ Future<void> main(List<String> args) async {
         try { await gateway.close(); } catch (_) {}
       }
       await lock.release();
-      exitCode = 1;
+      exit(1);
       return;
     }
   }
@@ -427,15 +427,32 @@ Future<void> main(List<String> args) async {
   stdout.writeln('Shutdown…');
   // Close the runtime once: it denies pending approvals, stops scheduled work,
   // and terminates managed MCP child processes before gateway shutdown.
-  await rt.close();
-  for (final s in subs) {
-    await s.cancel();
+  Future<void> closeAll() async {
+    await rt.close();
+    for (final s in subs) {
+      await s.cancel();
+    }
+    await tg?.close();
+    await discord?.close();
+    await email?.close();
+    await api?.stop();
   }
-  await tg?.close();
-  await discord?.close();
-  await email?.close();
-  await api?.stop();
-  await lock.release();
+
+  // Bounded shutdown: a hung close() must never leave a zombie daemon that
+  // still owns the lock file and the API port.
+  var clean = true;
+  try {
+    await closeAll().timeout(const Duration(seconds: 20));
+  } catch (_) {
+    clean = false;
+    stderr.writeln('Graceful shutdown timed out; force exiting.');
+  }
+  try {
+    await lock.release();
+  } catch (_) {}
+  // Exit explicitly: lingering signal watchers, timers, or sockets can keep
+  // the VM alive after main returns even though shutdown already completed.
+  exit(clean ? 0 : 1);
 }
 
 LlmProvider _primaryLlm(TikoRuntime rt) {

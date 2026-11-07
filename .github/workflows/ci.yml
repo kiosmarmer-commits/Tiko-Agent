@@ -8,6 +8,7 @@ jobs:
   dart:
     name: Dart analysis, tests and CLI smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
@@ -212,6 +213,7 @@ jobs:
   flutter:
     name: Flutter client analysis, tests and web build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
