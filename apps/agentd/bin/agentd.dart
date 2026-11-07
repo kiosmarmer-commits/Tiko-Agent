@@ -477,4 +477,7 @@ class _CollectGateway implements Gateway {
 
   @override
   Future<void> sendTyping(String sessionKey) async {}
+
+  @override
+  Future<void> close() async {}
 }

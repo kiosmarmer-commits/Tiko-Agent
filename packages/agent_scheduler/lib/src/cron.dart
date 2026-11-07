@@ -135,7 +135,7 @@ class CronExpression {
         }
       }
     }
-    throw const StateError('no next cron match within scan window');
+    throw StateError('no next cron match within scan window');
   }
 
   static DateTime _toWallTime(DateTime instant, String timezone) =>

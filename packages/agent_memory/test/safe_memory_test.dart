@@ -117,7 +117,7 @@ test('owner-scoped retrieval never returns another profile memory', () async {
 test('TTL-bound facts expire during retrieval', () async {
   final inner = InMemoryStore();
   final safe = SafeMemoryStore(inner);
-  await safe.upsertFact(const Fact(
+  await safe.upsertFact(Fact(
     id: 'expired',
     text: 'old temporary project preference',
     ownerKey: 'alice',

@@ -122,11 +122,12 @@ class StdioMcpClient implements McpTransport, McpToolServer {
 
   /// List tools exposed by the server. Names and schemas are untrusted config
   /// inputs; malformed entries abort loading instead of being partially used.
+  @override
   Future<List<McpToolInfo>> listTools() async {
     final res = await request('tools/list');
     final raw = res['tools'];
     if (raw is! List || raw.length > 128) {
-      throw FormatException('invalid MCP tools/list response');
+      throw const FormatException('invalid MCP tools/list response');
     }
     return raw.map((item) {
       if (item is! Map) throw const FormatException('invalid MCP tool entry');
@@ -157,6 +158,7 @@ class StdioMcpClient implements McpTransport, McpToolServer {
   }
 
   /// Call only an explicitly allowlisted server tool. Output is untrusted.
+  @override
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
     if (!allowedTools.contains(name)) {
       throw StateError('MCP tool is not allowlisted: $name');

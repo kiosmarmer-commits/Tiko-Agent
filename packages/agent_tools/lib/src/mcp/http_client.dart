@@ -44,6 +44,7 @@ class HttpMcpClient implements McpTransport, McpToolServer {
     } catch (_) {}
   }
 
+  @override
   Future<List<McpToolInfo>> listTools() async {
     final res = await request('tools/list');
     final tools = (res['tools'] as List<dynamic>? ?? []);
@@ -59,6 +60,7 @@ class HttpMcpClient implements McpTransport, McpToolServer {
     }).toList();
   }
 
+  @override
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
     final res = await request('tools/call', {
       'name': name,

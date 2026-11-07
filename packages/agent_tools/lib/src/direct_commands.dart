@@ -76,7 +76,7 @@ class DirectCommandDispatcher {
       final ok = confirm != null ? await confirm!(call, sess) : false;
       verdict = ok
           ? const PermissionResult(PermissionVerdict.allowed)
-          : PermissionResult(PermissionVerdict.denied, reason: 'tidak disetujui');
+          : const PermissionResult(PermissionVerdict.denied, reason: 'tidak disetujui');
     }
     if (verdict.verdict != PermissionVerdict.allowed) {
       return DirectResult(3, 'Ditolak: ${verdict.reason ?? verdict.verdict.name}');
