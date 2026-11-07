@@ -62,6 +62,9 @@ class CliGateway implements Gateway {
     }
   }
 
+
+  @override
+
   Future<void> close() async {
     _running = false;
     await _controller.close();

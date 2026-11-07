@@ -46,6 +46,13 @@ jobs:
           done
           ne="$(wc -l < "$ef")"; nw="$(wc -l < "$wf")"; ni="$(wc -l < "$nf")"
           echo "analyze done: errors=$ne warnings=$nw infos=$ni"
+          {
+            echo "## Analyze report"
+            echo "errors=$ne warnings=$nw infos=$ni"
+            echo '```'
+            cat "$ef" "$wf" "$nf" 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           head -40 "$ef"
           head -20 "$wf"
           head -50 "$nf"

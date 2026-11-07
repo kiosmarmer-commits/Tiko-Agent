@@ -314,6 +314,9 @@ class DiscordGateway implements Gateway {
     }
   }
 
+
+  @override
+
   Future<void> close() async {
     _running = false;
     _heartbeat?.cancel();

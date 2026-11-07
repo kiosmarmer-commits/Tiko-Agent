@@ -280,6 +280,9 @@ class TelegramGateway implements Gateway {
     return result;
   }
 
+
+  @override
+
   Future<void> close() async {
     await stop();
     await _inbound.close();

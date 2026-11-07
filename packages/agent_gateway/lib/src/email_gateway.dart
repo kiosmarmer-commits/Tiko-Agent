@@ -135,5 +135,8 @@ class EmailGateway implements Gateway {
   @override
   Future<void> sendTyping(String sessionKey) async {}
 
+
+  @override
+
   Future<void> close() async => _inbound.close();
 }
