@@ -20,13 +20,15 @@ class PatchFileTool implements Tool {
   ToolSpec get spec => const ToolSpec(
     name: 'patch_file',
     description:
-        'Ganti teks tepat (old → new) di file dalam workspace. old harus unik.',
+        'Ganti teks tepat (old → new) di file dalam workspace. old harus '
+        'unik, atau set replace_all=true untuk mengganti semua kemunculan.',
     inputSchema: {
       'type': 'object',
       'properties': {
         'path': {'type': 'string'},
         'old': {'type': 'string'},
         'new': {'type': 'string'},
+        'replace_all': {'type': 'boolean'},
       },
       'required': ['path', 'old', 'new'],
     },
@@ -38,6 +40,7 @@ class PatchFileTool implements Tool {
     final rel = (args['path'] as String?)?.trim() ?? '';
     final old = args['old'] as String? ?? '';
     final neu = args['new'] as String? ?? '';
+    final replaceAll = args['replace_all'] == true;
     if (old.length > 100 * 1024 || neu.length > 100 * 1024) {
       return const ToolResult(
         callId: '',
@@ -85,10 +88,11 @@ class PatchFileTool implements Tool {
         isError: true,
       );
     }
-    if (count > 1) {
+    if (count > 1 && !replaceAll) {
       return ToolResult(
         callId: '',
-        content: 'old tidak unik ($count kali). Perjelas konteks.',
+        content: 'old tidak unik ($count kali). Perjelas konteks '
+            'atau set replace_all=true.',
         isError: true,
       );
     }
@@ -119,12 +123,25 @@ class PatchFileTool implements Tool {
       }
     }
     await file.copy(backupPath);
-    await file.writeAsString(text.replaceFirst(old, neu));
+    await file.writeAsString(
+      replaceAll ? text.replaceAll(old, neu) : text.replaceFirst(old, neu),
+    );
+    final summary = replaceAll
+        ? 'Patched $rel ($count penggantian)'
+        : 'Patched $rel';
+    final header = checkpointId == null
+        ? summary
+        : '$summary (checkpoint: $checkpointId)';
     return ToolResult(
       callId: '',
-      content: checkpointId == null
-          ? 'Patched $rel'
-          : 'Patched $rel (checkpoint: $checkpointId)',
+      content: '$header\n- ${_preview(old)}\n+ ${_preview(neu)}',
     );
+  }
+
+  /// First line of a snippet, truncated for the diff preview.
+  String _preview(String snippet) {
+    var line = snippet.split('\n').first;
+    if (line.length > 120) line = '${line.substring(0, 120)}...';
+    return line;
   }
 }
