@@ -267,8 +267,13 @@ class AgentLoop {
         if (verdict.verdict == PermissionVerdict.allowed) {
           // Capability is validated and consumed by the gate; it must not
           // reach tool adapters, tool output, or persisted execution traces.
-          call.args.remove('_capability_id');
-          allowed.add(call);
+          // Copy the args instead of mutating them: a ToolCall may carry a
+          // const (unmodifiable) map, which rejects remove() at runtime.
+          final sanitizedArgs = Map<String, dynamic>.from(call.args)
+            ..remove('_capability_id');
+          allowed.add(
+            ToolCall(id: call.id, name: call.name, args: sanitizedArgs),
+          );
         } else {
           success = false;
           final result = ToolResult.denied(verdict);

@@ -145,6 +145,9 @@ class ApprovalBroker {
   Future<void> _reloadFromDisk() async {
     final file = File(path);
     if (!await file.exists()) {
+      // A directory (or other non-file) at the ledger path is a failed
+      // read, not an empty ledger. Keep the in-memory view and fail closed.
+      if (await FileSystemEntity.isDirectory(path)) return;
       _items.clear();
       return;
     }

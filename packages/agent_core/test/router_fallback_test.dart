@@ -2,8 +2,10 @@ import 'package:agent_core/agent_core.dart';
 import 'package:test/test.dart';
 
 class _FailProvider implements LlmProvider {
+  _FailProvider([this.nid = 'fail']);
+  final String nid;
   @override
-  String get id => 'fail';
+  String get id => nid;
   @override
   Capabilities get capabilities => const Capabilities(toolCalling: false);
   @override
@@ -15,8 +17,10 @@ class _FailProvider implements LlmProvider {
 }
 
 class _OkProvider implements LlmProvider {
+  _OkProvider([this.nid = 'ok']);
+  final String nid;
   @override
-  String get id => 'ok';
+  String get id => nid;
   @override
   Capabilities get capabilities => const Capabilities(toolCalling: true);
   @override
@@ -60,9 +64,9 @@ void main() {
   test('nextFallback honors excluded provider ids', () {
     final r = Router(
       providers: {
-        'p1': _FailProvider(),
-        'p2': _FailProvider(),
-        'p3': _OkProvider(),
+        'p1': _FailProvider('p1'),
+        'p2': _FailProvider('p2'),
+        'p3': _OkProvider('p3'),
       },
       defaultProviderId: 'p1',
       fallbackOrder: ['p1', 'p2', 'p3'],

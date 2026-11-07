@@ -17,7 +17,8 @@ class ShellPolicy {
 
   final List<List<String>> allowlist;
 
-  static final _meta = RegExp(r'[;&|`$(){}><\n]|\$\{|\$\(');
+  static final _meta =
+      RegExp(r'[;&|`$(){}><*?~\\\[\]\n]|\$\{|\$\(');
 
   /// Returns null if allowed, else deny reason.
   String? check(String command) {

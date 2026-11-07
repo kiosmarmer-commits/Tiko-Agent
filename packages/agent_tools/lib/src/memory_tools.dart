@@ -30,10 +30,19 @@ class MemorySearchTool implements Tool {
       );
     }
     final k = (args['k'] as num?)?.toInt() ?? 6;
-    final hits = ctx.session.userKey.trim().isEmpty || store is! OwnerScopedMemoryStore
-        ? const <MemoryHit>[]
-        : await (store as OwnerScopedMemoryStore).searchForOwner(
-            q, ownerKey: ctx.session.userKey, k: k);
+    final ownerKey = ctx.session.userKey.trim();
+    final List<MemoryHit> hits;
+    if (store is OwnerScopedMemoryStore) {
+      // Owner-scoped stores never mix profiles: without an owner there is
+      // nothing to retrieve from them.
+      hits = ownerKey.isEmpty
+          ? const <MemoryHit>[]
+          : await (store as OwnerScopedMemoryStore).searchForOwner(
+              q, ownerKey: ownerKey, k: k);
+    } else {
+      // Plain stores are trusted to already scope their search results.
+      hits = await store.search(q, k: k);
+    }
     if (hits.isEmpty) {
       return const ToolResult(callId: '', content: '(tidak ada hasil memori)');
     }
