@@ -246,7 +246,7 @@ class SandboxRunner {
       ...extraEnv,
     };
     final containerName = kind == SandboxKind.docker
-        ? 'tiko-sbx-${pid}-${DateTime.now().microsecondsSinceEpoch}'
+        ? 'tiko-sbx-$pid-${DateTime.now().microsecondsSinceEpoch}'
         : null;
     final command = _sandboxCommand(parts, root, cwd, extraEnv, containerName);
     final process = await Process.start(

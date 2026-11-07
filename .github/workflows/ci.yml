@@ -46,6 +46,7 @@ jobs:
           done
           ne="$(wc -l < "$ef")"; nw="$(wc -l < "$wf")"; ni="$(wc -l < "$nf")"
           echo "analyze done: errors=$ne warnings=$nw infos=$ni"
+          cp "$nf" .ci-notices.txt 2>/dev/null || true
           {
             echo "## Analyze report"
             echo "errors=$ne warnings=$nw infos=$ni"
@@ -60,6 +61,21 @@ jobs:
             echo "::error::Static analysis gagal: errors=$ne warnings=$nw infos=$ni (detail per baris di anotasi)"
             exit 1
           fi
+      - name: Surface notices 11-20
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-notices.txt ] && sed -n '11,20p' .ci-notices.txt || true
+      - name: Surface notices 21-30
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-notices.txt ] && sed -n '21,30p' .ci-notices.txt || true
+      - name: Surface notices 31-40
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-notices.txt ] && sed -n '31,40p' .ci-notices.txt || true
       - name: Test every Dart workspace member
         shell: bash
         run: |

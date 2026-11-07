@@ -47,7 +47,7 @@ class MemorySearchTool implements Tool {
         .replaceAll('<untrusted_data', '<\\untrusted_data');
     return ToolResult(
       callId: '',
-      content: '<untrusted_data source=\"memory-search\">\n$safeLines\n</untrusted_data>',
+      content: '<untrusted_data source="memory-search">\n$safeLines\n</untrusted_data>',
     );
   }
 }

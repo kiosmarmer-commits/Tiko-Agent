@@ -69,7 +69,7 @@ class DaemonManager {
 
     await Directory(dataDir).create(recursive: true);
     final logPath = p.join(dataDir, 'daemon.log');
-    final log = await File(logPath).openWrite(mode: FileMode.append);
+    final log = File(logPath).openWrite(mode: FileMode.append);
     final env = launchEnv;
     final configuredToken = env['API_TOKEN']?.trim();
     if (configuredToken == null || configuredToken.isEmpty) {

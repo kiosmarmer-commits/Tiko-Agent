@@ -30,9 +30,9 @@ void main() {
       }
     });
     test('input length and nesting are bounded', () {
-      expect(() => SafeMath.calculate('1+' * 200 + '1'), throwsFormatException);
+      expect(() => SafeMath.calculate('${"1+" * 200}1'), throwsFormatException);
       expect(
-        () => SafeMath.calculate('(' * 100 + '1' + ')' * 100),
+        () => SafeMath.calculate('${"(" * 100}1${")" * 100}'),
         throwsFormatException,
       );
     });

@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'sandbox.dart';
 
-/// Loads script tools from tools/<name>/tool.json and runs them only when a
+/// Loads script tools from `tools/<name>/tool.json` and runs them only when a
 /// working OS sandbox is available. No host-process fallback is permitted.
 ///
 /// Each tool receives a private temporary copy of its own files as the sandbox
@@ -221,7 +221,7 @@ class ScriptTool implements Tool {
       throw const FormatException('input_schema must be an object');
     }
     final rawRisk = json['risk'];
-    final risk = rawRisk == null ? 'high' : rawRisk;
+    final risk = rawRisk ?? 'high';
     if (risk is! String || !const {'low', 'medium', 'high', 'critical'}.contains(risk)) {
       throw const FormatException('invalid tool risk');
     }

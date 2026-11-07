@@ -48,7 +48,7 @@ class ConfigStore {
     final raw = await File(configPath).readAsString();
     final root = _convert(loadYaml(raw));
     if (root is! Map) {
-      return (revision: 0, issues: [ConfigIssue('config', 'root bukan map')]);
+      return const (revision: 0, issues: [ConfigIssue('config', 'root bukan map')]);
     }
     final map = Map<String, dynamic>.from(root);
     _setNested(map, dottedPath.split('.'), _parseValue(value));
@@ -63,7 +63,7 @@ class ConfigStore {
     await ensure();
     final root = _convert(loadYaml(yamlContent));
     if (root is! Map) {
-      return (revision: 0, issues: [ConfigIssue('config', 'invalid yaml')]);
+      return const (revision: 0, issues: [ConfigIssue('config', 'invalid yaml')]);
     }
     return _commit(Map<String, dynamic>.from(root), actor: actor, note: note);
   }
@@ -168,7 +168,7 @@ class ConfigStore {
   String _toYaml(Map map) {
     final buf = StringBuffer();
     String quote(String value) =>
-        '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\\"').replaceAll('\n', '\\n').replaceAll('\r', '\\r').replaceAll('\t', '\\t')}"';
+        '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n').replaceAll('\r', '\\r').replaceAll('\t', '\\t')}"';
 
     void write(dynamic node, int indent) {
       final pad = '  ' * indent;
