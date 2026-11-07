@@ -8,6 +8,7 @@ export 'src/agent_loop.dart';
 export 'src/context_builder.dart';
 export 'src/compactor.dart';
 export 'src/router.dart';
+export 'src/router_eval.dart';
 export 'src/loop_detector.dart';
 export 'src/budget_guard.dart';
 export 'src/skills.dart';
