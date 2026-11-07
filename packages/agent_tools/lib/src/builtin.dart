@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 
+import 'grep.dart';
 import 'ssrf.dart';
 import 'web_search.dart';
 import 'path_safety.dart';
@@ -25,6 +27,7 @@ List<Tool> createBuiltinTools({
     DatetimeTool(),
     CalcTool(),
     ListDirTool(workspaceRoot: root),
+    GrepTool(workspaceRoot: root),
     ReadFileTool(workspaceRoot: root),
     WriteFileTool(workspaceRoot: root),
     ShellTool(
@@ -331,7 +334,7 @@ class ShellTool implements Tool {
     }
 
     // Workspace jail: reject path args that escape workspace (AGD-07 sandbox light).
-    final root = Directory(ctx.workspacePath).absolute.path;
+    final root = p.normalize(Directory(ctx.workspacePath).absolute.path);
     for (final part in parts.skip(1)) {
       if (part.startsWith('-')) continue;
       if (part.contains('..')) {
@@ -345,8 +348,9 @@ class ShellTool implements Tool {
           part.contains(':\\') ||
           RegExp(r'^[A-Za-z]:').hasMatch(part)) {
         try {
-          final resolved = File(part).absolute.path;
-          if (!resolved.startsWith(root)) {
+          final resolved = p.normalize(File(part).absolute.path);
+          final insideRoot = resolved == root || p.isWithin(root, resolved);
+          if (!insideRoot) {
             return ToolResult(
               callId: '',
               content: 'Path di luar workspace: $part',
@@ -426,7 +430,7 @@ class WebFetchTool implements Tool {
       );
     }
 
-    final client = _client ?? http.Client();
+    final client = _client ?? IOClient(ssrf.pinnedHttpClient());
     try {
       // Manual redirect handling to re-check each hop.
       var current = url;

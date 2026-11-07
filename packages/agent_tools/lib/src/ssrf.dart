@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 /// SSRF protection helpers (AGD-04 §7, AGD-07 C-08).
@@ -45,11 +47,77 @@ class SsrfGuard {
     if (addrs.isEmpty) return 'DNS tidak mengembalikan alamat';
 
     for (final addr in addrs) {
-      if (_isPrivateOrReserved(addr)) {
+      if (isPrivateOrReserved(addr)) {
         return 'IP privat/reserved diblokir: ${addr.address}';
       }
     }
     return null;
+  }
+
+  /// Builds an [HttpClient] that re-resolves DNS at connect time and only
+  /// connects to validated public addresses. This closes the TOCTOU gap
+  /// between [checkUrl] and the actual TCP connect (DNS rebinding): a
+  /// hostname that flips to a private address after validation is refused
+  /// before any request bytes are sent.
+  HttpClient pinnedHttpClient() {
+    final client = HttpClient()..connectionTimeout = timeout;
+    client.connectionFactory = (url, proxyHost, proxyPort) async {
+      final Future<Socket> socketFuture;
+      if (proxyHost == null) {
+        socketFuture = _pinnedConnect(url.host, url.port, url);
+      } else {
+        // Operator-configured proxy may legitimately be local; connect
+        // directly to it without pinning.
+        final port = proxyPort ?? (url.scheme == 'https' ? 443 : 80);
+        socketFuture = _plainConnect(proxyHost, port, url);
+      }
+      return ConnectionTask.fromSocket(socketFuture, () {
+        unawaited(
+          socketFuture
+              .then<void>((s) => s.destroy())
+              .catchError((Object _) {}),
+        );
+      });
+    };
+    return client;
+  }
+
+  /// Resolves [host] at connect time, validates every address, then
+  /// connects to the first validated address (no second DNS lookup).
+  Future<Socket> _pinnedConnect(String host, int port, Uri url) async {
+    final addresses = await InternetAddress.lookup(host)
+        .timeout(const Duration(seconds: 5));
+    if (addresses.isEmpty) {
+      throw const SocketException('DNS tidak mengembalikan alamat');
+    }
+    for (final addr in addresses) {
+      if (isPrivateOrReserved(addr)) {
+        throw SocketException(
+          'IP privat/reserved diblokir: ${addr.address}',
+        );
+      }
+    }
+    final socket = await Socket.connect(
+      addresses.first,
+      port,
+      timeout: const Duration(seconds: 10),
+    );
+    if (url.scheme == 'https') {
+      return SecureSocket.secure(socket, host: url.host);
+    }
+    return socket;
+  }
+
+  Future<Socket> _plainConnect(String host, int port, Uri url) async {
+    final socket = await Socket.connect(
+      host,
+      port,
+      timeout: const Duration(seconds: 10),
+    );
+    if (url.scheme == 'https') {
+      return SecureSocket.secure(socket, host: url.host);
+    }
+    return socket;
   }
 
   static const _blockedHostnames = {
@@ -60,7 +128,8 @@ class SsrfGuard {
     '0.0.0.0',
   };
 
-  bool _isPrivateOrReserved(InternetAddress addr) {
+  /// True if the address is private, loopback, link-local, or reserved.
+  static bool isPrivateOrReserved(InternetAddress addr) {
     if (addr.isLoopback || addr.isLinkLocal) return true;
     final bytes = addr.rawAddress;
     if (addr.type == InternetAddressType.IPv4 && bytes.length == 4) {

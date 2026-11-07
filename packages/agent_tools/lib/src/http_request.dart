@@ -1,5 +1,6 @@
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import 'ssrf.dart';
 
@@ -82,7 +83,7 @@ class HttpRequestTool implements Tool {
       });
     }
     final body = args['body'] as String?;
-    final client = _client ?? http.Client();
+    final client = _client ?? IOClient(_ssrf.pinnedHttpClient());
     try {
       late http.Response res;
       switch (method) {
