@@ -1,7 +1,7 @@
 /// Readability-lite HTML to plain-text extraction, inspired by
 /// trafilatura: prefer semantic main content, drop boilerplate,
 /// keep heading markers and paragraph breaks.
-
+///
 /// Converts an HTML document to readable plain text.
 String htmlToText(String html) {
   var s = html;
@@ -79,4 +79,7 @@ const _namedEntities = <String, String>{
   '&mdash;': '--',
 };
 
-String _namedEntity(Match m) => _namedEntities[m.group(0)] ?? m.group(0);
+String _namedEntity(Match m) {
+  final name = m.group(0) ?? '';
+  return _namedEntities[name] ?? name;
+}

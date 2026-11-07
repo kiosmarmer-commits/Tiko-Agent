@@ -3,12 +3,16 @@ import 'package:test/test.dart';
 
 void main() {
   test('akurasi bobot default minimal 0.8', () {
-    final harness = MemoryRankEvalHarness(cases: indonesianMemoryRankEval10);
+    final harness = const MemoryRankEvalHarness(
+      cases: indonesianMemoryRankEval10,
+    );
     expect(harness.accuracy(), greaterThanOrEqualTo(0.8));
   });
 
   test('satu kasus gagal: duplikat web mengalahkan sumber tepercaya', () {
-    final harness = MemoryRankEvalHarness(cases: indonesianMemoryRankEval10);
+    final harness = const MemoryRankEvalHarness(
+      cases: indonesianMemoryRankEval10,
+    );
     final failures = harness.failures();
     expect(failures, hasLength(1));
     expect(failures.single.caseIndex, 9);
@@ -17,7 +21,9 @@ void main() {
   });
 
   test('grid-search menemukan bobot dengan akurasi maksimal', () {
-    final harness = MemoryRankEvalHarness(cases: indonesianMemoryRankEval10);
+    final harness = const MemoryRankEvalHarness(
+      cases: indonesianMemoryRankEval10,
+    );
     final w = harness.bestWeights();
     final tuned = MemoryReranker(
       retrievalWeight: w.retrieval,
