@@ -233,6 +233,7 @@ abstract class Gateway {
   /// processes). Implementations that own such resources must override this;
   /// the default no-op keeps simple adapters compiling.
   Future<void> close() async {}
+}
 
 abstract class PermissionGate {
   Future<PermissionResult> check(ToolCall call, Session session);
