@@ -417,7 +417,7 @@ Future<void> main(List<String> argv) async {
           }
         } else if (mode == 'daemon') {
           final r = await daemon.start();
-          stdout.writeln('daemon: ${r['action']} ${r}');
+          stdout.writeln('daemon: ${r['action']} $r');
         }
       }
       if (prompt.isNotEmpty) {
@@ -476,7 +476,9 @@ Skill? _loadSkill(String slug, String skillsDir) {
     if (p.equals(realDir, root) || !p.isWithin(root, realDir)) return null;
     final file = File(p.join(realDir, 'SKILL.md'));
     if (FileSystemEntity.typeSync(file.path, followLinks: false) !=
-        FileSystemEntityType.file) return null;
+        FileSystemEntityType.file) {
+      return null;
+    }
     final realFile = file.resolveSymbolicLinksSync();
     if (!p.isWithin(realDir, realFile) || file.lengthSync() > SkillValidator.maxBytes) {
       return null;
@@ -521,7 +523,7 @@ Future<void> _configCmd(
         final secretLike = RegExp(r'(api_key|token|secret|password|credential|private_key|webhook)').hasMatch(key);
         if (secretLike && !trimmed.toLowerCase().contains('env:')) {
           final indent = line.substring(0, line.length - trimmed.length);
-          return '${indent}${key}: [REDACTED]';
+          return '$indent$key: [REDACTED]';
         }
         return line;
       }).join('\n');

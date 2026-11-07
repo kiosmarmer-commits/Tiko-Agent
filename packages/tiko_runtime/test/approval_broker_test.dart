@@ -25,7 +25,7 @@ void main() {
           userKey: 'flutter-user',
         );
 
-    ToolCall call() => ToolCall(
+    ToolCall call() => const ToolCall(
           id: 'call-1',
           name: 'write_file',
           args: {'path': 'notes.txt', 'content': 'hello', '_internal': 'secret'},

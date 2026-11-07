@@ -123,7 +123,9 @@ class OfflineQueue {
     final index = entries.indexWhere((e) => e['id'] == id);
     if (index < 0 || entries[index]['status'] != 'in_flight' ||
         entries[index]['claim_token'] != claimToken ||
-        !_leaseIsCurrent(entries[index], DateTime.now().toUtc())) return false;
+        !_leaseIsCurrent(entries[index], DateTime.now().toUtc())) {
+      return false;
+    }
     entries[index]
       ..['status'] = 'acked'
       ..['acknowledged_at'] = DateTime.now().toUtc().toIso8601String()
@@ -139,7 +141,9 @@ class OfflineQueue {
     final index = entries.indexWhere((e) => e['id'] == id);
     if (index < 0 || entries[index]['status'] != 'in_flight' ||
         entries[index]['claim_token'] != claimToken ||
-        !_leaseIsCurrent(entries[index], DateTime.now().toUtc())) return false;
+        !_leaseIsCurrent(entries[index], DateTime.now().toUtc())) {
+      return false;
+    }
     entries[index]
       ..['status'] = 'pending'
       ..remove('claimed_at')

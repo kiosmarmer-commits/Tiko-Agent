@@ -1,5 +1,3 @@
-library tiko_runtime;
-
 export 'src/tiko_runtime.dart';
 export 'src/tiko_config.dart';
 export 'src/provider_factory.dart';

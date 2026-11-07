@@ -15,7 +15,7 @@ void main() {
       channel: 'http',
       userKey: 'flutter',
     );
-    final call = ToolCall(
+    final call = const ToolCall(
       id: 'call-integration',
       name: 'write_file',
       args: {'path': 'safe.txt', 'content': 'approved'},

@@ -12,6 +12,7 @@ dependencies:
     path: ../../packages/agent_core
   agent_tools:
     path: ../../packages/agent_tools
+  path: ^1.9.0
   tiko_runtime:
     path: ../../packages/tiko_runtime
 

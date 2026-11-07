@@ -283,10 +283,10 @@ class TikoConfig {
 
     if (providersSec['default_chat'] != null &&
         providersSec['default_chat'] is! String) {
-      issues.add(ConfigIssue('providers.default_chat', 'harus berupa string'));
+      issues.add(const ConfigIssue('providers.default_chat', 'harus berupa string'));
     }
     if (security['mode'] != null && security['mode'] is! String) {
-      issues.add(ConfigIssue('security.mode', 'harus berupa string'));
+      issues.add(const ConfigIssue('security.mode', 'harus berupa string'));
     }
     for (final field in ['data_dir', 'db_path']) {
       final value = storage[field];
@@ -296,7 +296,7 @@ class TikoConfig {
     }
     final searchUrl = search['searxng_base_url'];
     if (searchUrl != null && searchUrl is! String) {
-      issues.add(ConfigIssue('search.searxng_base_url', 'harus berupa string'));
+      issues.add(const ConfigIssue('search.searxng_base_url', 'harus berupa string'));
     }
     for (final entry in [
       ('security.shell_allowlist', security['shell_allowlist']),
@@ -313,7 +313,7 @@ class TikoConfig {
     final providers = <String, ProviderConfig>{};
     final chat = providersSec['chat'];
     if (chat != null && chat is! YamlMap) {
-      issues.add(ConfigIssue('providers.chat', 'harus berupa mapping'));
+      issues.add(const ConfigIssue('providers.chat', 'harus berupa mapping'));
     }
     if (chat is YamlMap) {
       for (final e in chat.entries) {
@@ -533,7 +533,7 @@ class TikoConfig {
     final configuredPort = api['port'];
     if (configuredPort != null &&
         (configuredPort is! int || configuredPort < 1 || configuredPort > 65535)) {
-      issues.add(ConfigIssue('api.port', 'harus berupa integer 1 sampai 65535'));
+      issues.add(const ConfigIssue('api.port', 'harus berupa integer 1 sampai 65535'));
     }
     final mode = str(security['mode'], 'ask');
     if (!const {'auto', 'ask', 'deny'}.contains(mode)) {
