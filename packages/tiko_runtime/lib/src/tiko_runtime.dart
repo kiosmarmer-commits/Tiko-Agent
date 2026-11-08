@@ -62,6 +62,7 @@ class TikoRuntime {
     required this.jobs,
     required this.mcpLoader,
     required this.scriptRunner,
+    required this.evidence,
     required this.mcpEnvironment,
     required this.decision,
   });
@@ -82,6 +83,7 @@ class TikoRuntime {
   final JobStore jobs;
   final McpToolLoader mcpLoader;
   final ScriptToolRunner scriptRunner;
+  final EvidenceLedger evidence;
   final Map<String, String> mcpEnvironment;
 
   /// T1 decision model (Jev/Laya). Null when disabled in config.
@@ -239,6 +241,7 @@ class TikoRuntime {
       jobs: jobs,
       mcpLoader: mcpLoader,
       scriptRunner: scriptRunner,
+      evidence: evidence,
       mcpEnvironment: env ?? Platform.environment,
       decision: decision,
     );
