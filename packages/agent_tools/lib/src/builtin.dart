@@ -108,11 +108,20 @@ class ListDirTool implements Tool {
   @override
   ToolSpec get spec => const ToolSpec(
     name: 'list_dir',
-    description: 'Daftar isi direktori di dalam workspace.',
+    description:
+        'Daftar isi direktori di dalam workspace (paging via offset/limit).'
     inputSchema: {
       'type': 'object',
       'properties': {
         'path': {'type': 'string', 'description': 'Path relatif (default ".")'},
+        'offset': {
+          'type': 'integer',
+          'description': 'Indeks entri mulai, 1-based (default 1).',
+        },
+        'limit': {
+          'type': 'integer',
+          'description': 'Jumlah entri maksimum (default 1000, maks 2000).',
+        }
       },
     },
     risk: 'low',
@@ -137,22 +146,39 @@ class ListDirTool implements Tool {
         isError: true,
       );
     }
+    var offset = (args['offset'] as num?)?.toInt() ?? 1;
+    var limit = (args['limit'] as num?)?.toInt() ?? 1000;
+    if (offset < 1) offset = 1;
+    if (limit < 1) limit = 1;
+    if (limit > 2000) limit = 2000;
     final lines = <String>[];
-    var truncated = false;
+    var skipped = 0;
+    var more = false;
     await for (final entry in dir.list(followLinks: false)) {
-      if (lines.length >= 1000) {
-        truncated = true;
+      if (skipped < offset - 1) {
+        skipped++;
+        continue;
+      }
+      if (lines.length >= limit) {
+        more = true;
         break;
       }
       final name = p.basename(entry.path);
       lines.add('${entry is Directory ? 'dir' : 'file'}\t$name');
     }
+    if (lines.isEmpty && skipped < offset - 1) {
+      return ToolResult(
+        callId: '',
+        content: 'offset melebihi jumlah entri ($skipped)',
+        isError: true,
+      );
+    }
     lines.sort();
     final content = lines.isEmpty ? '(kosong)' : lines.join('\n');
-    return ToolResult(
-      callId: '',
-      content: truncated ? '$content\n…[daftar dibatasi 1000 entri]' : content,
-    );
+    final trailer = more
+        ? '\n…[entri berlanjut; gunakan offset=${offset + lines.length}]'
+        : '';
+    return ToolResult(callId: '', content: '$content$trailer');
   }
 }
 
@@ -163,7 +189,9 @@ class ReadFileTool implements Tool {
   @override
   ToolSpec get spec => const ToolSpec(
     name: 'read_file',
-    description: 'Baca isi file teks di dalam workspace (maks 100 KB).',
+    description:
+        'Baca isi file teks di dalam workspace (file utuh maks 100 KB; '
+        'lebih besar otomatis dipaging).'
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -206,6 +234,13 @@ class ReadFileTool implements Tool {
       );
     }
     final len = await file.length();
+    if (await _isBinary(file)) {
+      return const ToolResult(
+        callId: '',
+        content: 'File biner — read_file hanya mendukung file teks',
+        isError: true,
+      );
+    }
     final offset = (args['offset'] as num?)?.toInt();
     final limit = (args['limit'] as num?)?.toInt();
     if (offset != null || limit != null) {
@@ -216,7 +251,12 @@ class ReadFileTool implements Tool {
           isError: true,
         );
       }
-      final all = await file.readAsLines();
+      final List<String> all;
+      try {
+        all = await file.readAsLines();
+      } on FormatException {
+        return _notUtf8;
+      }
       final start = (offset ?? 1) - 1;
       if (start < 0 || start >= all.length) {
         return ToolResult(
@@ -237,14 +277,46 @@ class ReadFileTool implements Tool {
       );
     }
     if (len > 100 * 1024) {
-      return ToolResult(
-        callId: '',
-        content: 'File terlalu besar ($len byte)',
-        isError: true,
-      );
+      try {
+        final all = await file.readAsLines();
+        const pageSize = 500;
+        final end = all.length > pageSize ? pageSize : all.length;
+        return ToolResult(
+          callId: '',
+          content: '${all.sublist(0, end).join('\n')}\n'
+              '[file besar: ${all.length} baris, $len byte — '
+              'dibaca baris 1-$end; lanjutkan dengan offset=${end + 1}]',
+        );
+      } on FormatException {
+        return _notUtf8;
+      }
     }
-    return ToolResult(callId: '', content: await file.readAsString());
+    try {
+      return ToolResult(callId: '', content: await file.readAsString());
+    } on FormatException {
+      return _notUtf8;
+    }
   }
+
+  /// Deteksi biner sederhana: byte NUL di 1 KB pertama.
+  Future<bool> _isBinary(File f) async {
+    final raf = await f.open();
+    try {
+      final bytes = await raf.read(1024);
+      for (final b in bytes) {
+        if (b == 0) return true;
+      }
+      return false;
+    } finally {
+      await raf.close();
+    }
+  }
+
+  static const _notUtf8 = ToolResult(
+    callId: '',
+    content: 'File bukan teks UTF-8 yang valid',
+    isError: true,
+  );
 }
 
 class WriteFileTool implements Tool {
