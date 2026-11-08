@@ -230,7 +230,7 @@ class ToolForgeTool implements Tool {
     if (!RegExp(r'^[a-z][a-z0-9_]{2,30}$').hasMatch(name)) {
       return const ToolResult(
         callId: '',
-        content: 'name harus cocok ^[a-z][a-z0-9_]{2,30}$',
+        content: 'name harus cocok pola ^[a-z][a-z0-9_] 3-31 karakter',
         isError: true,
       );
     }

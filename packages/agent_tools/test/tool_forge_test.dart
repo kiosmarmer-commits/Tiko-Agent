@@ -105,7 +105,7 @@ void main() {
     final forge = ToolForge(
       commandRunner: (parts) async => _pr(exitCode: 3, err: 'boom'),
     );
-    final def = ForgedToolDef(
+    final def = const ForgedToolDef(
       name: 'fail_tool',
       description: 'selalu gagal',
       command: ['run'],
