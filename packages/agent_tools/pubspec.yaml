@@ -8,6 +8,8 @@ environment:
   sdk: ^3.8.0
 
 dependencies:
+  agent_calc:
+    path: ../agent_calc
   agent_core:
     path: ../agent_core
   http: ^1.2.2

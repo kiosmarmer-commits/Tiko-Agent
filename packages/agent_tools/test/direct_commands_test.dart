@@ -21,7 +21,7 @@ void main() {
     );
     final r = await d.run('calc', ['5+1']);
     expect(r.exitCode, 0);
-    expect(r.output, '6');
+    expect(r.output, contains('"value":"6"'));
   });
 
   test('args are joined: calc 2 + 3', () async {
@@ -29,7 +29,21 @@ void main() {
       registry: _registry(),
       gate: _Gate(PermissionVerdict.allowed),
     );
-    expect((await d.run('calc', ['2', '+', '3'])).output, '5');
+    expect(
+      (await d.run('calc', ['2', '+', '3'])).output,
+      contains('"value":"5"'),
+    );
+  });
+
+  test('format Indonesia: 15% dari 2 juta -> 300000', () async {
+    final d = DirectCommandDispatcher(
+      registry: _registry(),
+      gate: _Gate(PermissionVerdict.allowed),
+    );
+    final r = await d.run('calc', ['15%', 'dari', '2', 'juta']);
+    expect(r.exitCode, 0);
+    expect(r.output, contains('"value":"300000"'));
+    expect(r.output, contains('"display":"300.000"'));
   });
 
   test('missing args -> exit 2; evaluation error -> exit 1', () async {
@@ -39,6 +53,10 @@ void main() {
     );
     expect((await d.run('calc', [])).exitCode, 2);
     expect((await d.run('calc', ['1/0'])).exitCode, 1);
+    expect(
+      (await d.run('calc', ['1/0'])).output,
+      contains('CALC_E_DIV_ZERO'),
+    );
   });
 
   test('unknown command is not handled (falls through to chat)', () async {

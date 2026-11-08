@@ -144,7 +144,9 @@ jobs:
           scout="$(mktemp)"
           {
             result="$(dart run apps/tiko/bin/tiko.dart calc 5+1)"
-            test "$result" = "6"
+            grep -q '"value":"6"' <<< "$result"
+            result="$(dart run apps/tiko/bin/tiko.dart calc 15% dari 2 juta)"
+            grep -q '"value":"300000"' <<< "$result"
             chat="$(dart run apps/tiko/bin/tiko.dart chat halo)"
             grep -qi 'mock agent' <<< "$chat"
           } >"$scout" 2>&1
