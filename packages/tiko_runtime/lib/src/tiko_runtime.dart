@@ -177,6 +177,8 @@ class TikoRuntime {
 
     final deferred = DeferredQuestionStore();
 
+    final decisions = DecisionLog();
+
     final invariantGuard = InvariantGuard(
       workspaceRoot: workspace,
       sandbox: sandbox,
@@ -211,7 +213,9 @@ class TikoRuntime {
       ..register(DeferQuestionTool(store: deferred))
       ..register(AnswerDeferredTool(store: deferred))
       ..register(ListDeferredTool(store: deferred))
-      ..register(const EffectPreviewTool());
+      ..register(const EffectPreviewTool())
+      ..register(RecordDecisionTool(log: decisions))
+      ..register(WhyTool(log: decisions));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
