@@ -9,6 +9,7 @@ export 'src/lease_tool.dart';
 export 'src/invariant_guard.dart';
 export 'src/secret_broker.dart';
 export 'src/evidence_tools.dart';
+export 'src/tool_forge.dart';
 export 'src/script_runner.dart';
 export 'src/ssrf.dart';
 export 'src/web_search.dart';

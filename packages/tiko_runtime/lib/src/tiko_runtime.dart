@@ -253,6 +253,15 @@ class TikoRuntime {
     if (rt.registry.get('spawn_subagent') == null) {
       rt.registry.register(SpawnSubagentTool(runner: rt._runSubagent));
     }
+    // NEW-12: forged tools are contract-tested before installation;
+    // fail-closed when no OS sandbox can execute the tests.
+    if (rt.registry.get('tool_forge') == null) {
+      rt.registry.register(ToolForgeTool(
+        forge: ToolForge(sandbox: sandbox),
+        hasTool: (name) => rt.registry.get(name) != null,
+        registerTool: rt.registry.register,
+      ));
+    }
     final snap = ResourceMonitor.capture(dataDir: dataDir);
     rt.lastResources = snap;
     rt.resourceProfile = snap.profile;
