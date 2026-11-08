@@ -210,7 +210,8 @@ class TikoRuntime {
       ..register(VerifyClaimsTool(ledger: evidence))
       ..register(DeferQuestionTool(store: deferred))
       ..register(AnswerDeferredTool(store: deferred))
-      ..register(ListDeferredTool(store: deferred));
+      ..register(ListDeferredTool(store: deferred))
+      ..register(const EffectPreviewTool());
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
