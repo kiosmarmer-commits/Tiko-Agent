@@ -13,7 +13,7 @@ final class EvalContext {
     this.scale = 12,
     this.rounding = RoundingMode.halfEven,
     this.angleUnit = 'rad',
-    this.limits = const CalcLimits.defaults(),
+    this.limits = CalcLimits.defaults,
   }) : warnings = [], approximate = false;
 
   final int scale;
