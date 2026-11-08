@@ -5,6 +5,7 @@ import '../core/limits.dart';
 import '../core/numeric.dart';
 import '../core/rounding.dart';
 import '../finance/finance.dart';
+import '../stats/stats.dart';
 import 'evaluator.dart';
 
 /// Fungsi evaluator (CALC-MAT-05b). Jalur eksak memakai Dec; jalur
@@ -414,6 +415,39 @@ final class CalcFunctions {
     'irr': (a, ctx) {
       _need(a, 'irr', 2);
       return CalcFinance.irr(a, ctx);
+    },
+    // TASK-CALC-16..17: statistik deskriptif (CalcStats).
+    'mean': (a, ctx) {
+      _need(a, 'mean', 1);
+      return CalcStats.mean(a, ctx);
+    },
+    'median': (a, ctx) {
+      _need(a, 'median', 1);
+      return CalcStats.median(a, ctx);
+    },
+    'var_p': (a, ctx) {
+      _need(a, 'var_p', 1);
+      return CalcStats.variance(a, ctx, sample: false);
+    },
+    'var_s': (a, ctx) {
+      _need(a, 'var_s', 1);
+      return CalcStats.variance(a, ctx, sample: true);
+    },
+    'stdev_p': (a, ctx) {
+      _need(a, 'stdev_p', 1);
+      return CalcStats.stdev(a, ctx, sample: false);
+    },
+    'stdev_s': (a, ctx) {
+      _need(a, 'stdev_s', 1);
+      return CalcStats.stdev(a, ctx, sample: true);
+    },
+    'percentile': (a, ctx) {
+      _need(a, 'percentile', 2);
+      return CalcStats.percentile(
+        a.sublist(0, a.length - 1),
+        a.last,
+        ctx,
+      );
     },
   };
 
