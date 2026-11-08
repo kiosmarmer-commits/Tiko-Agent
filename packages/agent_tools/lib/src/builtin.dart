@@ -61,7 +61,8 @@ class DatetimeTool implements Tool {
 }
 
 /// Kalkulator eksak berbasis agent_calc (CALC-ARC-04): evaluator yang
-/// sama dengan direct command tiko calc (satu sumber kebenaran).
+/// sama dengan direct command tiko calc (satu sumber kebenaran),
+/// dijalankan lewat CalcSandbox isolate dengan timeout dapat dibatalkan.
 class CalcTool implements Tool {
   CalcTool({this.limits = CalcLimits.defaults});
 
@@ -70,7 +71,8 @@ class CalcTool implements Tool {
   @override
   ToolSpec get spec => const ToolSpec(
     name: 'calc',
-    description: 'Hitung ekspresi matematika secara eksak. WAJIB dipakai '
+    descr
+iption: 'Hitung ekspresi matematika secara eksak. WAJIB dipakai '
         'untuk semua aritmetika bukan-trivial (perkalian besar, desimal, '
         'persen, pangkat, akar). Mendukung format Indonesia: '
         '1.500.000,50 ; 2 juta ; 5rb ; 15% dari 2 juta.',
@@ -122,15 +124,20 @@ class CalcTool implements Tool {
     } on FormatException catch (e) {
       return ToolResult(callId: '', content: '$e', isError: true);
     }
-    final result = CalcEngine(limits: limits).evaluate(
+    // Sandbox isolate (TASK-CALC-09): evaluasi dijalankan di isolate
+    // terpisah dengan timeout keras limits.timeoutMs, sehingga beban
+    // besar tidak pernah menggantung runtime (TASK-CALC-21 inferensi).
+    final result = await const CalcSandbox().evaluate(
       expression,
       scale: scale,
       rounding: rounding,
       locale: locale,
+      limits: limits,
     );
     return ToolResult(
       callId: '',
-      content: result.toJsonText(),
+      content: result.toJ
+sonText(),
       isError: !result.ok,
     );
   }
@@ -198,7 +205,8 @@ class ListDirTool implements Tool {
       return ToolResult(
         callId: '',
         content: 'offset melebihi jumlah entri (${all.length})',
-        isError: true,
+        is
+Error: true,
       );
     }
     all.sort();
@@ -268,7 +276,8 @@ class ReadFileTool implements Tool {
     if (await _isBinary(file)) {
       return const ToolResult(
         callId: '',
-        content: 'File biner — read_file hanya mendukung file teks',
+        content: 'File
+ biner — read_file hanya mendukung file teks',
         isError: true,
       );
     }
@@ -331,7 +340,8 @@ class ReadFileTool implements Tool {
     } on FormatException {
       return _notUtf8;
     } on FileSystemException {
-      return _notUtf8;
+    
+  return _notUtf8;
     }
   }
 
@@ -404,7 +414,8 @@ class WriteFileTool implements Tool {
       );
     }
     if (await file.exists()) {
-      await file.copy(backupPath);
+      aw
+ait file.copy(backupPath);
     }
     await file.parent.create(recursive: true);
     final rechecked = PathSafety.resolveInRoot(workspaceRoot, rel);
@@ -482,7 +493,8 @@ class ShellTool implements Tool {
       return const ToolResult(callId: '', content: 'cmd kosong', isError: true);
     }
 
-    // Workspace jail: reject path args that escape workspace (AGD-07 sandbox light).
+    // Workspace jail: rejec
+t path args that escape workspace (AGD-07 sandbox light).
     final root = p.normalize(Directory(ctx.workspacePath).absolute.path);
     for (final part in parts.skip(1)) {
       if (part.startsWith('-')) continue;
@@ -547,7 +559,8 @@ class WebFetchTool implements Tool {
   final http.Client? _client;
 
   @override
-  ToolSpec get spec => const ToolSpec(
+  ToolSpec get spec => c
+onst ToolSpec(
     name: 'web_fetch',
     description:
         'Ambil halaman HTTP(S) dan kembalikan teks (maks 2 MB). Blokir IP privat.',
@@ -615,7 +628,8 @@ class WebFetchTool implements Tool {
       if (response.statusCode >= 400) {
         return ToolResult(
           callId: '',
-          content: 'HTTP ${response.statusCode}',
+          content: 'H
+TTP ${response.statusCode}',
           isError: true,
         );
       }

@@ -1,3 +1,4 @@
+import 'package:agent_calc/agent_calc.dart';
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_tools/agent_tools.dart';
 import 'package:test/test.dart';
@@ -53,5 +54,26 @@ void main() {
     );
     expect(r.isError, isTrue);
     expect(r.content, contains('CALC_E_LIMIT'));
+  });
+}  test('fungsi domain M1 (keuangan) tersedia lewat tool runtime', () async {
+    final r = await CalcTool().run(
+      {'expression': 'pmt(0.01, 12, 100000)'},
+      ctx(),
+    );
+    expect(r.isError, isFalse);
+    expect(r.content, contains('"value":"8884.878867834171"'));
+  });
+
+  test('beban berat fact(5000) selesai dalam timeout default sandbox', () async {
+    final r = await CalcTool().run({'expression': 'fact(5000)'}, ctx());
+    expect(r.isError, isFalse);
+  });
+
+  test('timeout keras -> CALC_E_TIMEOUT via sandbox', () async {
+    final r = await CalcTool(
+      limits: const CalcLimits(timeoutMs: 0),
+    ).run({'expression': 'fact(5000)'}, ctx());
+    expect(r.isError, isTrue);
+    expect(r.content, contains('CALC_E_TIMEOUT'));
   });
 }
