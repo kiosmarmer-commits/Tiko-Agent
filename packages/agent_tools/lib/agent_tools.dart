@@ -14,6 +14,7 @@ export 'src/defer_question.dart';
 export 'src/effect_preview.dart';
 export 'src/decision_log.dart';
 export 'src/impact_map.dart';
+export 'src/undo_ledger.dart';
 export 'src/script_runner.dart';
 export 'src/ssrf.dart';
 export 'src/web_search.dart';

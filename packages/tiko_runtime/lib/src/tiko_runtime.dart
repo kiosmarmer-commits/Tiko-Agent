@@ -179,6 +179,8 @@ class TikoRuntime {
 
     final decisions = DecisionLog();
 
+    final undoLedger = UndoLedger();
+
     final invariantGuard = InvariantGuard(
       workspaceRoot: workspace,
       sandbox: sandbox,
@@ -216,7 +218,10 @@ class TikoRuntime {
       ..register(const EffectPreviewTool())
       ..register(RecordDecisionTool(log: decisions))
       ..register(WhyTool(log: decisions))
-      ..register(const ImpactMapTool());
+      ..register(const ImpactMapTool())
+      ..register(RecordUndoableTool(ledger: undoLedger))
+      ..register(UndoTool(ledger: undoLedger))
+      ..register(ListUndoTool(ledger: undoLedger));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
