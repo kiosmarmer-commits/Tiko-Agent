@@ -29,7 +29,6 @@ export 'src/mcp/http_client.dart';
 export 'src/sandbox.dart';
 export 'src/patch_file.dart';
 export 'src/readability.dart';
-export 'src/safe_math.dart';
 export 'src/direct_commands.dart';
 export 'src/path_safety.dart';
 export 'src/checkpoint.dart';

@@ -48,7 +48,7 @@ void main() {
 
   test('batas panjang ekspresi -> CALC_E_LIMIT', () async {
     final r = await CalcTool().run(
-      {'expression': '1' + List.filled(600, ' + 1').join()},
+      {'expression': '1${List.filled(600, ' + 1').join()}'},
       ctx(),
     );
     expect(r.isError, isTrue);
