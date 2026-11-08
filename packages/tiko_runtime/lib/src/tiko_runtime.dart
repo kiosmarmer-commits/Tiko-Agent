@@ -215,7 +215,8 @@ class TikoRuntime {
       ..register(ListDeferredTool(store: deferred))
       ..register(const EffectPreviewTool())
       ..register(RecordDecisionTool(log: decisions))
-      ..register(WhyTool(log: decisions));
+      ..register(WhyTool(log: decisions))
+      ..register(const ImpactMapTool());
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
