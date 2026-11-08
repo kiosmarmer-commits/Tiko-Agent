@@ -19,6 +19,8 @@ class DirectResult {
 /// Deterministic command path (PRD §6 "Direct command versus chat"):
 /// `tiko calc 5+1` -> tool `calc` -> `6`, never routed through an LLM, but
 /// still subject to schema validation and the permission gate.
+/// `tiko calc --scale=4 2/3` meneruskan flag scale/rounding/locale ke tool
+/// (TASK-CALC-23 inferensi); flag tidak dikenal -> exit 2.
 class DirectCommandDispatcher {
   DirectCommandDispatcher({
     required this.registry,
@@ -34,9 +36,63 @@ class DirectCommandDispatcher {
 
   /// Command name -> (tool name, builder of tool args from CLI args).
   static final Map<String, _Direct> _commands = {
-    'calc': _Direct('calc', (a) => a.isEmpty ? null : {'expression': a.join(' ')}),
+    'calc': _Direct('calc', _buildCalcArgs),
     'datetime': _Direct('datetime', (a) => const <String, dynamic>{}),
   };
+
+  /// Mode pembulatan yang diterima flag --rounding (samakan dengan
+  /// skema tool calc).
+  static const _roundingModes = {
+    'half_even',
+    'half_up',
+    'down',
+    'up',
+    'floor',
+    'ceiling',
+  };
+
+  /// Susun argumen tool calc: flag opsional --scale=N, --rounding=MODE,
+  /// --locale=id|en sebelum ekspresi; sisanya digabung menjadi ekspresi.
+  /// Skema tool sudah mendukung parameter ini; jalur direct command
+  /// sebelumnya tidak bisa mengaksesnya (TASK-CALC-23 inferensi).
+  /// Flag/nilai tidak dikenal -> null (exit 2, pesan penggunaan).
+  static Map<String, dynamic>? _buildCalcArgs(List<String> args) {
+    final expr = <String>[];
+    int? scale;
+    String? rounding;
+    String? locale;
+    for (final arg in args) {
+      if (!arg.startsWith('--')) {
+        expr.add(arg);
+        continue;
+      }
+      final eq = arg.indexOf('=');
+      if (eq <= 2) return null;
+      final key = arg.substring(2, eq);
+      final value = arg.substring(eq + 1);
+      if (value.isEmpty) return null;
+      if (key == 'scale') {
+        final s = int.tryParse(value);
+        if (s == null || s < 0 || s > 50) return null;
+        scale = s;
+      } else if (key == 'rounding') {
+        if (!_roundingModes.contains(value)) return null;
+        rounding = value;
+      } else if (key == 'locale') {
+        if (value != 'id' && value != 'en') return null;
+        locale = value;
+      } else {
+        return null;
+      }
+    }
+    if (expr.isEmpty) return null;
+    return <String, dynamic>{
+      'expression': expr.join(' '),
+      if (scale != null) 'scale': scale,
+      if (rounding != null) 'rounding': rounding,
+      if (locale != null) 'locale': locale,
+    };
+  }
 
   static Iterable<String> get commandNames => _commands.keys;
 
@@ -59,7 +115,8 @@ class DirectCommandDispatcher {
     if (tool == null) {
       return DirectResult(1, 'Tool tidak tersedia: ${spec.tool}');
     }
-    final invalid = registry.validateArgs(spec.tool, toolArgs);
+    final invalid = registry.validateArgs(spec.tool, tool
+Args);
     if (invalid != null) return DirectResult(2, 'Argumen tidak valid: $invalid');
 
     final sess = session ??

@@ -62,7 +62,8 @@ void main() {
   test('unknown command is not handled (falls through to chat)', () async {
     final d = DirectCommandDispatcher(
       registry: _registry(),
-      gate: _Gate(PermissionVerdict.allowed),
+      ga
+te: _Gate(PermissionVerdict.allowed),
     );
     expect((await d.run('hello', [])).handled, isFalse);
   });
@@ -79,5 +80,48 @@ void main() {
       gate: _Gate(PermissionVerdict.needsConfirm),
     );
     expect((await needs.run('calc', ['5+1'])).exitCode, 3);
+  });
+}  test('flag --scale diteruskan ke tool calc', () async {
+    final d = DirectCommandDispatcher(
+      registry: _registry(),
+      gate: _Gate(PermissionVerdict.allowed),
+    );
+    final r = await d.run('calc', ['--scale=4', '2/3']);
+    expect(r.exitCode, 0);
+    expect(r.output, contains('"value":"0.6667"'));
+    expect(
+      r.output,
+      contains('"precision":{"scale":4,"rounding":"half_even"}'),
+    );
+  });
+
+  test('flag --rounding=down membulatkan ke bawah', () async {
+    final d = DirectCommandDispatcher(
+      registry: _registry(),
+      gate: _Gate(PermissionVerdict.allowed),
+    );
+    final r = await d.run('calc', ['--scale=2', '--rounding=down', '2/3']);
+    expect(r.exitCode, 0);
+    expect(r.output, contains('"value":"0.66"'));
+  });
+
+  test('flag --locale=en membalik peran titik dan koma', () async {
+    final d = DirectCommandDispatcher(
+      registry: _registry(),
+      gate: _Gate(PermissionVerdict.allowed),
+    );
+    final r = await d.run('calc', ['--locale=en', '1,500.50', '*', '2']);
+    expect(r.exitCode, 0);
+    expect(r.output, contains('"value":"3001"'));
+  });
+
+  test('flag tidak dikenal / nilai invalid -> exit 2', () async {
+    final d = DirectCommandDispatcher(
+      registry: _registry(),
+      gate: _Gate(PermissionVerdict.allowed),
+    );
+    expect((await d.run('calc', ['--foo=1', '5+1'])).exitCode, 2);
+    expect((await d.run('calc', ['--scale=99', '5+1'])).exitCode, 2);
+    expect((await d.run('calc', ['--scale='])).exitCode, 2);
   });
 }
