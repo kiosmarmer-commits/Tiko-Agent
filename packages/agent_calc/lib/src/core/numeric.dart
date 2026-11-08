@@ -80,6 +80,61 @@ final class Dec implements Comparable<Dec> {
 
   Dec abs() => unscaled.isNegative ? Dec._(-unscaled, scale) : this;
 
+  /// Geser titik desimal: nilai * 10^exp (eksak).
+  Dec shift10(int exp) {
+    if (exp >= 0) return Dec._(unscaled * _ten.pow(exp), scale);
+    return Dec._(unscaled, scale - exp);
+  }
+
+  /// Sisa pembagian terpotong; tanda mengikuti dividen ini.
+  Dec remainderOf(Dec o) {
+    if (o.isZero) throw const FormatException('modulo dengan nol');
+    final s = scale > o.scale ? scale : o.scale;
+    return Dec._(_up(s).remainder(o._up(s)), s);
+  }
+
+  /// Akar kuadrat eksak ke [targetScale] via Newton BigInt (CALC-MAT-05).
+  Dec sqrtAt(int targetScale) {
+    if (targetScale < 0) {
+      throw const FormatException('skala tidak boleh negatif');
+    }
+    if (sign < 0) {
+      throw const FormatException('akar bilangan negatif');
+    }
+    if (isZero) return zero;
+    var t = targetScale;
+    while (2 * t < scale || (2 * t - scale).isOdd) {
+      t++;
+    }
+    final n = unscaled * _ten.pow(2 * t - scale);
+    return Dec._(_isqrt(n), t);
+  }
+
+  static BigInt _isqrt(BigInt n) {
+    if (n < BigInt.two) return n;
+    var x = BigInt.one << ((n.bitLength + 1) ~/ 2);
+    while (true) {
+      final y = (x + n ~/ x) >> 1;
+      if (y >= x) return x;
+      x = y;
+    }
+  }
+
+  /// Konversi khusus jalur perkiraan (transendental): 15 digit
+  /// signifikan dari double. JANGAN dipakai untuk nilai eksak -
+  /// double sudah dibulatkan biner (CALC-MAT-01).
+  static Dec fromApproxDouble(double v) {
+    if (v.isNaN || v.isInfinite) {
+      throw const FormatException('nilai tidak terdefinisi');
+    }
+    if (v == 0) return zero;
+    final s = v.toStringAsExponential(14);
+    final e = s.indexOf('e');
+    final mant = Dec.parse(s.substring(0, e));
+    final exp = int.parse(s.substring(e + 1));
+    return mant.shift10(exp);
+  }
+
   /// Pangkat bulat non-negatif via exponentiation by squaring (eksak).
   /// Batas pangkat/hasil digit dicek pemanggil (CalcLimits).
   Dec powInt(int exponent) {
