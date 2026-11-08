@@ -92,7 +92,7 @@ final class CalcSandbox {
   static CalcResult _timeout(int ms) {
     return _error(
       CalcErrorCodes.timeout,
-      'Evaluasi dibatalkan: melewati batas waktu (${ms} ms)',
+      'Evaluasi dibatalkan: melewati batas waktu ($ms ms)',
     );
   }
 
