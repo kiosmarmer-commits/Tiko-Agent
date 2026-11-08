@@ -198,7 +198,8 @@ class TikoRuntime {
       ..register(ErrorRecordTool(errorMemory))
       ..register(LeaseTool(manager: leases))
       ..register(InvariantDeclareTool(guard: invariantGuard))
-      ..register(InvariantCheckTool(guard: invariantGuard));
+      ..register(InvariantCheckTool(guard: invariantGuard))
+      ..register(SecretBrokerTool(sandbox: sandbox));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.

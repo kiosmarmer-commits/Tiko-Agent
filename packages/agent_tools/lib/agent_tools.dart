@@ -7,6 +7,7 @@ export 'src/probe.dart';
 export 'src/error_memory.dart';
 export 'src/lease_tool.dart';
 export 'src/invariant_guard.dart';
+export 'src/secret_broker.dart';
 export 'src/script_runner.dart';
 export 'src/ssrf.dart';
 export 'src/web_search.dart';
