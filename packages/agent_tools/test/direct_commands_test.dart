@@ -62,8 +62,7 @@ void main() {
   test('unknown command is not handled (falls through to chat)', () async {
     final d = DirectCommandDispatcher(
       registry: _registry(),
-      ga
-te: _Gate(PermissionVerdict.allowed),
+      gate: _Gate(PermissionVerdict.allowed),
     );
     expect((await d.run('hello', [])).handled, isFalse);
   });
@@ -81,7 +80,8 @@ te: _Gate(PermissionVerdict.allowed),
     );
     expect((await needs.run('calc', ['5+1'])).exitCode, 3);
   });
-}  test('flag --scale diteruskan ke tool calc', () async {
+
+  test('flag --scale diteruskan ke tool calc', () async {
     final d = DirectCommandDispatcher(
       registry: _registry(),
       gate: _Gate(PermissionVerdict.allowed),

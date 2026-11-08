@@ -36,7 +36,7 @@ class DirectCommandDispatcher {
 
   /// Command name -> (tool name, builder of tool args from CLI args).
   static final Map<String, _Direct> _commands = {
-    'calc': _Direct('calc', _buildCalcArgs),
+    'calc': const _Direct('calc', _buildCalcArgs),
     'datetime': _Direct('datetime', (a) => const <String, dynamic>{}),
   };
 
@@ -115,8 +115,7 @@ class DirectCommandDispatcher {
     if (tool == null) {
       return DirectResult(1, 'Tool tidak tersedia: ${spec.tool}');
     }
-    final invalid = registry.validateArgs(spec.tool, tool
-Args);
+    final invalid = registry.validateArgs(spec.tool, toolArgs);
     if (invalid != null) return DirectResult(2, 'Argumen tidak valid: $invalid');
 
     final sess = session ??

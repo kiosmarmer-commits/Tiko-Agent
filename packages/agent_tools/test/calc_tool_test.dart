@@ -55,7 +55,8 @@ void main() {
     expect(r.isError, isTrue);
     expect(r.content, contains('CALC_E_LIMIT'));
   });
-}  test('fungsi domain M1 (keuangan) tersedia lewat tool runtime', () async {
+
+  test('fungsi domain M1 (keuangan) tersedia lewat tool runtime', () async {
     final r = await CalcTool().run(
       {'expression': 'pmt(0.01, 12, 100000)'},
       ctx(),
