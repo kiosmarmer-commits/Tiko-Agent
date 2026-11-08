@@ -193,7 +193,7 @@ final class CalcFunctions {
       _need(a, 'sign', 1, 1);
       return Dec.fromInt(a[0].sign);
     },
-    'floor': (a, _) => _round(a, 'floor', RoundingMode.floor).roundTo(0, RoundingMode.floor),
+    'floor': (a, _) => _round(a, 'floor', RoundingMode.floor),
     'ceil': (a, _) => _round(a, 'ceil', RoundingMode.ceiling),
     'trunc': (a, _) => _round(a, 'trunc', RoundingMode.down),
     // DEC-OPEN-01 diputuskan: round() default half_up (kebiasaan sekolah);

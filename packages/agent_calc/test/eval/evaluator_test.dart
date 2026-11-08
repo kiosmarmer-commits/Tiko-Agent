@@ -68,7 +68,6 @@ void main() {
   });
 
   test('galat domain, div-zero, limit', () {
-    expect(evalExpr('sqrt(-1)').toString, throwsCalcException);
     expect(() => evalExpr('sqrt(-1)'), throwsCalcException('CALC_E_DOMAIN'));
     expect(() => evalExpr('ln(0)'), throwsCalcException('CALC_E_DOMAIN'));
     expect(() => evalExpr('log(0)'), throwsCalcException('CALC_E_DOMAIN'));
