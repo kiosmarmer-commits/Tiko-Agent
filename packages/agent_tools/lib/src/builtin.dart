@@ -215,7 +215,7 @@ class ListDirTool implements Tool {
     final trailer = end < all.length
         ? '\n…[entri berlanjut; gunakan offset=${end + 1}]'
         : '';
-    return ToolResult(callId: '', content: '${content}$trailer');
+    return ToolResult(callId: '', content: '$content$trailer');
   }
 }
 class ReadFileTool implements Tool {
@@ -584,7 +584,7 @@ class WebFetchTool implements Tool {
       );
     }
 
-    final client = _client ?? IOClient(ssrf.pinnedHttpClient());
+    final client = _client ?? io.IOClient(ssrf.pinnedHttpClient());
     try {
       // Manual redirect handling to re-check each hop.
       var current = url;
