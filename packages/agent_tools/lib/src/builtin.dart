@@ -477,7 +477,7 @@ class ShellTool implements Tool {
       }
     }
 
-    final parts = cmd.split(RegExp(r's+')).where((s) => s.isNotEmpty).toList();
+    final parts = cmd.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
     if (parts.isEmpty) {
       return const ToolResult(callId: '', content: 'cmd kosong', isError: true);
     }

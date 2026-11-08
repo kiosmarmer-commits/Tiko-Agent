@@ -20,7 +20,7 @@ final class LocaleNumbers {
   );
 
   static final RegExp _numberToken =
-      RegExp(r'\\d[\\d.,]*(?:[eE][+-]?\\d+)?');
+      RegExp(r'\d[\d.,]*(?:[eE][+-]?\d+)?');
 
   static const Map<String, int> _shifts = {
     'rb': 3, 'ribu': 3, 'k': 3,
@@ -62,7 +62,7 @@ final class LocaleNumbers {
     final warnings = <String>[];
     final text = input.replaceAllMapped(_numberToken, (m) {
       final tok = m.group(0)!;
-      if (RegExp(r'^\\d[\\d.,]*[eE][+-]?\\d+$').hasMatch(tok)) {
+      if (RegExp(r'^\d[\d.,]*[eE][+-]?\d+$').hasMatch(tok)) {
         return tok; // notasi ilmiah: biarkan
       }
       return _convert(tok, locale, strict, warnings);
@@ -74,24 +74,24 @@ final class LocaleNumbers {
   static Dec classify(String token, {String locale = 'id'}) {
     final plain = token.trim();
     if (locale == 'en') {
-      if (RegExp(r'^\\d{1,3}(,\\d{3})+(\\.\\d+)?$').hasMatch(plain)) {
+      if (RegExp(r'^\d{1,3}(,\d{3})+(\.\d+)?$').hasMatch(plain)) {
         return Dec.parse(plain.replaceAll(',', ''));
       }
-      if (RegExp(r'^\\d+,\\d+$').hasMatch(plain)) {
+      if (RegExp(r'^\d+,\d+$').hasMatch(plain)) {
         return Dec.parse(plain.replaceFirst(',', '.'));
       }
       return Dec.parse(plain);
     }
     // locale id: ambigu dicek SEBELUM aturan grup ribuan.
-    if (RegExp(r'^\\d+\\.\\d{3}$').hasMatch(plain)) {
+    if (RegExp(r'^\d+\.\d{3}$').hasMatch(plain)) {
       return Dec.parse(plain.replaceAll('.', ''));
     }
-    if (RegExp(r'^\\d{1,3}(\\.\\d{3})+(,\\d+)?$').hasMatch(plain)) {
+    if (RegExp(r'^\d{1,3}(\.\d{3})+(,\d+)?$').hasMatch(plain)) {
       return Dec.parse(
         plain.replaceAll('.', '').replaceFirst(',', '.'),
       );
     }
-    if (RegExp(r'^\\d+,\\d+$').hasMatch(plain)) {
+    if (RegExp(r'^\d+,\d+$').hasMatch(plain)) {
       return Dec.parse(plain.replaceFirst(',', '.'));
     }
     return Dec.parse(plain);
@@ -105,33 +105,33 @@ final class LocaleNumbers {
   ) {
     final plain = token.trim();
     if (locale == 'en') {
-      if (RegExp(r'^\\d{1,3}(,\\d{3})+(\\.\\d+)?$').hasMatch(plain)) {
+      if (RegExp(r'^\d{1,3}(,\d{3})+(\.\d+)?$').hasMatch(plain)) {
         return plain.replaceAll(',', '');
       }
-      if (RegExp(r'^\\d+,\\d+$').hasMatch(plain)) {
+      if (RegExp(r'^\d+,\d+$').hasMatch(plain)) {
         warnings.add('W_DECIMAL_POINT');
         return plain.replaceFirst(',', '.');
       }
       return plain;
     }
-    if (RegExp(r'^\\d+\\.\\d{3}$').hasMatch(plain)) {
+    if (RegExp(r'^\d+\.\d{3}$').hasMatch(plain)) {
       if (strict) {
         throw CalcException(
           CalcErrorCodes.ambiguousNumber,
-          "Angka ambigu '$plain': tulus 1500 atau 1500.000",
-          hint: 'tulis 1.500,00 atau 1500 bila maksudmu ribuan',
+          "Angka ambigu '$plain': tulis 1500 atau 1.500,00",
+          hint: 'tulis 1.500,00 bila maksudmu ribuan, atau 1500 bila lainnya',
         );
       }
       warnings.add('W_AMBIGUOUS_NUMBER');
       return plain.replaceAll('.', '');
     }
-    if (RegExp(r'^\\d{1,3}(\\.\\d{3})+(,\\d+)?$').hasMatch(plain)) {
+    if (RegExp(r'^\d{1,3}(\.\d{3})+(,\d+)?$').hasMatch(plain)) {
       return plain.replaceAll('.', '').replaceFirst(',', '.');
     }
-    if (RegExp(r'^\\d+,\\d+$').hasMatch(plain)) {
+    if (RegExp(r'^\d+,\d+$').hasMatch(plain)) {
       return plain.replaceFirst(',', '.');
     }
-    if (RegExp(r'^\\d+\\.\\d+$').hasMatch(plain)) {
+    if (RegExp(r'^\d+\.\d+$').hasMatch(plain)) {
       warnings.add('W_DECIMAL_POINT');
       return plain;
     }

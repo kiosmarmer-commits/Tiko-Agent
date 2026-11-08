@@ -32,7 +32,7 @@ void main() {
     expect(canon('2 juta').text, '2000000');
     expect(canon('5rb * 2').text, '5000 * 2');
     expect(canon('1,5 juta').text, '1500000');
-    expect(canon('3k + 1').text, '3001');
+    expect(canon('3k + 1').text, '3000 + 1');
   });
 
   test('strict: angka ambigu -> CALC_E_AMBIGUOUS_NUMBER', () {

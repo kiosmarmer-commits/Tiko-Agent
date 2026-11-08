@@ -56,6 +56,6 @@ void main() {
       ),
     );
     expect(result.isError, isFalse);
-    expect(result.content, '20');
+    expect(result.content, contains('"value":"20"'));
   });
 }

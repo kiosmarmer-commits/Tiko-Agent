@@ -6,35 +6,35 @@ final class RewriteId {
 
   static final List<RegExp> _patterns = [
     RegExp(
-      r'^\\s*diskon\\s+(.+?)\\s*%\\s+dari\\s+(.+?)\\s*$',
+      r'^\s*diskon\s+(.+?)\s*%\s+dari\s+(.+?)\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*(.+?)\\s+naik\\s+(.+?)\\s*%\\s*$',
+      r'^\s*(.+?)\s+naik\s+(.+?)\s*%\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*naik\\s+(.+?)\\s*%\\s+dari\\s+(.+?)\\s*$',
+      r'^\s*naik\s+(.+?)\s*%\s+dari\s+(.+?)\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*(.+?)\\s+turun\\s+(.+?)\\s*%\\s*$',
+      r'^\s*(.+?)\s+turun\s+(.+?)\s*%\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*(.+?)\\s*%\\s+dari\\s+(.+?)\\s*$',
+      r'^\s*(.+?)\s*%\s+dari\s+(.+?)\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*(.+?)\\s+(?:adalah|itu)\\s+berapa\\s+persen\\s+dari\\s+(.+?)\\s*$',
+      r'^\s*(.+?)\s+(?:adalah|itu)\s+berapa\s+persen\s+dari\s+(.+?)\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*akar\\s+dari\\s+(.+?)\\s*$',
+      r'^\s*akar\s+dari\s+(.+?)\s*$',
       caseSensitive: false,
     ),
     RegExp(
-      r'^\\s*(.+?)\\s+(?:kali|dibagi|tambah|kurang|pangkat)\\s+(.+?)\\s*$',
+      r'^\s*(.+)\s+(kali|dibagi|tambah|kurang|pangkat)\s+(.+?)\s*$',
       caseSensitive: false,
     ),
   ];
@@ -57,42 +57,45 @@ final class RewriteId {
     for (final p in _patterns) {
       final m = p.firstMatch(input);
       if (m == null) continue;
+      final pat = p.pattern;
+      // R5: akar dari X (hanya satu grup tangkapan).
+      if (pat.contains('akar')) {
+        return 'sqrt(${m.group(1)!.trim()})';
+      }
+      // R6: kata operator, asosiatif kiri - operand kiri ditulis ulang
+      // lebih dulu bila masih memuat frasa operator.
+      if (pat.contains('kali')) {
+        final raw = m.group(1)!.trim();
+        final left = _applyOnce(raw) ?? raw;
+        final op = switch (m.group(2)!.toLowerCase()) {
+          'kali' => '*',
+          'dibagi' => '/',
+          'tambah' => '+',
+          'kurang' => '-',
+          _ => '^',
+        };
+        return '($left)$op(${m.group(3)!.trim()})';
+      }
       final g1 = m.group(1)!.trim();
-      final g2 = m.group(2)!.trim();
-      if (p.pattern.contains('diskon')) {
+      final g2 = m.groupCount > 1 ? m.group(2)!.trim() : '';
+      if (pat.contains('diskon')) {
         return '($g2)*(1-($g1)/100)';
       }
-      if (p.pattern.contains('naik') && p.pattern.contains('dari')) {
+      if (pat.contains('naik') && pat.contains('dari')) {
         return '($g2)*(1+($g1)/100)';
       }
-      if (p.pattern.contains('naik')) {
+      if (pat.contains('naik')) {
         return '($g1)*(1+($g2)/100)';
       }
-      if (p.pattern.contains('turun')) {
+      if (pat.contains('turun')) {
         return '($g1)*(1-($g2)/100)';
       }
-      if (p.pattern.contains('%')) {
+      if (pat.contains('%')) {
         return '(($g1)/100)*($g2)';
       }
-      if (p.pattern.contains('persen')) {
+      if (pat.contains('persen')) {
         return '(($g1)/($g2))*100';
       }
-      if (p.pattern.contains('akar')) {
-        return 'sqrt($g1)';
-      }
-      // kata operator: kali/dibagi/tambah/kurang/pangkat
-      final opWord = RegExp(
-        r'(kali|dibagi|tambah|kurang|pangkat)',
-        caseSensitive: false,
-      ).firstMatch(input)!.group(1)!.toLowerCase();
-      final op = switch (opWord) {
-        'kali' => '*',
-        'dibagi' => '/',
-        'tambah' => '+',
-        'kurang' => '-',
-        _ => '^',
-      };
-      return '($g1)$op($g2)';
     }
     return null;
   }

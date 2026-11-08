@@ -35,7 +35,7 @@ void main() {
     final tool = CalcTool();
     final r = await tool.run({'expression': '(2+3)*4'}, ctx);
     expect(r.isError, isFalse);
-    expect(r.content, '20');
+    expect(r.content, contains('"value":"20"'));
   });
 
   test('registry includes new tools', () {

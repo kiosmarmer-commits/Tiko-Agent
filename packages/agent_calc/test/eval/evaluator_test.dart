@@ -17,7 +17,7 @@ Dec evalExpr(String s, {int scale = 12, String angleUnit = 'rad'}) {
 void main() {
   test('G-MAT-004: 3 + 4*2/(1-5)^2^3', () {
     expect(
-      evalExpr('3 + 4*2/(1-5)^2^3', scale: 20).toString(),
+      evalExpr('3 + 4*2/(1-5)^2^3', scale: 20).normalized.toString(),
       '3.0001220703125',
     );
   });

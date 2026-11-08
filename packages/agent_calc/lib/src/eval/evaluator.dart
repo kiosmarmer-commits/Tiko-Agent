@@ -92,7 +92,9 @@ final class Evaluator {
         position: position,
       );
     }
-    return Dec.fromBigInt(CalcFunctions.factorial(v.unscaled.toInt(), ctx.limits));
+    return Dec.fromBigInt(
+      CalcFunctions.factorial(v.unscaled.toInt(), ctx.limits),
+    );
   }
 
   Dec _binary(
@@ -121,9 +123,9 @@ final class Evaluator {
       case '*':
         return a * b;
       case '/':
-        return a.divide(b, scale: ctx.scale, mode: ctx.rounding);
+        return _guardDiv(a, b, ctx);
       case 'mod':
-        return a.remainderOf(b);
+        return _guardMod(a, b);
       case '^':
         return CalcFunctions.power(a, b, ctx);
     }
@@ -132,5 +134,36 @@ final class Evaluator {
       "Operator tidak dikenal '$op'",
       position: position,
     );
+  }
+
+  /// Pembagian dengan galat berkode (P5); Dec melempar FormatException
+  /// mentah untuk pembagi nol, jangan sampai bocor ke pemanggil.
+  static Dec _guardDiv(Dec a, Dec b, EvalContext ctx) {
+    try {
+      return a.divide(b, scale: ctx.scale, mode: ctx.rounding);
+    } on FormatException catch (e) {
+      throw _fromFormat(e);
+    }
+  }
+
+  static Dec _guardMod(Dec a, Dec b) {
+    try {
+      return a.remainderOf(b);
+    } on FormatException catch (e) {
+      throw _fromFormat(e);
+    }
+  }
+
+  /// FormatException dari Dec dipetakan menjadi CalcException berkode
+  /// (P5: gagal terang, tidak pernah bocor pengecualian mentah).
+  static CalcException _fromFormat(FormatException e) {
+    final m = e.message;
+    if (m.contains('dengan nol')) {
+      return CalcException(CalcErrorCodes.divZero, m);
+    }
+    if (m.contains('akar bilangan negatif')) {
+      return CalcException(CalcErrorCodes.domain, m);
+    }
+    return CalcException(CalcErrorCodes.syntax, m);
   }
 }
