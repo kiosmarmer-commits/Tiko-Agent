@@ -175,6 +175,8 @@ class TikoRuntime {
 
     final evidence = EvidenceLedger();
 
+    final deferred = DeferredQuestionStore();
+
     final invariantGuard = InvariantGuard(
       workspaceRoot: workspace,
       sandbox: sandbox,
@@ -205,7 +207,10 @@ class TikoRuntime {
       ..register(InvariantCheckTool(guard: invariantGuard))
       ..register(SecretBrokerTool(sandbox: sandbox))
       ..register(ClaimTool(ledger: evidence))
-      ..register(VerifyClaimsTool(ledger: evidence));
+      ..register(VerifyClaimsTool(ledger: evidence))
+      ..register(DeferQuestionTool(store: deferred))
+      ..register(AnswerDeferredTool(store: deferred))
+      ..register(ListDeferredTool(store: deferred));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
