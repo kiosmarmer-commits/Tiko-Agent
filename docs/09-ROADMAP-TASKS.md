@@ -48,6 +48,20 @@
 | TASK-07-01..06 | Keamanan + observabilitas | M1–M7 | AGD-07 |
 | TASK-08-01..03 | Verifikasi dependensi | M0 + bulanan | AGD-08 |
 
+## 2a. Track `agent_calc` (TASK-CALC)
+
+Kalkulator eksak memakai penomoran TASK-CALC sendiri; status per
+2026-11-08:
+
+| Fase | Task | Status |
+|---|---|---|
+| CALC-M0 | TASK-CALC-01..08, 10..11 (09 sempat ditunda) | selesai — `CALC-M0-COMPLETE-2026-11-08.md` |
+| CALC-M1 | TASK-CALC-12..20 satuan, keuangan, statistik, tanggal | selesai — `CALC-M1-COMPLETE-2026-11-08.md` |
+| CALC-M2 | TASK-CALC-09 sandbox isolate + TASK-CALC-36 benchmark tool | selesai — `CALC-M2-TASK-09-36-COMPLETE-2026-11-08.md` |
+| CALC-M3 | TASK-CALC-21..23 (inferensi): CalcTool via sandbox, golden M1, flag CLI `tiko calc` | selesai — `CALC-M3-INFERENCE-2026-11-08.md` + `CALC-CI-FIX-M3-TOOLS-2026-11-08.md` |
+| — | TASK-CALC-24..35 | **menunggu definisi pemilik proyek** (tidak ada di repo) |
+| — | Bagian device TASK-CALC-36 (benchmark Termux nyata) | menunggu perangkat fisik |
+
 ## 3. Register risiko (RISK)
 | ID | Risiko | Peluang | Dampak | Mitigasi | Pemilik task |
 |---|---|---|---|---|---|

@@ -4,7 +4,7 @@
 - **Tanggal verifikasi dependensi:** 2026-11-04
 - **Bahasa:** Indonesia
 - **Pembaca sasaran:** pengembang (Popop) dan AI lain yang akan melanjutkan implementasi
-- **Status:** rancangan v1 (belum ada kode)
+- **Status:** implementasi berjalan — rancangan tetap acuan; progres ada di bagian 6 dan laporan status
 
 ## 1. Tujuan
 Membangun agent AI otonom berbahasa Dart yang meniru kemampuan inti Hermes Agent (Nous Research):
@@ -25,6 +25,7 @@ model keputusan (Jev/Laya), dan custom script tools.
 | 8 | `07-KEAMANAN-OBSERVABILITAS.md` | Threat model dan kontrol |
 | 9 | `08-REGISTRI-DEPENDENSI.md` | Versi, status aktif, skrip verifikasi |
 | 10 | `09-ROADMAP-TASKS.md` | Fase, task ID, kriteria selesai, risiko |
+| 11 | `STATUS-2026-11-08.md` + laporan `CALC-*` / `TIKO-*` | Progres implementasi per tanggal |
 
 ## 3. Legenda status dependensi
 | Simbol | Arti |
@@ -58,7 +59,27 @@ model keputusan (Jev/Laya), dan custom script tools.
 - **Dart:** SDK 3.13.x terlihat pada analisis pub.dev (pana).
 - Detail per paket: lihat `08-REGISTRI-DEPENDENSI.md`.
 
-## 6. Batasan dokumen
+## 6. Status implementasi (per 2026-11-08)
+
+Rancangan dieksekusi sebagian. Workspace Dart aktif: `packages/`
+(`agent_calc`, `agent_core`, `agent_gateway`, `agent_memory`,
+`agent_providers`, `agent_scheduler`, `agent_security`,
+`agent_tools`, `tiko_runtime`) dan `apps/` (`agent_cli`,
+`agent_flutter`, `agentd`, `tiko`). CI GitHub Actions hijau di
+HEAD. Ringkasan satu halaman: `STATUS-2026-11-08.md`.
+
+| Track | Isi | Laporan |
+|---|---|---|
+| agent_calc M0 | TASK-CALC-01..11 engine eksak inti | `CALC-M0-COMPLETE-2026-11-08.md` |
+| agent_calc M1 | TASK-CALC-12..20 satuan, keuangan, statistik, tanggal | `CALC-M1-COMPLETE-2026-11-08.md` |
+| agent_calc M2 | TASK-CALC-09 sandbox isolate + TASK-CALC-36 benchmark | `CALC-M2-TASK-09-36-COMPLETE-2026-11-08.md` |
+| agent_calc M3 | TASK-CALC-21..23 (inferensi): CalcTool via sandbox, golden M1, flag CLI | `CALC-M3-INFERENCE-2026-11-08.md` |
+| Tiko runtime | P0/P1, repair 2026-11-07, fix CI analyze | `TIKO-P0-COMPLETE.md`, `TIKO-REPAIR-STATUS-2026-11-07.md`, `CALC-CI-FIX-M3-TOOLS-2026-11-08.md` |
+
+TASK-CALC-24..35 menunggu definisi pemilik proyek; benchmark Termux
+menunggu perangkat fisik (lihat bagian "Sisa" laporan M2/M3).
+
+## 7. Batasan dokumen
 1. Tidak semua paket sempat diverifikasi; yang belum ditandai ⚠️.
 2. Format request Jev (`state`, header auth) belum diverifikasi dari dokumen resmi `docs.typesafe.ai/api`.
 3. Belum ada benchmark akurasi pada bahasa Indonesia untuk Laya/Nimble; wajib uji sendiri (TASK-02-05).
