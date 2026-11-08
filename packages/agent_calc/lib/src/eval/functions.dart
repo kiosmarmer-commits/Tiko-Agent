@@ -323,15 +323,19 @@ final class CalcFunctions {
     },
     'sinh': (a, ctx) {
       _need(a, 'sinh', 1, 1);
-      return _approx(math.sinh(_d(a[0], 'sinh')), ctx);
+      final x = _d(a[0], 'sinh');
+      return _approx((math.exp(x) - math.exp(-x)) / 2, ctx);
     },
     'cosh': (a, ctx) {
       _need(a, 'cosh', 1, 1);
-      return _approx(math.cosh(_d(a[0], 'cosh')), ctx);
+      final x = _d(a[0], 'cosh');
+      return _approx((math.exp(x) + math.exp(-x)) / 2, ctx);
     },
     'tanh': (a, ctx) {
       _need(a, 'tanh', 1, 1);
-      return _approx(math.tanh(_d(a[0], 'tanh')), ctx);
+      final x = _d(a[0], 'tanh');
+      final e2 = math.exp(2 * x);
+      return _approx((e2 - 1) / (e2 + 1), ctx);
     },
     'deg': (a, ctx) {
       _need(a, 'deg', 1, 1);

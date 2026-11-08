@@ -35,7 +35,7 @@ final class LocaleNumbers {
     String locale = 'id',
     bool strict = false,
   }) {
-    var text = _applySuffixes(input, locale);
+    final text = _applySuffixes(input, locale);
     return _applySeparators(text, locale, strict);
   }
 

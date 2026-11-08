@@ -37,7 +37,7 @@ void main() {
     expect(engine.evaluate('sqrt(-1)').error?.code, CalcErrorCodes.domain);
     expect(engine.evaluate('ln(0)').error?.code, CalcErrorCodes.domain);
     expect(engine.evaluate('9^9^9').error?.code, CalcErrorCodes.limit);
-    final long = '1' + List.filled(600, ' + 1').join();
+    final long = '1${List.filled(600, ' + 1').join()}';
     expect(engine.evaluate(long).error?.code, CalcErrorCodes.limit);
   });
 
