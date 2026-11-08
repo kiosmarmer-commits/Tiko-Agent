@@ -35,6 +35,11 @@ void main() {
     expect(canon('3k + 1').text, '3000 + 1');
   });
 
+  test('sufiks tidak mencerna koma pemisah argumen', () {
+    expect(canon('300, k').text, '300, k');
+    expect(canon('2, juta').text, '2, juta');
+  });
+
   test('strict: angka ambigu -> CALC_E_AMBIGUOUS_NUMBER', () {
     expect(
       () => canon('1.500', strict: true),

@@ -29,7 +29,7 @@ void main() {
 
   test('convert sebagai bagian ekspresi', () {
     final r = calc('100 + convert(2, km, m)');
-    expect(r.value, '2102');
+    expect(r.value, '2100');
   });
 
   test('suhu: c, f, k', () {

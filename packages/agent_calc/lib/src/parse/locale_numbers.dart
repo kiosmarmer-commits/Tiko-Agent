@@ -14,8 +14,11 @@ final class LocaleNumbersResult {
 final class LocaleNumbers {
   LocaleNumbers._();
 
+  /// Sufiks pengali: grup angka wajib diakhiri digit agar koma
+  /// pemisah argumen tidak ikut tercerna (mis. convert(300, k, c)
+  /// memakai k = kelvin, bukan ribuan).
   static final RegExp _suffix = RegExp(
-    '(\\d[\\d.,]*)(\\s*)(ribu|rb|juta|jt|miliar|milyar|triliun|k)\\b',
+    '(\\d(?:[\\d.,]*\\d)?)(\\s*)(ribu|rb|juta|jt|miliar|milyar|triliun|k)\\b',
     caseSensitive: false,
   );
 
