@@ -189,7 +189,7 @@ class ListDirTool implements Tool {
     final all = <String>[];
     await for (final entry in dir.list(followLinks: false)) {
       final name = p.basename(entry.path);
-      all.add('${entry is Directory ? 'dir' : 'file'}	$name');
+      all.add('${entry is Directory ? 'dir' : 'file'}\t$name');
     }
     if (all.isEmpty) {
       return const ToolResult(callId: '', content: '(kosong)');
@@ -206,11 +206,9 @@ class ListDirTool implements Tool {
         ? all.length
         : offset - 1 + limit;
     final slice = all.sublist(offset - 1, end);
-    final content = slice.join('
-');
+    final content = slice.join('\n');
     final trailer = end < all.length
-        ? '
-…[entri berlanjut; gunakan offset=${end + 1}]'
+        ? '\n…[entri berlanjut; gunakan offset=${end + 1}]'
         : '';
     return ToolResult(callId: '', content: '$content$trailer');
   }
@@ -307,9 +305,7 @@ class ReadFileTool implements Tool {
       final slice = all.sublist(start, end);
       return ToolResult(
         callId: '',
-        content: '${slice.join('
-')}
-[baris ${start + 1}-$end '
+        content: '${slice.join('\n')}\n[baris ${start + 1}-$end '
             'dari ${all.length}]',
       );
     }
@@ -320,9 +316,7 @@ class ReadFileTool implements Tool {
         final end = all.length > pageSize ? pageSize : all.length;
         return ToolResult(
           callId: '',
-          content: '${all.sublist(0, end).join('
-')}
-'
+          content: '${all.sublist(0, end).join('\n')}\n'
               '[file besar: ${all.length} baris, $len byte — '
               'dibaca baris 1-$end; lanjutkan dengan offset=${end + 1}]',
         );
@@ -462,10 +456,9 @@ class ShellTool implements Tool {
     r'$(',
     '>',
     '<',
-    '
-',
-    '',
-    '	',
+    '\n',
+    '\r',
+    '\t',
   ];
 
   @override
@@ -534,8 +527,7 @@ class ShellTool implements Tool {
       out.writeln('exit: ${result.exitCode}');
       var text = out.toString();
       if (text.length > 50000) {
-        text = '${text.substring(0, 50000)}
-…[truncated]';
+        text = '${text.substring(0, 50000)}\n…[truncated]';
       }
       return ToolResult(
         callId: '',
@@ -642,8 +634,7 @@ class WebFetchTool implements Tool {
         text = _stripHtml(text);
       }
       if (text.length > 100000) {
-        text = '${text.substring(0, 100000)}
-…[truncated]';
+        text = '${text.substring(0, 100000)}\n…[truncated]';
       }
       return ToolResult(callId: '', content: text);
     } catch (e) {
