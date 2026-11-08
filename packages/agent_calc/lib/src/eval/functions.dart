@@ -4,6 +4,7 @@ import '../core/errors.dart';
 import '../core/limits.dart';
 import '../core/numeric.dart';
 import '../core/rounding.dart';
+import '../finance/finance.dart';
 import 'evaluator.dart';
 
 /// Fungsi evaluator (CALC-MAT-05b). Jalur eksak memakai Dec; jalur
@@ -388,6 +389,31 @@ final class CalcFunctions {
         );
       }
       return a[0].remainderOf(a[1]);
+    },
+    // TASK-CALC-13..15: keuangan (CalcFinance).
+    'pmt': (a, ctx) {
+      _need(a, 'pmt', 3, 3);
+      return CalcFinance.pmt(a[0], a[1], a[2], ctx);
+    },
+    'annuity_fv': (a, ctx) {
+      _need(a, 'annuity_fv', 3, 3);
+      return CalcFinance.annuityFv(a[0], a[1], a[2], ctx);
+    },
+    'annuity_pv': (a, ctx) {
+      _need(a, 'annuity_pv', 3, 3);
+      return CalcFinance.annuityPv(a[0], a[1], a[2], ctx);
+    },
+    'amortisasi': (a, ctx) {
+      _need(a, 'amortisasi', 3, 3);
+      return CalcFinance.totalInterest(a[0], a[1], a[2], ctx);
+    },
+    'sisa': (a, ctx) {
+      _need(a, 'sisa', 4, 4);
+      return CalcFinance.balance(a[0], a[1], a[2], a[3], ctx);
+    },
+    'irr': (a, ctx) {
+      _need(a, 'irr', 2);
+      return CalcFinance.irr(a, ctx);
     },
   };
 
