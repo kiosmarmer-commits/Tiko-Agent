@@ -217,7 +217,7 @@ class ReadFileTool implements Tool {
         );
       }
       final all = await file.readAsLines();
-      final start = (offset == null ? 1 : offset) - 1;
+      final start = (offset ?? 1) - 1;
       if (start < 0 || start >= all.length) {
         return ToolResult(
           callId: '',
@@ -225,14 +225,14 @@ class ReadFileTool implements Tool {
           isError: true,
         );
       }
-      var count = limit == null ? 500 : limit;
+      var count = limit ?? 500;
       if (count < 1) count = 1;
       if (count > 2000) count = 2000;
       final end = start + count > all.length ? all.length : start + count;
       final slice = all.sublist(start, end);
       return ToolResult(
         callId: '',
-        content: '${slice.join('\n')}\n[baris ${start + 1}-${end} '
+        content: '${slice.join('\n')}\n[baris ${start + 1}-$end '
             'dari ${all.length}]',
       );
     }

@@ -94,8 +94,9 @@ class InvariantGuard {
     }
     try {
       final ProcessResult result;
-      if (_commandRunner != null) {
-        result = await _commandRunner!(parts);
+      final runner = _commandRunner;
+      if (runner != null) {
+        result = await runner(parts);
       } else {
         final sb = sandbox;
         if (sb == null) {

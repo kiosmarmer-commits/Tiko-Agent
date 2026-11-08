@@ -27,7 +27,21 @@ class SecretBrokerTool implements Tool {
 
   /// Characters a secret value must never contain: whitespace breaks
   /// argv tokenization, the rest are shell metacharacters.
-  static const String _badChars = ' \t\n;&|<>`\$"'\\';
+  static const List<String> _badChars = [
+    ' ',
+    '\t',
+    '\n',
+    ';',
+    '&',
+    '|',
+    '<',
+    '>',
+    '`',
+    r'$',
+    '"',
+    "'",
+    '\\',
+  ];
 
   @override
   ToolSpec get spec => const ToolSpec(
@@ -85,7 +99,7 @@ class SecretBrokerTool implements Tool {
           isError: true,
         );
       }
-      if (_badChars.split('').any(value.contains)) {
+      if (_badChars.any(value.contains)) {
         return ToolResult(
           callId: '',
           content: 'Nilai secret $name mengandung karakter berbahaya',
@@ -119,8 +133,9 @@ class SecretBrokerTool implements Tool {
     }
     try {
       final ProcessResult result;
-      if (_commandRunner != null) {
-        result = await _commandRunner!(parts);
+      final runner = _commandRunner;
+      if (runner != null) {
+        result = await runner(parts);
       } else {
         result = await sandbox.run(
           parts,

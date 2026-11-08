@@ -259,10 +259,10 @@ class ErrorLookupTool implements Tool {
     final lines = <String>[];
     for (final m in matches) {
       lines
-        ..add('- signature: ${m.signature}')
-        ..add('  cause: ${m.cause}')
-        ..add('  fix: ${m.fix}')
-        ..add('  hits: ${m.hits}')
+        ..add('- signature: ${m.entry.signature}')
+        ..add('  cause: ${m.entry.cause}')
+        ..add('  fix: ${m.entry.fix}')
+        ..add('  hits: ${m.entry.hits}')
         ..add('  similarity: ${m.similarity.toStringAsFixed(2)}');
     }
     return ToolResult(callId: '', content: lines.join('\n'));
