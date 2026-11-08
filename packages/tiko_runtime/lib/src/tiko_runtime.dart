@@ -165,6 +165,10 @@ class TikoRuntime {
     final jobs = JobStore(persistPath: p.join(dataDir, 'jobs.json'));
     await jobs.load();
 
+    final errorMemory = ErrorMemoryStore(
+      persistPath: p.join(dataDir, 'errors.json'),
+    );
+
     final checkpointer = WorkspaceCheckpointer(workspaceRoot: workspace);
 
     final registry = ToolRegistry()
@@ -182,7 +186,9 @@ class TikoRuntime {
       ..register(CdpBrowserTool())
       ..register(ScheduleJobTool(jobs))
       ..register(ListJobsTool(jobs))
-      ..register(CancelJobTool(jobs));
+      ..register(CancelJobTool(jobs))
+      ..register(ErrorLookupTool(errorMemory))
+      ..register(ErrorRecordTool(errorMemory));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
