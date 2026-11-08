@@ -171,6 +171,11 @@ class TikoRuntime {
 
     final leases = LeaseManager();
 
+    final invariantGuard = InvariantGuard(
+      workspaceRoot: workspace,
+      sandbox: sandbox,
+    );
+
     final checkpointer = WorkspaceCheckpointer(workspaceRoot: workspace);
 
     final registry = ToolRegistry()
@@ -191,7 +196,9 @@ class TikoRuntime {
       ..register(CancelJobTool(jobs))
       ..register(ErrorLookupTool(errorMemory))
       ..register(ErrorRecordTool(errorMemory))
-      ..register(LeaseTool(manager: leases));
+      ..register(LeaseTool(manager: leases))
+      ..register(InvariantDeclareTool(guard: invariantGuard))
+      ..register(InvariantCheckTool(guard: invariantGuard));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
