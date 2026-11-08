@@ -17,7 +17,7 @@ final class CalcException implements Exception {
 
   @override
   String toString() {
-    final pos = position == null ? '' : ' (posisi ${position})';
+    final pos = position == null ? '' : ' (posisi $position)';
     final h = hint == null ? '' : ' - $hint';
     return '$code: $message$pos$h';
   }
