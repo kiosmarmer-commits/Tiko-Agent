@@ -151,32 +151,29 @@ class ListDirTool implements Tool {
     if (offset < 1) offset = 1;
     if (limit < 1) limit = 1;
     if (limit > 2000) limit = 2000;
-    final lines = <String>[];
-    var skipped = 0;
-    var more = false;
+    final all = <String>[];
     await for (final entry in dir.list(followLinks: false)) {
-      if (skipped < offset - 1) {
-        skipped++;
-        continue;
-      }
-      if (lines.length >= limit) {
-        more = true;
-        break;
-      }
       final name = p.basename(entry.path);
-      lines.add('${entry is Directory ? 'dir' : 'file'}\t$name');
+      all.add('${entry is Directory ? 'dir' : 'file'}\t$name');
     }
-    if (lines.isEmpty && skipped < offset - 1) {
+    if (all.isEmpty) {
+      return const ToolResult(callId: '', content: '(kosong)');
+    }
+    if (offset > all.length) {
       return ToolResult(
         callId: '',
-        content: 'offset melebihi jumlah entri ($skipped)',
+        content: 'offset melebihi jumlah entri (${all.length})',
         isError: true,
       );
     }
-    lines.sort();
-    final content = lines.isEmpty ? '(kosong)' : lines.join('\n');
-    final trailer = more
-        ? '\n…[entri berlanjut; gunakan offset=${offset + lines.length}]'
+    all.sort();
+    final end = offset - 1 + limit > all.length
+        ? all.length
+        : offset - 1 + limit;
+    final slice = all.sublist(offset - 1, end);
+    final content = slice.join('\n');
+    final trailer = end < all.length
+        ? '\n…[entri berlanjut; gunakan offset=${end + 1}]'
         : '';
     return ToolResult(callId: '', content: '$content$trailer');
   }
@@ -256,6 +253,8 @@ class ReadFileTool implements Tool {
         all = await file.readAsLines();
       } on FormatException {
         return _notUtf8;
+      } on FileSystemException {
+        return _notUtf8;
       }
       final start = (offset ?? 1) - 1;
       if (start < 0 || start >= all.length) {
@@ -289,11 +288,15 @@ class ReadFileTool implements Tool {
         );
       } on FormatException {
         return _notUtf8;
+      } on FileSystemException {
+        return _notUtf8;
       }
     }
     try {
       return ToolResult(callId: '', content: await file.readAsString());
     } on FormatException {
+      return _notUtf8;
+    } on FileSystemException {
       return _notUtf8;
     }
   }
