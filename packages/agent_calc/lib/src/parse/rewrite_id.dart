@@ -74,6 +74,9 @@ final class RewriteId {
       if (p.pattern.contains('%')) {
         return '(($g1)/100)*($g2)';
       }
+      if (p.pattern.contains('persen')) {
+        return '(($g1)/($g2))*100';
+      }
       if (p.pattern.contains('akar')) {
         return 'sqrt($g1)';
       }
