@@ -8,6 +8,7 @@ environment:
 
 workspace:
   - packages/agent_core
+  - packages/agent_calc
   - packages/agent_providers
   - packages/agent_tools
   - packages/agent_memory
