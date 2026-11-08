@@ -24,6 +24,7 @@ export 'src/self_consistency.dart';
 export 'src/parallel_tools.dart';
 export 'src/trace.dart';
 export 'src/session_lock.dart';
+export 'src/lease.dart';
 export 'src/isolate_pool.dart';
 export 'src/skill_scanner.dart';
 export 'src/skill_gate.dart';

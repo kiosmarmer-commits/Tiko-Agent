@@ -169,6 +169,8 @@ class TikoRuntime {
       persistPath: p.join(dataDir, 'errors.json'),
     );
 
+    final leases = LeaseManager();
+
     final checkpointer = WorkspaceCheckpointer(workspaceRoot: workspace);
 
     final registry = ToolRegistry()
@@ -188,7 +190,8 @@ class TikoRuntime {
       ..register(ListJobsTool(jobs))
       ..register(CancelJobTool(jobs))
       ..register(ErrorLookupTool(errorMemory))
-      ..register(ErrorRecordTool(errorMemory));
+      ..register(ErrorRecordTool(errorMemory))
+      ..register(LeaseTool(manager: leases));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
