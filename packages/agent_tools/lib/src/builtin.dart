@@ -6,6 +6,7 @@ import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 
 import 'grep.dart';
+import 'probe.dart';
 import 'ssrf.dart';
 import 'web_search.dart';
 import 'path_safety.dart';
@@ -29,6 +30,7 @@ List<Tool> createBuiltinTools({
     CalcTool(),
     ListDirTool(workspaceRoot: root),
     GrepTool(workspaceRoot: root),
+    ProbeTool(workspaceRoot: root),
     ReadFileTool(workspaceRoot: root),
     WriteFileTool(workspaceRoot: root),
     ShellTool(
@@ -166,6 +168,14 @@ class ReadFileTool implements Tool {
       'type': 'object',
       'properties': {
         'path': {'type': 'string'},
+        'offset': {
+          'type': 'integer',
+          'description': 'Baris mulai (1-based); mode rentang bila diisi.',
+        },
+        'limit': {
+          'type': 'integer',
+          'description': 'Jumlah baris maksimum pada mode rentang (500).',
+        },
       },
       'required': ['path'],
     },
@@ -196,6 +206,36 @@ class ReadFileTool implements Tool {
       );
     }
     final len = await file.length();
+    final offset = (args['offset'] as num?)?.toInt();
+    final limit = (args['limit'] as num?)?.toInt();
+    if (offset != null || limit != null) {
+      if (len > 2 * 1024 * 1024) {
+        return const ToolResult(
+          callId: '',
+          content: 'File terlalu besar untuk mode rentang (maks 2 MB)',
+          isError: true,
+        );
+      }
+      final all = await file.readAsLines();
+      final start = (offset == null ? 1 : offset) - 1;
+      if (start < 0 || start >= all.length) {
+        return ToolResult(
+          callId: '',
+          content: 'offset di luar jumlah baris (${all.length})',
+          isError: true,
+        );
+      }
+      var count = limit == null ? 500 : limit;
+      if (count < 1) count = 1;
+      if (count > 2000) count = 2000;
+      final end = start + count > all.length ? all.length : start + count;
+      final slice = all.sublist(start, end);
+      return ToolResult(
+        callId: '',
+        content: '${slice.join('\n')}\n[baris ${start + 1}-${end} '
+            'dari ${all.length}]',
+      );
+    }
     if (len > 100 * 1024) {
       return ToolResult(
         callId: '',

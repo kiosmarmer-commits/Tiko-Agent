@@ -3,6 +3,7 @@ library;
 export 'src/registry.dart';
 export 'src/builtin.dart';
 export 'src/grep.dart';
+export 'src/probe.dart';
 export 'src/script_runner.dart';
 export 'src/ssrf.dart';
 export 'src/web_search.dart';
