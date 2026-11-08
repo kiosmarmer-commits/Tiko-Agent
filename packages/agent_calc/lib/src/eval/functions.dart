@@ -4,6 +4,7 @@ import '../core/errors.dart';
 import '../core/limits.dart';
 import '../core/numeric.dart';
 import '../core/rounding.dart';
+import '../dates/civil_date.dart';
 import '../finance/finance.dart';
 import '../stats/stats.dart';
 import 'evaluator.dart';
@@ -448,6 +449,55 @@ final class CalcFunctions {
         a.last,
         ctx,
       );
+    },
+    // TASK-CALC-18..20: tanggal sipil (CivilDate).
+    'date_diff': (a, _) {
+      _need(a, 'date_diff', 2, 2);
+      return Dec.fromInt(
+        CivilDate.diff(CivilDate.parseYmd(a[0]), CivilDate.parseYmd(a[1])),
+      );
+    },
+    'date_add': (a, _) {
+      _need(a, 'date_add', 2, 2);
+      return Dec.fromInt(
+        CivilDate.addDays(CivilDate.parseYmd(a[0]), _asInt(a[1], 'date_add')),
+      );
+    },
+    'date_add_months': (a, _) {
+      _need(a, 'date_add_months', 2, 2);
+      return Dec.fromInt(
+        CivilDate.addMonths(
+          CivilDate.parseYmd(a[0]),
+          _asInt(a[1], 'date_add_months'),
+        ),
+      );
+    },
+    'day_of_week': (a, _) {
+      _need(a, 'day_of_week', 1, 1);
+      return Dec.fromInt(CivilDate.dayOfWeek(CivilDate.parseYmd(a[0])));
+    },
+    'is_leap_year': (a, _) {
+      _need(a, 'is_leap_year', 1, 1);
+      final y = _asInt(a[0], 'is_leap_year');
+      if (y < 1 || y > 9999) {
+        throw const CalcException(
+          CalcErrorCodes.domain,
+          'Tahun harus 1..9999',
+        );
+      }
+      return Dec.fromInt(CivilDate.isLeap(y) ? 1 : 0);
+    },
+    'days_in_month': (a, _) {
+      _need(a, 'days_in_month', 2, 2);
+      final y = _asInt(a[0], 'days_in_month');
+      final m = _asInt(a[1], 'days_in_month');
+      if (y < 1 || y > 9999) {
+        throw const CalcException(
+          CalcErrorCodes.domain,
+          'Tahun harus 1..9999',
+        );
+      }
+      return Dec.fromInt(CivilDate.daysInMonth(y, m));
     },
   };
 
