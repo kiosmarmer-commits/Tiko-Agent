@@ -171,6 +171,8 @@ class TikoRuntime {
 
     final leases = LeaseManager();
 
+    final evidence = EvidenceLedger();
+
     final invariantGuard = InvariantGuard(
       workspaceRoot: workspace,
       sandbox: sandbox,
@@ -199,7 +201,9 @@ class TikoRuntime {
       ..register(LeaseTool(manager: leases))
       ..register(InvariantDeclareTool(guard: invariantGuard))
       ..register(InvariantCheckTool(guard: invariantGuard))
-      ..register(SecretBrokerTool(sandbox: sandbox));
+      ..register(SecretBrokerTool(sandbox: sandbox))
+      ..register(ClaimTool(ledger: evidence))
+      ..register(VerifyClaimsTool(ledger: evidence));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
@@ -459,6 +463,7 @@ class TikoRuntime {
           maxToolCalls: resourceProfile == 'eco' ? 12 : config.maxToolCalls,
         ),
         audit: (call, verdict, result) {
+          evidence.recordCall(result.callId, call.name, result.content);
           unawaited(
             audit.log(
               sessionId: session.id,
