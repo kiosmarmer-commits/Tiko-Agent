@@ -31,7 +31,7 @@ class UndoLedger {
     required String description,
     String? path,
     String? before,
-    required bool existed,
+    bool existed = false,
   }) {
     final e = UndoEntry(
       description: description,
@@ -138,7 +138,7 @@ class RecordUndoableTool implements Tool {
       before: before,
       existed: true,
     );
-    return ToolResult(
+    return const ToolResult(
       callId: '',
       content: 'OK tercatat (snapshot disimpan)',
     );
