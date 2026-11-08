@@ -109,7 +109,7 @@ class ListDirTool implements Tool {
   ToolSpec get spec => const ToolSpec(
     name: 'list_dir',
     description:
-        'Daftar isi direktori di dalam workspace (paging via offset/limit).'
+        'Daftar isi direktori di dalam workspace (paging via offset/limit).',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -191,7 +191,7 @@ class ReadFileTool implements Tool {
     name: 'read_file',
     description:
         'Baca isi file teks di dalam workspace (file utuh maks 100 KB; '
-        'lebih besar otomatis dipaging).'
+        'lebih besar otomatis dipaging).',
     inputSchema: {
       'type': 'object',
       'properties': {
