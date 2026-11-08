@@ -3,6 +3,7 @@ import '../core/limits.dart';
 import '../core/numeric.dart';
 import '../core/rounding.dart';
 import '../parse/ast.dart';
+import '../units/units.dart';
 import 'constants.dart';
 import 'functions.dart';
 
@@ -57,6 +58,11 @@ final class Evaluator {
       case BinaryNode(:final op, :final left, :final right, :final position):
         return _binary(op, left, right, position, ctx);
       case CallNode(:final name, :final args, :final position):
+        // Bentuk khusus TASK-CALC-12: convert() menerima nama satuan
+        // sebagai ident mentah, bukan ekspresi bernilai.
+        if (name == 'convert') {
+          return _evalConvert(args, position, ctx);
+        }
         final fn = CalcFunctions.all[name];
         if (fn == null) {
           throw CalcException(
@@ -94,6 +100,37 @@ final class Evaluator {
     }
     return Dec.fromBigInt(
       CalcFunctions.factorial(v.unscaled.toInt(), ctx.limits),
+    );
+  }
+
+  /// Bentuk khusus TASK-CALC-12: convert(nilai, dari, ke); argumen nama
+  /// satuan adalah ident mentah, bukan ekspresi bernilai.
+  Dec _evalConvert(List<Node> args, int position, EvalContext ctx) {
+    if (args.length != 3) {
+      throw CalcException(
+        CalcErrorCodes.syntax,
+        'convert butuh 3 argumen: convert(nilai, dari, ke)',
+        position: position,
+        hint: 'contoh: convert(5, km, m)',
+      );
+    }
+    final value = eval(args[0], ctx);
+    return CalcUnits.convert(
+      value,
+      _unitName(args[1]),
+      _unitName(args[2]),
+      ctx,
+    );
+  }
+
+  /// Nama satuan hanya boleh ident (bukan angka atau ekspresi).
+  static String _unitName(Node n) {
+    if (n is IdentNode) return n.name;
+    throw CalcException(
+      CalcErrorCodes.syntax,
+      'Nama satuan harus ditulis langsung sebagai nama',
+      position: n.position,
+      hint: 'contoh: convert(5, km, m)',
     );
   }
 
