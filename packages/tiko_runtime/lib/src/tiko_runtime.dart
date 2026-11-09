@@ -431,7 +431,7 @@ class TikoRuntime {
             workspacePath: workspace,
             sanitizer: _sanitizer,
             skillEval: const SkillEvalConfig(threshold: 1.0),
-            config: AgentConfig(
+            config: const AgentConfig(
               maxIterations: 6,
               maxTokensPerTask: 20000,
               maxWallClockSec: 60,

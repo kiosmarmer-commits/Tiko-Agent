@@ -18,7 +18,7 @@ status: draft
 - Balas salam dengan sapaan ramah.
 ''';
 
-/// Menyiapkan config mock + satu skill di <temp>/skills/halo-demo.
+/// Menyiapkan config mock + satu skill di temp/skills/halo-demo.
 /// Nama skill sengaja diawali "halo" agar smoke task fallback gate
 /// (answer_contains = kata pertama nama) lolos pada jawaban tetap
 /// MockLlmProvider plain.
