@@ -149,6 +149,7 @@ class TikoConfig {
     this.decision = const DecisionConfig(),
     this.memoryEmbed = const MemoryEmbedConfig(),
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
+    this.tavilyApiKeyRef,
     this.maxIterations = 12,
     this.maxTokensPerTask = 60000,
     this.maxWallClockSec = 300,
@@ -171,6 +172,10 @@ class TikoConfig {
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
   final String searxngBaseUrl;
+
+  /// SecretRef `env:TAVILY_API_KEY` untuk cadangan Tavily (AGD-04 §7);
+  /// null berarti fallback nonaktif.
+  final String? tavilyApiKeyRef;
   final int maxIterations;
   final int maxTokensPerTask;
   final int maxWallClockSec;
@@ -297,6 +302,18 @@ class TikoConfig {
     final searchUrl = search['searxng_base_url'];
     if (searchUrl != null && searchUrl is! String) {
       issues.add(const ConfigIssue('search.searxng_base_url', 'harus berupa string'));
+    }
+    final tavilyKeyValue = search['tavily_api_key'];
+    if (tavilyKeyValue != null && tavilyKeyValue is! String) {
+      issues.add(const ConfigIssue('search.tavily_api_key', 'harus berupa string'));
+    }
+    if (tavilyKeyValue is String &&
+        tavilyKeyValue.isNotEmpty &&
+        !tavilyKeyValue.startsWith('env:')) {
+      issues.add(const ConfigIssue(
+        'search.tavily_api_key',
+        "gunakan SecretRef 'env:NAMA_VAR', jangan menulis secret di file",
+      ));
     }
     for (final entry in [
       ('security.shell_allowlist', security['shell_allowlist']),
@@ -572,6 +589,10 @@ class TikoConfig {
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       searxngBaseUrl: str(search['searxng_base_url'], 'http://127.0.0.1:8080'),
+      tavilyApiKeyRef:
+          tavilyKeyValue is String && tavilyKeyValue.startsWith('env:')
+              ? tavilyKeyValue
+              : null,
       maxIterations: intOf(agent['max_iterations'], 12),
       maxTokensPerTask: intOf(agent['max_tokens_per_task'], 60000),
       maxWallClockSec: intOf(agent['max_wall_clock_sec'], 300),

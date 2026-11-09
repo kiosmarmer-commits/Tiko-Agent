@@ -192,6 +192,7 @@ class TikoRuntime {
       ..registerAll(createBuiltinTools(
         workspaceRoot: workspace,
         searxngBaseUrl: cfg.searxngBaseUrl,
+        tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: env),
         sandbox: sandbox,
       ))
       ..register(MemorySearchTool(memory))

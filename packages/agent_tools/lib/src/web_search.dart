@@ -5,10 +5,12 @@ import 'package:http/http.dart' as http;
 
 import 'ssrf.dart';
 
-/// web_search via SearXNG + optional fetch top-N pages (AGD-04 §7).
+/// web_search via SearXNG with an optional Tavily fallback (AGD-04 §7).
 class WebSearchTool implements Tool {
   WebSearchTool({
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
+    this.tavilyApiKey,
+    this.tavilyBaseUrl = 'https://api.tavily.com',
     this.maxResults = 8,
     this.fetchTop = 3,
     this.fetchMaxChars = 2500,
@@ -18,6 +20,10 @@ class WebSearchTool implements Tool {
        _ssrf = ssrf ?? SsrfGuard();
 
   final String searxngBaseUrl;
+
+  /// Tavily API key (`tvly-...`). Null/empty berarti fallback nonaktif.
+  final String? tavilyApiKey;
+  final String tavilyBaseUrl;
   final int maxResults;
   final int fetchTop;
   final int fetchMaxChars;
@@ -32,8 +38,9 @@ class WebSearchTool implements Tool {
   ToolSpec get spec => const ToolSpec(
     name: 'web_search',
     description:
-        'Cari di web lewat SearXNG. Mengembalikan judul, URL, cuplikan; '
-        'opsional mengunduh isi singkat dari N hasil teratas.',
+        'Cari di web lewat SearXNG dengan cadangan Tavily bila terpasang. '
+        'Mengembalikan judul, URL, cuplikan; opsional mengunduh isi singkat '
+        'dari N hasil teratas.',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -82,42 +89,16 @@ class WebSearchTool implements Tool {
       );
     }
 
-    final uri = Uri.parse(searxngBaseUrl).replace(
-      path: '/search',
-      queryParameters: {'q': query, 'format': 'json', 'categories': categories},
-    );
-
+    final tavilyKey = (tavilyApiKey ?? '').trim();
     final client = _client ?? http.Client();
     try {
-      final res = await client
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'agent_dart/0.1',
-            },
-          )
-          .timeout(const Duration(seconds: 18));
-
-      if (res.statusCode == 403) {
-        return const ToolResult(
-          callId: '',
-          content:
-              'SearXNG menolak format=json. Aktifkan di settings.yml: search.formats: [html, json]',
-          isError: true,
-        );
-      }
-      if (res.statusCode >= 400) {
-        return ToolResult(
-          callId: '',
-          content: 'SearXNG HTTP ${res.statusCode}',
-          isError: true,
-        );
-      }
-
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
-      final results = (json['results'] as List<dynamic>? ?? []);
-      if (results.isEmpty) {
+      final (hits, engine) = await _acquireHits(
+        client,
+        query,
+        categories,
+        tavilyKey,
+      );
+      if (hits.isEmpty) {
         return const ToolResult(callId: '', content: 'Tidak ada hasil.');
       }
 
@@ -125,19 +106,19 @@ class WebSearchTool implements Tool {
       final citations = <Map<String, String>>[];
       var i = 0;
       final seen = <String>{};
-      for (final raw in results) {
+      for (final h in hits) {
         if (i >= maxResults) break;
-        final r = raw as Map<String, dynamic>;
-        final url = (r['url'] as String?) ?? '';
-        final title = (r['title'] as String?) ?? '(tanpa judul)';
-        final content = (r['content'] as String?) ?? '';
-        if (url.isEmpty || seen.contains(url)) continue;
-        seen.add(url);
+        if (h.url.isEmpty || seen.contains(h.url)) continue;
+        seen.add(h.url);
         i++;
-        citations.add({'n': '$i', 'title': title, 'url': url});
+        citations.add({'n': '$i', 'title': h.title, 'url': h.url});
         lines.add(
-          '$i. $title\n   $url\n   ${content.length > 240 ? '${content.substring(0, 240)}…' : content}',
+          '$i. ${h.title}\n   ${h.url}\n   '
+          '${h.content.length > 240 ? '${h.content.substring(0, 240)}…' : h.content}',
         );
+      }
+      if (citations.isEmpty) {
+        return const ToolResult(callId: '', content: 'Tidak ada hasil.');
       }
 
       // Fetch top-N page bodies (SSRF-checked), with TTL cache
@@ -182,6 +163,9 @@ class WebSearchTool implements Tool {
       final buf = StringBuffer();
       buf.writeln('<untrusted_data source="web_search">');
       buf.writeln('## Hasil pencarian: $query');
+      if (engine == 'tavily') {
+        buf.writeln('## Mesin: Tavily (cadangan; SearXNG tidak tersedia)');
+      }
       buf.writeln(lines.join('\n\n'));
       if (pageBlocks.isNotEmpty) {
         buf.writeln('\n## Isi halaman (top $fetchTop)');
@@ -194,6 +178,8 @@ class WebSearchTool implements Tool {
       buf.writeln('</untrusted_data>');
 
       return ToolResult(callId: '', content: buf.toString());
+    } on _SearchFailure catch (e) {
+      return ToolResult(callId: '', content: e.message, isError: true);
     } catch (e) {
       return ToolResult(
         callId: '',
@@ -204,6 +190,148 @@ class WebSearchTool implements Tool {
     } finally {
       if (_client == null) client.close();
     }
+  }
+
+  /// SearXNG first; bila gagal pada level transport dan key terpasang,
+  /// coba Tavily (AGD-04 §7: cadangan berbayar/terkelola).
+  Future<(List<({String title, String url, String content})>, String)>
+  _acquireHits(
+    http.Client client,
+    String query,
+    String categories,
+    String tavilyKey,
+  ) async {
+    try {
+      return (await _searchSearxng(client, query, categories), 'searxng');
+    } on _SearchFailure catch (searxError) {
+      if (!searxError.fallbackEligible || tavilyKey.isEmpty) {
+        throw searxError;
+      }
+      try {
+        return (
+          await _searchTavily(client, query, categories, tavilyKey),
+          'tavily',
+        );
+      } on _SearchFailure catch (tavilyError) {
+        throw _SearchFailure(
+          'SearXNG gagal: ${searxError.message}\n'
+          'Tavily gagal: ${tavilyError.message}',
+          fallbackEligible: false,
+        );
+      }
+    }
+  }
+
+  Future<List<({String title, String url, String content})>> _searchSearxng(
+    http.Client client,
+    String query,
+    String categories,
+  ) async {
+    final uri = Uri.parse(searxngBaseUrl).replace(
+      path: '/search',
+      queryParameters: {'q': query, 'format': 'json', 'categories': categories},
+    );
+    final http.Response res;
+    try {
+      res = await client
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'agent_dart/0.1',
+            },
+          )
+          .timeout(const Duration(seconds: 18));
+    } catch (e) {
+      throw _SearchFailure(
+        'web_search error: $e\n'
+        'Pastikan SearXNG jalan di $searxngBaseUrl dengan format JSON.',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 403) {
+      throw const _SearchFailure(
+        'SearXNG menolak format=json. '
+        'Aktifkan di settings.yml: search.formats: [html, json]',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'SearXNG HTTP ${res.statusCode}',
+        fallbackEligible: res.statusCode >= 500,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchTavily(
+    http.Client client,
+    String query,
+    String categories,
+    String tavilyKey,
+  ) async {
+    final tavilyCheck = await _ssrf.checkUrl(tavilyBaseUrl);
+    if (tavilyCheck != null) {
+      throw _SearchFailure(
+        'Tavily base URL ditolak: $tavilyCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse(tavilyBaseUrl).replace(path: '/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $tavilyKey',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'search_depth': 'basic',
+              'max_results': maxResults,
+              'topic': categories == 'news' ? 'news' : 'general',
+              'include_answer': false,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure('Tavily error: $e', fallbackEligible: false);
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Tavily auth ditolak (HTTP ${res.statusCode}) — periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Tavily HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  static List<({String title, String url, String content})> _hitsFrom(
+    Map<String, dynamic> json,
+  ) {
+    final results = json['results'] as List<dynamic>? ?? [];
+    final hits = <({String title, String url, String content})>[];
+    for (final raw in results) {
+      if (raw is! Map<String, dynamic>) continue;
+      hits.add((
+        title: (raw['title'] as String?) ?? '(tanpa judul)',
+        url: (raw['url'] as String?) ?? '',
+        content: (raw['content'] as String?) ?? '',
+      ));
+    }
+    return hits;
   }
 
   static String _stripHtml(String html) {
@@ -225,4 +353,13 @@ class WebSearchTool implements Tool {
         .trim();
     return s;
   }
+}
+
+/// Kegagalan satu mesin pencarian; [fallbackEligible] menandai kegagalan
+/// level transport di mana mencoba mesin lain masuk akal.
+class _SearchFailure implements Exception {
+  const _SearchFailure(this.message, {required this.fallbackEligible});
+
+  final String message;
+  final bool fallbackEligible;
 }

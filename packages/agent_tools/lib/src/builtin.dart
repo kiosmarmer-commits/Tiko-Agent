@@ -19,6 +19,7 @@ List<Tool> createBuiltinTools({
   String? workspaceRoot,
   SsrfGuard? ssrf,
   String searxngBaseUrl = 'http://127.0.0.1:8080',
+  String? tavilyApiKey,
   bool enableWebSearch = true,
   SandboxRunner? sandbox,
 }) {
@@ -38,7 +39,11 @@ List<Tool> createBuiltinTools({
     ),
     WebFetchTool(ssrf: guard),
     if (enableWebSearch)
-      WebSearchTool(searxngBaseUrl: searxngBaseUrl, ssrf: guard),
+      WebSearchTool(
+        searxngBaseUrl: searxngBaseUrl,
+        tavilyApiKey: tavilyApiKey,
+        ssrf: guard,
+      ),
   ];
 }
 
