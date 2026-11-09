@@ -27,7 +27,8 @@ class ScheduleJobTool implements Tool {
         },
         'timezone': {
           'type': 'string',
-          'description': 'UTC, Asia/Jakarta, Asia/Pontianak, Asia/Makassar, atau Asia/Jayapura',
+          'description':
+              'Nama zona IANA penuh, mis. Asia/Jakarta atau America/New_York; DST dihitung otomatis',
         },
       },
       'required': ['cron', 'prompt'],

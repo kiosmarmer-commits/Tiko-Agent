@@ -1,3 +1,5 @@
+import 'timezones.dart';
+
 /// Strict 5-field cron parser/matcher (minute hour dom month dow).
 /// Supports *, N, N-M, */N, N-M/S and comma-separated combinations.
 class CronExpression {
@@ -119,23 +121,30 @@ class CronExpression {
     return true;
   }
 
-  /// Match an absolute UTC instant against the requested fixed-offset zone.
-  /// IANA zones with daylight-saving transitions are rejected rather than
-  /// silently evaluated in the host's timezone.
+  /// Cocokkan sebuah instant absolut terhadap jam dinding zona IANA
+  /// [timezone]. Semua zona IANA didukung, termasuk zona dengan transisi
+  /// DST; zona tak dikenal ditolak keras (fail-closed) agar job tidak
+  /// pernah diam-diam dievaluasi di zona host.
   bool matchesAt(DateTime instant, {String timezone = 'UTC'}) =>
-      matches(_toWallTime(instant, timezone));
+      matches(Tz.wallFromUtc(instant, timezone));
 
   /// [from] is an absolute instant; the returned instant is UTC.
+  ///
+  /// Kandidat dihitung pada jam dinding zona lalu dikonversi per kandidat,
+  /// sehingga pergeseran offset DST diperhitungkan. Jam dinding ambigu
+  /// (fold) memilih kemunculan pertama dan jam dinding yang tidak ada (gap)
+  /// dinormalisasi maju oleh resolver zona — keduanya deterministik: setiap
+  /// kemunculan jam dinding dijadwalkan tepat satu kali.
   DateTime nextAfter(
     DateTime from, {
     int maxScanMinutes = 60 * 24 * 366 * 8,
     String timezone = 'UTC',
   }) {
-    final offset = _offsetFor(timezone);
-    final wallStart = from.toUtc().add(offset);
+    final fromUtc = from.toUtc();
+    final deadline = fromUtc.add(Duration(minutes: maxScanMinutes));
+    final wallStart = Tz.wallFromUtc(fromUtc, timezone);
     final firstDay = DateTime.utc(wallStart.year, wallStart.month, wallStart.day);
-    final deadline = wallStart.add(Duration(minutes: maxScanMinutes));
-    final maxDays = deadline.difference(firstDay).inDays;
+    final maxDays = maxScanMinutes ~/ 1440 + 1;
     final sortedHours = hours.toList()..sort();
     final sortedMinutes = minutes.toList()..sort();
 
@@ -158,9 +167,12 @@ class CronExpression {
 
       for (final hour in sortedHours) {
         for (final minute in sortedMinutes) {
-          final candidate = DateTime.utc(day.year, day.month, day.day, hour, minute);
-          if (candidate.isAfter(wallStart) && !candidate.isAfter(deadline)) {
-            return candidate.subtract(offset);
+          final wall =
+              DateTime.utc(day.year, day.month, day.day, hour, minute);
+          if (!wall.isAfter(wallStart)) continue;
+          final instant = Tz.utcFromWall(wall, timezone);
+          if (instant.isAfter(fromUtc) && !instant.isAfter(deadline)) {
+            return instant;
           }
         }
       }
@@ -168,24 +180,4 @@ class CronExpression {
     throw StateError('no next cron match within scan window');
   }
 
-  static DateTime _toWallTime(DateTime instant, String timezone) =>
-      instant.toUtc().add(_offsetFor(timezone));
-
-  static Duration _offsetFor(String timezone) {
-    const offsets = <String, int>{
-      'UTC': 0,
-      'Etc/UTC': 0,
-      'Asia/Jakarta': 7,
-      'Asia/Pontianak': 7,
-      'Asia/Makassar': 8,
-      'Asia/Jayapura': 9,
-    };
-    final hours = offsets[timezone];
-    if (hours == null) {
-      throw FormatException(
-        'timezone "$timezone" belum didukung; gunakan UTC atau zona Indonesia fixed-offset yang didukung',
-      );
-    }
-    return Duration(hours: hours);
-  }
 }

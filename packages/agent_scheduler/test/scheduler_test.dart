@@ -54,10 +54,16 @@ void main() {
     final next = cron.nextAfter(from, timezone: 'Asia/Jakarta');
     expect(next.isUtc, isTrue);
     expect(next, DateTime.utc(2026, 11, 8, 0));
-    expect(
-      () => cron.nextAfter(from, timezone: 'America/New_York'),
-      throwsFormatException,
+  });
+
+  test('nextAfter dengan zona IANA DST mengembalikan instant UTC', () {
+    final cron = CronExpression.parse('0 7 * * *');
+    // 02:30 UTC = 22:30 EDT 6 Nov 2026; berikutnya 07:00 EST = 12:00 UTC.
+    final next = cron.nextAfter(
+      DateTime.utc(2026, 11, 7, 2, 30),
+      timezone: 'America/New_York',
     );
+    expect(next, DateTime.utc(2026, 11, 7, 12));
   });
 
   test('durable claim replays pending run until acknowledged', () async {
