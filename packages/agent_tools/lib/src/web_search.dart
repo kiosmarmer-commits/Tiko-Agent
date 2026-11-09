@@ -205,7 +205,7 @@ class WebSearchTool implements Tool {
       return (await _searchSearxng(client, query, categories), 'searxng');
     } on _SearchFailure catch (searxError) {
       if (!searxError.fallbackEligible || tavilyKey.isEmpty) {
-        throw searxError;
+        rethrow;
       }
       try {
         return (
