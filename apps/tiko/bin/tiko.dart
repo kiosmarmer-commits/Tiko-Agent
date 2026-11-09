@@ -262,7 +262,6 @@ Future<void> main(List<String> argv) async {
       return;
 
     case 'skills':
-      final gate = SkillPromotionGate(skillsDir: skillsDir);
       if (args.isEmpty || args.first == 'list') {
         final dir = Directory(skillsDir);
         if (!dir.existsSync()) {
@@ -279,36 +278,49 @@ Future<void> main(List<String> argv) async {
         if (!r.ok) exitCode = 1;
       } else if (args.first == 'evaluate' && args.length > 1) {
         final slug = args[1];
-        final skill = _loadSkill(slug, skillsDir);
-        if (skill == null) {
-          stderr.writeln('skill not found: $slug');
+        try {
+          final r = await rt.evaluateSkill(
+            slug,
+            promoteOnPass: args.contains('--promote'),
+          );
+          emit(r.toJson(), '${r.ok ? 'PASS' : 'FAIL'} ${r.stage}: ${r.message}');
+          if (!r.ok) exitCode = 1;
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
           exitCode = 1;
-          return;
         }
-        final r = await gate.evaluateAndMaybePromote(skill, promoteOnPass: args.contains('--promote'));
-        emit(r.toJson(), '${r.ok ? 'PASS' : 'FAIL'} ${r.stage}: ${r.message}');
-        if (!r.ok) exitCode = 1;
       } else if (args.first == 'approve' && args.length > 1) {
-        final skill = _loadSkill(args[1], skillsDir);
-        if (skill == null) {
-          exitCode = 1;
-          return;
+        var actor = 'cli';
+        for (var i = 2; i + 1 < args.length; i++) {
+          if (args[i] == '--actor') actor = args[i + 1];
         }
-        // must evaluate first
-        await gate.evaluateAndMaybePromote(skill);
-        final r = gate.approve(skill, actor: 'cli');
-        emit(r.toJson(), r.message);
-        if (!r.ok) exitCode = 1;
+        if (actor.trim().isEmpty) actor = 'cli';
+        try {
+          final r = await rt.approveSkill(args[1], actor: actor);
+          emit(r.toJson(), r.message);
+          if (!r.ok) exitCode = 1;
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
+          exitCode = 1;
+        }
       } else if (args.first == 'rollback' && args.length > 1) {
-        final skill = _loadSkill(args[1], skillsDir);
-        if (skill == null) {
-          exitCode = 1;
-          return;
+        var to = 'draft';
+        for (var i = 2; i + 1 < args.length; i++) {
+          if (args[i] == '--to') to = args[i + 1];
         }
-        final r = gate.rollback(skill);
-        emit(r.toJson(), r.message);
+        try {
+          final r = await rt.rollbackSkill(args[1], to: to);
+          emit(r.toJson(), r.message);
+          if (!r.ok) exitCode = 1;
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
+          exitCode = 1;
+        }
       } else {
-        stderr.writeln('skills list|scan <dir>|evaluate <slug>|approve <slug>|rollback <slug>');
+        stderr.writeln(
+          'skills list|scan <dir>|evaluate <slug> [--promote]|'
+          'approve <slug> [--actor nama]|rollback <slug> [--to draft]',
+        );
         exitCode = 2;
       }
       return;
@@ -457,37 +469,6 @@ Future<void> main(List<String> argv) async {
     }
   } finally {
     await rt.close();
-  }
-}
-
-/// Loads only a direct child of the canonical workspace skills directory.
-/// Symbolic-link escapes and malformed/oversized skill files are rejected.
-Skill? _loadSkill(String slug, String skillsDir) {
-  if (slug.trim().isEmpty || slug == '.' || slug == '..' ||
-      slug.contains('/') || slug.contains('\\') ||
-      !RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$').hasMatch(slug)) {
-    return null;
-  }
-  try {
-    final root = Directory(skillsDir).resolveSymbolicLinksSync();
-    final dir = Directory(p.join(root, slug));
-    if (!dir.existsSync()) return null;
-    final realDir = dir.resolveSymbolicLinksSync();
-    if (p.equals(realDir, root) || !p.isWithin(root, realDir)) return null;
-    final file = File(p.join(realDir, 'SKILL.md'));
-    if (FileSystemEntity.typeSync(file.path, followLinks: false) !=
-        FileSystemEntityType.file) {
-      return null;
-    }
-    final realFile = file.resolveSymbolicLinksSync();
-    if (!p.isWithin(realDir, realFile) || file.lengthSync() > SkillValidator.maxBytes) {
-      return null;
-    }
-    final skill = SkillParser.parse(file.readAsStringSync(), slug: slug, path: file.path);
-    if (skill == null || SkillValidator.validate(skill) != null) return null;
-    return skill;
-  } catch (_) {
-    return null;
   }
 }
 

@@ -59,6 +59,8 @@ class TikoRuntime {
     required this.workspace,
     required this.dataDir,
     required this.skills,
+    required this.skillsRoot,
+    required this.goldenDir,
     required this.jobs,
     required this.mcpLoader,
     required this.scriptRunner,
@@ -80,6 +82,12 @@ class TikoRuntime {
   final String workspace;
   final String dataDir;
   final SkillRegistry skills;
+
+  /// Akar direktori skills/ absolut untuk gerbang promosi skill.
+  final String skillsRoot;
+
+  /// Direktori tugas golden (test/golden) absolut untuk evaluasi skill.
+  final String goldenDir;
   final JobStore jobs;
   final McpToolLoader mcpLoader;
   final ScriptToolRunner scriptRunner;
@@ -99,6 +107,7 @@ class TikoRuntime {
   final CapabilityVault capabilities = CapabilityVault();
   final EventBus events = EventBus();
   late final ApprovalBroker approvals;
+  late final SkillApprovalLedger skillLedger;
   late final OfflineQueue offlineQueue;
   ResourceSnapshot? lastResources;
 
@@ -255,6 +264,8 @@ class TikoRuntime {
       workspace: workspace,
       dataDir: dataDir,
       skills: skills,
+      skillsRoot: abs('skills'),
+      goldenDir: abs('test/golden'),
       jobs: jobs,
       mcpLoader: mcpLoader,
       scriptRunner: scriptRunner,
@@ -264,6 +275,12 @@ class TikoRuntime {
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
+    rt.skillLedger = SkillApprovalLedger(p.join(dataDir, 'skill_approvals.json'));
+    await rt.skillLedger.load();
+    // Status frontmatter YAML bukan record approval dan memang di-reset oleh
+    // loadFromDirectory; hanya ledger durabel yang boleh memulihkan status
+    // approved/trial/retired, dan hanya saat fingerprint konten masih cocok.
+    rt.skillLedger.applyTo(skills);
     rt.offlineQueue = OfflineQueue(p.join(dataDir, 'offline'));
     // ALG-04: the subagent tool only works with a runner that executes
     // a nested runtime turn; a bare tool would just emit SUBAGENT_REQUEST.
@@ -364,6 +381,198 @@ class TikoRuntime {
   Future<Map<String, dynamic>> routeExplain(String text) async {
     final session = Session(id: 'explain', channel: 'cli', userKey: 'local');
     return _router.explain(text, session);
+  }
+
+  /// Evaluator golden terisolasi untuk gerbang promosi skill (perbaikan:
+  /// "a real isolated golden evaluator"). Setiap tugas golden berjalan di
+  /// AgentLoop sendiri dengan: memory in-memory terpisah (evaluasi tidak
+  /// pernah menyentuh memory/sesi produksi), registry skill yang hanya
+  /// berisi salinan kandidat (metrik skill produksi tidak terpolusi),
+  /// [_EvalToolGate] yang menolak semua tool di luar allowlist tugas, dan
+  /// sintesis skill dimatikan (threshold 1.0 tak terjangkau) sehingga
+  /// evaluasi tidak bisa menulis draft baru ke workspace.
+  GoldenTaskEvaluator buildGoldenEvaluator(Skill skill) {
+    final candidate = Skill(
+      slug: skill.slug,
+      name: skill.name,
+      description: skill.description,
+      body: skill.body,
+      triggers: skill.triggers,
+      tools: skill.tools,
+      version: skill.version,
+      status: skill.status,
+      path: skill.path,
+      sha256: skill.sha256,
+    );
+    return (tasks) async {
+      final allowed = <String>{
+        for (final task in tasks) ...task.mustCallTools,
+        for (final task in tasks) ...task.allowedTools,
+        ...skill.tools,
+      };
+      final harness = GoldenHarness(
+        loopFactory: () async {
+          final replies = <String>[];
+          final evalMemory = SafeMemoryStore(InMemoryStore());
+          final evalSkills = SkillRegistry()..register(candidate);
+          final loop = AgentLoop(
+            router: _router,
+            contextBuilder: _RuntimeContext(
+              registry,
+              memory: evalMemory,
+              skillRegistry: evalSkills,
+              expander: ContextExpander(workspaceRoot: workspace),
+            ),
+            compactor: Compactor(),
+            gate: _EvalToolGate(allowed),
+            executor: RegistryToolExecutor(registry),
+            memory: evalMemory,
+            skillRegistry: evalSkills,
+            workspacePath: workspace,
+            sanitizer: _sanitizer,
+            skillEval: const SkillEvalConfig(threshold: 1.0),
+            config: AgentConfig(
+              maxIterations: 6,
+              maxTokensPerTask: 20000,
+              maxWallClockSec: 60,
+              maxToolCalls: 10,
+            ),
+            reply: (msg, out) async => replies.add(out),
+          );
+          final session = Session(
+            id: 'eval',
+            channel: 'eval',
+            userKey: 'eval',
+          );
+          return (
+            loop: loop,
+            session: session,
+            replies: replies,
+            tools: const <String>[],
+          );
+        },
+      );
+      return harness.run(tasks);
+    };
+  }
+
+  /// Menjalankan gerbang promosi penuh (scan -> golden) dengan evaluator
+  /// terisolasi, lalu mencatat hasilnya di ledger skill.
+  Future<SkillGateResult> evaluateSkill(
+    String slug, {
+    bool promoteOnPass = false,
+    String actor = 'cli',
+  }) async {
+    if (_closed) throw StateError('runtime is closed');
+    final skill = skills.get(slug);
+    if (skill == null) throw ArgumentError('skill not found: $slug');
+    final gate = SkillPromotionGate(
+      skillsDir: skillsRoot,
+      goldenDir: goldenDir,
+      evaluator: buildGoldenEvaluator(skill),
+    );
+    final result = await gate.evaluateAndMaybePromote(
+      skill,
+      promoteOnPass: promoteOnPass,
+    );
+    await skillLedger.append(SkillLedgerRecord(
+      slug: slug,
+      action: result.ok
+          ? (promoteOnPass ? 'trial' : 'evaluated')
+          : 'eval_failed',
+      actor: actor,
+      fingerprint: SkillApprovalLedger.fingerprintOf(skill),
+      at: DateTime.now().toUtc(),
+      reason: result.message.isEmpty ? null : result.message,
+      goldenScore: skill.goldenScore,
+      goldenTotal: skill.goldenTotal,
+    ));
+    events.emit('skill.evaluated', result.toJson()..['actor'] = actor);
+    return result;
+  }
+
+  /// Menyetujui skill secara durabel: evaluasi golden terisolasi wajib lulus
+  /// di proses ini, lalu approval dicatat di ledger supaya bertahan setelah
+  /// restart (status frontmatter tidak pernah dipercaya).
+  Future<SkillGateResult> approveSkill(
+    String slug, {
+    String actor = 'cli',
+    String? reason,
+  }) async {
+    if (_closed) throw StateError('runtime is closed');
+    if (actor.trim().isEmpty || actor.length > 128) {
+      throw ArgumentError.value(actor, 'actor', 'actor wajib diisi (maks 128)');
+    }
+    final skill = skills.get(slug);
+    if (skill == null) throw ArgumentError('skill not found: $slug');
+    final gate = SkillPromotionGate(
+      skillsDir: skillsRoot,
+      goldenDir: goldenDir,
+      evaluator: buildGoldenEvaluator(skill),
+    );
+    final evaluated = await gate.evaluateAndMaybePromote(skill);
+    await skillLedger.append(SkillLedgerRecord(
+      slug: slug,
+      action: evaluated.ok ? 'evaluated' : 'eval_failed',
+      actor: actor,
+      fingerprint: SkillApprovalLedger.fingerprintOf(skill),
+      at: DateTime.now().toUtc(),
+      reason: evaluated.message.isEmpty ? null : evaluated.message,
+      goldenScore: skill.goldenScore,
+      goldenTotal: skill.goldenTotal,
+    ));
+    events.emit('skill.evaluated', evaluated.toJson()..['actor'] = actor);
+    if (!evaluated.ok) {
+      return evaluated;
+    }
+    final result = gate.approve(skill, actor: actor);
+    if (result.ok) {
+      await skillLedger.append(SkillLedgerRecord(
+        slug: slug,
+        action: 'approved',
+        actor: actor,
+        fingerprint: SkillApprovalLedger.fingerprintOf(skill),
+        at: DateTime.now().toUtc(),
+        reason: reason,
+        goldenScore: skill.goldenScore,
+        goldenTotal: skill.goldenTotal,
+      ));
+      events.emit('skill.approved', result.toJson()..['actor'] = actor);
+    }
+    return result;
+  }
+
+  /// Mengembalikan status skill dan mencatat hasilnya di ledger supaya
+  /// rollback juga bertahan setelah restart.
+  Future<SkillGateResult> rollbackSkill(
+    String slug, {
+    String to = 'draft',
+    String actor = 'cli',
+  }) async {
+    if (_closed) throw StateError('runtime is closed');
+    final skill = skills.get(slug);
+    if (skill == null) throw ArgumentError('skill not found: $slug');
+    var target = 'draft';
+    for (final status in SkillStatus.values) {
+      if (status.name == to) target = status.name;
+    }
+    final gate = SkillPromotionGate(
+      skillsDir: skillsRoot,
+      goldenDir: goldenDir,
+    );
+    final result = gate.rollback(skill, to: target);
+    await skillLedger.append(SkillLedgerRecord(
+      slug: slug,
+      action: 'rolled_back',
+      actor: actor,
+      fingerprint: SkillApprovalLedger.fingerprintOf(skill),
+      at: DateTime.now().toUtc(),
+      reason: target,
+      goldenScore: skill.goldenScore,
+      goldenTotal: skill.goldenTotal,
+    ));
+    events.emit('skill.rolled_back', result.toJson()..['actor'] = actor);
+    return result;
   }
 
   Map<String, dynamic> providerHealth() => _router.healthSnapshot();
@@ -1068,6 +1277,26 @@ class _RuntimeContext extends ContextBuilder {
   }
 }
 
+
+/// Permission gate fail-closed untuk evaluator golden terisolasi: tool
+/// hanya diizinkan bila dideklarasikan oleh tugas golden atau skill yang
+/// sedang diuji. Selebihnya ditolak tanpa konfirmasi.
+class _EvalToolGate implements PermissionGate {
+  const _EvalToolGate(this.allowedTools);
+
+  final Set<String> allowedTools;
+
+  @override
+  Future<PermissionResult> check(ToolCall call, Session session) async {
+    if (allowedTools.contains(call.name)) {
+      return const PermissionResult(PermissionVerdict.allowed);
+    }
+    return const PermissionResult(
+      PermissionVerdict.denied,
+      reason: 'tool di luar allowlist tugas golden',
+    );
+  }
+}
 
 void stdoutWrite(String m) {
   try {
