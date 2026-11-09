@@ -2,21 +2,82 @@ import 'interfaces.dart';
 import 'models.dart';
 
 /// Per-provider health for circuit breaker (PRD §9.2).
+///
+/// Fase dihitung murni dari [openedAt] terhadap [openDuration] memakai
+/// clock yang dapat disuntik — tidak ada efek samping di getter. Half-open
+/// bersifat single-probe: hanya pemanggil pertama [tryAcquire] yang
+/// mendapatkan slot; pemanggil lain gagal-closed seolah breaker terbuka.
 class ProviderHealth {
+  ProviderHealth({
+    this.openDuration = const Duration(seconds: 60),
+    this.failureThreshold = 3,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? _defaultClock;
+
+  /// Lama jendela open sebelum masuk half-open.
+  final Duration openDuration;
+
+  /// Berapa kegagalan berurutan yang membuka breaker.
+  final int failureThreshold;
+
+  static DateTime _defaultClock() => DateTime.now().toUtc();
+
+  final DateTime Function() _clock;
+
   int failures = 0;
   int successes = 0;
   DateTime? openedAt;
   DateTime? lastErrorAt;
   String? lastError;
   double lastLatencyMs = 0;
+  bool _probeInFlight = false;
 
-  bool get isOpen {
-    if (openedAt == null) return false;
-    // half-open after 60s
-    if (DateTime.now().toUtc().difference(openedAt!).inSeconds > 60) {
-      return false;
+  /// True hanya saat fase open penuh (belum lewat jendela).
+  bool get isOpen => _phase == _Phase.open;
+
+  /// Representasi fase: closed, open, atau half_open.
+  String get state => switch (_phase) {
+        _Phase.closed => 'closed',
+        _Phase.open => 'open',
+        _Phase.halfOpen => 'half_open',
+      };
+
+  /// True bila provider masih boleh dipilih sebagai primary/fallback:
+  /// closed, atau half-open dengan slot probe kosong.
+  bool get selectable => switch (_phase) {
+        _Phase.closed => true,
+        _Phase.open => false,
+        _Phase.halfOpen => !_probeInFlight,
+      };
+
+  _Phase get _phase {
+    if (openedAt == null) return _Phase.closed;
+    if (_clock().difference(openedAt!) >= openDuration) {
+      return _Phase.halfOpen;
     }
-    return failures >= 3;
+    return _Phase.open;
+  }
+
+  /// Slot eksekusi: closed selalu diizinkan; open ditolak; half-open
+  /// hanya untuk satu probe. False bila breaker terbuka atau slot probe
+  /// sedang dipakai pemanggil lain.
+  bool tryAcquire() {
+    switch (_phase) {
+      case _Phase.closed:
+        return true;
+      case _Phase.open:
+        return false;
+      case _Phase.halfOpen:
+        if (_probeInFlight) return false;
+        _probeInFlight = true;
+        return true;
+    }
+  }
+
+  /// Lepas slot probe half-open tanpa verdict — untuk pemanggil yang
+  /// hanya menjelaskan routing tanpa mengeksekusinya.
+  void releaseProbe() {
+    _probeInFlight = false;
   }
 
   void recordSuccess(double latencyMs) {
@@ -24,23 +85,31 @@ class ProviderHealth {
     failures = 0;
     openedAt = null;
     lastLatencyMs = latencyMs;
+    _probeInFlight = false;
   }
 
   void recordFailure(String error) {
     failures++;
     lastError = error;
-    lastErrorAt = DateTime.now().toUtc();
-    if (failures >= 3) openedAt = lastErrorAt;
+    lastErrorAt = _clock();
+    // Dari half-open, satu kegagalan probe langsung membuka ulang jendela.
+    if (openedAt != null || failures >= failureThreshold) {
+      openedAt = lastErrorAt;
+    }
+    _probeInFlight = false;
   }
 
   Map<String, dynamic> toJson() => {
         'failures': failures,
         'successes': successes,
         'open': isOpen,
+        'phase': state,
         'last_error': lastError,
         'last_latency_ms': lastLatencyMs,
       };
 }
+
+enum _Phase { closed, open, halfOpen }
 
 /// Router bertingkat + fallback + circuit breaker (ALG-06 / PRD §9.2).
 class Router {
@@ -51,6 +120,7 @@ class Router {
     this.tierProviders = const {},
     this.fallbackOrder = const [],
     this.thresholds = const DecisionThresholds(),
+    this.clock,
     this.onFallback,
   });
 
@@ -61,12 +131,17 @@ class Router {
   /// Explicit fallback chain (provider ids), after primary.
   final List<String> fallbackOrder;
   final DecisionThresholds thresholds;
+
+  /// Clock yang dapat disuntik untuk fase breaker deterministik di test;
+  /// default waktu nyata UTC.
+  final DateTime Function()? clock;
   final void Function(Map<String, dynamic> event)? onFallback;
   final Map<String, ProviderHealth> health = {};
   final List<Map<String, dynamic>> _fallbackEvents = [];
 
 
-  ProviderHealth _h(String id) => health.putIfAbsent(id, ProviderHealth.new);
+  ProviderHealth _h(String id) =>
+      health.putIfAbsent(id, () => ProviderHealth(clock: clock));
 
   Future<RouteDecision> route(String text, Session session) async {
     final trimmed = text.trim();
@@ -151,6 +226,8 @@ class Router {
   /// Explain routing without side effects (CLI `tiko route explain`).
   Future<Map<String, dynamic>> explain(String text, Session session) async {
     final d = await route(text, session);
+    // Explain tidak mengeksekusi provider; slot probe dilepas tanpa verdict.
+    _h(d.providerId).releaseProbe();
     return {
       ...d.toJson(),
       'tier_providers': {
@@ -173,7 +250,9 @@ class Router {
     // for a single request failure.
     LlmProvider? selected;
     for (final id in decision.fallbackIds) {
-      if (id == failedId || exclude.contains(id) || _h(id).isOpen) continue;
+      if (id == failedId || exclude.contains(id) || !_h(id).selectable) {
+        continue;
+      }
       final candidate = providers[id];
       if (candidate != null) {
         selected = candidate;
@@ -182,7 +261,11 @@ class Router {
     }
     if (selected == null) {
       for (final entry in providers.entries) {
-        if (entry.key == failedId || exclude.contains(entry.key) || _h(entry.key).isOpen) continue;
+        if (entry.key == failedId ||
+            exclude.contains(entry.key) ||
+            !_h(entry.key).selectable) {
+          continue;
+        }
         selected = entry.value;
         break;
       }
@@ -218,20 +301,24 @@ class Router {
   String _pickPrimary({String? prefer, required int tier}) {
     if (prefer != null &&
         providers.containsKey(prefer) &&
-        !_h(prefer).isOpen) {
+        _h(prefer).selectable &&
+        _h(prefer).tryAcquire()) {
       return prefer;
     }
     // score all
     String? best;
     var bestScore = -1.0;
     for (final id in providers.keys) {
-      if (_h(id).isOpen) continue;
+      if (!_h(id).selectable) continue;
       final s = _score(id, needTools: tier >= 2);
       if (s > bestScore) {
         bestScore = s;
         best = id;
       }
     }
+    if (best != null && _h(best).tryAcquire()) return best;
+    // Upaya terakhir: seluruh provider open — tetap tunjuk prefer agar
+    // pemanggil masih bisa mencoba, bukan gagal tanpa eksekusi.
     return best ?? prefer ?? providers.keys.first;
   }
 
