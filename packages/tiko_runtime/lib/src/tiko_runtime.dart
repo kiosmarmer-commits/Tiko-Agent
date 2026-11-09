@@ -108,6 +108,7 @@ class TikoRuntime {
   final EventBus events = EventBus();
   late final ApprovalBroker approvals;
   late final SkillApprovalLedger skillLedger;
+  late final SkillMetricsLedger skillMetrics;
   late final OfflineQueue offlineQueue;
   ResourceSnapshot? lastResources;
 
@@ -281,6 +282,15 @@ class TikoRuntime {
     // loadFromDirectory; hanya ledger durabel yang boleh memulihkan status
     // approved/trial/retired, dan hanya saat fingerprint konten masih cocok.
     rt.skillLedger.applyTo(skills);
+    // Metrik penggunaan skill (uses/successes) juga durabel: ledger
+    // memulihkan angka setelah restart dan sink registry mencatat setiap
+    // pemakaian/feedback secara fire-and-forget (kegagalan tulis tidak
+    // boleh menggagalkan giliran agent).
+    rt.skillMetrics = SkillMetricsLedger(p.join(dataDir, 'skill_metrics.json'));
+    await rt.skillMetrics.load();
+    rt.skillMetrics.applyTo(skills);
+    skills.onUseRecorded = rt.skillMetrics.recordUse;
+    skills.onFeedbackRecorded = rt.skillMetrics.recordFeedback;
     rt.offlineQueue = OfflineQueue(p.join(dataDir, 'offline'));
     // ALG-04: the subagent tool only works with a runner that executes
     // a nested runtime turn; a bare tool would just emit SUBAGENT_REQUEST.

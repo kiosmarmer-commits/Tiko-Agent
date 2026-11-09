@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -128,6 +129,13 @@ class SkillParser {
 class SkillRegistry {
   final Map<String, Skill> _skills = {};
 
+  /// Sink durabel opsional: dipanggil fire-and-forget setiap kali
+  /// [recordUse] mencatat pemakaian skill.
+  Future<void> Function(String slug, {required bool success})? onUseRecorded;
+
+  /// Sink durabel opsional untuk feedback user ([applyFeedback]).
+  Future<void> Function(String slug, {required bool positive})? onFeedbackRecorded;
+
   List<Skill> get all => _skills.values.toList();
   List<Skill> get active =>
       _skills.values.where((s) => s.status != SkillStatus.retired).toList();
@@ -203,6 +211,10 @@ class SkillRegistry {
         s.successRate < 0.6) {
       s.status = SkillStatus.retired;
     }
+    final sink = onUseRecorded;
+    if (sink != null) {
+      unawaited(sink(slug, success: success).catchError((Object _) {}));
+    }
   }
 
   /// User feedback 👍/👎 on recent skill use (stronger signal than auto metrics).
@@ -222,6 +234,10 @@ class SkillRegistry {
           s.successRate < 0.4) {
         s.status = SkillStatus.retired;
       }
+    }
+    final sink = onFeedbackRecorded;
+    if (sink != null) {
+      unawaited(sink(slug, positive: positive).catchError((Object _) {}));
     }
   }
 }
