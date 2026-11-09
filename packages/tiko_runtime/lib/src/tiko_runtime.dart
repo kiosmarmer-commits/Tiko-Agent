@@ -669,10 +669,17 @@ class TikoRuntime {
     return mcpLoader.loadServers(servers);
   }
 
-  /// Start the single runtime-owned scheduler. Job outputs are published as
-  /// events with their original channel; the host may deliver only to that
-  /// exact gateway and must never fall back to another channel.
-  void startScheduler({Duration tickInterval = const Duration(seconds: 20)}) {
+  /// Start the single runtime-owned scheduler. Dengan [deliver], giliran
+  /// agent yang sukses mengantre outputnya untuk delivery gateway yang
+  /// durabel: run hanya di-ack setelah sink mengonfirmasi delivery, gagal
+  /// di-retry dengan backoff, dan `job.delivery_failed` diterbitkan bila
+  /// retry habis. Tanpa [deliver], run selesai begitu giliran agent sukses
+  /// (kontrak lama). Host hanya boleh mengirim ke channel milik job itu
+  /// sendiri dan tidak pernah fallback ke gateway lain.
+  void startScheduler({
+    Duration tickInterval = const Duration(seconds: 20),
+    DeliveryHandler? deliver,
+  }) {
     if (_closed || _scheduler != null) return;
     _scheduler = Scheduler(
       store: jobs,
@@ -696,6 +703,15 @@ class TikoRuntime {
               'scheduled agent turn did not complete successfully: ${outcome.text}',
             );
           }
+          if (deliver != null) {
+            // Antre durabel sebelum menerbitkan sukses: crash setelah titik
+            // ini me-replay delivery alih-alih kehilangan output.
+            await jobs.awaitDelivery(
+              job.id,
+              message.meta['run_id'] as String? ?? '',
+              outcome.text,
+            );
+          }
           events.emit('job.completed', {
             'job_id': job.id,
             'channel': job.channel,
@@ -703,6 +719,7 @@ class TikoRuntime {
             'session_id': message.sessionKey,
             'text': outcome.text,
             'scheduled_at': job.scheduledAt?.toIso8601String(),
+            'delivery_pending': deliver != null,
           });
         } catch (error) {
           events.emit('job.failed', {
@@ -714,13 +731,40 @@ class TikoRuntime {
           rethrow;
         }
       },
+      deliver: deliver,
+      onDelivered: (job, runId, attempts) => events.emit('job.delivered', {
+        'job_id': job.id,
+        'channel': job.channel,
+        'run_id': runId,
+        'attempts': attempts,
+      }),
+      onDeliveryRetry: (job, runId, attempt, error) =>
+          events.emit('job.delivery_retry', {
+        'job_id': job.id,
+        'channel': job.channel,
+        'run_id': runId,
+        'attempt': attempt,
+        'error': _sanitizer.output('$error'),
+      }),
+      onDeliveryFailed: (job, runId, attempts, error) =>
+          events.emit('job.delivery_failed', {
+        'job_id': job.id,
+        'channel': job.channel,
+        'run_id': runId,
+        'attempts': attempts,
+        'error': _sanitizer.output('$error'),
+        'session_id': '${job.channel}:${job.userKey}:job:${job.id}',
+      }),
       onError: (job, error) => events.emit('job.retry', {
         'job_id': job.id,
         'channel': job.channel,
         'error': _sanitizer.output('$error'),
       }),
     )..start();
-    events.emit('scheduler.started', {'jobs': jobs.all.length});
+    events.emit('scheduler.started', {
+      'jobs': jobs.all.length,
+      'delivery_tracking': deliver != null,
+    });
   }
 
   Future<void> stopScheduler() async {

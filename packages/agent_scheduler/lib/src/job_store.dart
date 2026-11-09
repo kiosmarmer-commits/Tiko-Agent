@@ -8,6 +8,9 @@ import 'cron.dart';
 
 enum MissedPolicy { skip, runOnce, catchUp }
 
+/// Nilai sah untuk [Job.deliveryState].
+const _deliveryStates = <String>{'none', 'pending', 'delivered', 'failed'};
+
 class Job {
   Job({
     required this.id,
@@ -22,6 +25,13 @@ class Job {
     this.timezone = 'UTC',
     this.pendingRunAt,
     this.scheduledAt,
+    this.deliveryRunId,
+    this.deliveryText,
+    this.deliveryAttempts = 0,
+    this.deliveryNextAt,
+    this.lastDeliveryAt,
+    this.deliveryError,
+    this.deliveryState = 'none',
   });
 
   final String id;
@@ -41,6 +51,17 @@ class Job {
   /// Runtime copy of the scheduled instant that the current claim represents.
   DateTime? scheduledAt;
 
+  /// Durable outbound-delivery tracking. `deliveryRunId != null` marks an
+  /// agent output that is queued and waiting for the target gateway to
+  /// acknowledge delivery; the scheduled run stays claimed until then.
+  String? deliveryRunId;
+  String? deliveryText;
+  int deliveryAttempts = 0;
+  DateTime? deliveryNextAt;
+  DateTime? lastDeliveryAt;
+  String? deliveryError;
+  String deliveryState = 'none'; // none | pending | delivered | failed
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'cron': cron,
@@ -53,6 +74,13 @@ class Job {
     'missed_policy': missedPolicy.name,
     'timezone': timezone,
     'pending_run_at': pendingRunAt?.toUtc().toIso8601String(),
+    'delivery_run_id': deliveryRunId,
+    'delivery_text': deliveryText,
+    'delivery_attempts': deliveryAttempts,
+    'delivery_next_at': deliveryNextAt?.toUtc().toIso8601String(),
+    'last_delivery_at': lastDeliveryAt?.toUtc().toIso8601String(),
+    'delivery_error': deliveryError,
+    'delivery_state': deliveryState,
   };
 
   factory Job.fromJson(Map<String, dynamic> m) {
@@ -75,6 +103,45 @@ class Job {
     if (rawPending != null && parsedPending == null) {
       throw const FormatException('invalid pending_run_at');
     }
+    final rawDeliveryNext = m['delivery_next_at'];
+    final parsedDeliveryNext = rawDeliveryNext == null
+        ? null
+        : rawDeliveryNext is String
+            ? DateTime.tryParse(rawDeliveryNext)?.toUtc()
+            : null;
+    if (rawDeliveryNext != null && parsedDeliveryNext == null) {
+      throw const FormatException('invalid delivery_next_at');
+    }
+    final rawLastDelivery = m['last_delivery_at'];
+    final parsedLastDelivery = rawLastDelivery == null
+        ? null
+        : rawLastDelivery is String
+            ? DateTime.tryParse(rawLastDelivery)?.toUtc()
+            : null;
+    if (rawLastDelivery != null && parsedLastDelivery == null) {
+      throw const FormatException('invalid last_delivery_at');
+    }
+    final rawDeliveryAttempts = m['delivery_attempts'];
+    if (rawDeliveryAttempts != null && rawDeliveryAttempts is! int) {
+      throw const FormatException('invalid delivery_attempts');
+    }
+    final rawDeliveryText = m['delivery_text'];
+    if (rawDeliveryText != null && rawDeliveryText is! String) {
+      throw const FormatException('invalid delivery_text');
+    }
+    final rawDeliveryError = m['delivery_error'];
+    if (rawDeliveryError != null && rawDeliveryError is! String) {
+      throw const FormatException('invalid delivery_error');
+    }
+    final deliveryState = m['delivery_state'] as String? ?? 'none';
+    if (!_deliveryStates.contains(deliveryState)) {
+      throw FormatException('invalid delivery_state: $deliveryState');
+    }
+    final rawDeliveryRunId = m['delivery_run_id'] as String?;
+    if (deliveryState == 'pending' &&
+        (rawDeliveryRunId == null || rawDeliveryRunId.isEmpty)) {
+      throw const FormatException('pending delivery requires delivery_run_id');
+    }
     return Job(
       id: m['id'] as String,
       cron: m['cron'] as String,
@@ -89,6 +156,13 @@ class Job {
       missedPolicy: policy,
       timezone: m['timezone'] as String? ?? 'UTC',
       pendingRunAt: parsedPending,
+      deliveryRunId: rawDeliveryRunId,
+      deliveryText: rawDeliveryText as String?,
+      deliveryAttempts: rawDeliveryAttempts as int? ?? 0,
+      deliveryNextAt: parsedDeliveryNext,
+      lastDeliveryAt: parsedLastDelivery,
+      deliveryError: rawDeliveryError as String?,
+      deliveryState: deliveryState,
     );
   }
 }
@@ -96,6 +170,10 @@ class Job {
 /// Job store with atomic JSON persistence and restart-safe execution claims.
 class JobStore {
   JobStore({this.persistPath});
+
+  /// Cap untuk teks delivery yang diantre agar satu output tidak
+  /// mendominasi jobs.json.
+  static const maxDeliveryTextLength = 20000;
 
   final String? persistPath;
   final Map<String, Job> _jobs = {};
@@ -338,5 +416,129 @@ class JobStore {
     if (job == null) return;
     job.scheduledAt = job.pendingRunAt;
     await save();
+  }
+
+  /// Antre output agent untuk dikirim ke gateway. Run terjadwal tetap
+  /// diklaim (pending_run_at) sampai delivery di-ack, sehingga crash antara
+  /// generate dan kirim me-replay delivery, bukan kehilangan output.
+  Future<void> awaitDelivery(String id, String runId, String text) async {
+    final job = _jobs[id];
+    if (job == null) throw StateError('unknown job $id');
+    if (runId.isEmpty) {
+      throw ArgumentError.value(runId, 'runId', 'must not be empty');
+    }
+    if (job.pendingRunAt == null) {
+      throw StateError('job $id has no claimed run awaiting delivery');
+    }
+    if (job.deliveryRunId != null) {
+      if (job.deliveryRunId == runId) return; // idempotent re-queue
+      throw StateError(
+        'job $id already has a pending delivery for ${job.deliveryRunId}',
+      );
+    }
+    job
+      ..deliveryRunId = runId
+      ..deliveryText = text.length > maxDeliveryTextLength
+          ? text.substring(0, maxDeliveryTextLength)
+          : text
+      ..deliveryAttempts = 0
+      ..deliveryNextAt = DateTime.now().toUtc()
+      ..deliveryState = 'pending'
+      ..deliveryError = null;
+    await save();
+  }
+
+  bool deliveryPending(String id) => _jobs[id]?.deliveryRunId != null;
+
+  /// Klaim output yang retry-nya sudah jatuh tempo. Penghitung upaya
+  /// dipersist SEBELUM pengiriman dilakukan, sehingga crash di tengah
+  /// pengiriman tetap dihitung sebagai satu upaya (at-least-once).
+  Future<List<Job>> claimDueDeliveries(DateTime now) async {
+    final n = now.toUtc();
+    final due = <Job>[];
+    var changed = false;
+    for (final job in _jobs.values) {
+      if (job.deliveryRunId == null) continue;
+      final next = job.deliveryNextAt;
+      if (next != null && next.isAfter(n)) continue;
+      job.deliveryAttempts += 1;
+      job.deliveryNextAt = null;
+      due.add(job);
+      changed = true;
+    }
+    if (changed) await save();
+    return due;
+  }
+
+  /// Ack delivery sukses sekaligus menuntaskan run terjadwal.
+  Future<void> completeDelivery(String id, String runId) async {
+    final job = _jobs[id];
+    if (job == null) return;
+    if (job.deliveryRunId != runId) {
+      throw StateError('delivery mismatch for job $id: $runId');
+    }
+    job.lastRun = job.pendingRunAt?.toUtc() ?? job.lastRun;
+    job
+      ..pendingRunAt = null
+      ..scheduledAt = null
+      ..deliveryRunId = null
+      ..deliveryText = null
+      ..deliveryNextAt = null
+      ..deliveryError = null
+      ..deliveryState = 'delivered'
+      ..lastDeliveryAt = DateTime.now().toUtc();
+    await save();
+  }
+
+  /// Catat upaya delivery gagal dan jadwalkan retry berikutnya.
+  Future<void> scheduleDeliveryRetry(
+    String id,
+    String runId,
+    Duration delay, {
+    required String error,
+  }) async {
+    final job = _jobs[id];
+    if (job == null) return;
+    if (job.deliveryRunId != runId) {
+      throw StateError('delivery mismatch for job $id: $runId');
+    }
+    if (delay < Duration.zero) {
+      throw ArgumentError.value(delay, 'delay', 'must not be negative');
+    }
+    job
+      ..deliveryNextAt = DateTime.now().toUtc().add(delay)
+      ..deliveryState = 'pending'
+      ..deliveryError = _capDeliveryError(error);
+    await save();
+  }
+
+  /// Menyerah setelah retry habis. Giliran agent sendiri sudah sukses, jadi
+  /// run dituntaskan dengan catatan delivery gagal yang durabel, bukan
+  /// di-replay (yang akan menduplikasi giliran agent).
+  Future<void> failDeliveryPermanently(
+    String id,
+    String runId,
+    String error,
+  ) async {
+    final job = _jobs[id];
+    if (job == null) return;
+    if (job.deliveryRunId != runId) {
+      throw StateError('delivery mismatch for job $id: $runId');
+    }
+    job.lastRun = job.pendingRunAt?.toUtc() ?? job.lastRun;
+    job
+      ..pendingRunAt = null
+      ..scheduledAt = null
+      ..deliveryRunId = null
+      ..deliveryText = null
+      ..deliveryNextAt = null
+      ..deliveryState = 'failed'
+      ..deliveryError = _capDeliveryError(error);
+    await save();
+  }
+
+  String _capDeliveryError(String error) {
+    final clean = error.replaceAll('\n', ' ').trim();
+    return clean.length > 500 ? clean.substring(0, 500) : clean;
   }
 }

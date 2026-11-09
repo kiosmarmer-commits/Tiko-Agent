@@ -302,24 +302,25 @@ Future<void> main(List<String> args) async {
     });
   }
 
-  final jobEventsSub = rt.events.stream.listen((event) {
-    if (event.type != 'job.completed') return;
-    final channel = event.data['channel'] as String? ?? '';
-    final sessionKey = event.data['session_id'] as String? ?? '';
-    final text = event.data['text'] as String? ?? '';
-    final target = gatewayForChannel(channel);
-    if (target == null) {
-      // No exact destination available: retain the result locally, never send
-      // it to an unrelated first/available gateway.
-      stdout.writeln('[scheduler:${event.data['job_id']}] no gateway for "$channel"; result kept in session $sessionKey');
-      return;
-    }
-    unawaited(target.send(OutboundMessage(sessionKey: sessionKey, text: text)).catchError((error) {
-      stdout.writeln('[scheduler:${event.data['job_id']}] delivery failed for "$channel": $error; result remains in session $sessionKey');
-    }));
-  });
-  rt.startScheduler();
-  stdout.writeln('Scheduler aktif (dikelola TikoRuntime)');
+  // Output job mengalir lewat antrean delivery durabel milik runtime:
+  // scheduler me-retry kegagalan gateway dengan backoff dan hanya meng-ack
+  // run setelah gateway tujuan menerima pesan. Channel tanpa gateway yang
+  // cocok tetap menyimpan hasil di sesi (ack lokal — tidak pernah
+  // dikirim silang ke gateway lain).
+  rt.startScheduler(
+    deliver: (job, runId, sessionKey, text) async {
+      final target = gatewayForChannel(job.channel);
+      if (target == null) {
+        stdout.writeln(
+          '[scheduler:${job.id}] no gateway for "${job.channel}"; '
+          'result kept in session $sessionKey',
+        );
+        return;
+      }
+      await target.send(OutboundMessage(sessionKey: sessionKey, text: text));
+    },
+  );
+  stdout.writeln('Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)');
 
   final webhooks = (wa != null || slackGw != null)
       ? WebhookEndpoint(
@@ -411,7 +412,6 @@ Future<void> main(List<String> args) async {
       );
       await api?.stop();
       await rt.close();
-      await jobEventsSub.cancel();
       for (final gateway in gateways) {
         try { await gateway.close(); } catch (_) {}
       }
@@ -421,7 +421,6 @@ Future<void> main(List<String> args) async {
       stderr.writeln('API startup gagal: $error');
       await api?.stop();
       await rt.close();
-      await jobEventsSub.cancel();
       for (final gateway in gateways) {
         try { await gateway.close(); } catch (_) {}
       }
@@ -431,7 +430,6 @@ Future<void> main(List<String> args) async {
   }
 
   final subs = <StreamSubscription>[];
-  subs.add(jobEventsSub);
   for (final gw in gateways) {
     subs.add(gw.inbound.listen((m) {
       unawaited(handleMessage(m, replyVia: gw));
