@@ -404,6 +404,7 @@ class TikoRuntime {
   Router get _router => _routerInstance ??= Router(
         providers: providers,
         defaultProviderId: config.defaultProvider,
+        tierProviders: config.tierProviders,
         decision: decision,
         fallbackOrder: [
           config.defaultProvider,

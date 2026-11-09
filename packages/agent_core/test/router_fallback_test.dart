@@ -32,6 +32,33 @@ class _OkProvider implements LlmProvider {
   Future<List<double>> embed(String text) async => const [];
 }
 
+class _FixedDecision implements DecisionProvider {
+  const _FixedDecision(this.complexity);
+
+  final String complexity;
+
+  @override
+  Future<DecisionResult> decide(
+    String state,
+    Map<String, Question> questions,
+  ) async {
+    final answers = <String, Answer>{};
+    for (final entry in questions.entries) {
+      final question = entry.value;
+      if (question is NoulQuestion) {
+        answers[entry.key] = const Answer(type: 'noul', noul: 0.0);
+      } else if (question is ChoiceQuestion) {
+        answers[entry.key] = entry.key == 'kompleksitas'
+            ? Answer(type: 'choice', choice: complexity)
+            : Answer(type: 'choice', choice: question.options.first);
+      } else {
+        answers[entry.key] = const Answer(type: 'score', score: 0.0);
+      }
+    }
+    return DecisionResult(answers);
+  }
+}
+
 void main() {
   test('explain includes provider and fallbacks', () async {
     final r = Router(
@@ -92,5 +119,57 @@ void main() {
       'fail',
     );
     expect(next?.id, 'ok');
+  });
+
+  test('tier routing memilih provider sesuai keputusan decision model', () async {
+    final s = Session(id: 's', channel: 't', userKey: 'u');
+    final berat = Router(
+      providers: {
+        'kecil': _OkProvider('kecil'),
+        'besar': _FailProvider('besar'),
+      },
+      defaultProviderId: 'kecil',
+      decision: const _FixedDecision('berat'),
+      tierProviders: const {1: 'kecil', 3: 'besar'},
+    );
+    final dBerat = await berat.route('analisis mendalam', s);
+    expect(dBerat.tier, 3);
+    expect(dBerat.providerId, 'besar');
+
+    final ringan = Router(
+      providers: {
+        'kecil': _OkProvider('kecil'),
+        'besar': _FailProvider('besar'),
+      },
+      defaultProviderId: 'kecil',
+      decision: const _FixedDecision('ringan'),
+      tierProviders: const {1: 'kecil', 3: 'besar'},
+    );
+    final dRingan = await ringan.route('halo', s);
+    expect(dRingan.tier, 1);
+    expect(dRingan.providerId, 'kecil');
+  });
+
+  test('tier tanpa pemetaan jatuh ke provider default', () async {
+    final r = Router(
+      providers: {'kecil': _OkProvider('kecil')},
+      defaultProviderId: 'kecil',
+      decision: const _FixedDecision('berat'),
+    );
+    final s = Session(id: 's', channel: 't', userKey: 'u');
+    final d = await r.route('sangat berat', s);
+    expect(d.tier, 3);
+    expect(d.providerId, 'kecil');
+  });
+
+  test('explain menampilkan pemetaan tier', () async {
+    final r = Router(
+      providers: {'kecil': _OkProvider('kecil')},
+      defaultProviderId: 'kecil',
+      tierProviders: const {1: 'kecil'},
+    );
+    final s = Session(id: 's', channel: 't', userKey: 'u');
+    final e = await r.explain('halo', s);
+    expect(e['tier_providers'], containsPair('1', 'kecil'));
   });
 }

@@ -153,6 +153,9 @@ class Router {
     final d = await route(text, session);
     return {
       ...d.toJson(),
+      'tier_providers': {
+        for (final e in tierProviders.entries) e.key.toString(): e.value,
+      },
       'health': {for (final e in health.entries) e.key: e.value.toJson()},
       'fallback_events': fallbackEvents(),
       'providers': providers.keys.toList(),

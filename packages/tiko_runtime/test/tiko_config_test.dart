@@ -218,6 +218,52 @@ mcp:
       expect(cfg.defaultProvider, 'mock');
     });
 
+    test('providers.tiers memetakan tier ke provider dan divalidasi', () {
+      final (cfg, issues) = TikoConfig.parse('''
+providers:
+  default_chat: kecil
+  tiers:
+    1: kecil
+    3: besar
+  chat:
+    kecil:
+      type: mock
+    besar:
+      type: mock
+''');
+      expect(issues, isEmpty);
+      expect(cfg.tierProviders[1], 'kecil');
+      expect(cfg.tierProviders[3], 'besar');
+      expect(cfg.tierProviders.containsKey(2), isFalse);
+
+      final (_, badIssues) = TikoConfig.parse('''
+providers:
+  default_chat: kecil
+  tiers:
+    0: kecil
+    2: hantu
+  chat:
+    kecil:
+      type: mock
+''');
+      final paths = badIssues.map((issue) => issue.path).toSet();
+      expect(paths, contains('providers.tiers.0'));
+      expect(paths, contains('providers.tiers.2'));
+
+      final (_, scalarIssues) = TikoConfig.parse('''
+providers:
+  default_chat: kecil
+  tiers: oops
+  chat:
+    kecil:
+      type: mock
+''');
+      expect(
+        scalarIssues.any((issue) => issue.path == 'providers.tiers'),
+        isTrue,
+      );
+    });
+
     test('shipped config/agent.yaml is valid', () {
       final f = File('../../config/agent.yaml');
       if (!f.existsSync()) return; // run from another cwd

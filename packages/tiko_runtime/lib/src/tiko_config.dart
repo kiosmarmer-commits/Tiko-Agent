@@ -135,6 +135,7 @@ class TikoConfig {
     this.dbPath = 'data/agent.db',
     this.defaultProvider = 'mock',
     this.providers = const {},
+    this.tierProviders = const {},
     this.permissionMode = 'ask',
     this.shellAllowlist = const ['ls', 'cat', 'git status', 'pwd', 'echo'],
     this.requireConfirm = const [
@@ -164,6 +165,10 @@ class TikoConfig {
   final String dbPath;
   final String defaultProvider;
   final Map<String, ProviderConfig> providers;
+
+  /// Pemetaan tier routing adaptif (tier 1, 2, atau 3) ke id provider dari
+  /// providers.tiers di config; kosong berarti semua tier memakai default.
+  final Map<int, String> tierProviders;
   final String permissionMode;
   final List<String> shellAllowlist;
   final List<String> requireConfirm;
@@ -547,6 +552,51 @@ class TikoConfig {
         "provider '$defaultProvider' dipilih sebagai default tetapi disabled",
       ));
     }
+    // ---- providers.tiers: pemetaan tier routing adaptif (ALG-06) ----
+    final tierProviders = <int, String>{};
+    final tiersValue = providersSec['tiers'];
+    if (tiersValue != null && tiersValue is! YamlMap) {
+      issues.add(const ConfigIssue(
+        'providers.tiers',
+        'harus berupa mapping tier (1|2|3) ke id provider',
+      ));
+    } else if (tiersValue is YamlMap) {
+      for (final entry in tiersValue.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        final tier = key is int ? key : int.tryParse('$key');
+        if (tier == null || tier < 1 || tier > 3) {
+          issues.add(ConfigIssue(
+            'providers.tiers.$key',
+            'tier harus 1, 2, atau 3',
+          ));
+          continue;
+        }
+        if (value is! String || value.trim().isEmpty) {
+          issues.add(ConfigIssue(
+            'providers.tiers.$key',
+            'harus berupa id provider yang tidak kosong',
+          ));
+          continue;
+        }
+        if (!providers.containsKey(value)) {
+          issues.add(ConfigIssue(
+            'providers.tiers.$key',
+            "provider '$value' tidak terdefinisi",
+          ));
+          continue;
+        }
+        if (!providers[value]!.enabled) {
+          issues.add(ConfigIssue(
+            'providers.tiers.$key',
+            "provider '$value' disabled",
+          ));
+          continue;
+        }
+        tierProviders[tier] = value;
+      }
+    }
+
     final configuredPort = api['port'];
     if (configuredPort != null &&
         (configuredPort is! int || configuredPort < 1 || configuredPort > 65535)) {
@@ -574,6 +624,7 @@ class TikoConfig {
           ? defaultProvider
           : providers.keys.first,
       providers: providers,
+      tierProviders: tierProviders,
       permissionMode: const {'auto', 'ask', 'deny'}.contains(mode) ? mode : 'ask',
       shellAllowlist: strList(security['shell_allowlist'],
           const ['ls', 'cat', 'git status', 'pwd', 'echo']),
@@ -730,6 +781,7 @@ agent:
   max_tool_calls: 30
 providers:
   default_chat: $providerId
+  tiers: {}
   chat:
     mock:
       type: mock

@@ -11,6 +11,11 @@ agent:
 
 providers:
   default_chat: mock
+  # tiers: pemetaan tier routing adaptif (ALG-06); tanpa ini semua tier
+  # memakai default_chat:
+  #   1: ollama_local   # ringan
+  #   2: ollama_local
+  #   3: ollama_local   # berat - ganti ke provider cloud bila dikonfigurasi
   chat:
     mock:
       type: mock
