@@ -327,18 +327,42 @@ class TikoRuntime {
         if (tok == null) return 'capability invalid/expired';
         if (tok.sessionId != session.id) return 'capability session mismatch';
         if (tok.tool != call.name) return 'capability tool mismatch';
-        if (!tok.operations.contains('execute')) return 'capability operation mismatch';
-        if (!tok.roots.contains(workspace)) return 'capability workspace mismatch';
+        // Operasi sempit per tool (PRD §12): 'execute' generik hanya
+        // diterima untuk token bergaya lama; token baru menyimpan operasi
+        // persis yang disetujui untuk tool itu.
+        final operation = CapabilityToken.operationForTool(call.name);
+        if (!tok.operations.contains(operation) &&
+            !tok.operations.contains('execute')) {
+          return 'capability operation mismatch';
+        }
+        // Binding sumber daya sempit: root token harus memuat file persis
+        // yang disentuh call, dan host HTTP harus cocok persis dengan yang
+        // disetujui — bukan sekadar "workspace mana pun".
+        final roots = CapabilityToken.boundRoots(
+          call.name,
+          call.args,
+          workspaceRoot: workspace,
+        );
+        final rootOk = roots.every(
+          (resource) => tok.roots.any(
+            (root) => root == resource || p.isWithin(root, resource),
+          ),
+        );
+        if (!rootOk) return 'capability resource binding mismatch';
+        final domains = CapabilityToken.boundDomains(call.name, call.args);
+        if (domains.isNotEmpty && !domains.every(tok.domains.contains)) {
+          return 'capability domain mismatch';
+        }
         try {
           final fingerprint = CapabilityToken.fingerprintArguments(call.args);
-          if (utf8.encode(fingerprint).length > tok.maxBytes) {
-            return 'capability payload exceeds approved byte limit';
-          }
           if (fingerprint != tok.argumentsFingerprint) {
             return 'capability arguments changed after approval';
           }
         } catch (_) {
           return 'capability arguments are invalid or oversized';
+        }
+        if (!_withinApprovedBytes(call, tok.maxBytes)) {
+          return 'capability payload exceeds approved byte limit';
         }
         return null;
       },
@@ -773,8 +797,15 @@ class TikoRuntime {
           final tok = capabilities.issue(CapabilityToken.mint(
             sessionId: sess.id,
             tool: call.name,
-            operations: const ['execute'],
-            roots: [workspace],
+            // Operasi + sumber daya sempit: token hanya berlaku untuk file
+            // (atau host) yang persis disetujui user pada panggilan ini.
+            operations: [CapabilityToken.operationForTool(call.name)],
+            roots: CapabilityToken.boundRoots(
+              call.name,
+              call.args,
+              workspaceRoot: workspace,
+            ),
+            domains: CapabilityToken.boundDomains(call.name, call.args),
             arguments: call.args,
           ));
           call.args['_capability_id'] = tok.id;

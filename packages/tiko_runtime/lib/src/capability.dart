@@ -1,8 +1,16 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 /// Scoped capability token (PRD §12).
+///
+/// Token dibuat sempit dan terikat sumber daya (narrow resource-bound):
+/// [operations] menyimpan operasi persis untuk tool itu ([operationForTool]),
+/// [roots] memuat file absolut persis yang disetujui ([boundRoots]), dan
+/// [domains] memuat host HTTP persis ([boundDomains]) — bukan "workspace
+/// mana pun" generik. Fingerprint argumen tetap menjadi kunci utama; binding
+/// sumber daya adalah lapisan pertahanan kedua yang juga terlihat di audit.
 class CapabilityToken {
   CapabilityToken({
     required this.id,
@@ -33,6 +41,55 @@ class CapabilityToken {
   bool get isValid => !isExpired && !(singleUse && used);
 
   void markUsed() => used = true;
+
+  /// Operasi sempit per tool (PRD §12). 'execute' generik tetap dikenal
+  /// gerbang untuk token bergaya lama, tetapi token baru hanya menyimpan
+  /// operasi persis yang disetujui untuk tool tersebut.
+  static String operationForTool(String tool) => switch (tool) {
+        'shell' => 'exec',
+        'write_file' => 'write',
+        'patch_file' => 'patch',
+        'http_request' || 'web_fetch' => 'fetch',
+        _ => 'execute',
+      };
+
+  /// Binding root sempit: untuk tool file, root = file absolut persis yang
+  /// diminta (bukan seluruh workspace). Untuk tool tanpa path spesifik yang
+  /// bisa ditarik (shell, script, mcp), tetap workspace — tetap dikunci oleh
+  /// fingerprint argumen. Path absolut dipertahankan apa adanya; resolusi
+  /// traversal tetap tugas jail tool (fail-closed di sana).
+  static List<String> boundRoots(
+    String tool,
+    Map<String, dynamic> args, {
+    required String workspaceRoot,
+  }) {
+    if (tool == 'write_file' || tool == 'patch_file') {
+      final raw = args['path'];
+      if (raw is String && raw.trim().isNotEmpty) {
+        final normalized = p.normalize(
+          p.isAbsolute(raw) ? raw : p.join(workspaceRoot, raw),
+        );
+        return List<String>.unmodifiable([normalized]);
+      }
+    }
+    return List<String>.unmodifiable([workspaceRoot]);
+  }
+
+  /// Binding domain sempit untuk tool HTTP: host persis dari URL yang
+  /// disetujui (lowercase). URL tidak valid menghasilkan list kosong; tool
+  /// akan menolak URL tersebut lebih dulu (fail-closed).
+  static List<String> boundDomains(String tool, Map<String, dynamic> args) {
+    if (tool == 'http_request' || tool == 'web_fetch') {
+      final raw = args['url'];
+      if (raw is String) {
+        final host = Uri.tryParse(raw.trim())?.host.toLowerCase();
+        if (host != null && host.isNotEmpty) {
+          return List<String>.unmodifiable([host]);
+        }
+      }
+    }
+    return const [];
+  }
 
   Map<String, dynamic> toJson() => {
         'capability_id': id,
@@ -87,6 +144,7 @@ class CapabilityToken {
     Duration ttl = const Duration(minutes: 5),
     List<String> domains = const [],
     bool singleUse = true,
+    int maxBytes = 102400,
   }) {
     return CapabilityToken(
       id: 'cap_${const Uuid().v4()}',
@@ -98,6 +156,7 @@ class CapabilityToken {
       domains: List.unmodifiable(domains),
       expiresAt: DateTime.now().toUtc().add(ttl),
       singleUse: singleUse,
+      maxBytes: maxBytes,
     );
   }
 }
