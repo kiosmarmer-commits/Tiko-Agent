@@ -40,7 +40,7 @@ void main() {
   });
 
   test('threshold kegagalan membuka breaker dan menolak panggilan', () {
-    var now = DateTime.utc(2026, 11, 9, 12);
+    final now = DateTime.utc(2026, 11, 9, 12);
     final b = CircuitBreaker(
       failureThreshold: 3,
       openDuration: const Duration(seconds: 60),
@@ -93,7 +93,7 @@ void main() {
   });
 
   test('BreakerLlmProvider menolak cepat saat breaker terbuka', () async {
-    var now = DateTime.utc(2026, 11, 9, 12);
+    final now = DateTime.utc(2026, 11, 9, 12);
     final inner = _FailingProvider('p1');
     final b = CircuitBreaker(
       failureThreshold: 2,
@@ -141,7 +141,7 @@ void main() {
 
   test('semua breaker terbuka -> error deterministik all_breakers_open',
       () async {
-    var now = DateTime.utc(2026, 11, 9, 12);
+    final now = DateTime.utc(2026, 11, 9, 12);
     final b1 = CircuitBreaker(
       failureThreshold: 1,
       openDuration: const Duration(seconds: 60),
@@ -158,16 +158,16 @@ void main() {
     ]);
     // Percakapan pertama: kedua provider benar-benar dieksekusi dan gagal.
     final first = await _collect(fallback.chat(_req));
-    expect((first.whereType<LlmError>().single as LlmError).code,
+    expect(first.whereType<LlmError>().single.code,
         'fallback_exhausted');
     // Percakapan kedua: kedua breaker terbuka -> deterministik.
     final second = await _collect(fallback.chat(_req));
-    final err = second.whereType<LlmError>().single as LlmError;
+    final err = second.whereType<LlmError>().single;
     expect(err.code, 'all_breakers_open');
   });
 
   test('breaker terbuka + kegagalan nyata tetap fallback_exhausted', () async {
-    var now = DateTime.utc(2026, 11, 9, 12);
+    final now = DateTime.utc(2026, 11, 9, 12);
     final b1 = CircuitBreaker(
       failureThreshold: 1,
       openDuration: const Duration(seconds: 60),
@@ -179,7 +179,7 @@ void main() {
     ]);
     await _collect(fallback.chat(_req));
     final second = await _collect(fallback.chat(_req));
-    final err = second.whereType<LlmError>().single as LlmError;
+    final err = second.whereType<LlmError>().single;
     expect(err.code, 'fallback_exhausted');
   });
 }

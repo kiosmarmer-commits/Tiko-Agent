@@ -190,13 +190,13 @@ class FallbackLlmProvider implements LlmProvider {
     // caller bisa membedakan "coba lagi nanti" dari "provider error".
     if (providers.isNotEmpty && breakerBlocked == providers.length) {
       yield LlmError(
-        'semua provider unhealthy (circuit breaker terbuka): ${lastError}',
+        'semua provider unhealthy (circuit breaker terbuka): $lastError',
         code: 'all_breakers_open',
       );
       return;
     }
     yield LlmError(
-      'semua provider gagal: ${lastError}',
+      'semua provider gagal: $lastError',
       code: 'fallback_exhausted',
     );
   }
