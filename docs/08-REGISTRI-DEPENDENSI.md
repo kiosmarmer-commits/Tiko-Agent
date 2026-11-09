@@ -38,6 +38,7 @@
 | DEP-18 | `cron`, `workmanager`, `flutter_background_service` | Penjadwalan | — | — | — | ⚠️ cek | belum diverifikasi |
 | DEP-19 | `riverpod`, `flutter_secure_storage`, `args`, `logging`, `html`, `yaml`, `path`, `uuid` | Pendukung | — | — | — | ⚠️ cek (paket umum, risiko rendah) | belum diverifikasi |
 | DEP-20 | `teledart`, `mcp_dart`, `mcp_server_dart` | Alternatif | `mcp_server_dart` 1.2.0 (±7 bln, 17★) | — | MIT | ⚠️ | ecosyste.ms |
+| DEP-21 | `timezone` | Database zona IANA + TZDateTime untuk cron scheduler | 0.10.2 (data IANA 2025c) | Stabil | BSD-2 | ✅ (pra-v1, di balik interface Tz — K-6) | pub.dev |
 *Lisensi `*` = diasumsikan dari repositori `davidmigloz/langchain_dart`; konfirmasi di pub.dev.
 
 ## 3. Proyek non-Dart
