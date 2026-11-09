@@ -54,7 +54,7 @@ void main() {
     }
     if (method == 'tools/list') {
       req.response.headers.contentType =
-          const ContentType('text', 'event-stream');
+          ContentType('text', 'event-stream');
       req.response.write('event: message\n');
       req.response.write(
         'data: ${jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/progress'})}\n\n',
