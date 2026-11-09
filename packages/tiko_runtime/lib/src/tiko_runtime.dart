@@ -1329,6 +1329,19 @@ class _EvalToolGate implements PermissionGate {
   }
 }
 
+/// Batas byte operasi (maxBytes) dihitung dari payload aktual yang
+/// ditulis, bukan dari panjang fingerprint, sehingga konten tulis/patch
+/// tidak bisa melebihi ukuran yang disetujui walau fingerprintnya pendek.
+bool _withinApprovedBytes(ToolCall call, int maxBytes) {
+  for (final key in const ['content', 'new', 'body']) {
+    final value = call.args[key];
+    if (value is String && utf8.encode(value).length > maxBytes) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void stdoutWrite(String m) {
   try {
     stdout.writeln(m);
