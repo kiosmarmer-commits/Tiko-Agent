@@ -64,4 +64,27 @@ void main() {
     }
     expect((await s.recent('s', limit: 100)).length, 4);
   });
+
+  test('concurrent appends in one process are all persisted', () async {
+    final s = open();
+    await s.getOrCreate('c', channel: 'cli', userKey: 'u');
+    await Future.wait([
+      for (var i = 0; i < 5; i++)
+        s.appendTurn('c', user: 'u$i', assistant: 'a$i'),
+    ]);
+    final fresh = open();
+    expect((await fresh.recent('c', limit: 100)).length, 10);
+    expect((await fresh.list()).single.turns, 5);
+  });
+
+  test('two instances take turns without losing updates', () async {
+    final a = open();
+    await a.getOrCreate('x', channel: 'cli', userKey: 'u');
+    await a.appendTurn('x', user: 'p', assistant: 'q');
+    final b = open(); // instance kedua tidak boleh menimpa turn milik a
+    await b.appendTurn('x', user: 'r', assistant: 's');
+    final c = open();
+    expect((await c.recent('x', limit: 10)).length, 4);
+    expect((await c.list()).single.turns, 2);
+  });
 }
