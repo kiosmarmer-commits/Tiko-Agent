@@ -135,7 +135,7 @@ void main() {
     await c.start();
     final out = await c.callTool('echo', {'x': 1});
     expect(out, startsWith('<untrusted_data source="mcp-http:mock-http">'));
-    expect(out, contains(r'<\\/untrusted_data'));
+    expect(out, contains(r'<\/untrusted_data'));
     expect(out, endsWith('</untrusted_data>'));
     expect(out, contains('dalam'));
   });
