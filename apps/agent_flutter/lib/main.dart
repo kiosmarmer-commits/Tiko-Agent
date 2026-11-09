@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
 import 'ui/chat_controller.dart';
+import 'ui/status_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -474,6 +475,7 @@ class _DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending =
         approvals.where((a) => a['state'] == 'pending').length;
+    final routing = RoutingSummary.fromStatus(status);
     return Column(
       children: [
         _TopBar(
@@ -509,6 +511,50 @@ class _DashboardPage extends StatelessWidget {
                       'sandbox: ${status?['sandbox'] ?? caps?['sandbox'] ?? '—'}',
                       style: const TextStyle(height: 1.5),
                     ),
+                  ),
+                  _Card(
+                    title: 'Routing',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('default: ${routing.defaultProvider}'),
+                        for (final tier in const ['1', '2', '3'])
+                          Text(
+                              'tier $tier → ${routing.providerForTier(tier)}'),
+                        if (routing.health.isEmpty)
+                          const Text('belum ada data kesehatan',
+                              style: TextStyle(color: _muted)),
+                        for (final e in routing.health.entries)
+                          Text(
+                            '${e.key}: ${e.value['open'] == true ? 'circuit open' : 'sehat'}'
+                            ' (${e.value['failures'] ?? 0} gagal)',
+                            style: TextStyle(
+                              color: e.value['open'] == true ? _danger : _muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  _Card(
+                    title: 'MCP',
+                    child: routing.mcpServers.isEmpty
+                        ? const Text(
+                            'Tidak ada server MCP.',
+                            style: TextStyle(color: _muted),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final s in routing.mcpServers)
+                                Text(
+                                  '${s['id']} · ${s['type']} · '
+                                  '${s['enabled'] == true ? 'aktif' : 'nonaktif'}',
+                                  style: TextStyle(
+                                    color: s['enabled'] == true ? null : _muted,
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
                   _Card(
                     title: 'Approvals',

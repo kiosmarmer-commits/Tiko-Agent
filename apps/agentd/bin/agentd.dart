@@ -400,6 +400,28 @@ Future<void> main(List<String> args) async {
           'jobs': rt.jobs.all.length,
           'resource_profile': rt.resourceProfile,
           'sandbox': rt.sandboxKind.name,
+          'routing': {
+            'default': rt.config.defaultProvider,
+            'tiers': {
+              for (final e in rt.config.tierProviders.entries)
+                e.key.toString(): e.value,
+            },
+            'providers': rt.providers.keys.toList(growable: false),
+            'health': rt.providerHealth(),
+          },
+          'mcp': {
+            'servers': [
+              for (final server in rt.config.mcpServers)
+                {
+                  'id': server.id,
+                  'type': server.type,
+                  'enabled': server.enabled,
+                  'risk': server.risk,
+                  if (server.type == 'http') 'url': server.url,
+                  if (server.type == 'stdio') 'command': server.command,
+                },
+            ],
+          },
         },
       );
       await api.start();
