@@ -75,3 +75,7 @@ Sebelum rilis pada host nyata, verifikasi setidaknya:
 8. Scheduler retry tidak menjalankan ulang agent turn dan tidak mengirim silang ke gateway lain.
 
 CI mencakup static analysis/test suites; uji penetrasi dan konfigurasi akun eksternal di host deployment tetap pekerjaan rilis.
+
+## 8. Content-plane guard (baru)
+
+`packages/agent_security/lib/src/prompt_guard.dart` melengkapi Tirith pada bidang konten: `PromptGuard.inspectInput()` mendeteksi prompt injection (instruction override, ekstraksi system prompt, delimiter chat-template, persona jailbreak, blob base64, instruksi tool-call tertanam) dengan eskalasi severity untuk provenance tak tepercaya; `PromptGuard.inspectOutput()` menyaring kebocoran secret/PII menjadi `[REDACTED:*]`; `AnomalyDetector` mendeteksi lonjakan rate per key. Guard ini bersifat heuristik deterministik dan tidak menggantikan PermissionGate/approval.

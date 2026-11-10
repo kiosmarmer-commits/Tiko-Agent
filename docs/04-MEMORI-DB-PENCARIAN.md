@@ -66,7 +66,15 @@ search:
 
 `memory.embed` memerlukan Ollama embedding endpoint/model yang benar. Nilai di atas hanya contoh; uji model pada host target.
 
-## 8. Batasan
+## 8. Pipeline RAG lanjutan (baru)
+
+`packages/agent_memory/lib/src/rag_pipeline.dart` menambahkan pipeline RAG penuh di atas backend di atas: chunking paragraph-aware dengan overlap (`RagChunker`), query expansion deterministik (`QueryExpander`), hybrid retrieval dense+BM25 dengan Reciprocal Rank Fusion (`HybridRetriever`, `k=60`), dan perakitan konteks bersitasi (`RagPipeline.retrieve()`). Rincian ada di `ADVANCED-AGENT-FEATURES-2026-11-10.md`.
+
+## 9. Memori berlapis (baru)
+
+`packages/agent_memory/lib/src/memory_layers.dart` menambahkan `LayeredMemory`: layer episodic/semantic/procedural, skor efektif importance × retention Ebbinghaus × access boost, konsolidasi episodic → semantic, dan forgetting di bawah `decayFloor`. Modul ini berdiri sendiri dari `MemoryStore` SQLite/JSON; integrasi ke runtime dapat dilakukan tanpa mengubah kontrak store yang ada.
+
+## 10. Batasan
 
 - SQLite FTS5 bergantung build/library SQLite native di device; JSON fallback bukan jaminan performa atau kesetaraan query.
 - Brute-force vector retrieval dapat menjadi bottleneck pada jumlah vektor besar; benchmark target nyata masih diperlukan.

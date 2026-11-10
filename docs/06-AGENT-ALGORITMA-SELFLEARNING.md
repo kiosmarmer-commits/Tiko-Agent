@@ -79,6 +79,10 @@ IRR adalah jalur numerik berbasis double/bisection (ditandai approximate); janga
 
 CI menjalankan unit test paket, golden fixtures kalkulator dan smoke CLI, tetapi tidak mengukur akurasi provider AI eksternal secara menyeluruh. Evaluasi router Indonesia, tool call selection, skill quality dan prompt-injection perlu test fixtures tersendiri. Angka success/accuracy tidak boleh dicantumkan tanpa dataset dan hasil run yang menyertainya.
 
+## 6a. Reflection loop (baru)
+
+`packages/tiko_runtime/lib/src/reflection_loop.dart` menambahkan tahap refleksi pada self-learning loop: `ReflectionEngine.reflect()` mendistilasi trajectory sesi menjadi lesson (corrective untuk turn gagal, positive untuk trajectory sukses multi-tool), reinforcement menggantikan duplikasi, dan `buildContextPrompt()` menyuntikkan lesson relevan ke prompt berikutnya. Modul ini melengkapi `SelfLearningEngine`; lihat `ADVANCED-AGENT-FEATURES-2026-11-10.md`.
+
 ## 7. Algoritma yang tidak boleh diklaim sebagai fitur aktif tanpa bukti
 
 - Fine-tuning otomatis/online training model.

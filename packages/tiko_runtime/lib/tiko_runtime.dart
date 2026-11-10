@@ -11,3 +11,5 @@ export 'src/offline_queue.dart';
 export 'src/resource_monitor.dart';
 export 'src/remote_client.dart';
 export 'src/api_token_store.dart';
+export 'src/self_learning_engine.dart';
+export 'src/reflection_loop.dart';

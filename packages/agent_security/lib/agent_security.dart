@@ -12,3 +12,4 @@ export 'src/shell_policy.dart';
 export 'src/tirith.dart';
 export 'src/credential_manager.dart';
 export 'src/fallback_manager.dart';
+export 'src/prompt_guard.dart';
