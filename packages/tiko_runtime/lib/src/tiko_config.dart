@@ -104,6 +104,7 @@ class McpServerConfig {
     this.risk = 'high',
     this.enabled = true,
     this.environmentRefs = const {},
+    this.allowPrivateNetwork = false,
   });
 
   final String id;
@@ -130,6 +131,7 @@ class McpServerConfig {
   final String risk;
   final bool enabled;
   final Map<String, String> environmentRefs;
+  final bool allowPrivateNetwork;
 }
 
 /// Typed, validated configuration (PRD P0: typed config schema).

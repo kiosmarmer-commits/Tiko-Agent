@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
-import "email_inbound.dart";
 
 /// SMTP gateway with optional STARTTLS (AGD-05 / email).
 class EmailGateway implements Gateway {
@@ -293,32 +292,6 @@ class EmailGateway implements Gateway {
 
   @override
   Future<void> sendTyping(String sessionKey) async {}
-
-  @override
-
-  /// Creates an inbound email processor with security hardening (P1-04).
-  EmailInbound createInboundProcessor({
-    Set<String> allowedSenders = const <String>{},
-    int maxMessageSize = 100 * 1024,
-    int maxBodySize = 50 * 1024,
-    Duration messageTtl = const Duration(hours: 24),
-    Duration antiReplayWindow = const Duration(hours: 1),
-  }) {
-    return EmailInbound(
-      onInbound: ({required from, required subject, required body}) {
-        pushInbound(
-          fromAddr: from,
-          subject: subject,
-          body: body,
-        );
-      },
-      allowedSenders: allowedSenders,
-      maxMessageSize: maxMessageSize,
-      maxBodySize: maxBodySize,
-      messageTtl: messageTtl,
-      antiReplayWindow: antiReplayWindow,
-    );
-  }
 
   @override
   Future<void> close() async => _inbound.close();

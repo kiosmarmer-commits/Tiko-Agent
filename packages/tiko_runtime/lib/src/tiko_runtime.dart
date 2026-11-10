@@ -904,7 +904,7 @@ class TikoRuntime {
     // Empty allowlist inherits parent surface (full buildGate).
     final PermissionGate? isolationGate = allowedTools.isEmpty
         ? null
-        : _AllowlistToolGate(allowedTools);
+        : _EvalToolGate(allowedTools);
     final subConfig = AgentConfig(
       maxIterations: config.maxIterations,
       maxTokensPerTask: budget.maxTokens,
