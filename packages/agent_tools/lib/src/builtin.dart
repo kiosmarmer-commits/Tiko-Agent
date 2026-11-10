@@ -17,6 +17,10 @@ import 'browser_tool.dart';
 import 'skill_bundle.dart';
 import 'image_generation.dart';
 import 'vision.dart';
+import 'code_execution.dart';
+import 'batch_processing.dart';
+import 'api_server.dart';
+import 'ide_integration.dart';
 
 /// Built-in tools for M1 (complete set for DoD).
 List<Tool> createBuiltinTools({
@@ -31,6 +35,20 @@ List<Tool> createBuiltinTools({
   String? openaiApiKey,
   bool enableImageGeneration = false,
   bool enableVision = false,
+  bool enableContextFiles = true,
+  bool enableContextReferences = true,
+  bool enableCodeExecution = false,
+  String? codeExecutionWorkingDirectory,
+  bool enableBatchProcessing = false,
+  String? batchProcessingWorkingDirectory,
+  AgentLoop? agentLoop,
+  bool enableApiServer = false,
+  String? apiServerWorkingDirectory,
+  int apiServerPort = 8080,
+  String? apiServerAuthToken,
+  bool enableIdeIntegration = false,
+  String? ideIntegrationWorkingDirectory,
+  String ideType = 'vscode',
 }) {
   final root = workspaceRoot ?? Directory.current.path;
   final guard = ssrf ?? SsrfGuard();
@@ -40,6 +58,25 @@ List<Tool> createBuiltinTools({
       ? SkillBundleManager(
           skillRegistry: skillRegistry,
           bundlesDirectory: p.join(root, 'bundles'),
+        )
+      : null;
+  
+  // Create context files manager
+  final contextFilesManager = enableContextFiles
+      ? ContextFilesManager(
+          config: ContextFilesConfig(
+            enabled: true,
+            searchPaths: ['.', '..'],
+          ),
+          workingDirectory: root,
+        )
+      : null;
+  
+  // Create context expander
+  final contextExpander = enableContextReferences
+      ? EnhancedContextExpander(
+          workspaceRoot: root,
+          contextFilesManager: contextFilesManager,
         )
       : null;
   
@@ -78,6 +115,45 @@ List<Tool> createBuiltinTools({
         provider: 'openai',
         apiKey: openaiApiKey,
         outputDirectory: p.join(root, 'vision_cache'),
+      ),
+    if (enableContextFiles && contextFilesManager != null)
+      ContextFilesTool(contextFilesManager),
+    if (enableContextReferences && contextExpander != null)
+      ContextReferencesTool(contextExpander),
+    if (enableCodeExecution)
+      CodeExecutionTool(
+        config: const CodeExecutionConfig(),
+        sandbox: sandbox,
+        workingDirectory: codeExecutionWorkingDirectory ?? root,
+      ),
+    if (enableBatchProcessing)
+      BatchProcessingTool(
+        manager: null, // Will use default manager
+        agentLoop: agentLoop,
+        workingDirectory: batchProcessingWorkingDirectory ?? root,
+      ),
+    if (enableApiServer)
+      ApiServerTool(
+        config: ApiServerConfig(
+          enabled: true,
+          host: '127.0.0.1',
+          port: apiServerPort,
+          authToken: apiServerAuthToken,
+        ),
+        agentLoop: agentLoop,
+        workingDirectory: apiServerWorkingDirectory ?? root,
+      ),
+    if (enableIdeIntegration)
+      IdeIntegrationTool(
+        config: IdeIntegrationConfig(
+          enabled: true,
+          ideType: ideType,
+          autoDetect: true,
+          enableAcp: true,
+        ),
+        agentLoop: agentLoop,
+        tools: [], // Will be populated with available tools
+        workingDirectory: ideIntegrationWorkingDirectory ?? root,
       ),
   ];
 }
