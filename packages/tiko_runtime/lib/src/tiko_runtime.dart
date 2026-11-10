@@ -19,6 +19,7 @@ import 'approval_ledger.dart';
 import 'resource_monitor.dart';
 import 'offline_queue.dart';
 import 'self_learning_engine.dart';
+import 'package:agent_security/agent_security.dart' show TirithSecurityLayer, TirithConfig, CredentialManager, FallbackManager, FallbackConfig;
 
 const tikoVersion = '0.2.0';
 
@@ -69,6 +70,9 @@ class TikoRuntime {
     required this.evidence,
     required this.mcpEnvironment,
     required this.decision,
+    required this.tirith,
+    required this.credentialManager,
+    required this.fallbackManager,
     SelfLearningEngine? selfLearningEngine,
   }) : selfLearningEngine = selfLearningEngine ?? SelfLearningEngine(
           llmProvider: providers.values.first,
@@ -106,6 +110,9 @@ class TikoRuntime {
   /// T1 decision model (Jev/Laya). Null when disabled in config.
   final DecisionProvider? decision;
   late final SelfLearningEngine selfLearningEngine;
+  late final TirithSecurityLayer tirith;
+  late final CredentialManager credentialManager;
+  late final FallbackManager fallbackManager;
   Scheduler? _scheduler;
   bool _closed = false;
   bool _mcpStarted = false;
@@ -262,6 +269,80 @@ class TikoRuntime {
     final safety = SafetyState();
     if (safe) safety.enableSafeMode();
 
+    // Initialize Tirith Security Layer (P0 - Critical)
+    final tirithConfig = TirithConfig(
+      enabled: true,
+      requireApprovalForHighRisk: true,
+      requireApprovalForMediumRisk: false,
+      autoApproveLowRisk: true,
+      approvalTtl: const Duration(minutes: 10),
+      enableCredentialPools: true,
+      enableFallbackProviders: true,
+      enableTaintTracking: true,
+      sanitizationEnabled: true,
+    );
+    
+    final auditLogPath = p.join(dataDir, 'security_audit.jsonl');
+    final securityAuditLog = AuditLog(path: auditLogPath);
+    await securityAuditLog.initialize();
+    
+    final permissionGate = MatrixPermissionGate(
+      mode: cfg.permissionMode == 'auto' 
+          ? PermissionMode.auto 
+          : (cfg.permissionMode == 'deny' ? PermissionMode.deny : PermissionMode.ask),
+    );
+    
+    final capabilityGate = CapabilityVault();
+    final sanitizer = SecuritySanitizer();
+    
+    final tirith = TirithSecurityLayer(
+      auditLog: securityAuditLog,
+      permissionGate: permissionGate,
+      capabilityGate: capabilityGate,
+      sanitizer: sanitizer,
+      taintTracker: TaintTracker(),
+      config: tirithConfig,
+    );
+    await tirith.initialize();
+    
+    // Initialize Credential Manager (P0 - Critical)
+    final credentialManager = CredentialManager(
+      storagePath: p.join(dataDir, 'credentials.json'),
+      rotationStrategy: RotationStrategy.leastUsed,
+    );
+    await credentialManager.initialize();
+    
+    // Initialize Fallback Manager (P0 - Critical)
+    final fallbackConfig = FallbackConfig(
+      fallbacks: [
+        // Add default fallback configurations
+        FallbackEntry(
+          primary: 'openai',
+          fallbacks: [
+            FallbackProviderConfig(name: 'anthropic'),
+            FallbackProviderConfig(name: 'google'),
+          ],
+        ),
+        FallbackEntry(
+          primary: 'anthropic',
+          fallbacks: [
+            FallbackProviderConfig(name: 'openai'),
+            FallbackProviderConfig(name: 'mistral'),
+          ],
+        ),
+      ],
+      retryAfter: const Duration(minutes: 1),
+      enableAutomaticFallback: true,
+    );
+    
+    final fallbackManager = FallbackManager(
+      config: fallbackConfig,
+      maxRetries: 3,
+      retryDelay: const Duration(seconds: 1),
+      fallbackDelay: const Duration(seconds: 2),
+    );
+    await fallbackManager.initialize();
+
     final rt = TikoRuntime._(
       config: cfg,
       issues: issues,
@@ -284,6 +365,9 @@ class TikoRuntime {
       evidence: evidence,
       mcpEnvironment: env ?? Platform.environment,
       decision: decision,
+      tirith: tirith,
+      credentialManager: credentialManager,
+      fallbackManager: fallbackManager,
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();

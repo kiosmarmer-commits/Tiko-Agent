@@ -9,3 +9,6 @@ export 'src/secret_store.dart';
 export 'src/sanitizer.dart';
 export 'src/capability_gate.dart';
 export 'src/shell_policy.dart';
+export 'src/tirith.dart';
+export 'src/credential_manager.dart';
+export 'src/fallback_manager.dart';
