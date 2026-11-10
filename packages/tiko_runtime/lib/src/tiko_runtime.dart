@@ -18,6 +18,7 @@ import 'event_bus.dart';
 import 'approval_ledger.dart';
 import 'resource_monitor.dart';
 import 'offline_queue.dart';
+import 'self_learning_engine.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -68,7 +69,14 @@ class TikoRuntime {
     required this.evidence,
     required this.mcpEnvironment,
     required this.decision,
-  });
+    SelfLearningEngine? selfLearningEngine,
+  }) : selfLearningEngine = selfLearningEngine ?? SelfLearningEngine(
+          llmProvider: providers.values.first,
+          skillRegistry: skills,
+          memoryStore: memory,
+          sessionStore: sessions,
+          config: const SelfLearningConfig(),
+        );
 
   final TikoConfig config;
   final List<ConfigIssue> issues;
@@ -97,6 +105,7 @@ class TikoRuntime {
 
   /// T1 decision model (Jev/Laya). Null when disabled in config.
   final DecisionProvider? decision;
+  late final SelfLearningEngine selfLearningEngine;
   Scheduler? _scheduler;
   bool _closed = false;
   bool _mcpStarted = false;
@@ -205,6 +214,7 @@ class TikoRuntime {
         searxngBaseUrl: cfg.searxngBaseUrl,
         tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: env),
         sandbox: sandbox,
+        skillRegistry: skills,
       ))
       ..register(MemorySearchTool(memory))
       ..register(MemoryAddTool(memory))
@@ -330,6 +340,10 @@ class TikoRuntime {
     final snap = ResourceMonitor.capture(dataDir: dataDir);
     rt.lastResources = snap;
     rt.resourceProfile = snap.profile;
+    
+    // Start the self-learning engine for autonomous skill creation and improvement
+    await rt.selfLearningEngine.start();
+    
     return rt;
   }
 

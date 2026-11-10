@@ -13,6 +13,8 @@ import 'web_search.dart';
 import 'path_safety.dart';
 import 'sandbox.dart';
 import 'readability.dart';
+import 'browser_tool.dart';
+import 'skill_bundle.dart';
 
 /// Built-in tools for M1 (complete set for DoD).
 List<Tool> createBuiltinTools({
@@ -22,9 +24,19 @@ List<Tool> createBuiltinTools({
   String? tavilyApiKey,
   bool enableWebSearch = true,
   SandboxRunner? sandbox,
+  SkillRegistry? skillRegistry,
 }) {
   final root = workspaceRoot ?? Directory.current.path;
   final guard = ssrf ?? SsrfGuard();
+  
+  // Create skill bundle manager if skill registry is provided
+  final bundleManager = skillRegistry != null
+      ? SkillBundleManager(
+          skillRegistry: skillRegistry,
+          bundlesDirectory: p.join(root, 'bundles'),
+        )
+      : null;
+  
   return [
     DatetimeTool(),
     CalcTool(),
@@ -38,6 +50,11 @@ List<Tool> createBuiltinTools({
           sandbox ?? SandboxRunner(kind: SandboxKind.none, workspacePath: root),
     ),
     WebFetchTool(ssrf: guard),
+    BrowserTool(
+      sandbox: sandbox,
+      headless: true,
+    ),
+    if (bundleManager != null) SkillBundleTool(bundleManager),
     if (enableWebSearch)
       WebSearchTool(
         searxngBaseUrl: searxngBaseUrl,
