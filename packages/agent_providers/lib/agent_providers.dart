@@ -10,3 +10,4 @@ export 'src/gemini_compat.dart';
 export 'src/ollama_embed.dart';
 export 'src/capability_probe.dart';
 export 'src/ollama_native.dart';
+export 'src/prompt_cache.dart';

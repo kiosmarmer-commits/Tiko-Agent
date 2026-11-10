@@ -8,6 +8,7 @@ export 'src/memory_rank_eval.dart';
 export 'src/agent_loop.dart';
 export 'src/context_builder.dart';
 export 'src/agent_team.dart';
+export 'src/plugin_system.dart';
 export 'src/compactor.dart';
 export 'src/router.dart';
 export 'src/router_eval.dart';

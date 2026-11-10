@@ -574,3 +574,23 @@ This document provides a **detailed comparison** between **Hermes Agent** (by No
 **Last Updated:** 2026-11-10  
 **Author:** Vibe Code (AI Assistant)  
 **Status:** Post-Implementation Review Complete
+
+---
+
+## 📌 Addendum v3.0 — Gap Utama Ditutup (2026-11-10, commit advanced features)
+
+Status terbaru setelah implementasi lanjutan (lihat `docs/HERMES-PARITY-GAPS-2026-11-10.md` dan `docs/ADVANCED-AGENT-FEATURES-2026-11-10.md`):
+
+| Gap lama (v2.0) | Status baru | Modul |
+|---|---|---|
+| Plugins System ❌ | ✅ Implemented — 3 tipe plugin, hook veto/rewrite, error isolation | `agent_core/src/plugin_system.dart` |
+| Memory Providers ❌ | ✅ Implemented — HttpMemoryProvider REST + MemoryProviderRouter fan-out/merge | `agent_memory/src/memory_providers.dart` |
+| Prompt Caching ❌ | ✅ Implemented — TTL 1 jam, LRU, cache_control Anthropic maks 4 breakpoint | `agent_providers/src/prompt_cache.dart` |
+| API Server ❌ | ✅ Implemented — /v1/chat/completions streaming SSE + non-streaming, /v1/models, Bearer auth | `agent_tools/src/openai_api.dart` |
+| IDE Integration (ACP) ❌ | ✅ Implemented — JSON-RPC 2.0 ndjson stdio: initialize/session.new/prompt/cancel | `agent_tools/src/acp_agent.dart` |
+| Multi-Agent Orchestration ⚠️ | ✅ Enhanced — TaskGraph DAG + Blackboard + paralel per-wave | `agent_core/src/agent_team.dart` |
+| Self-Improving Loop ⚠️ | ✅ Enhanced — ReflectionEngine (lesson corrective/positive + reinforcement) | `tiko_runtime/src/reflection_loop.dart` |
+| Security ⚠️ | ✅ Enhanced — PromptGuard (PI/OF rules) + AnomalyDetector | `agent_security/src/prompt_guard.dart` |
+| Learning & Memory ⚠️ | ✅ Enhanced — RagPipeline (RRF hybrid) + LayeredMemory (Ebbinghaus decay + konsolidasi) | `agent_memory/src/rag_pipeline.dart`, `memory_layers.dart` |
+
+**Estimasi paritas keseluruhan: ~85%** (dari ~75% pada v2.0). Gap tersisa: plugins UI/skins/profiles, memory provider cloud bawaan (Honcho/Mem0 siap via adapter REST), cloud browser backends, Discord voice, agentskills.io compatibility, lebar model image gen/TTS.

@@ -25,6 +25,10 @@ Lima kelompok fitur ala Hermes Agent / Claude Code sudah tersedia sebagai modul 
 3. **Multi-Agent Orchestration** — `AgentRegistry`, `TaskGraph` DAG, `TeamOrchestrator` paralel per-wave, `Blackboard` bersama.
 4. **Enhanced Security** — deteksi prompt injection, filter kebocoran secret/PII, anomaly rate detector.
 5. **Advanced Memory System** — memori berlapis episodic/semantic/procedural dengan konsolidasi dan decay Ebbinghaus.
+6. **Plugins System + Memory Providers** — hook lifecycle plugin (veto/rewrite tool call), adapter REST untuk memory backend eksternal (RetainDB/ByteRover/Mem0-style), context engine pluggable.
+7. **Prompt Caching** — cache prefix lintas sesi TTL 1 jam + breakpoint `cache_control` Anthropic (maks 4 blok).
+8. **API Server OpenAI-Compatible** — `/v1/chat/completions` (streaming SSE & non-streaming) + `/v1/models`, auth Bearer.
+9. **ACP IDE Integration** — agent-side Agent Client Protocol (JSON-RPC ndjson stdio) untuk Zed/VS Code/JetBrains.
 
 ## Menjalankan
 

@@ -27,6 +27,7 @@
 | 15 | `email-smtp.md` | Status SMTP outbound, STARTTLS verification/no-downgrade dan input validation |
 | 16 | `sqlite-vec-notes.md` | Catatan riset; belum menjadi runtime backend |
 | 17 | `ADVANCED-AGENT-FEATURES-2026-11-10.md` | Reflection loop, Advanced RAG, multi-agent orchestration, content-plane security guard, layered memory |
+| 18 | `HERMES-PARITY-GAPS-2026-11-10.md` | Plugins system, memory providers eksternal, prompt caching, API server OpenAI-compatible, ACP IDE |
 
 `README.md` dan `INSTALL.md` adalah panduan pengguna. Dokumen arsitektur `01-08` dan `dependency-log.md` awalnya direkonsiliasi terhadap snapshot lama; dokumen tersebut adalah referensi desain/implementasi, bukan bukti CI untuk bundle implementasi lokal. Gunakan `STATUS-2026-11-10.md` dan `P1-ROBUSTNESS-2026-11-10.md` untuk status kerja terkini. Laporan `CALC-*` adalah milestone calculator bertanggal 8 November. `P0/P1-*`, `TIKO-*`, `PERBAIKAN-*`, `STATUS-2026-11-09.md`, dan `REPOSITORY-AUDIT-2026-11-09.md` dipertahankan sebagai arsip/historis; jangan menggunakannya sebagai status sekarang. Laporan fitur `*-2026-11-09.md` mencatat patch saat itu; baca bersama source karena kontrak dapat berubah setelah commit laporan.
 

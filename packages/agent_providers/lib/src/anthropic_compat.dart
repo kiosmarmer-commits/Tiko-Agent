@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
+import 'prompt_cache.dart';
+
 /// Minimal Anthropic Messages API adapter (TASK-02-03 smoke).
 class AnthropicProvider implements LlmProvider {
   AnthropicProvider({
@@ -11,12 +13,17 @@ class AnthropicProvider implements LlmProvider {
     this.model = 'claude-sonnet-4-20250514',
     this.baseUrl = 'https://api.anthropic.com',
     this.httpClient,
+    this.promptCache,
   });
 
   final String apiKey;
   final String model;
   final String baseUrl;
   final http.Client? httpClient;
+
+  /// When set, stable system prefixes get Anthropic `cache_control`
+  /// breakpoints so Claude reuses the cross-session prefix cache.
+  final PromptCacheManager? promptCache;
 
   @override
   String get id => 'anthropic';
@@ -45,11 +52,18 @@ class AnthropicProvider implements LlmProvider {
         });
       }
 
+      final cache = promptCache;
+      if (cache != null && system != null) {
+        cache.observe(model: req.model ?? model, systemPrompt: system);
+      }
       final body = {
         'model': req.model ?? model,
         'max_tokens': req.maxTokens ?? 4096,
         'messages': messages,
-        if (system != null) 'system': system,
+        if (system != null)
+          'system': cache != null
+              ? const AnthropicCacheBreaker().buildBlocks(system)
+              : system,
         'stream': false,
       };
 
