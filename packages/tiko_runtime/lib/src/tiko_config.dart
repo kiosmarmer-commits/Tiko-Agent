@@ -161,11 +161,15 @@ class TikoConfig {
     this.memoryEmbed = const MemoryEmbedConfig(),
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
     this.tavilyApiKeyRef,
+    this.falApiKeyRef,
+    this.openaiApiKeyRef,
     this.maxIterations = 12,
     this.maxTokensPerTask = 60000,
     this.maxWallClockSec = 300,
     this.maxToolCalls = 30,
     this.apiPort = 8787,
+    this.enableImageGeneration = false,
+    this.enableVision = false,
   });
 
   final String profile;
@@ -191,6 +195,19 @@ class TikoConfig {
   /// SecretRef `env:TAVILY_API_KEY` untuk cadangan Tavily (AGD-04 §7);
   /// null berarti fallback nonaktif.
   final String? tavilyApiKeyRef;
+
+  /// SecretRef `env:FAL_KEY` untuk FAL.ai image generation
+  final String? falApiKeyRef;
+
+  /// SecretRef `env:OPENAI_API_KEY` untuk OpenAI vision
+  final String? openaiApiKeyRef;
+
+  /// Enable image generation tools (FAL.ai)
+  final bool enableImageGeneration;
+
+  /// Enable vision tools (image analysis, OCR)
+  final bool enableVision;
+
   final int maxIterations;
   final int maxTokensPerTask;
   final int maxWallClockSec;

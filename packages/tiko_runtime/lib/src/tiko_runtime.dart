@@ -222,6 +222,10 @@ class TikoRuntime {
         tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: env),
         sandbox: sandbox,
         skillRegistry: skills,
+        falApiKey: TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env),
+        openaiApiKey: TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: env),
+        enableImageGeneration: cfg.enableImageGeneration,
+        enableVision: cfg.enableVision,
       ))
       ..register(MemorySearchTool(memory))
       ..register(MemoryAddTool(memory))

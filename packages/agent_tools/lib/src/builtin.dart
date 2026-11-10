@@ -15,6 +15,8 @@ import 'sandbox.dart';
 import 'readability.dart';
 import 'browser_tool.dart';
 import 'skill_bundle.dart';
+import 'image_generation.dart';
+import 'vision.dart';
 
 /// Built-in tools for M1 (complete set for DoD).
 List<Tool> createBuiltinTools({
@@ -25,6 +27,10 @@ List<Tool> createBuiltinTools({
   bool enableWebSearch = true,
   SandboxRunner? sandbox,
   SkillRegistry? skillRegistry,
+  String? falApiKey,
+  String? openaiApiKey,
+  bool enableImageGeneration = false,
+  bool enableVision = false,
 }) {
   final root = workspaceRoot ?? Directory.current.path;
   final guard = ssrf ?? SsrfGuard();
@@ -60,6 +66,18 @@ List<Tool> createBuiltinTools({
         searxngBaseUrl: searxngBaseUrl,
         tavilyApiKey: tavilyApiKey,
         ssrf: guard,
+      ),
+    if (enableImageGeneration && falApiKey != null)
+      ImageGenerationToolFactory.create(
+        provider: 'fal',
+        apiKey: falApiKey,
+        outputDirectory: p.join(root, 'images'),
+      ),
+    if (enableVision && openaiApiKey != null)
+      ...VisionToolFactory.create(
+        provider: 'openai',
+        apiKey: openaiApiKey,
+        outputDirectory: p.join(root, 'vision_cache'),
       ),
   ];
 }
