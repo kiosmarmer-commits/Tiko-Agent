@@ -1,0 +1,20 @@
+name: agent_tools
+description: Tool registry, built-in tools, script runner, MCP client.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  agent_calc:
+    path: ../agent_calc
+  agent_core:
+    path: ../agent_core
+  http: ^1.2.2
+  path: ^1.9.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

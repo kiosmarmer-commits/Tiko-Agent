@@ -1,0 +1,8 @@
+- id: smoke-name
+  input: ringkas waktu
+  answer_contains: [ringkas, waktu]
+  weight: 1
+- id: smoke-tool
+  input: datetime
+  answer_contains: [waktu]
+  weight: 1

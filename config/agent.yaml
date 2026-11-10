@@ -1,0 +1,57 @@
+# Pasitiko (Tiko) configuration. Parsed with a real YAML parser:
+# duplicate keys are an error. Secrets must be SecretRefs (env:NAME).
+profile: default
+workspace: "."
+
+agent:
+  max_iterations: 12
+  max_tokens_per_task: 60000
+  max_wall_clock_sec: 300
+  max_tool_calls: 30
+
+providers:
+  default_chat: mock
+  # tiers: pemetaan tier routing adaptif (ALG-06); tanpa ini semua tier
+  # memakai default_chat:
+  #   1: ollama_local   # ringan
+  #   2: ollama_local
+  #   3: ollama_local   # berat - ganti ke provider cloud bila dikonfigurasi
+  chat:
+    mock:
+      type: mock
+    ollama_local:
+      type: openai_compat
+      base_url: "http://127.0.0.1:11434/v1"
+      model: "qwen2.5:3b"
+    # cloud_example:
+    #   type: openai_compat
+    #   base_url: "https://api.openai.com/v1"
+    #   model: "<model>"
+    #   api_key: "env:OPENAI_API_KEY"
+
+security:
+  mode: ask
+  shell_allowlist: ["ls", "cat", "git status", "pwd", "echo"]
+  require_confirm: ["write_file", "patch_file", "shell", "http_post", "http_request", "schedule_job"]
+
+search:
+  searxng_base_url: "http://127.0.0.1:8080"
+
+http:
+  domain_allowlist: ["example.com", "api.github.com"]
+
+storage:
+  data_dir: "data"
+  db_path: "data/agent.db"
+
+api:
+  port: 8787
+
+mcp:
+  servers: []
+
+scheduler:
+  tick_interval_sec: 20
+
+# Env flags (not YAML): AGENT_REFLECT, AGENT_SELF_CONSISTENCY,
+# AGENT_AUTO_REFLECT_TOOLS, AGENT_PROBE, OLLAMA_EMBED, AGENT_UI, API_TOKEN, API_PORT

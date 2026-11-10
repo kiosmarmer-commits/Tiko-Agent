@@ -1,0 +1,16 @@
+{
+  "name": "echo_demo",
+  "description": "Script tool contoh: mengembalikan argumen yang dikirim.",
+  "risk": "low",
+  "timeout_sec": 10,
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "message": { "type": "string" }
+    },
+    "required": ["message"]
+  },
+  "runtime": {
+    "command": ["python3", "run.py"]
+  }
+}

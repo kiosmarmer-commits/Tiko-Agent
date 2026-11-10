@@ -1,0 +1,26 @@
+name: agent_dart
+description: Autonomous AI agent in Dart inspired by Hermes Agent (Nous Research).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/agent_core
+  - packages/agent_calc
+  - packages/agent_providers
+  - packages/agent_tools
+  - packages/agent_memory
+  - packages/agent_gateway
+  - packages/agent_scheduler
+  - packages/agent_security
+  - packages/tiko_runtime
+  - apps/agentd
+  - apps/agent_cli
+  - apps/tiko
+
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
