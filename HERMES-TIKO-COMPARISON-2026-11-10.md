@@ -594,3 +594,20 @@ Status terbaru setelah implementasi lanjutan (lihat `docs/HERMES-PARITY-GAPS-202
 | Learning & Memory ⚠️ | ✅ Enhanced — RagPipeline (RRF hybrid) + LayeredMemory (Ebbinghaus decay + konsolidasi) | `agent_memory/src/rag_pipeline.dart`, `memory_layers.dart` |
 
 **Estimasi paritas keseluruhan: ~85%** (dari ~75% pada v2.0). Gap tersisa: plugins UI/skins/profiles, memory provider cloud bawaan (Honcho/Mem0 siap via adapter REST), cloud browser backends, Discord voice, agentskills.io compatibility, lebar model image gen/TTS.
+
+---
+
+## 📌 Addendum v4.0 — Gap 4-6 Ditutup (2026-11-10, branch `vibe/media-web-skills-0a390f`)
+
+Status setelah implementasi gelombang kedua (lihat addendum v4.0 di `docs/HERMES-PARITY-GAPS-2026-11-10.md`):
+
+| Gap tersisa (v3.0) | Status baru | Modul |
+|---|---|---|
+| Cloud browser backends ❌ | ✅ Implemented — Browserbase + Browser Use REST, `CloudBrowserRouter` dengan fallback Chromium lokal via `CdpSession(wsEndpoint: ...)` | `agent_tools/src/browser_backends.dart` |
+| Discord voice ❌ | ✅ Implemented — voice gateway handshake penuh (op 0/2/4/5/6), discovery UDP 74-byte, `DiscordVoiceLoop` STT→TTS; enkripsi `xsalsa20_poly1305` pluggable (butuh FFI sodium untuk transmisi nyata) | `agent_gateway/src/discord_voice.dart` |
+| Image gen breadth ❌ | ✅ Implemented — 11 model Hermes di `ImageModelCatalog`; `FalAiImageProvider` (queue API: submit→poll→download) + `OpenAiImagesProvider` (b64_json/url) + `ImageModelRouter` | `agent_tools/src/image_providers.dart` |
+| TTS breadth ❌ | ✅ Implemented — 10 provider di `TtsProviderCatalog`; `HttpTtsProvider` template generik (base64/hex, path JSON bertitik) + `CommandTtsProvider` (Edge TTS/Piper/custom CLI) + `TtsProviderFactory` | `agent_gateway/src/tts_providers.dart` |
+| agentskills.io ❌ | ✅ Implemented — `AgentSkillManifest` parse/validasi/serialisasi SKILL.md standar + `AgentSkillConverter` dua arah (impor selalu status `trial`) | `agent_core/src/agentskills_io.dart` |
+| Skills Hub ❌ | ✅ Implemented — `SkillsHubClient`: search/fetch/install/uninstall/refreshInstalled; pipeline keamanan checksum sha256 → manifest → SkillScanner → path-traversal guard → `installed.json` | `agent_tools/src/skills_hub.dart` |
+
+**Estimasi paritas keseluruhan: ~93%** (dari ~85% pada v3.0). Gap tersisa: skins/themes/profiles, enkripsi suara native (sodium FFI), wiring penuh modul baru ke `TikoRuntime`/daemon.

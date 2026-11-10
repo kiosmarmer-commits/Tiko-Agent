@@ -17,6 +17,7 @@ class CdpSession {
     this.timeout = const Duration(seconds: 20),
     this.allowPrivateUrls = false,
     this.maxResultBytes = 64 * 1024,
+    this.wsEndpoint,
   });
 
   /// Explicit Chromium/Chrome executable. Auto-detected when null.
@@ -26,6 +27,10 @@ class CdpSession {
   final Duration timeout;
   final bool allowPrivateUrls;
   final int maxResultBytes;
+
+  /// Explicit CDP WebSocket endpoint (e.g. from a cloud browser backend).
+  /// When set, no local browser process is launched.
+  final String? wsEndpoint;
 
   Process? _process;
   WebSocket? _ws;
@@ -67,29 +72,34 @@ class CdpSession {
     if (isOpen || _opening) return;
     _opening = true;
     try {
-      final executable = chromePath ?? await findChrome();
-      if (executable == null) {
-        throw UnsupportedError(
-          'Chromium/Chrome tidak ditemukan. Set TIKO_CHROME_PATH.',
-        );
-      }
-      final userDataDir = await Directory.systemTemp.createTemp('tiko-cdp-');
-      final proc = await Process.start(executable, [
-        if (headless) '--headless=new' else '--headless=old',
-        '--remote-debugging-port=0',
-        '--remote-allow-origins=*',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--no-sandbox',
-        '--user-data-dir=${userDataDir.path}',
-        'about:blank',
-      ]);
-      _process = proc;
+      final String wsUrl;
+      if (wsEndpoint != null && wsEndpoint!.isNotEmpty) {
+        wsUrl = wsEndpoint!;
+      } else {
+        final executable = chromePath ?? await findChrome();
+        if (executable == null) {
+          throw UnsupportedError(
+            'Chromium/Chrome tidak ditemukan. Set TIKO_CHROME_PATH.',
+          );
+        }
+        final userDataDir = await Directory.systemTemp.createTemp('tiko-cdp-');
+        final proc = await Process.start(executable, [
+          if (headless) '--headless=new' else '--headless=old',
+          '--remote-debugging-port=0',
+          '--remote-allow-origins=*',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--no-sandbox',
+          '--user-data-dir=${userDataDir.path}',
+          'about:blank',
+        ]);
+        _process = proc;
 
-      // Wait for the DevTools endpoint on stderr.
-      final wsUrl = await _awaitDevToolsUrl(proc).timeout(timeout);
+        // Wait for the DevTools endpoint on stderr.
+        wsUrl = await _awaitDevToolsUrl(proc).timeout(timeout);
+      }
       final ws = await WebSocket.connect(wsUrl).timeout(timeout);
       _ws = ws;
       ws.listen(

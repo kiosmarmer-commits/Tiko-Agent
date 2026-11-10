@@ -36,3 +36,6 @@ export 'src/cdp_browser.dart';
 export 'src/mcp/streamable_http.dart';
 export 'src/openai_api.dart';
 export 'src/acp_agent.dart';
+export 'src/skills_hub.dart';
+export 'src/browser_backends.dart';
+export 'src/image_providers.dart';

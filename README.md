@@ -29,6 +29,10 @@ Lima kelompok fitur ala Hermes Agent / Claude Code sudah tersedia sebagai modul 
 7. **Prompt Caching** — cache prefix lintas sesi TTL 1 jam + breakpoint `cache_control` Anthropic (maks 4 blok).
 8. **API Server OpenAI-Compatible** — `/v1/chat/completions` (streaming SSE & non-streaming) + `/v1/models`, auth Bearer.
 9. **ACP IDE Integration** — agent-side Agent Client Protocol (JSON-RPC ndjson stdio) untuk Zed/VS Code/JetBrains.
+10. **Cloud Browser Backends** — Browserbase + Browser Use cloud (CDP remote) dengan fallback otomatis ke Chromium lokal (`browser_backends.dart`).
+11. **Discord Voice** — voice gateway handshake + discovery UDP + loop STT/TTS (`discord_voice.dart`).
+12. **Image Gen & TTS Breadth** — 11 model image (FAL.ai queue API + OpenAI Images) dan 10 provider TTS (HTTP template + CLI Edge TTS/Piper).
+13. **agentskills.io + Skills Hub** — manifest SKILL.md standar, konverter dua arah, dan klien marketplace dengan audit keamanan.
 
 ## Menjalankan
 

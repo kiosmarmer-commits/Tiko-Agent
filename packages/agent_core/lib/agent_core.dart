@@ -30,6 +30,7 @@ export 'src/lease.dart';
 export 'src/evidence_ledger.dart';
 export 'src/isolate_pool.dart';
 export 'src/skill_scanner.dart';
+export 'src/agentskills_io.dart';
 export 'src/skill_gate.dart';
 export 'src/context_expander.dart';
 export 'src/skill_synthesis.dart';
