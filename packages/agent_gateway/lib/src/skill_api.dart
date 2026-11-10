@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:agent_core/agent_core.dart';
-
 /// Abstract interface for skill management operations (P1-03).
 /// Implementations provide concrete storage and retrieval for skill definitions,
 /// metrics, and approval workflows.
