@@ -1,0 +1,206 @@
+import '../core/errors.dart';
+import '../core/limits.dart';
+import '../core/numeric.dart';
+import '../core/rounding.dart';
+import '../parse/ast.dart';
+import '../units/units.dart';
+import 'constants.dart';
+import 'functions.dart';
+
+/// Konteks evaluasi memuat parameter precision dan hasil samping
+/// (warnings, approximate).
+final class EvalContext {
+  EvalContext({
+    this.scale = 12,
+    this.rounding = RoundingMode.halfEven,
+    this.angleUnit = 'rad',
+    this.limits = CalcLimits.defaults,
+  }) : warnings = [], approximate = false;
+
+  final int scale;
+  final RoundingMode rounding;
+  final String angleUnit; // 'rad' | 'deg'
+  final CalcLimits limits;
+  final List<String> warnings;
+  bool approximate;
+}
+
+/// Visitor atas AST (CALC-MAT-05b). Semua operasi lewat Dec; tidak ada
+/// eval. Galat selalu CalcException berkode dan berposisi.
+final class Evaluator {
+  const Evaluator();
+
+  Dec eval(Node node, EvalContext ctx) {
+    switch (node) {
+      case NumNode(:final value):
+        return value;
+      case IdentNode(:final name, :final position):
+        final c = MathConstants.byName[name];
+        if (c == null) {
+          throw CalcException(
+            CalcErrorCodes.unknownSymbol,
+            "Konstanta '$name' tidak dikenal",
+            position: position,
+            hint: 'fungsi harus dipanggil dengan kurung, mis. sqrt(2)',
+          );
+        }
+        ctx.approximate = true;
+        return Dec.parse(c);
+      case UnaryNode(:final op, :final child):
+        final v = eval(child, ctx);
+        return op == '-' ? -v : v;
+      case PercentNode(:final child):
+        // Berdiri sendiri: persen = nilai/100.
+        return eval(child, ctx)
+            .divide(Dec.fromInt(100), scale: ctx.scale, mode: ctx.rounding);
+      case FactorialNode(:final child, :final position):
+        return _factorial(eval(child, ctx), position, ctx);
+      case BinaryNode(:final op, :final left, :final right, :final position):
+        return _binary(op, left, right, position, ctx);
+      case CallNode(:final name, :final args, :final position):
+        // Bentuk khusus TASK-CALC-12: convert() menerima nama satuan
+        // sebagai ident mentah, bukan ekspresi bernilai.
+        if (name == 'convert') {
+          return _evalConvert(args, position, ctx);
+        }
+        final fn = CalcFunctions.all[name];
+        if (fn == null) {
+          throw CalcException(
+            CalcErrorCodes.unknownSymbol,
+            "Fungsi '$name' tidak dikenal",
+            position: position,
+          );
+        }
+        final values = [for (final a in args) eval(a, ctx)];
+        return fn(values, ctx);
+    }
+  }
+
+  Dec _factorial(Dec v, int position, EvalContext ctx) {
+    if (v.sign < 0) {
+      throw CalcException(
+        CalcErrorCodes.domain,
+        'Faktorial bilangan negatif',
+        position: position,
+      );
+    }
+    if (v.scale != 0) {
+      throw CalcException(
+        CalcErrorCodes.domain,
+        'Faktorial butuh bilangan bulat',
+        position: position,
+      );
+    }
+    if (v.unscaled > BigInt.from(ctx.limits.maxFactorial)) {
+      throw CalcException(
+        CalcErrorCodes.limit,
+        'Faktorial melebihi batas (maksimum ${ctx.limits.maxFactorial})',
+        position: position,
+      );
+    }
+    return Dec.fromBigInt(
+      CalcFunctions.factorial(v.unscaled.toInt(), ctx.limits),
+    );
+  }
+
+  /// Bentuk khusus TASK-CALC-12: convert(nilai, dari, ke); argumen nama
+  /// satuan adalah ident mentah, bukan ekspresi bernilai.
+  Dec _evalConvert(List<Node> args, int position, EvalContext ctx) {
+    if (args.length != 3) {
+      throw CalcException(
+        CalcErrorCodes.syntax,
+        'convert butuh 3 argumen: convert(nilai, dari, ke)',
+        position: position,
+        hint: 'contoh: convert(5, km, m)',
+      );
+    }
+    final value = eval(args[0], ctx);
+    return CalcUnits.convert(
+      value,
+      _unitName(args[1]),
+      _unitName(args[2]),
+      ctx,
+    );
+  }
+
+  /// Nama satuan hanya boleh ident (bukan angka atau ekspresi).
+  static String _unitName(Node n) {
+    if (n is IdentNode) return n.name;
+    throw CalcException(
+      CalcErrorCodes.syntax,
+      'Nama satuan harus ditulis langsung sebagai nama',
+      position: n.position,
+      hint: 'contoh: convert(5, km, m)',
+    );
+  }
+
+  Dec _binary(
+    String op,
+    Node left,
+    Node right,
+    int position,
+    EvalContext ctx,
+  ) {
+    // Operand kanan berbentuk persen pada +/- memakai basis operand kiri
+    // (gaya kalkulator saku, CALC-MAT-04b).
+    if ((op == '+' || op == '-') && right is PercentNode) {
+      final base = eval(left, ctx);
+      final pct = eval(right.child, ctx)
+          .divide(Dec.fromInt(100), scale: ctx.scale, mode: ctx.rounding);
+      ctx.warnings.add('PERCENT_BASE_LEFT');
+      return op == '+' ? base + base * pct : base - base * pct;
+    }
+    final a = eval(left, ctx);
+    final b = eval(right, ctx);
+    switch (op) {
+      case '+':
+        return a + b;
+      case '-':
+        return a - b;
+      case '*':
+        return a * b;
+      case '/':
+        return _guardDiv(a, b, ctx);
+      case 'mod':
+        return _guardMod(a, b);
+      case '^':
+        return CalcFunctions.power(a, b, ctx);
+    }
+    throw CalcException(
+      CalcErrorCodes.syntax,
+      "Operator tidak dikenal '$op'",
+      position: position,
+    );
+  }
+
+  /// Pembagian dengan galat berkode (P5); Dec melempar FormatException
+  /// mentah untuk pembagi nol, jangan sampai bocor ke pemanggil.
+  static Dec _guardDiv(Dec a, Dec b, EvalContext ctx) {
+    try {
+      return a.divide(b, scale: ctx.scale, mode: ctx.rounding);
+    } on FormatException catch (e) {
+      throw _fromFormat(e);
+    }
+  }
+
+  static Dec _guardMod(Dec a, Dec b) {
+    try {
+      return a.remainderOf(b);
+    } on FormatException catch (e) {
+      throw _fromFormat(e);
+    }
+  }
+
+  /// FormatException dari Dec dipetakan menjadi CalcException berkode
+  /// (P5: gagal terang, tidak pernah bocor pengecualian mentah).
+  static CalcException _fromFormat(FormatException e) {
+    final m = e.message;
+    if (m.contains('dengan nol')) {
+      return CalcException(CalcErrorCodes.divZero, m);
+    }
+    if (m.contains('akar bilangan negatif')) {
+      return CalcException(CalcErrorCodes.domain, m);
+    }
+    return CalcException(CalcErrorCodes.syntax, m);
+  }
+}

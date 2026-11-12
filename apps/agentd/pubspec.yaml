@@ -1,0 +1,30 @@
+name: agentd
+description: Agent daemon — Telegram + scheduler + tools.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  agent_core:
+    path: ../../packages/agent_core
+  agent_providers:
+    path: ../../packages/agent_providers
+  agent_tools:
+    path: ../../packages/agent_tools
+  agent_security:
+    path: ../../packages/agent_security
+  agent_gateway:
+    path: ../../packages/agent_gateway
+  agent_scheduler:
+    path: ../../packages/agent_scheduler
+  agent_memory:
+    path: ../../packages/agent_memory
+  tiko_runtime:
+    path: ../../packages/tiko_runtime
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

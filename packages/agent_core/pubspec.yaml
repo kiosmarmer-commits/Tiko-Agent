@@ -1,0 +1,20 @@
+name: agent_core
+description: Core agent loop, interfaces, context builder, router, and compactor (pure Dart).
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  meta: ^1.16.0
+  collection: ^1.19.0
+  uuid: ^4.5.1
+  path: ^1.9.0
+  yaml: ^3.1.2
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
+  agent_providers: any

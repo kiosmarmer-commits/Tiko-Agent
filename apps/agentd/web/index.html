@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#10151d" />
+  <meta name="color-scheme" content="dark" />
+  <title>Tiko Agent</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">T</span>
+          <div class="brand-copy">
+            <strong>Tiko</strong>
+            <span>Personal AI agent</span>
+          </div>
+        </div>
+        <span id="statusPill" class="pill offline" role="status" aria-live="polite">offline</span>
+      </div>
+      <nav class="tabs" aria-label="Navigasi utama">
+        <button type="button" data-tab="chat" class="active" aria-pressed="true" aria-controls="tab-chat">Chat</button>
+        <button type="button" data-tab="memory" aria-pressed="false" aria-controls="tab-memory">Memori</button>
+        <button type="button" data-tab="status" aria-pressed="false" aria-controls="tab-status">Status</button>
+        <button type="button" data-tab="approvals" aria-pressed="false" aria-controls="tab-approvals">Approvals</button>
+        <button type="button" data-tab="sessions" aria-pressed="false" aria-controls="tab-sessions">Sessions</button>
+        <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-chat" class="tab active" aria-label="Chat">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">WORKSPACE</p>
+            <h1>Percakapan</h1>
+            <p class="subheading">Tanyakan sesuatu atau minta Tiko menjalankan tugas.</p>
+          </div>
+        </div>
+        <div id="messages" class="messages" aria-live="polite" aria-relevant="additions text"></div>
+        <div id="confirmBox" class="confirm hidden" role="group" aria-label="Konfirmasi tindakan">
+          <div class="confirm-copy">
+            <strong>Persetujuan diperlukan</strong>
+            <p id="confirmText"></p>
+          </div>
+          <div class="row">
+            <button type="button" id="confirmYes" class="primary">Izinkan</button>
+            <button type="button" id="confirmNo" class="danger-button">Tolak</button>
+          </div>
+        </div>
+        <form id="chatForm" class="composer">
+          <label class="sr-only" for="input">Pesan untuk Tiko</label>
+          <input id="input" type="text" placeholder="Tulis pesan…" autocomplete="off" />
+          <button type="submit" id="sendBtn" class="primary" title="Kirim pesan">Kirim</button>
+        </form>
+        <p class="hint">Contoh: <code>hitung 12 × 8</code> · <code>rencanakan tugas</code> · <code>cari file README</code></p>
+      </section>
+
+      <section id="tab-memory" class="tab" hidden aria-label="Memori">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">PERSONAL CONTEXT</p><h1>Memori</h1><p class="subheading">Fakta yang disimpan untuk membantu percakapan berikutnya.</p></div>
+          <button type="button" id="refreshMem" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="memList" class="list"></ul>
+      </section>
+
+      <section id="tab-status" class="tab" hidden aria-label="Status">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">SYSTEM</p><h1>Status runtime</h1><p class="subheading">Kondisi daemon dan provider yang sedang berjalan.</p></div>
+          <button type="button" id="refreshStatus" class="secondary">Muat ulang</button>
+        </div>
+        <pre id="statusBox" class="code">Memuat status…</pre>
+      </section>
+
+      <section id="tab-approvals" class="tab" hidden aria-label="Approvals">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">SAFETY GATE</p><h1>Approvals</h1><p class="subheading">Tinjau tindakan yang memerlukan izin.</p></div>
+          <button type="button" id="btn-refresh-approvals" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="approval-list" class="list"></ul>
+      </section>
+
+      <section id="tab-sessions" class="tab" hidden aria-label="Sessions">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">CONVERSATIONS</p><h1>Sessions</h1><p class="subheading">Daftar sesi yang tercatat pada daemon.</p></div>
+          <button type="button" id="btn-refresh-sessions" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="session-list" class="list"></ul>
+      </section>
+
+      <section id="tab-help" class="tab" hidden aria-label="Bantuan">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">GETTING STARTED</p><h1>Bantuan & koneksi</h1><p class="subheading">Panduan singkat untuk menjalankan Tiko.</p></div>
+        </div>
+        <div class="card-grid">
+          <article class="card">
+            <h2>Mulai cepat</h2>
+            <ol>
+              <li>Jalankan daemon dengan opsi <code>--api</code>.</li>
+              <li>Ambil token dari <code>data/api.token</code> pada perangkat tepercaya.</li>
+              <li>Masukkan API base dan token di bagian Setelan koneksi.</li>
+              <li>Kembali ke Chat dan mulai percakapan.</li>
+            </ol>
+          </article>
+          <article class="card">
+            <h2>Keamanan</h2>
+            <p>Tindakan berisiko harus melalui approval. Jangan bagikan token API, terutama saat memakai koneksi di luar perangkat lokal.</p>
+          </article>
+        </div>
+        <article class="card settings-card">
+          <h2>Setelan koneksi</h2>
+          <label for="cfgBase">API base URL</label>
+          <input id="cfgBase" type="url" inputmode="url" autocomplete="url" placeholder="http://127.0.0.1:8787" />
+          <label for="cfgToken">Bearer token</label>
+          <input id="cfgToken" type="password" autocomplete="off" placeholder="Token dari data/api.token" />
+          <button type="button" id="saveCfg" class="primary">Simpan & hubungkan</button>
+          <p class="hint">Token disimpan pada penyimpanan browser di perangkat ini. Hindari menggunakan perangkat bersama.</p>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Enable JSON format for agent_dart web_search tool.
+use_default_settings: true
+server:
+  secret_key: "change-me-please"
+  limiter: false
+  image_proxy: false
+search:
+  formats:
+    - html
+    - json

@@ -1,0 +1,285 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dart:
+    name: Dart analysis, tests and CLI smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.4
+      - name: Web UI syntax and interaction tests
+        run: bash scripts/web_ui_validate.sh
+      - name: Validate shell and Python scripts
+        run: |
+          set -euo pipefail
+          for script in scripts/*.sh; do bash -n "$script"; done
+          python3 -m compileall -q scripts tools/mock_mcp_server
+      - name: Resolve workspace dependencies
+        run: dart pub get
+      - name: Static analysis (strict release gate)
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          fail=0
+          report="$(mktemp)"
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+            [[ -d "$dir" ]] || continue
+            echo "== analyze: $dir =="
+            out="$( cd "$dir" && dart analyze --fatal-warnings 2>&1 )"
+            rc=$?
+            if [[ $rc -ne 0 ]]; then
+              fail=1
+              {
+                echo "### $dir (exit $rc)"
+                echo '```text'
+                printf '%s\n' "$out"
+                echo '```'
+                echo
+              } >> "$report"
+              # Preserve the analyzer's full file:line diagnostics in the job log.
+              printf '%s\n' "$out"
+            else
+              printf '%s\n' "$out"
+            fi
+          done
+          if [[ -s "$report" ]]; then
+            {
+              echo '## Strict Dart analysis failures'
+              cat "$report"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo '::error::Strict Dart analysis failed; see the package-specific diagnostics above and in the job summary.'
+            exit 1
+          fi
+          echo 'Strict Dart analysis passed for every workspace member.'
+      - name: Test every Dart workspace member
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          fail=0
+          tf="$(mktemp)"
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+            if [[ -d "$dir/test" ]]; then
+              echo "== dart test: $dir =="
+              out="$(mktemp)"
+              (cd "$dir" && dart test --reporter json) > "$out" 2>&1
+              rc=$?
+              if [[ $rc -ne 0 ]]; then
+                fail=1
+                echo "::error file=$dir::dart test gagal di $dir (exit $rc)"
+                python3 - "$out" "$dir" >> "$tf" <<'PYEOF'
+          import json, sys
+          path, pkg = sys.argv[1], sys.argv[2]
+          names = {}
+          for raw in open(path, errors='replace'):
+              line = raw.strip()
+              if not line.startswith('{'):
+                  continue
+              try:
+                  ev = json.loads(line)
+              except Exception:
+                  continue
+              et = ev.get('type')
+              if et == 'testStart':
+                  names[ev.get('test', {}).get('id')] = ev.get('test', {}).get('name', '')
+              elif et == 'error':
+                  tid = ev.get('testID')
+                  name = names.get(tid) or '(suite)'
+                  err = (ev.get('error') or '').strip().splitlines()
+                  msg = err[0] if err else 'unknown error'
+                  print((pkg + ' | ' + name[:120] + ' | ' + msg[:170]).replace('%', ''))
+          PYEOF
+              fi
+              rm -f "$out"
+            fi
+          done
+          if [[ -s "$tf" ]]; then cp "$tf" .ci-testfailures.txt; fi
+          exit $fail
+      - name: Surface test failures 1-10
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '1,10p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: Surface test failures 11-20
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '11,20p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: Surface test failures 21-30
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-testfailures.txt ] && sed -n '21,30p' .ci-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: CLI deterministic command and chat smoke
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          scout="$(mktemp)"
+          {
+            result="$(dart run apps/tiko/bin/tiko.dart calc 5+1)"
+            grep -q '"value":"6"' <<< "$result"
+            result="$(dart run apps/tiko/bin/tiko.dart calc 15% dari 2 juta)"
+            grep -q '"value":"300000"' <<< "$result"
+            chat="$(dart run apps/tiko/bin/tiko.dart chat halo)"
+            grep -qi 'mock agent' <<< "$chat"
+          } >"$scout" 2>&1
+          rc=$?
+          cat "$scout"
+          if [[ $rc -ne 0 ]]; then
+            echo '::error::CLI smoke gagal (calc/chat)'
+            tail -10 "$scout" | sed 's/^/::error ::/' | head -10
+            exit 1
+          fi
+      - name: Setup and config schema smoke (mock + Ollama)
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          scout="$(mktemp)"
+          {
+            dart run apps/tiko/bin/tiko.dart --config "$tmp/mock/agent.yaml" setup --provider mock
+            dart run apps/tiko/bin/tiko.dart --config "$tmp/ollama/agent.yaml" setup --provider ollama
+            dart run apps/tiko/bin/tiko.dart --config "$tmp/mock/agent.yaml" config validate
+            dart run apps/tiko/bin/tiko.dart --config "$tmp/ollama/agent.yaml" config validate
+          } >"$scout" 2>&1
+          rc=$?
+          cat "$scout"
+          if [[ $rc -ne 0 ]]; then
+            echo '::error::setup/config smoke gagal'
+            grep -E '(Error|error|Exception|gagal|invalid)' "$scout" | head -10 | sed 's/^/::error ::/' || true
+            exit 1
+          fi
+      - name: Compile executable entrypoints
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          cout="$(mktemp)"
+          {
+            mkdir -p build
+            dart compile exe apps/tiko/bin/tiko.dart -o build/tiko
+            dart compile exe apps/agentd/bin/agentd.dart -o build/agentd
+            dart compile exe apps/agent_cli/bin/agent_cli.dart -o build/agent_cli
+          } >"$cout" 2>&1
+          rc=$?
+          tail -30 "$cout"
+          if [[ $rc -ne 0 ]]; then
+            echo '::error::dart compile gagal'
+            grep -E 'Error|error:' "$cout" | head -10 | sed 's/^/::error ::/' || true
+            exit 1
+          fi
+      - name: Daemon lifecycle and HTTP API smoke
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          dout="$(mktemp)"
+          bash scripts/smoke_agentd.sh >"$dout" 2>&1
+          rc=$?
+          tail -30 "$dout"
+          if [[ $rc -ne 0 ]]; then
+            echo '::error::smoke_agentd gagal'
+            grep -E '(Error|error|Exception|failed|gagal|exited|timed out|lock)' "$dout" | head -10 | sed 's/^/::error ::/' || true
+            exit 1
+          fi
+
+  flutter:
+    name: Flutter client analysis, tests and web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          cache: true
+      - name: Full Flutter client validation
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          if ! command -v flutter >/dev/null 2>&1; then
+            echo 'ERROR: Flutter SDK is required' >&2
+            exit 127
+          fi
+          cd apps/agent_flutter
+          fail=0
+          tfl="$(mktemp)"
+          echo '== flutter pub get =='
+          if ! flutter pub get; then
+            echo '::error::flutter pub get gagal'
+            exit 1
+          fi
+          echo '== flutter analyze =='
+          aout="$(mktemp)"
+          flutter analyze >"$aout" 2>&1
+          arc=$?
+          cat "$aout"
+          if [[ $arc -ne 0 ]]; then
+            fail=1
+            echo "::error::flutter analyze gagal (exit $arc)"
+            grep -E '(error|warning|info) •' "$aout" | head -20 | sed 's/^ *//' | sed 's/^/::error ::/' || true
+          fi
+          echo '== flutter test =='
+          tout="$(mktemp)"
+          flutter test --reporter json >"$tout" 2>&1
+          trc=$?
+          if [[ $trc -ne 0 ]]; then
+            fail=1
+            echo "::error::flutter test gagal (exit $trc)"
+            python3 - "$tout" "apps/agent_flutter" >> "$tfl" <<'PYEOF'
+          import json, sys
+          path, pkg = sys.argv[1], sys.argv[2]
+          names = {}
+          for raw in open(path, errors='replace'):
+              line = raw.strip()
+              if not line.startswith('{'):
+                  continue
+              try:
+                  ev = json.loads(line)
+              except Exception:
+                  continue
+              et = ev.get('type')
+              if et == 'testStart':
+                  names[ev.get('test', {}).get('id')] = ev.get('test', {}).get('name', '')
+              elif et == 'error':
+                  tid = ev.get('testID')
+                  name = names.get(tid) or '(suite)'
+                  err = (ev.get('error') or '').strip().splitlines()
+                  msg = err[0] if err else 'unknown error'
+                  print((pkg + ' | ' + name[:120] + ' | ' + msg[:170]).replace('%', ''))
+          PYEOF
+          fi
+          echo '== flutter build web =='
+          bout="$(mktemp)"
+          flutter build web --release >"$bout" 2>&1
+          brc=$?
+          tail -40 "$bout"
+          if [[ $brc -ne 0 ]]; then
+            fail=1
+            echo "::error::flutter build web gagal (exit $brc)"
+            grep -E '(Error|error:|Target kernel_snapshot failed)' "$bout" | head -10 | sed 's/^/::error ::/' || true
+          fi
+          if [[ -s "$tfl" ]]; then cp "$tfl" "$GITHUB_WORKSPACE/.ci-flutter-testfailures.txt"; fi
+          exit $fail
+      - name: Surface flutter test failures 1-10
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-flutter-testfailures.txt ] && sed -n '1,10p' .ci-flutter-testfailures.txt | sed 's/^/::error ::/' || true
+      - name: Surface flutter test failures 11-20
+        if: always()
+        shell: bash
+        run: |
+          [ -f .ci-flutter-testfailures.txt ] && sed -n '11,20p' .ci-flutter-testfailures.txt | sed 's/^/::error ::/' || true

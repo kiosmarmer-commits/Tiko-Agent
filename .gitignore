@@ -1,0 +1,14 @@
+# Dart / Flutter generated files
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+**/build/
+.flutter-plugins-dependencies
+coverage/
+
+# Local runtime secrets and state
+**/api.token
+**/api.token.tmp
+**/tiko.lock
+**/daemon.log

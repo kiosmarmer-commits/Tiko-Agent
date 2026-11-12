@@ -1,0 +1,9 @@
+# Minimal SearXNG for agent_dart web_search (bind localhost only).
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
