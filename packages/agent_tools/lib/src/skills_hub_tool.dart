@@ -11,7 +11,7 @@ class SkillsHubTool implements Tool {
   final SkillsHubClient _client;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'skills_hub',
         description:
             'Skills Hub komunitas: cari, instal, hapus, dan daftar skill '

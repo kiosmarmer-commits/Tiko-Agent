@@ -97,7 +97,7 @@ void main() {
       config: const AgentConfig(maxIterations: 8, maxToolCalls: 10),
     );
     await loop.handle(
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'user1',
         sessionKey: 'cli:user1',
@@ -131,7 +131,7 @@ void main() {
       config: const AgentConfig(maxIterations: 8, maxToolCalls: 10),
     );
     await loop.handle(
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'user1',
         sessionKey: 'cli:user1',

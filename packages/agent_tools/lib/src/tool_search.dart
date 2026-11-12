@@ -92,7 +92,7 @@ class ToolSearchTool implements Tool {
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     final query = args['query']?.toString() ?? '';
     if (query.trim().isEmpty) {
-      return ToolResult(
+      return const ToolResult(
         callId: '',
         content: 'query wajib diisi',
         isError: true,

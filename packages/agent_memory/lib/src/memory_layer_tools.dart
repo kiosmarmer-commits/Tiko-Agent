@@ -12,7 +12,7 @@ class LayeredMemoryTool implements Tool {
   final LayeredMemory _memory;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'layered_memory',
         description:
             'Memori berlapis (episodic/semantic/procedural) dengan skor '

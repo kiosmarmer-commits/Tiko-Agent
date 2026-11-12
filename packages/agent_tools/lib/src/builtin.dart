@@ -66,7 +66,7 @@ List<Tool> createBuiltinTools({
   // Create context files manager
   final contextFilesManager = enableContextFiles
       ? ContextFilesManager(
-          config: ContextFilesConfig(
+          config: const ContextFilesConfig(
             enabled: true,
             searchPaths: ['.', '..'],
           ),

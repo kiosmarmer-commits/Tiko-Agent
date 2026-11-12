@@ -48,7 +48,7 @@ void main() {
       );
 
       final events = await provider
-          .chat(ChatRequest(
+          .chat(const ChatRequest(
             messages: [ChatMessage(role: 'user', content: 'hai')],
             stream: false,
           ))
@@ -156,7 +156,7 @@ void main() {
       );
 
       final events = await provider
-          .chat(ChatRequest(
+          .chat(const ChatRequest(
             messages: [ChatMessage(role: 'user', content: 'halo')],
             stream: false,
           ))
@@ -208,7 +208,7 @@ void main() {
       );
 
       await provider
-          .chat(ChatRequest(
+          .chat(const ChatRequest(
             messages: [
               ChatMessage(role: 'system', content: 'Kamu agent.'),
               ChatMessage(role: 'user', content: 'hitung'),

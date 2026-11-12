@@ -114,7 +114,7 @@ void main() {
       'kittentts',
       'piper',
     ]));
-    expect(TtsProviderCatalog().byId('piper')!.kind, 'command');
+    expect(const TtsProviderCatalog().byId('piper')!.kind, 'command');
   });
 
   test('TtsProviderFactory builds catalog providers', () {

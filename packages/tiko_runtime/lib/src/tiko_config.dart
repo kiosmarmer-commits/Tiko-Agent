@@ -276,6 +276,7 @@ class TikoConfig {
     this.apiPort = 8787,
     this.enableImageGeneration = false,
     this.enableVision = false,
+    this.sandboxDockerPersistent = false,
   });
 
   final String profile;
@@ -316,6 +317,11 @@ class TikoConfig {
 
   /// Enable vision tools (image analysis, OCR)
   final bool enableVision;
+
+  /// Hermes-parity `container_persistent`: keep one hardened docker container
+  /// alive and dispatch commands via `docker exec` so state (cwd, installed
+  /// packages, /work files) carries between tool calls. Off by default.
+  final bool sandboxDockerPersistent;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1044,6 +1050,9 @@ class TikoConfig {
           : 8787,
       enableImageGeneration: imageGenValue == true,
       enableVision: visionValue == true,
+      sandboxDockerPersistent:
+          root['sandbox'] is YamlMap &&
+              (root['sandbox'] as YamlMap)['container_persistent'] == true,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue
@@ -1175,22 +1184,28 @@ class TikoConfig {
       final kind = kindValue is String && kindValue.trim().isNotEmpty
           ? kindValue.trim()
           : 'http';
-      if (!const {'http', 'mem0', 'honcho'}.contains(kind)) {
+      if (!const {
+        'http',
+        'mem0',
+        'honcho',
+        'supermemory',
+        'hindsight',
+      }.contains(kind)) {
         issues.add(ConfigIssue(
           'memory.external_providers[$i].kind',
-          "harus salah satu dari: http, mem0, honcho",
+          'harus salah satu dari: http, mem0, honcho, supermemory, hindsight',
         ));
         continue;
       }
       final baseUrl = entry['base_url'];
-      final needsBaseUrl = kind == 'http';
-      if (baseUrl is! String ||
-          (needsBaseUrl && baseUrl.trim().isEmpty)) {
+      final needsBaseUrl = kind == 'http' || kind == 'hindsight';
+      final hasBaseUrl = baseUrl is String && baseUrl.trim().isNotEmpty;
+      if (needsBaseUrl && !hasBaseUrl) {
         issues.add(ConfigIssue(
           'memory.external_providers[$i].base_url',
           needsBaseUrl
               ? 'harus berupa string yang tidak kosong'
-              : 'harus berupa string (opsional untuk kind mem0/honcho)',
+              : 'harus berupa string (opsional untuk kind mem0/honcho/supermemory)',
         ));
         continue;
       }
@@ -1217,7 +1232,7 @@ class TikoConfig {
         ));
       }
       out.add(ExternalMemoryProviderConfig(
-        baseUrl: baseUrl.trim(),
+        baseUrl: hasBaseUrl ? baseUrl.trim() : '',
         kind: kind,
         name: nameValue is String && nameValue.trim().isNotEmpty
             ? nameValue.trim()

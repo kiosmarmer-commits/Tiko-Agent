@@ -120,7 +120,8 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   final List<Map<String, dynamic>> notifications = [];
 
   /// Server-initiated JSON-RPC requests (with an `id`) observed on GET SSE.
-  /// They are exposed for diagnostics; request handling is not implemented.
+  /// They are retained for diagnostics; live requests are also dispatched on
+  /// [serverEvents] so a [McpServerRequestHandler] can answer them (P1-7).
   final List<Map<String, dynamic>> serverRequests = [];
 
   /// Errors from the optional GET event stream, independent of JSON-RPC calls.
@@ -306,6 +307,9 @@ class HttpMcpClient implements McpTransport, McpToolServer {
         }
       } else {
         _retainObserved(serverRequests, decoded);
+        if (!_serverEventController.isClosed) {
+          _serverEventController.add(decoded);
+        }
       }
     } catch (_) {
       // Ignore malformed SSE events; the POST response path remains intact.
@@ -635,6 +639,30 @@ class HttpMcpClient implements McpTransport, McpToolServer {
       }
     }
     return withId;
+  }
+
+  /// Sends a JSON-RPC response to a server-initiated request by POSTing it
+  /// back to the MCP endpoint (Streamable HTTP allows responses on POST).
+  /// Best-effort: transport failures are recorded in [transportErrors] and
+  /// never propagate to the caller.
+  Future<void> postServerResponse(Map<String, dynamic> response) async {
+    if (_closed) return;
+    try {
+      final res = await _client
+          .post(
+            Uri.parse(baseUrl),
+            headers: _requestHeaders(),
+            body: jsonEncode(response),
+          )
+          .timeout(const Duration(seconds: 10));
+      final sid = res.headers['mcp-session-id'];
+      if (sid != null && sid.isNotEmpty) _sessionId = sid;
+    } catch (error) {
+      _retainObserved(transportErrors, {
+        'error': 'MCP server response POST failed: $error',
+        'at': DateTime.now().toUtc().toIso8601String(),
+      });
+    }
   }
 
   void _retainObserved(

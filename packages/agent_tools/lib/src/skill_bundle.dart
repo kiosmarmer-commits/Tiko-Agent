@@ -89,7 +89,9 @@ class SkillBundleManager {
 
     await for (final entity in dir.list()) {
       if (entity is! File || !entity.path.endsWith('.yaml') && 
-          !entity.path.endsWith('.yml')) continue;
+          !entity.path.endsWith('.yml')) {
+        continue;
+      }
 
       try {
         final content = await entity.readAsString();

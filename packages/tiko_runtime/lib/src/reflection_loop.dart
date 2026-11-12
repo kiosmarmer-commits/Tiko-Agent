@@ -164,9 +164,9 @@ class ReflectionEngine {
     final observations = <String>[];
 
     if (turns.length < config.minTurnsForReflection) {
-      return ReflectionResult(
-        newLessons: const [],
-        reinforcedIds: const [],
+      return const ReflectionResult(
+        newLessons: [],
+        reinforcedIds: [],
         observations: ['terlalu sedikit turn untuk refleksi'],
       );
     }

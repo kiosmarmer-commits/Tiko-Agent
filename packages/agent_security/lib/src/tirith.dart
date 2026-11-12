@@ -98,7 +98,7 @@ class TirithSecurityLayer {
     required String channel,
   }) async {
     if (!_enabled) {
-      return SecurityDecision.allow(reason: 'Security layer disabled');
+      return const SecurityDecision.allow(reason: 'Security layer disabled');
     }
 
     // Step 1: Sanitize input
@@ -191,7 +191,7 @@ class TirithSecurityLayer {
       ),
     );
     
-    return SecurityDecision.allow(reason: 'All security checks passed');
+    return const SecurityDecision.allow(reason: 'All security checks passed');
   }
 
   /// Sanitize a tool call
@@ -209,7 +209,7 @@ class TirithSecurityLayer {
   /// Check if session is tainted
   Future<SecurityDecision> _checkTaint(Session session, ToolCall call) async {
     if (taintTracker == null) {
-      return SecurityDecision.allow();
+      return const SecurityDecision.allow();
     }
 
     if (taintTracker!.isTainted(session.id)) {
@@ -222,7 +222,7 @@ class TirithSecurityLayer {
       }
     }
 
-    return SecurityDecision.allow();
+    return const SecurityDecision.allow();
   }
 
   /// Get risk level for a tool call

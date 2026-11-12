@@ -525,7 +525,7 @@ class ImageGenerationTool implements Tool {
         .replaceAll(RegExp(r'\s+'), '_')
         .toLowerCase();
     
-    final filename = '${timestamp}_${safePrompt.substring(0, min(50, safePrompt.length))}_${model ?? 'unknown'}.${format}';
+    final filename = '${timestamp}_${safePrompt.substring(0, min(50, safePrompt.length))}_${model ?? 'unknown'}.$format';
     final path = p.join(dir.path, filename);
 
     // Save the file

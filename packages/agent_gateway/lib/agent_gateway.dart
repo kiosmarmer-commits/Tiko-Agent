@@ -19,5 +19,6 @@ export 'src/whatsapp_gateway.dart';
 export 'src/slack_gateway.dart';
 export 'src/signal_gateway.dart';
 export 'src/matrix_gateway.dart';
+export 'src/progressive_stream.dart';
 export 'src/webhook_signature.dart';
 export 'src/webhook_endpoint.dart';

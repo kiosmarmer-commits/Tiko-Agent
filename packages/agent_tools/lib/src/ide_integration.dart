@@ -39,17 +39,17 @@ class IdeType {
 
     switch (ideType) {
       case vscode:
-        return p.join(home, Platform.isWindows ? 'AppData\Roaming\Code\User' : '.vscode');
+        return p.join(home, Platform.isWindows ? 'AppDataRoamingCodeUser' : '.vscode');
       case zed:
         return p.join(home, '.zed');
       case jetbrains:
-        return p.join(home, '.config\JetBrains');
+        return p.join(home, '.configJetBrains');
       case cursor:
         return p.join(home, '.cursor');
       case sublime:
         return p.join(home, Platform.isWindows
-            ? 'AppData\Roaming\Sublime Text\Packages\User'
-            : '.config\sublime-text-3\Packages\User');
+            ? 'AppDataRoamingSublime TextPackagesUser'
+            : '.configsublime-text-3PackagesUser');
       case neovim:
         return p.join(home, '.config\nvim');
       default:

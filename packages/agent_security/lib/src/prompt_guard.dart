@@ -9,6 +9,7 @@
 ///   and PII leakage before it leaves the process.
 /// - [AnomalyDetector]: sliding-window event rate per key flags runaway
 ///   loops and credential-stuffing patterns.
+library;
 
 import 'dart:math' as math;
 

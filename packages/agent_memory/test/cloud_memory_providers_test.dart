@@ -10,10 +10,14 @@ void main() {
   late String base;
   final mem0Store = <String, Map<String, dynamic>>{};
   final honchoStore = <String, Map<String, dynamic>>{};
+  final supermemoryStore = <String, Map<String, dynamic>>{};
+  final hindsightStore = <String, Map<String, dynamic>>{};
 
   setUp(() async {
     mem0Store.clear();
     honchoStore.clear();
+    supermemoryStore.clear();
+    hindsightStore.clear();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     base = 'http://127.0.0.1:${server.port}';
     server.listen((req) async {
@@ -76,6 +80,63 @@ void main() {
         await req.response.close();
         return;
       }
+      if (req.uri.path == '/v3/documents' && req.method == 'POST') {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final content = json['content'] as String;
+        final id = 'sm${supermemoryStore.length}';
+        supermemoryStore[id] = {
+          'id': id,
+          'content': content,
+          'score': 0.88,
+        };
+        req.response.write(jsonEncode({'id': id}));
+        await req.response.close();
+        return;
+      }
+      if (req.uri.path == '/v3/search' && req.method == 'POST') {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final query = (json['q'] as String? ?? '').toLowerCase();
+        final hits = [
+          for (final e in supermemoryStore.entries)
+            if ((e.value['content'] as String).toLowerCase().contains(query))
+              e.value,
+        ].toList();
+        req.response.write(jsonEncode({'matches': hits}));
+        await req.response.close();
+        return;
+      }
+      if (req.uri.path.startsWith('/v3/documents/') &&
+          req.method == 'DELETE') {
+        supermemoryStore.remove(req.uri.pathSegments.last);
+        await req.response.close();
+        return;
+      }
+      if (req.uri.path == '/v1/memories' && req.method == 'POST') {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final text = json['text'] as String;
+        final id = 'hs${hindsightStore.length}';
+        hindsightStore[id] = {'id': id, 'text': text, 'similarity': 0.91};
+        await req.response.close();
+        return;
+      }
+      if (req.uri.path == '/v1/memories/search' && req.method == 'POST') {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final query = (json['query'] as String? ?? '').toLowerCase();
+        final hits = [
+          for (final e in hindsightStore.entries)
+            if ((e.value['text'] as String).toLowerCase().contains(query))
+              e.value,
+        ].toList();
+        req.response.write(jsonEncode({'results': hits}));
+        await req.response.close();
+        return;
+      }
+      if (req.uri.path.startsWith('/v1/memories/') &&
+          req.method == 'DELETE') {
+        hindsightStore.remove(req.uri.pathSegments.last);
+        await req.response.close();
+        return;
+      }
       req.response.statusCode = 404;
       await req.response.close();
     });
@@ -91,7 +152,7 @@ void main() {
       baseUrl: base,
       userId: 'user-1',
     );
-    await provider.upsert(MemoryRecord(
+    await provider.upsert(const MemoryRecord(
       id: 'r1',
       text: 'pengguna suka kopi manual brew',
       ownerKey: 'user-1',
@@ -114,7 +175,7 @@ void main() {
       sessionId: 's1',
       baseUrl: base,
     );
-    await provider.upsert(MemoryRecord(id: 'r2', text: 'deploy tiap jumat'));
+    await provider.upsert(const MemoryRecord(id: 'r2', text: 'deploy tiap jumat'));
     final hits = await provider.search('deploy', k: 5);
     expect(hits, hasLength(1));
     expect(hits.first.text, 'deploy tiap jumat');
@@ -133,5 +194,53 @@ void main() {
     ], 5);
     expect(fromList.single.text, 'dunia');
     expect(parseCloudHits({'other': []}, 5), isEmpty);
+  });
+
+  test('SupermemoryMemoryProvider upsert, search and forget round-trip',
+      () async {
+    final provider = SupermemoryMemoryProvider(
+      apiKey: 'test-key',
+      baseUrl: base,
+      userId: 'user-2',
+    );
+    await provider.upsert(const MemoryRecord(
+      id: 'r3',
+      text: 'rapat produk setiap senin',
+      ownerKey: 'user-2',
+    ));
+    expect(supermemoryStore, hasLength(1));
+
+    final hits = await provider.search('rapat', k: 5);
+    expect(hits, hasLength(1));
+    expect(hits.first.text, 'rapat produk setiap senin');
+    expect(hits.first.score, closeTo(0.88, 1e-9));
+
+    await provider.forget(hits.first.id);
+    expect(supermemoryStore, isEmpty);
+    await provider.close();
+  });
+
+  test('HindsightMemoryProvider upsert, search and forget round-trip',
+      () async {
+    final provider = HindsightMemoryProvider(
+      apiKey: 'test-key',
+      baseUrl: base,
+      userId: 'user-3',
+    );
+    await provider.upsert(const MemoryRecord(
+      id: 'r4',
+      text: 'server produksi di region asia',
+      ownerKey: 'user-3',
+    ));
+    expect(hindsightStore, hasLength(1));
+
+    final hits = await provider.search('server', k: 5);
+    expect(hits, hasLength(1));
+    expect(hits.first.text, 'server produksi di region asia');
+    expect(hits.first.score, closeTo(0.91, 1e-9));
+
+    await provider.forget(hits.first.id);
+    expect(hindsightStore, isEmpty);
+    await provider.close();
   });
 }

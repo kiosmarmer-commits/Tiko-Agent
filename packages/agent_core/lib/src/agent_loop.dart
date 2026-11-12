@@ -93,6 +93,7 @@ class AgentLoop {
     this.autoReflectOnTools = 3,
     this.synthLlm,
     this.skillEval = const SkillEvalConfig(),
+    this.onTextDelta,
   });
 
   final Router router;
@@ -103,6 +104,12 @@ class AgentLoop {
   final MemoryStore memory;
   final ReplyFn reply;
   final ConfirmFn? confirm;
+
+  /// Invoked for every raw model text delta while streaming (P1-4). Callers
+  /// that push progressive updates to chat platforms must sanitize each
+  /// delta themselves; the final reply still passes through the normal
+  /// output guard.
+  final void Function(String delta)? onTextDelta;
   final AgentConfig config;
   final String workspacePath;
   final void Function(
@@ -586,6 +593,7 @@ class AgentLoop {
       switch (e) {
         case LlmTextDelta(:final delta):
           buf.write(delta);
+          onTextDelta?.call(delta);
         case LlmToolCall(:final call):
           resp.toolCalls = [...resp.toolCalls, call];
         case LlmUsage(:final usage):

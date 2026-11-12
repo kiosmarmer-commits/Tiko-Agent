@@ -99,8 +99,7 @@ class MemoryEntry {
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       lastAccessedAt:
           DateTime.tryParse(json['last_accessed_at'] as String? ?? '')
-                  ?.toUtc() ??
-              null,
+                  ?.toUtc(),
       tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString())
           .toList() ?? const [],
       ownerKey: json['owner_key'] as String?,

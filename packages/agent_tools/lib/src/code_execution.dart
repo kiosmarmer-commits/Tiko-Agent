@@ -468,7 +468,7 @@ class DockerCodeExecutionProvider implements CodeExecutionProvider {
 
       try {
         // Build docker command
-        List<String> dockerArgs = [
+        final List<String> dockerArgs = [
           'run',
           '--rm',
           '-i',

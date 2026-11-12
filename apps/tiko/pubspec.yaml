@@ -16,6 +16,7 @@ dependencies:
   tiko_runtime:
     path: ../../packages/tiko_runtime
 
+  agent_providers: any
 dev_dependencies:
   lints: ^5.0.0
   test: ^1.25.0

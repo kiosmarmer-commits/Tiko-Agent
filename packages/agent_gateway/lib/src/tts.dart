@@ -28,6 +28,7 @@ class OpenAiTtsProvider implements TtsProvider {
     this.client,
   });
 
+  @override
   final String id;
 
   final String apiKey;

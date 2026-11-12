@@ -306,7 +306,7 @@ class ContextFilesManager {
   Stream<ContextFileChange> watch() async* {
     // In a real implementation, this would watch the filesystem
     // For now, this is a placeholder
-    yield* Stream.empty();
+    yield* const Stream.empty();
   }
 }
 
@@ -573,14 +573,13 @@ class ExpandedContext {
 /// Enhanced context expander with support for context files
 class EnhancedContextExpander extends ContextExpander {
   EnhancedContextExpander({
-    required this.workspaceRoot,
+    required super.workspaceRoot,
     this.maxFileSize = 1024 * 1024, // 1MB
     this.maxDirectoryFiles = 100,
     this.maxUrlSize = 10 * 1024 * 1024, // 10MB
     this.contextFilesManager,
-  }) : super(workspaceRoot: workspaceRoot);
+  });
 
-  final String workspaceRoot;
   final int maxFileSize;
   final int maxDirectoryFiles;
   final int maxUrlSize;

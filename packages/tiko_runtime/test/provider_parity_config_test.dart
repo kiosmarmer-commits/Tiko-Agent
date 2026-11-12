@@ -249,6 +249,55 @@ providers:
       expect(p.capabilities.maxContext, 64000);
     });
 
+    test('sandbox.container_persistent ter-parse', () {
+      final (on, i1) = TikoConfig.parse('''
+sandbox:
+  container_persistent: true
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+''');
+      expect(i1, isEmpty);
+      expect(on.sandboxDockerPersistent, isTrue);
+      final (off, i2) = TikoConfig.parse('''
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+''');
+      expect(i2, isEmpty);
+      expect(off.sandboxDockerPersistent, isFalse);
+    });
+
+    test('memory.external_providers kind supermemory/hindsight ter-parse', () {
+      final (cfg, issues) = TikoConfig.parse('''
+memory:
+  external_providers:
+    - kind: supermemory
+      name: user-1
+      api_key: "env:SUPERMEMORY_API_KEY"
+    - kind: hindsight
+      base_url: "http://127.0.0.1:8000"
+      name: user-2
+      api_key: "env:HINDSIGHT_API_KEY"
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+''');
+      expect(issues, isEmpty);
+      expect(cfg.memoryProviders, hasLength(2));
+      expect(cfg.memoryProviders[0].kind, 'supermemory');
+      expect(cfg.memoryProviders[0].baseUrl, isEmpty);
+      expect(cfg.memoryProviders[0].apiKeyRef, 'env:SUPERMEMORY_API_KEY');
+      expect(cfg.memoryProviders[1].kind, 'hindsight');
+      expect(cfg.memoryProviders[1].baseUrl, 'http://127.0.0.1:8000');
+    });
+
     test('request_timeout_sec -> requestTimeout Duration', () {
       final p = _buildWithEnv('''
 providers:

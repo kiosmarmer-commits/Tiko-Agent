@@ -67,7 +67,7 @@ void main() {
     });
 
     test('github token is blocked', () {
-      final v = guard.inspectOutput('token: ghp_' + 'a' * 36);
+      final v = guard.inspectOutput('token: ghp_${'a' * 36}');
       expect(v.blocked, isTrue);
       expect(v.findings.map((f) => f.ruleId), contains('OF-002'));
     });

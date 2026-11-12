@@ -184,6 +184,7 @@ class CommandTtsProvider implements TtsProvider {
     this.timeout = const Duration(seconds: 60),
   });
 
+  @override
   final String id;
   final List<String> commandTemplate;
   final String? defaultVoice;

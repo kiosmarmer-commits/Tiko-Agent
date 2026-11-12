@@ -47,7 +47,7 @@ void main() {
     });
 
     test('validates name pattern and length', () {
-      final bad = AgentSkillManifest(
+      final bad = const AgentSkillManifest(
           name: 'Invalid Name!', description: 'desc');
       expect(bad.validate(), isNotEmpty);
       final long = AgentSkillManifest(

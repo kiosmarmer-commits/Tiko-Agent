@@ -42,7 +42,7 @@ void main() {
 
   group('SubagentResult', () {
     test('success result', () {
-      final result = SubagentResult(
+      final result = const SubagentResult(
         success: true,
         output: 'Task completed successfully',
         subagentId: 'sub-1',
@@ -56,7 +56,7 @@ void main() {
     });
 
     test('failure result', () {
-      final result = SubagentResult(
+      final result = const SubagentResult(
         success: false,
         output: '',
         error: 'Task failed',
@@ -93,7 +93,7 @@ void main() {
     });
 
     test('toSummary for success', () {
-      final result = SubagentResult(
+      final result = const SubagentResult(
         success: true,
         output: 'This is a long output that should be truncated',
       );
@@ -103,7 +103,7 @@ void main() {
     });
 
     test('toSummary for failure', () {
-      final result = SubagentResult(
+      final result = const SubagentResult(
         success: false,
         output: 'Error occurred',
       );
@@ -292,7 +292,7 @@ void main() {
           required Set<String> allowedTools,
         }) async {
           // Simulate a subagent that takes too long
-          return SubagentResult(
+          return const SubagentResult(
             success: true,
             output: 'Done',
             tokenCount: 100,
@@ -326,7 +326,7 @@ void main() {
           required Set<String> allowedTools,
         }) async {
           // Simulate a subagent that makes too many tool calls
-          return SubagentResult(
+          return const SubagentResult(
             success: true,
             output: 'Done',
             tokenCount: 100,
@@ -360,7 +360,7 @@ void main() {
           required Set<String> allowedTools,
         }) async {
           // Simulate a subagent that costs too much
-          return SubagentResult(
+          return const SubagentResult(
             success: true,
             output: 'Done',
             tokenCount: 100,

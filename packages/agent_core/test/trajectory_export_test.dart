@@ -75,7 +75,7 @@ void main() {
     await logger.exportForTraining(
       outputPath: outPath,
       customRedactor: (line) =>
-          line.replaceAll('Budi', '<NAMA>') + '\n{"_custom": true}',
+          '${line.replaceAll('Budi', '<NAMA>')}\n{"_custom": true}',
     );
     final lines = await File(outPath).readAsLines();
     expect(lines.first, isNot(contains('Budi')));

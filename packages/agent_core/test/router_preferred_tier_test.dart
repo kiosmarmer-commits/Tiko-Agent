@@ -92,7 +92,7 @@ void main() {
       config: const AgentConfig(preferredTier: 3),
     );
     await loop.handle(
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'u',
         sessionKey: 'cli:u',

@@ -153,7 +153,7 @@ class EmailGateway implements Gateway {
           'server response',
           serverResponse: true,
         )) {
-          throw SocketException('SMTP connection closed unexpectedly');
+          throw const SocketException('SMTP connection closed unexpectedly');
         }
         return responseStream.current;
       }
@@ -169,7 +169,7 @@ class EmailGateway implements Gateway {
         var continuation = firstMatch.group(2) == '-';
         while (continuation) {
           if (lines.length >= 100) {
-            throw FormatException('SMTP response exceeded 100 lines');
+            throw const FormatException('SMTP response exceeded 100 lines');
           }
           final line = await readLine();
           final match = RegExp('^$code([- ])').firstMatch(line);

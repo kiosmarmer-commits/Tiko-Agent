@@ -60,7 +60,7 @@ Monorepo root `pubspec.yaml` memiliki workspace `agent_core`, `agent_calc`, `age
 | Circuit breaker half-open single probe | Runtime aktif memakai `Router.ProviderHealth` sebagai satu pemilik state; fallback mengunci slot probe. Wrapper `agent_providers.CircuitBreaker` tetap legacy API dan tidak di-wire runtime |
 | Memory SQLite FTS5 + JSON fallback | Implemented; backend tergantung kemampuan native host |
 | Vector memory | Implemented melalui `BruteForceVectorIndex`; embedding opsional |
-| MCP stdio + Streamable HTTP | Implemented; bundle terbaru menambahkan GET SSE opsional, protocol-version header/config, dengan request server-initiated ber-ID masih hanya dicatat |
+| MCP stdio + Streamable HTTP | Implemented; GET SSE opsional, protocol-version header/config, reconnect ber-backoff, dan server-initiated request ber-ID dijawab (termasuk `sampling/createMessage` dengan rate limit per menit) |
 | Skills draft/evaluate/approve/rollback + ledgers | Implemented |
 | Scheduler cron + IANA timezone/DST + delivery ack/retry | Implemented di daemon integration |
 | HTTP/WebSocket + Web UI + Flutter client | Implemented; uji visual perangkat nyata tetap perlu |

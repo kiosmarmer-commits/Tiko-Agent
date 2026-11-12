@@ -337,7 +337,7 @@ class BrowserTool implements Tool {
       const data = { $jsEntries };
       let filledCount = 0;
       for (const [name, value] of Object.entries(data)) {
-        const input = document.querySelector(\[name=\`\${name}\`\], input[name=\`\${name}\`], textarea[name=\`\${name}\`]);
+        const input = document.querySelector([name=`\${name}`], input[name=`\${name}`], textarea[name=`\${name}`]);
         if (input) {
           input.value = value;
           input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -345,7 +345,7 @@ class BrowserTool implements Tool {
           filledCount++;
         }
       }
-      return \`Filled \${filledCount} form fields\`;
+      return `Filled \${filledCount} form fields`;
     ''';
     return await _session!.evaluate(js);
   }

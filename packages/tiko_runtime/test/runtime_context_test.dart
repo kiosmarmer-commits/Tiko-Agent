@@ -21,13 +21,13 @@ class _FakeTool extends Tool {
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
-    return ToolResult(callId: '', content: 'ok');
+    return const ToolResult(callId: '', content: 'ok');
   }
 }
 
 void main() {
   final session = Session(id: 'ctx-test', channel: 'cli', userKey: 'tester');
-  final message = InboundMessage(
+  final message = const InboundMessage(
     channel: 'cli',
     userKey: 'tester',
     sessionKey: 'ctx-test',
@@ -93,12 +93,12 @@ void main() {
     );
     reflection.reflect(
       turns: [
-        ConversationTurn(
+        const ConversationTurn(
           userMessage: 'deploy gagal',
           assistantMessage: 'terjadi error',
           isSuccessful: false,
         ),
-        ConversationTurn(
+        const ConversationTurn(
           userMessage: 'deploy gagal lagi',
           assistantMessage: 'terjadi error lagi',
           isSuccessful: false,
@@ -112,7 +112,7 @@ void main() {
       reflectionEngine: reflection,
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'ctx-test',
@@ -149,7 +149,7 @@ void main() {
       layeredMemory: layered,
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'ctx-test',

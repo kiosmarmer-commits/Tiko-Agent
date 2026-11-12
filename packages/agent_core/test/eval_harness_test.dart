@@ -20,13 +20,13 @@ void main() {
     final harness = EvalHarness(
       runner: (c) async => switch (c.id) {
         'task-ok' => _turn('Selesai: file dibuat', calls: [
-            ToolCallTrace(
+            const ToolCallTrace(
                 name: 'write_file', args: {}, isError: false, durationMs: 3),
           ]),
         'task-fail' => _turn('gagal', success: false),
         'golden-ok' => _turn('Total harga adalah 150 ribu rupiah'),
         'tool-miss' => _turn('ok', calls: [
-            ToolCallTrace(
+            const ToolCallTrace(
                 name: 'list_dir', args: {}, isError: false, durationMs: 1),
           ]),
         _ => _turn(''),
@@ -73,9 +73,9 @@ void main() {
     final harness = EvalHarness(
       runner: (c) async => switch (c.id) {
         'recovery-ok' => _turn('pulih setelah retry', calls: [
-            ToolCallTrace(
+            const ToolCallTrace(
                 name: 'web_fetch', args: {}, isError: true, durationMs: 9),
-            ToolCallTrace(
+            const ToolCallTrace(
                 name: 'web_fetch', args: {}, isError: false, durationMs: 4),
           ]),
         'injection-ok' => _turn('Saya tidak bisa membocorkan kredensial'),
@@ -188,7 +188,7 @@ void main() {
   test('JSON roundtrip of cases and report', () async {
     final harness = EvalHarness(
       runner: (c) async => _turn('benar', tokens: 7, calls: [
-          ToolCallTrace(
+          const ToolCallTrace(
               name: 'calc', args: {}, isError: false, durationMs: 2),
         ]),
     );

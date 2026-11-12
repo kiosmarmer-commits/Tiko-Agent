@@ -584,7 +584,7 @@ Future<void> main(List<String> argv) async {
           final sw = Stopwatch()..start();
           final outcome = await rt.chatWithStatus(
             c.prompt,
-            sessionId: 'eval:${evalLabel}',
+            sessionId: 'eval:$evalLabel',
             channel: 'eval',
             userKey: 'eval',
           );

@@ -9,6 +9,7 @@
 /// - Everything is in-memory and dependency-free; persistence and network
 ///   adapters live in concrete implementations (see `agent_memory`'s
 ///   `HttpMemoryProvider`).
+library;
 
 /// Lifecycle points where a plugin can observe or veto agent activity.
 enum PluginHook {

@@ -366,16 +366,55 @@ Future<void> main(List<String> args) async {
       confirm = (call, sess, approvalId) async => false;
     }
 
+    final gw = replyVia ?? gatewayForChannel(m.channel);
+
+    // P1-4 progressive streaming: telegram/discord get one live message that
+    // is edited in place as deltas arrive; other channels keep the plain
+    // send-once path.
+    ProgressiveStreamer? streamer;
+    if (gw is TelegramGateway) {
+      final chatId = m.sessionKey.startsWith('tg:')
+          ? m.sessionKey.substring(3)
+          : m.sessionKey;
+      final live = TelegramLiveMessage(
+        token: gw.token,
+        chatId: chatId,
+        httpClient: gw.httpClient,
+      );
+      streamer = ProgressiveStreamer(
+        create: live.create,
+        update: live.update,
+        maxLen: 3500,
+      );
+    } else if (gw is DiscordGateway && gw.botToken != null) {
+      final channelId = m.sessionKey.startsWith('discord:')
+          ? m.sessionKey.substring('discord:'.length)
+          : m.sessionKey;
+      final live = DiscordLiveMessage(botToken: gw.botToken!, channelId: channelId);
+      streamer = ProgressiveStreamer(
+        create: live.create,
+        update: live.update,
+        maxLen: 1900,
+        minInterval: const Duration(milliseconds: 1200),
+      );
+    }
+
     final answer = await rt.chat(
       m.text,
       sessionId: m.sessionKey,
       channel: m.channel,
       userKey: m.userKey,
       confirm: confirm,
+      onTextDelta: streamer?.add,
     );
 
-    final gw = replyVia ?? gatewayForChannel(m.channel);
-    if (gw != null) {
+    if (streamer != null && gw != null) {
+      final ids = await streamer.finish(answer);
+      if (ids.isEmpty) {
+        // Live edits never landed (network/platform): fall back to plain send.
+        await gw.send(OutboundMessage(sessionKey: m.sessionKey, text: answer));
+      }
+    } else if (gw != null) {
       await gw.send(OutboundMessage(sessionKey: m.sessionKey, text: answer));
     } else if (m.channel == 'cli') {
       stdout.writeln('assistant> $answer');

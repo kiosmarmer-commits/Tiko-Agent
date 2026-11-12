@@ -20,10 +20,10 @@ class RecordingPlugin extends Plugin {
     calls.add('before:${input.toolName}');
     if (failOn == 'before') throw StateError('before boom');
     if (input.toolName == 'dangerous') {
-      return HookVerdict.deny(reason: 'blokir oleh ${name}');
+      return HookVerdict.deny(reason: 'blokir oleh $name');
     }
     if (input.toolName == 'rewritable') {
-      return HookVerdict.modify({'rewritten': true});
+      return const HookVerdict.modify({'rewritten': true});
     }
     return const HookVerdict.allow();
   }

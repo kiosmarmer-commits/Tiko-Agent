@@ -75,7 +75,7 @@ class SubagentResult {
   };
 
   String toSummary() =>
-      'Subagent ${success ? 'sukses' : 'gagal'}: ${output.length > 100 ? output.substring(0, 100) + '...' : output}';
+      'Subagent ${success ? 'sukses' : 'gagal'}: ${output.length > 100 ? '${output.substring(0, 100)}...' : output}';
 }
 
 /// spawn_subagent — parallel research with separate token budget (ALG-04, P1-09).
@@ -178,7 +178,7 @@ class SpawnSubagentTool implements Tool {
       try {
         // Register subagent before execution
         if (!registerSubagent(subagentId)) {
-          return ToolResult(
+          return const ToolResult(
             callId: '',
             content: 'Tidak dapat mendaftarkan subagent',
             isError: true,

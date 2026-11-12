@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
@@ -18,6 +17,8 @@ class McpServerRequestHandler {
     required this.client,
     required this.toolRegistry,
     required this.onServerRequest,
+    this.onSampling,
+    this.maxSamplingPerMinute = 10,
     this.maxConcurrentRequests = 10,
     this.requestTimeout = const Duration(seconds: 30),
   });
@@ -36,6 +37,19 @@ class McpServerRequestHandler {
     String requestId,
   )? onServerRequest;
 
+  /// Callback for `sampling/createMessage` server requests (MCP sampling).
+  /// Receives the request params and must return the sampled message result
+  /// (`{"role": ..., "content": {"type": "text", "text": ...}, ...}`).
+  /// Returning null declines the request with a method-not-found error.
+  final Future<Map<String, dynamic>?> Function(
+    Map<String, dynamic> params,
+    String requestId,
+  )? onSampling;
+
+  /// Maximum `sampling/createMessage` requests answered per sliding minute.
+  /// Excess requests are declined with a rate-limit error (P1-7).
+  final int maxSamplingPerMinute;
+
   /// Maximum concurrent server request handlers.
   final int maxConcurrentRequests;
 
@@ -44,6 +58,7 @@ class McpServerRequestHandler {
 
   bool _isRunning = false;
   final _activeRequests = <String, Completer<Map<String, dynamic>>>{};
+  final _samplingWindow = <DateTime>[];
   StreamSubscription<Map<String, dynamic>>? _subscription;
 
   /// Starts handling server requests from the SSE event stream.
@@ -109,8 +124,11 @@ class McpServerRequestHandler {
       return;
     }
 
-    // Create a completer for tracking the request
+    // Create a completer for tracking the request. It is diagnostic only:
+    // errors are reported to the server via _sendResponse, so the future is
+    // ignored to avoid unhandled async errors when stop() completes it.
     final completer = Completer<Map<String, dynamic>>();
+    completer.future.ignore();
     _activeRequests[requestId] = completer;
 
     try {
@@ -125,22 +143,28 @@ class McpServerRequestHandler {
         'result': response,
       });
 
-      completer.complete(response);
+      if (!completer.isCompleted) completer.complete(response);
     } catch (e) {
       // Send error response
       await _sendResponse(requestId, {
         'jsonrpc': '2.0',
         'id': requestId,
         'error': {
-          'code': -32603,
+          'code': _errorCodeFor(e),
           'message': e.toString(),
         },
       });
 
-      completer.completeError(e);
+      if (!completer.isCompleted) completer.completeError(e);
     } finally {
       _activeRequests.remove(requestId);
     }
+  }
+
+  static int _errorCodeFor(Object error) {
+    if (error is McpSamplingRateLimitException) return -32005;
+    if (error is McpSamplingUnsupportedException) return -32601;
+    return -32603;
   }
 
   /// Processes a server-initiated request.
@@ -174,6 +198,9 @@ class McpServerRequestHandler {
 
       case 'resources/read':
         return await _handleResourceRead(params);
+
+      case 'sampling/createMessage':
+        return await _handleSampling(params, requestId);
 
       default:
         // Unknown method - return method not found error
@@ -241,6 +268,31 @@ class McpServerRequestHandler {
     };
   }
 
+  /// Handles a `sampling/createMessage` request from the server (P1-7).
+  /// Enforces a sliding-window rate limit before delegating to [onSampling].
+  Future<Map<String, dynamic>> _handleSampling(
+    Map<String, dynamic> params,
+    String requestId,
+  ) async {
+    final now = DateTime.now();
+    _samplingWindow.removeWhere(
+      (t) => now.difference(t) >= const Duration(minutes: 1),
+    );
+    if (_samplingWindow.length >= maxSamplingPerMinute) {
+      throw const McpSamplingRateLimitException();
+    }
+    _samplingWindow.add(now);
+
+    if (onSampling == null) {
+      throw const McpSamplingUnsupportedException();
+    }
+    final result = await onSampling!(params, requestId);
+    if (result == null) {
+      throw const McpSamplingUnsupportedException();
+    }
+    return result;
+  }
+
   /// Handles a resources/read request from the server.
   Future<Map<String, dynamic>> _handleResourceRead(
     Map<String, dynamic> params,
@@ -255,30 +307,20 @@ class McpServerRequestHandler {
     throw Exception('Resource reading not yet implemented');
   }
 
-  /// Sends a JSON-RPC response back to the server.
-  ///
-  /// Note: MCP Streamable HTTP doesn't currently define a way to send
-  /// responses to server-initiated requests. This method is a placeholder
-  /// for when the protocol is extended to support this.
-  ///
-  /// For now, we log the response and store it for diagnostics.
+  /// Sends a JSON-RPC response back to the server by POSTing it to the MCP
+  /// endpoint (Streamable HTTP permits responses on POST). The response is
+  /// retained on the client for diagnostics; transport failures are recorded
+  /// but never propagate to the request pipeline.
   Future<void> _sendResponse(
     String requestId,
     Map<String, dynamic> response,
   ) async {
-    // In the current MCP Streamable HTTP spec, there's no way to send
-    // responses to server-initiated requests. We log this for now.
-    
-    // Store in client for diagnostics
     client.serverRequests.add({
       'id': requestId,
       'response': response,
       'timestamp': DateTime.now().toIso8601String(),
     });
-
-    // Log the response
-    // In production, you might want to use a proper logger
-    print('MCP Server Request Response [$requestId]: ${jsonEncode(response)}');
+    await client.postServerResponse(response);
   }
 
   /// Gets the current status of the handler.
@@ -304,14 +346,32 @@ class McpServerRequestHandler {
   }
 }
 
+/// Declined a `sampling/createMessage` request because the per-minute
+/// sampling budget is exhausted.
+class McpSamplingRateLimitException implements Exception {
+  const McpSamplingRateLimitException();
+
+  @override
+  String toString() => 'MCP sampling rate limit exceeded';
+}
+
+/// Declined a `sampling/createMessage` request because no sampling callback
+/// is configured or the callback declined.
+class McpSamplingUnsupportedException implements Exception {
+  const McpSamplingUnsupportedException();
+
+  @override
+  String toString() => 'MCP sampling/createMessage is not supported';
+}
+
 /// Enhanced HTTP MCP client with full server request handling.
 ///
 /// This extends the basic HttpMcpClient to properly handle server-initiated
 /// requests, similar to Hermes Agent's implementation.
 class EnhancedHttpMcpClient extends HttpMcpClient {
   EnhancedHttpMcpClient({
-    required String baseUrl,
-    Map<String, String> headers = const {},
+    required super.baseUrl,
+    super.headers,
     super.httpClient,
     super.protocolVersion = '2025-11-25',
     super.maxOutputChars = 100000,
@@ -320,12 +380,11 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
     super.maxObservedEvents = 100,
     this.toolRegistry,
     this.onServerRequest,
+    this.onSampling,
+    this.maxSamplingPerMinute = 10,
     this.maxConcurrentRequests = 10,
     this.requestTimeout = const Duration(seconds: 30),
-  }) : super(
-          baseUrl: baseUrl,
-          headers: headers,
-        );
+  });
 
   final ToolRegistry? toolRegistry;
   final Future<Map<String, dynamic>> Function(
@@ -333,6 +392,11 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
     Map<String, dynamic> params,
     String requestId,
   )? onServerRequest;
+  final Future<Map<String, dynamic>?> Function(
+    Map<String, dynamic> params,
+    String requestId,
+  )? onSampling;
+  final int maxSamplingPerMinute;
   final int maxConcurrentRequests;
   final Duration requestTimeout;
 
@@ -341,13 +405,15 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
   @override
   Future<void> start() async {
     await super.start();
-    
+
     // Initialize server request handler if we have a tool registry
     if (toolRegistry != null) {
       _serverHandler = McpServerRequestHandler(
         client: this,
         toolRegistry: toolRegistry!,
         onServerRequest: onServerRequest,
+        onSampling: onSampling,
+        maxSamplingPerMinute: maxSamplingPerMinute,
         maxConcurrentRequests: maxConcurrentRequests,
         requestTimeout: requestTimeout,
       );

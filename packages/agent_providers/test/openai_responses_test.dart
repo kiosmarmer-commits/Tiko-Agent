@@ -75,7 +75,7 @@ void main() {
 
   test('non-stream: teks + function_call + usage', () async {
     final events = await provider()
-        .chat(ChatRequest(
+        .chat(const ChatRequest(
           messages: [ChatMessage(role: 'user', content: 'halo')],
           stream: false,
         ))
@@ -102,7 +102,7 @@ void main() {
 
   test('stream SSE: delta text + tool call + usage + done', () async {
     final events = await provider()
-        .chat(ChatRequest(
+        .chat(const ChatRequest(
           messages: [ChatMessage(role: 'user', content: 'halo')],
           stream: true,
         ))
@@ -124,7 +124,7 @@ void main() {
   test('mapping pesan: system jadi instructions, tool result jadi output',
       () async {
     await provider()
-        .chat(ChatRequest(
+        .chat(const ChatRequest(
           messages: [
             ChatMessage(role: 'system', content: 'Kamu agent.'),
             ChatMessage(role: 'user', content: 'hitung'),
@@ -154,7 +154,7 @@ void main() {
 
   test('tools dimapping ke format function flat', () async {
     await provider()
-        .chat(ChatRequest(
+        .chat(const ChatRequest(
           messages: [ChatMessage(role: 'user', content: 'x')],
           stream: false,
           tools: [

@@ -17,6 +17,57 @@ enum SandboxKind { none, bubblewrap, docker, ssh, modal, daytona }
 /// [SandboxRunner.dispatchFor] so scoring stays centralized.
 typedef CommandRiskFn = double Function(String command);
 
+/// Argv for `docker exec` into the persistent container (P1-5). Values of
+/// [envKeys] are resolved from the docker CLI process environment, so secret
+/// values never appear in argv.
+List<String> dockerExecArgv({
+  required String container,
+  required String cwdInContainer,
+  required List<String> envKeys,
+  required List<String> parts,
+}) =>
+    [
+      'exec',
+      '-i',
+      '-w',
+      cwdInContainer,
+      for (final key in envKeys) ...['-e', key],
+      container,
+      ...parts,
+    ];
+
+/// Argv that creates the long-lived hardened persistent container.
+List<String> dockerRunPersistentArgv({
+  required String container,
+  required String root,
+  required String image,
+}) =>
+    [
+      'run',
+      '-d',
+      '--pull=never',
+      '--name',
+      container,
+      '--init',
+      '--network',
+      'none',
+      '--read-only',
+      '--cap-drop=ALL',
+      '--security-opt=no-new-privileges',
+      '--pids-limit=64',
+      '--memory=256m',
+      '--cpus=1.0',
+      '--tmpfs',
+      '/tmp:rw,noexec,nosuid,size=16m',
+      '-v',
+      '$root:/work:rw',
+      '-w',
+      '/work',
+      image,
+      'sleep',
+      '100000000',
+    ];
+
 class SandboxRunner {
   SandboxRunner({
     this.kind = SandboxKind.none,
@@ -32,6 +83,7 @@ class SandboxRunner {
     this.daytonaApiKey,
     this.httpClient,
     this.modalBin = 'modal',
+    this.containerPersistent = false,
   })  : assert(maxOutputBytes > 0),
         assert(kind != SandboxKind.ssh || (sshHost ?? '').isNotEmpty,
             'ssh sandbox requires an sshHost (user@host)'),
@@ -72,6 +124,16 @@ class SandboxRunner {
 
   /// Modal CLI binary name/path (injectable for tests).
   final String modalBin;
+
+  /// Hermes-parity `container_persistent`: when true, the docker backend
+  /// keeps ONE hardened container alive for the lifetime of this runner and
+  /// dispatches every command via `docker exec`, so working-directory
+  /// changes, installed packages, and files written under /work carry over
+  /// between tool calls. The container is removed by [dispose].
+  final bool containerPersistent;
+
+  String? _persistentContainer;
+  Future<void>? _ensureContainer;
 
   final Map<int, String> _dockerContainers = {};
 
@@ -332,6 +394,9 @@ class SandboxRunner {
       'LANG': 'C.UTF-8',
       ...extraEnv,
     };
+    if (kind == SandboxKind.docker && containerPersistent) {
+      return _startDockerExec(parts, root: root, cwd: cwd, extraEnv: extraEnv);
+    }
     final containerName = kind == SandboxKind.docker
         ? 'tiko-sbx-$pid-${DateTime.now().microsecondsSinceEpoch}'
         : null;
@@ -349,6 +414,70 @@ class SandboxRunner {
       unawaited(process.exitCode.then((_) => _dockerContainers.remove(process.pid)));
     }
     return process;
+  }
+
+  /// Persistent docker backend (P1-5): one long-lived hardened container;
+  /// every command runs via `docker exec` so state carries across calls.
+  Future<Process> _startDockerExec(
+    List<String> parts, {
+    required String root,
+    required String cwd,
+    required Map<String, String> extraEnv,
+  }) async {
+    await _ensurePersistentContainer(root);
+    final name = _persistentContainer!;
+    final cwdInContainer = cwd == root
+        ? '/work'
+        : '/work/${cwd.substring(root.length).replaceAll(Platform.pathSeparator, '/')}';
+    return Process.start(
+      'docker',
+      dockerExecArgv(
+        container: name,
+        cwdInContainer: cwdInContainer,
+        envKeys: extraEnv.keys.toList(),
+        parts: parts,
+      ),
+      workingDirectory: root,
+      environment: extraEnv,
+      includeParentEnvironment: true,
+      runInShell: false,
+    );
+  }
+
+  Future<void> _ensurePersistentContainer(String root) {
+    return _ensureContainer ??= () async {
+      final name = 'tiko-sbx-persistent-$pid';
+      final res = await Process.run(
+        'docker',
+        dockerRunPersistentArgv(
+          container: name,
+          root: root,
+          image: dockerImage,
+        ),
+      ).timeout(
+        const Duration(seconds: 30),
+      );
+      if (res.exitCode != 0) {
+        throw StateError(
+          'docker persistent container gagal dibuat: ${res.stderr}',
+        );
+      }
+      _persistentContainer = name;
+    }();
+  }
+
+  /// Stops and removes the persistent container (if any). Safe to call
+  /// multiple times; best-effort, never throws.
+  Future<void> dispose() async {
+    final name = _persistentContainer;
+    _persistentContainer = null;
+    _ensureContainer = null;
+    if (name == null) return;
+    try {
+      await Process.run('docker', ['rm', '--force', name]).timeout(
+        const Duration(seconds: 10),
+      );
+    } catch (_) {}
   }
 
   /// FR-02 remote execution: runs argv on the configured ssh host inside a

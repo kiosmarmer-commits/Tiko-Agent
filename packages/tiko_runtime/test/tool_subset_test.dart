@@ -19,7 +19,7 @@ class _FakeTool extends Tool {
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
-    return ToolResult(callId: '', content: 'ok');
+    return const ToolResult(callId: '', content: 'ok');
   }
 }
 
@@ -42,7 +42,7 @@ void main() {
       memory: InMemoryStore(),
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'subset-test',
@@ -67,7 +67,7 @@ void main() {
       memory: InMemoryStore(),
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'subset-test',
@@ -87,7 +87,7 @@ void main() {
       memory: InMemoryStore(),
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'subset-test',
@@ -107,7 +107,7 @@ void main() {
       toolFilter: {'tool_a', 'tool_search'},
     ).build(
       session,
-      InboundMessage(
+      const InboundMessage(
         channel: 'cli',
         userKey: 'tester',
         sessionKey: 'subset-test',

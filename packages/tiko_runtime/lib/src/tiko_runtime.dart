@@ -7,8 +7,6 @@ import 'package:agent_memory/agent_memory.dart';
 import 'package:agent_security/agent_security.dart';
 import 'package:agent_scheduler/agent_scheduler.dart';
 import 'package:agent_tools/agent_tools.dart';
-import 'package:agent_tools/src/image_generation.dart' show ImageProvider;
-import 'package:agent_tools/src/subagent.dart';
 import 'package:path/path.dart' as p;
 
 import 'provider_factory.dart';
@@ -23,7 +21,6 @@ import 'reflection_loop.dart';
 import 'kanban_board.dart';
 import 'self_learning_engine.dart';
 import 'team_tool.dart';
-import 'package:agent_security/agent_security.dart' show TirithSecurityLayer, TirithConfig, CredentialManager, FallbackManager, FallbackConfig, CapabilityGate, CapabilityCheckResult;
 
 part 'tiko_runtime_internals.dart';
 
@@ -104,7 +101,9 @@ class TikoRuntime {
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
-  }) : selfLearningEngine = selfLearningEngine ??
+    SandboxRunner? sandbox,
+  })  : _sandbox = sandbox,
+        selfLearningEngine = selfLearningEngine ??
           (providers.isEmpty
               ? null
               : SelfLearningEngine(
@@ -125,6 +124,10 @@ class TikoRuntime {
   final String memoryBackend;
   final SafetyState safety;
   final SandboxKind sandboxKind;
+
+  /// The OS-sandbox runner shared by shell/script/MCP tools; kept so
+  /// [close] can tear down a persistent docker container (P1-5).
+  final SandboxRunner? _sandbox;
   final AuditLog audit;
   final String workspace;
   final String dataDir;
@@ -258,7 +261,11 @@ class TikoRuntime {
     }
 
     var sandboxKind = await SandboxRunner.detect();
-    var sandbox = SandboxRunner(kind: sandboxKind, workspacePath: workspace);
+    var sandbox = SandboxRunner(
+      kind: sandboxKind,
+      workspacePath: workspace,
+      containerPersistent: cfg.sandboxDockerPersistent,
+    );
     if (sandboxKind == SandboxKind.none) {
       final cloud = await SandboxRunner.cloudFromEnv(workspacePath: workspace);
       if (cloud != null) {
@@ -312,6 +319,17 @@ class TikoRuntime {
               apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
               sessionId: c.name ?? 'tiko-agent',
               baseUrl: c.baseUrl.isEmpty ? 'https://api.honcho.dev' : c.baseUrl,
+            ),
+          'supermemory' => SupermemoryMemoryProvider(
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              userId: c.name,
+              baseUrl:
+                  c.baseUrl.isEmpty ? 'https://api.supermemory.ai' : c.baseUrl,
+            ),
+          'hindsight' => HindsightMemoryProvider(
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              userId: c.name,
+              baseUrl: c.baseUrl,
             ),
           _ => HttpMemoryProvider(
               config: HttpMemoryProviderConfig(
@@ -444,12 +462,12 @@ class TikoRuntime {
     if (safe) safety.enableSafeMode();
 
     // Initialize Tirith Security Layer (P0 - Critical)
-    final tirithConfig = TirithConfig(
+    final tirithConfig = const TirithConfig(
       enabled: true,
       requireApprovalForHighRisk: true,
       requireApprovalForMediumRisk: false,
       autoApproveLowRisk: true,
-      approvalTtl: const Duration(minutes: 10),
+      approvalTtl: Duration(minutes: 10),
       enableCredentialPools: true,
       enableFallbackProviders: true,
       enableTaintTracking: true,
@@ -485,7 +503,7 @@ class TikoRuntime {
     await credentialManager.initialize();
     
     // Initialize Fallback Manager (P0 - Critical)
-    final fallbackConfig = FallbackConfig(
+    final fallbackConfig = const FallbackConfig(
       fallbacks: [
         // Add default fallback configurations
         FallbackEntry(
@@ -503,7 +521,7 @@ class TikoRuntime {
           ],
         ),
       ],
-      retryAfter: const Duration(minutes: 1),
+      retryAfter: Duration(minutes: 1),
       enableAutomaticFallback: true,
     );
     
@@ -525,6 +543,7 @@ class TikoRuntime {
       memoryBackend: backend,
       safety: safety,
       sandboxKind: sandboxKind,
+      sandbox: sandbox,
       audit: AuditLog(directory: abs(cfg.logsDir)),
       workspace: workspace,
       dataDir: dataDir,
@@ -1087,12 +1106,14 @@ class TikoRuntime {
     String userKey = 'local',
     Future<bool> Function(ToolCall call, Session session, String approvalId)?
         confirm,
+    void Function(String delta)? onTextDelta,
   }) async => (await chatWithStatus(
         text,
         sessionId: sessionId,
         channel: channel,
         userKey: userKey,
         confirm: confirm,
+        onTextDelta: onTextDelta,
       )).text;
 
   /// One agent turn with explicit completion status for durable queues/jobs.
@@ -1106,6 +1127,7 @@ class TikoRuntime {
     PermissionGate? gateOverride,
     AgentConfig? configOverride,
     Set<String>? toolFilter,
+    void Function(String delta)? onTextDelta,
   }) async {
     if (!_lock.tryAcquire(sessionId)) {
       return const ChatRunResult(
@@ -1191,6 +1213,10 @@ class TikoRuntime {
         synthLlm: _router.providers.isEmpty ? null : _router.providers.values.first,
         shouldStop: () => safety.stopRequested,
         config: configOverride ?? defaultConfig,
+        // P1-4: sanitize each delta before it reaches a live chat message;
+        // the final reply is additionally guarded below as usual.
+        onTextDelta:
+            onTextDelta == null ? null : (d) => onTextDelta(_sanitizer.output(d)),
         audit: (call, verdict, result) {
           evidence.recordCall(result.callId, call.name, result.content);
           unawaited(plugins.dispatchAfterToolCall(
@@ -1474,7 +1500,7 @@ class TikoRuntime {
     // Track execution metrics
     int tokenCount = 0;
     int toolCallCount = 0;
-    double cost = 0.0;
+    final double cost = 0.0;
 
     try {
       final outcome = await chatWithStatus(
@@ -1748,6 +1774,9 @@ class TikoRuntime {
     } catch (_) {}
     try {
       await scriptRunner.close();
+    } catch (_) {}
+    try {
+      await _sandbox?.dispose();
     } catch (_) {}
     try {
       if (_baseMemory is SafeMemoryStore) {

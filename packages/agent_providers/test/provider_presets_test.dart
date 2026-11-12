@@ -75,7 +75,7 @@ void main() {
       );
 
       final events = await provider
-          .chat(ChatRequest(
+          .chat(const ChatRequest(
         messages: [ChatMessage(role: 'user', content: 'halo')],
         stream: false,
       ))

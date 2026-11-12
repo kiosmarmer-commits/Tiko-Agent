@@ -46,5 +46,5 @@ class _TestTool implements Tool {
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async =>
-      ToolResult(callId: '', content: 'ok');
+      const ToolResult(callId: '', content: 'ok');
 }

@@ -97,10 +97,10 @@ void main() {
 
   test('HttpMemoryProvider retries then surfaces failures', () async {
     final provider = HttpMemoryProvider(
-      config: HttpMemoryProviderConfig(
+      config: const HttpMemoryProviderConfig(
         baseUrl: 'http://127.0.0.1:1',
         maxRetries: 1,
-        retryDelay: const Duration(milliseconds: 10),
+        retryDelay: Duration(milliseconds: 10),
       ),
       name: 'dead',
     );

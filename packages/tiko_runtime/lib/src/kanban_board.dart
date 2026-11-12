@@ -205,7 +205,7 @@ class KanbanTool implements Tool {
   final KanbanBoard board;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'kanban',
         description:
             'Papan Kanban durable lintas proses: tambah/klaim/selesaikan '

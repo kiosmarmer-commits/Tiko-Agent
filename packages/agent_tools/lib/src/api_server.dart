@@ -111,7 +111,7 @@ class ApiRoute {
 
   Map<String, dynamic> toOpenApiJson(String basePath) {
     return {
-      '${method.value.toLowerCase()}': {
+      method.value.toLowerCase(): {
         'summary': description.isNotEmpty ? description : path,
         'description': description,
         'parameters': parameters.map((p) => p.toOpenApiJson()).toList(),

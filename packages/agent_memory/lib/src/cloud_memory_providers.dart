@@ -112,7 +112,13 @@ List<MemoryRecord> parseCloudHits(dynamic json, int k, {String? ownerKey}) {
     items = json;
   } else if (json is Map) {
     items = [
-      for (final key in const ['results', 'memories', 'records', 'data'])
+      for (final key in const [
+        'results',
+        'memories',
+        'records',
+        'data',
+        'matches',
+      ])
         if (json[key] is List) ...(json[key] as List),
     ];
   } else {
@@ -219,6 +225,176 @@ class HonchoMemoryProvider implements MemoryProvider {
     await res.drain<void>();
     if (res.statusCode >= 400) {
       throw HttpException('honcho forget failed: HTTP ${res.statusCode}');
+    }
+  }
+
+  Future<void> close() async => _client.close(force: true);
+}
+
+/// [Supermemory](https://supermemory.ai) hosted memory.
+///
+/// - upsert  → `POST {base}/v3/documents` with `{"content": ..., "metadata":
+///   {"user_id": ...}}`
+/// - search  → `POST {base}/v3/search` with `{"q": ..., "limit": k}`;
+///   hits are read from `matches` (tolerant parser also accepts other shapes)
+/// - forget  → `DELETE {base}/v3/documents/{id}` (404 treated as success)
+class SupermemoryMemoryProvider implements MemoryProvider {
+  SupermemoryMemoryProvider({
+    required String apiKey,
+    this.userId,
+    String baseUrl = 'https://api.supermemory.ai',
+    HttpClient? client,
+    this.timeout = const Duration(seconds: 10),
+  })  : name = 'supermemory',
+        _base = baseUrl.endsWith('/')
+            ? baseUrl.substring(0, baseUrl.length - 1)
+            : baseUrl,
+        _apiKey = apiKey,
+        _client = client ?? HttpClient();
+
+  @override
+  final String name;
+
+  /// Default user scope when a record carries no [MemoryRecord.ownerKey].
+  final String? userId;
+  final String _base;
+  final String _apiKey;
+  final HttpClient _client;
+  final Duration timeout;
+
+  String _scope(String? ownerKey) => ownerKey ?? userId ?? 'tiko-agent';
+
+  @override
+  Future<void> upsert(MemoryRecord record) async {
+    final req = await _client
+        .postUrl(Uri.parse('$_base/v3/documents'))
+      ..headers.contentType = ContentType.json
+      ..headers.set('Authorization', 'Bearer $_apiKey')
+      ..write(jsonEncode({
+        'content': record.text,
+        'metadata': {
+          'user_id': _scope(record.ownerKey),
+          if (record.tags.isNotEmpty) 'tags': record.tags,
+        },
+      }));
+    final res = await req.close().timeout(timeout);
+    await res.drain<void>();
+    if (res.statusCode >= 400) {
+      throw HttpException('supermemory upsert failed: HTTP ${res.statusCode}');
+    }
+  }
+
+  @override
+  Future<List<MemoryRecord>> search(
+    String query, {
+    int k = 8,
+    String? ownerKey,
+  }) async {
+    final req = await _client
+        .postUrl(Uri.parse('$_base/v3/search'))
+      ..headers.contentType = ContentType.json
+      ..headers.set('Authorization', 'Bearer $_apiKey')
+      ..write(jsonEncode({'q': query, 'limit': k}));
+    final res = await req.close().timeout(timeout);
+    final body = await res.transform(utf8.decoder).join();
+    if (res.statusCode >= 400) {
+      throw HttpException('supermemory search failed: HTTP ${res.statusCode}');
+    }
+    return parseCloudHits(jsonDecode(body), k, ownerKey: ownerKey);
+  }
+
+  @override
+  Future<void> forget(String id) async {
+    final req = await _client.deleteUrl(Uri.parse('$_base/v3/documents/$id'))
+      ..headers.set('Authorization', 'Bearer $_apiKey');
+    final res = await req.close().timeout(timeout);
+    await res.drain<void>();
+    if (res.statusCode >= 400 && res.statusCode != 404) {
+      throw HttpException('supermemory forget failed: HTTP ${res.statusCode}');
+    }
+  }
+
+  Future<void> close() async => _client.close(force: true);
+}
+
+/// [Hindsight](https://github.com/vectra-dev/hindsight) memory service
+/// (self-hosted or cloud).
+///
+/// - upsert  → `POST {base}/v1/memories` with
+///   `{"text": ..., "user_id": ...}`
+/// - search  → `POST {base}/v1/memories/search` with
+///   `{"query": ..., "limit": k}`
+/// - forget  → `DELETE {base}/v1/memories/{id}` (404 treated as success)
+class HindsightMemoryProvider implements MemoryProvider {
+  HindsightMemoryProvider({
+    required String apiKey,
+    this.userId,
+    String baseUrl = 'http://localhost:8000',
+    HttpClient? client,
+    this.timeout = const Duration(seconds: 10),
+  })  : name = 'hindsight',
+        _base = baseUrl.endsWith('/')
+            ? baseUrl.substring(0, baseUrl.length - 1)
+            : baseUrl,
+        _apiKey = apiKey,
+        _client = client ?? HttpClient();
+
+  @override
+  final String name;
+
+  /// Default user scope when a record carries no [MemoryRecord.ownerKey].
+  final String? userId;
+  final String _base;
+  final String _apiKey;
+  final HttpClient _client;
+  final Duration timeout;
+
+  String _scope(String? ownerKey) => ownerKey ?? userId ?? 'tiko-agent';
+
+  @override
+  Future<void> upsert(MemoryRecord record) async {
+    final req = await _client
+        .postUrl(Uri.parse('$_base/v1/memories'))
+      ..headers.contentType = ContentType.json
+      ..headers.set('Authorization', 'Bearer $_apiKey')
+      ..write(jsonEncode({
+        'text': record.text,
+        'user_id': _scope(record.ownerKey),
+      }));
+    final res = await req.close().timeout(timeout);
+    await res.drain<void>();
+    if (res.statusCode >= 400) {
+      throw HttpException('hindsight upsert failed: HTTP ${res.statusCode}');
+    }
+  }
+
+  @override
+  Future<List<MemoryRecord>> search(
+    String query, {
+    int k = 8,
+    String? ownerKey,
+  }) async {
+    final req = await _client
+        .postUrl(Uri.parse('$_base/v1/memories/search'))
+      ..headers.contentType = ContentType.json
+      ..headers.set('Authorization', 'Bearer $_apiKey')
+      ..write(jsonEncode({'query': query, 'limit': k}));
+    final res = await req.close().timeout(timeout);
+    final body = await res.transform(utf8.decoder).join();
+    if (res.statusCode >= 400) {
+      throw HttpException('hindsight search failed: HTTP ${res.statusCode}');
+    }
+    return parseCloudHits(jsonDecode(body), k, ownerKey: ownerKey);
+  }
+
+  @override
+  Future<void> forget(String id) async {
+    final req = await _client.deleteUrl(Uri.parse('$_base/v1/memories/$id'))
+      ..headers.set('Authorization', 'Bearer $_apiKey');
+    final res = await req.close().timeout(timeout);
+    await res.drain<void>();
+    if (res.statusCode >= 400 && res.statusCode != 404) {
+      throw HttpException('hindsight forget failed: HTTP ${res.statusCode}');
     }
   }
 

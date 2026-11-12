@@ -55,7 +55,7 @@ class AgentTeamTool implements Tool {
     ));
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'agent_team',
         description:
             'Jalankan tim multi-agent pada DAG tugas; tugas independen '

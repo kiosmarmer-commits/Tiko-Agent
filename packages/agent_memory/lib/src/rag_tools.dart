@@ -10,7 +10,7 @@ class RagIngestTool implements Tool {
   final RagPipeline _pipeline;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'rag_ingest',
         description:
             'Indeks dokumen ke store RAG hibrida (chunking paragraf + dense + BM25).',
@@ -53,7 +53,7 @@ class RagQueryTool implements Tool {
   final RagPipeline _pipeline;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'rag_query',
         description:
             'Retrieval hibrida (dense + BM25 + RRF) di atas dokumen yang '

@@ -287,7 +287,7 @@ class EvalHarness {
       try {
         turn = await runner(c);
       } catch (e) {
-        turn = EvalTurnResult(text: '', success: false, latencyMs: 0);
+        turn = const EvalTurnResult(text: '', success: false, latencyMs: 0);
       }
       watch.stop();
       results.add(_judge(c, turn, watch.elapsedMilliseconds));

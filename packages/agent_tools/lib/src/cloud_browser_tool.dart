@@ -13,7 +13,7 @@ class CloudBrowserTool implements Tool {
   CloudBrowserHandle? _handle;
 
   @override
-  ToolSpec get spec => ToolSpec(
+  ToolSpec get spec => const ToolSpec(
         name: 'cloud_browser',
         description:
             'Browse via cloud browser backend (Browserbase/Browser Use) '
