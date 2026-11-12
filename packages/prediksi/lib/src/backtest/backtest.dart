@@ -120,9 +120,9 @@ class Backtest {
     void tutup(int i) {
       if (posisi != 0 && indeksMasuk != null) {
         transaksi.add(Transaksi(
-          indeksMasuk: indeksMasuk!,
+          indeksMasuk: indeksMasuk,
           indeksKeluar: i,
-          hargaMasuk: data[indeksMasuk!].close,
+          hargaMasuk: data[indeksMasuk].close,
           hargaKeluar: data[i].close,
           posisiLong: posisi == 1,
         ));

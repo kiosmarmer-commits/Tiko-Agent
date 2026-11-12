@@ -3,6 +3,13 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    # Weekly integration re-run (loopback e2e mocks: MCP, gateways, LLM API).
+    - cron: '0 3 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   dart:
@@ -283,3 +290,46 @@ jobs:
         shell: bash
         run: |
           [ -f .ci-flutter-testfailures.txt ] && sed -n '11,20p' .ci-flutter-testfailures.txt | sed 's/^/::error ::/' || true
+
+  termux-eco:
+    name: Termux/eco host simulation (core tests + JSON memory fallback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.4
+      - name: Resolve workspace dependencies
+        run: dart pub get
+      - name: Core package tests (Termux-relevant set)
+        run: |
+          set -euo pipefail
+          for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
+            echo "== dart test: $dir =="
+            (cd "$dir" && dart test)
+          done
+      - name: Verify forced JSON memory fallback (TIKO_FORCE_JSON_MEMORY=1)
+        run: dart test packages/tiko_runtime/test/eco_memory_backend_test.dart
+
+  android-apk:
+    name: Flutter Android debug APK build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          cache: true
+      - name: Generate Android platform scaffold and build debug APK
+        working-directory: apps/agent_flutter
+        run: |
+          set -euo pipefail
+          flutter create --platforms=android --org id.kiosmarmer.tiko .
+          flutter pub get
+          flutter build apk --debug

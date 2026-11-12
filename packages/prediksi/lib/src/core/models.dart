@@ -1,4 +1,4 @@
-/// Model data inti yang dipakai semua metode.
+// Model data inti yang dipakai semua metode.
 
 /// Satu candle harga (Open, High, Low, Close, Volume).
 class Candle {

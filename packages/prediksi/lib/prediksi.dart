@@ -1,7 +1,7 @@
 /// Paket prediksi: kumpulan metode prediksi pasar/ekonomi dalam Dart murni.
 ///
 /// Peringatan: ini alat analisis dan edukasi, bukan saran keuangan.
-library prediksi;
+library;
 
 export 'src/backtest/backtest.dart';
 export 'src/core/math_utils.dart';
