@@ -73,8 +73,11 @@ void main() {
       markTestSkipped('libsqlite3 tidak tersedia di lingkungan ini');
       return;
     }
+    final sqliteSync = await VaultSync.apply(sqlite, vault);
+    expect(sqliteSync.added, ['catatan/satu.md']);
     final sqliteStats = await sqlite.stats();
     expect(sqliteStats.keys, ['catatan/satu.md']);
+    expect(sqliteStats['catatan/satu.md']!.hash, isNotEmpty);
     await sqlite.close();
   });
 }
