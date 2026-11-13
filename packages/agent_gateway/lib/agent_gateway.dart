@@ -9,6 +9,7 @@ export 'src/discord_voice.dart';
 export 'src/nacl_secretbox.dart';
 export 'src/xchacha20_aead.dart';
 export 'src/email_gateway.dart';
+export 'src/imap_client.dart';
 export 'src/text_split.dart';
 export 'src/stt.dart';
 export 'src/tts.dart';

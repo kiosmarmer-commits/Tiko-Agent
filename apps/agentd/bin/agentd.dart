@@ -138,6 +138,8 @@ Future<void> main(List<String> args) async {
   TelegramGateway? tg;
   DiscordGateway? discord;
   EmailGateway? email;
+  ImapPoller? imap;
+  StreamSubscription<ImapEmail>? imapSub;
   HttpApiServer? api;
   OpenAiCompatServer? openAiServer;
 
@@ -184,6 +186,50 @@ Future<void> main(List<String> args) async {
     );
     gateways.add(email);
     stdout.writeln('Email SMTP aktif');
+  }
+
+  // Email inbound via IMAP poll (TLS-only, allowlist wajib).
+  final imapHost = Platform.environment['IMAP_HOST'];
+  if (imapHost != null && imapHost.isNotEmpty) {
+    final imapUser = Platform.environment['IMAP_USER'] ?? '';
+    final imapPass = Platform.environment['IMAP_PASSWORD'] ?? '';
+    final imapAllow = (Platform.environment['IMAP_ALLOW'] ?? '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    if (imapUser.isEmpty || imapPass.isEmpty || imapAllow.isEmpty) {
+      stderr.writeln('IMAP_USER, IMAP_PASSWORD, dan IMAP_ALLOW wajib');
+      exit(1);
+    }
+    if (email == null) {
+      stderr.writeln(
+        'IMAP_HOST butuh jalur balasan SMTP: set EMAIL_FROM/SMTP_HOST juga',
+      );
+      exit(1);
+    }
+    final emailGateway = email;
+    imap = ImapPoller(
+      host: imapHost,
+      port: int.tryParse(Platform.environment['IMAP_PORT'] ?? '') ?? 993,
+      username: imapUser,
+      password: imapPass,
+      allowSenders: imapAllow,
+      pollInterval: Duration(
+        seconds:
+            int.tryParse(Platform.environment['IMAP_POLL_SEC'] ?? '') ?? 60,
+      ),
+      onError: stderr.writeln,
+    );
+    imapSub = imap.emails.listen((m) {
+      emailGateway.pushInbound(
+        fromAddr: m.from,
+        subject: m.subject,
+        body: m.body,
+      );
+    });
+    imap.start();
+    stdout.writeln('Email IMAP inbound aktif (${imap.host}:${imap.port})');
   }
 
   // Telegram
@@ -721,6 +767,8 @@ Future<void> main(List<String> args) async {
     }
     await tg?.close();
     await discord?.close();
+    await imapSub?.cancel();
+    await imap?.stop();
     await email?.close();
     await api?.stop();
     await openAiServer?.stop();
