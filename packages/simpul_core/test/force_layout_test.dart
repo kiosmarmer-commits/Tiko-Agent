@@ -55,10 +55,10 @@ void main() {
     }
     expect(maxEdgeSq, lessThan(300 * 300));
 
-    var minX = graph.positionsX.reduce((a, b) => a < b ? a : b);
-    var maxX = graph.positionsX.reduce((a, b) => a > b ? a : b);
-    var minY = graph.positionsY.reduce((a, b) => a < b ? a : b);
-    var maxY = graph.positionsY.reduce((a, b) => a > b ? a : b);
+    final minX = graph.positionsX.reduce((a, b) => a < b ? a : b);
+    final maxX = graph.positionsX.reduce((a, b) => a > b ? a : b);
+    final minY = graph.positionsY.reduce((a, b) => a < b ? a : b);
+    final maxY = graph.positionsY.reduce((a, b) => a > b ? a : b);
     final spread = (maxX - minX) + (maxY - minY);
     expect(spread, greaterThan(300));
   });

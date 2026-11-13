@@ -169,6 +169,9 @@ abstract class VaultIndex {
 
   /// Removes notes by path together with their derived rows.
   Future<void> removePaths(List<String> paths);
+
+  /// Cached scan state per path (NFR-S05) — the input for incremental diff.
+  Future<Map<String, ({int mtimeNs, int sizeBytes, String hash})>> stats();
   Future<List<SearchHit>> search(String query, {int limit = 20});
   Future<List<String>> backlinks(String notePath);
   Future<VaultHealthReport> health();
@@ -178,9 +181,10 @@ abstract class VaultIndex {
 /// Resolves a link target to a note path. Obsidian resolves by basename
 /// anywhere in the vault (shortest path wins) or by exact vault-relative path.
 String? resolveTarget(String target, Map<String, String> byBasename, Map<String, String> byPath) {
-  final direct = byPath[target] ?? byPath['$target.md'];
+  final stripped = target.replaceAll(RegExp(r'\.md$'), '');
+  final direct = byPath[target] ?? byPath['$target.md'] ?? byPath[stripped];
   if (direct != null) return direct;
-  return byBasename[target] ?? byBasename['$target.md'];
+  return byBasename[target] ?? byBasename['$target.md'] ?? byBasename[stripped];
 }
 
 /// Parses a search query (FR-30): `tag:`, `path:`, `prop:key=value`,
@@ -478,6 +482,20 @@ class SqliteVaultIndex implements VaultIndex {
   }
 
   @override
+  Future<Map<String, ({int mtimeNs, int sizeBytes, String hash})>> stats() async {
+    return {
+      for (final row in db.select(
+        'SELECT path, mtime_ns, size_bytes, content_hash FROM notes',
+      ))
+        row['path'] as String: (
+          mtimeNs: row['mtime_ns'] as int,
+          sizeBytes: row['size_bytes'] as int,
+          hash: row['content_hash'] as String,
+        ),
+    };
+  }
+
+  @override
   Future<List<SearchHit>> search(String query, {int limit = 20}) async {
     final parsed = SearchQuery.parse(query);
     if (parsed.isEmpty) return const [];
@@ -728,6 +746,19 @@ class JsonVaultIndex implements VaultIndex {
   Map<String, String> _byPath() => {
         for (final note in _notes) note.path.replaceAll(RegExp(r'\.md$'), ''): note.path,
       };
+
+  @override
+  Future<Map<String, ({int mtimeNs, int sizeBytes, String hash})>> stats() async {
+    _ensureLoaded();
+    return {
+      for (final note in _notes)
+        note.path: (
+          mtimeNs: note.mtimeNs,
+          sizeBytes: note.sizeBytes,
+          hash: note.contentHash,
+        ),
+    };
+  }
 
   @override
   Future<List<SearchHit>> search(String query, {int limit = 20}) async {

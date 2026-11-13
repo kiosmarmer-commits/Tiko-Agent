@@ -27,6 +27,12 @@ Future<void> main(List<String> args) async {
         await _layout(rest);
       case 'semsearch':
         await _semsearch(rest);
+      case 'sync':
+        await _sync(rest);
+      case 'clusters':
+        await _clusters(rest);
+      case 'suggest-links':
+        await _suggestLinks(rest);
       case 'bench':
         await _bench(rest);
       case '--help' || 'help' || '-h':
@@ -68,6 +74,13 @@ Penggunaan:
       Pencarian semantik atas indeks vektor (.simpul/vectors.json).
   simpul search <vault> "kueri" [--hybrid]
       --hybrid menggabungkan leksikal + vektor dengan RRF (AI-20).
+  simpul sync <vault>
+      Pembaruan inkremental: hanya file berubah/baru/hapus yang diproses
+      (NFR-S05, NFR-08).
+  simpul clusters <vault>
+      Deteksi komunitas Louvain (GRA-L05); id komunitas per node.
+  simpul suggest-links <vault> [--limit N] [--min-score S]
+      Saran tautan antar catatan serupa yang belum tertaut (AI-25).
   simpul bench <vault> [--iterations N]
       Benchmark scan/index/search/backlink/CSR/inkremental/vektor (BM-02..07).
 ''');
@@ -330,6 +343,78 @@ Future<void> _semsearch(List<String> args) async {
   } finally {
     await semantic.close();
   }
+}
+
+Future<void> _sync(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final file = _resolveIndexFile(vault, opts['out']);
+  final index =
+      SqliteVaultIndex.tryOpen(file.path) ?? JsonVaultIndex(p.setExtension(file.path, '.json'));
+  try {
+    final result = await VaultSync.apply(index, vault);
+    stdout.writeln(jsonEncode({
+      'backend': index is SqliteVaultIndex ? 'sqlite' : 'json',
+      ...result.toJson(),
+      'detail': {
+        'added': result.added,
+        'updated': result.updated,
+        'removed': result.removed,
+      },
+    }));
+  } finally {
+    await index.close();
+  }
+}
+
+Future<void> _clusters(List<String> args) async {
+  final vault = _positional(args);
+  final notes = await VaultScanner.scan(vault);
+  final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
+  final result = CommunityDetector.louvain(graph);
+  final counts = <int, int>{};
+  for (final c in result.communityOf) {
+    counts[c] = (counts[c] ?? 0) + 1;
+  }
+  stdout.writeln(jsonEncode({
+    'community_count': result.communityCount,
+    'modularity': result.modularity,
+    'sizes': {
+      for (final key in counts.keys.toList()..sort())
+        '$key': counts[key],
+    },
+    'nodes': [
+      for (var i = 0; i < graph.nodeCount; i++)
+        {
+          'id': i,
+          'path': graph.paths[i],
+          'community': result.communityOf[i],
+        },
+    ],
+  }));
+}
+
+Future<void> _suggestLinks(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final limit = int.parse(opts['limit'] ?? '20');
+  final minScore = double.parse(opts['min-score'] ?? '${LinkSuggester.defaultMinScore}');
+  final notes = await VaultScanner.scan(vault);
+  final suggestions = await LinkSuggester.suggest(
+    notes.map((n) => n.toIndexed()).toList(),
+    limit: limit,
+    minScore: minScore,
+  );
+  stdout.writeln(jsonEncode({
+    'suggestions': [
+      for (final s in suggestions)
+        {
+          'from': s.fromPath,
+          'to': s.toPath,
+          'score': s.score,
+        },
+    ],
+  }));
 }
 
 Future<void> _health(List<String> args) async {
