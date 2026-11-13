@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:simpul/simpul.dart' show SimpulBridge;
 import 'package:simpul_core/simpul_core.dart';
 
 Future<void> main(List<String> args) async {
@@ -27,6 +28,8 @@ Future<void> main(List<String> args) async {
         await _layout(rest);
       case 'viewport':
         await _viewport(rest);
+      case 'serve':
+        await _serve(rest);
       case 'semsearch':
         await _semsearch(rest);
       case 'sync':
@@ -76,6 +79,9 @@ Penggunaan:
       memakai coarsening Louvain (GRA-L04).
   simpul viewport <vault> [--min-x A --min-y B --max-x C --max-y D]
       Culling viewport via quadtree (GRA-R02); node dalam persegi panjang.
+  simpul serve <vault> [--token T]
+      Server MCP "Simpul Bridge" (AI-44) via stdio JSON-RPC: search,
+      semsearch, health, backlinks, read_note, clusters, suggest_links.
   simpul semsearch <vault> "kueri" [--limit N]
       Pencarian semantik atas indeks vektor (.simpul/vectors.json).
   simpul search <vault> "kueri" [--hybrid]
@@ -157,7 +163,7 @@ Future<void> _index(List<String> args) async {
   final scanned = watch.elapsedMilliseconds;
   final file = _resolveIndexFile(vault, outDir);
   final sqlite = SqliteVaultIndex.tryOpen(file.path);
-  final index = sqlite ??
+  final VaultIndex index = sqlite ??
       JsonVaultIndex(p.setExtension(file.path, '.json'));
   try {
     await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
@@ -336,6 +342,18 @@ Future<void> _viewport(List<String> args) async {
   }));
 }
 
+Future<void> _serve(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final bridge = SimpulBridge(vaultDir: vault, token: opts['token']);
+  await for (final line
+      in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    if (line.trim().isEmpty) continue;
+    final response = await bridge.handleLine(line);
+    if (response.isNotEmpty) stdout.writeln(response);
+  }
+}
+
 Future<void> _semsearch(List<String> args) async {
   final positional = args.where((a) => !a.startsWith('--')).toList();
   if (positional.length < 2) {
@@ -384,7 +402,7 @@ Future<void> _sync(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {});
   final file = _resolveIndexFile(vault, opts['out']);
-  final index =
+  final VaultIndex index =
       SqliteVaultIndex.tryOpen(file.path) ?? JsonVaultIndex(p.setExtension(file.path, '.json'));
   try {
     final result = await VaultSync.apply(index, vault);

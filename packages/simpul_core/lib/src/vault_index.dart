@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'graph_cache.dart';
 import 'note_parser.dart';
 
 /// One indexed note row (PRD DATA-03 `notes` + derived rows).
@@ -240,7 +241,7 @@ class SearchQuery {
 /// SQLite-backed index per PRD §3. Returns null when the native sqlite3
 /// library is unavailable (same graceful-degradation contract as
 /// `SqliteMemoryStore.tryOpen` in agent_memory).
-class SqliteVaultIndex implements VaultIndex {
+class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
   SqliteVaultIndex._(this.db);
 
   final Database db;
@@ -284,6 +285,14 @@ class SqliteVaultIndex implements VaultIndex {
       )
     ''');
     db.execute('CREATE INDEX IF NOT EXISTS idx_notes_mtime ON notes(mtime_ns)');
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS graph_layout (
+        kind TEXT PRIMARY KEY,
+        version TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
     db.execute('''
       CREATE TABLE IF NOT EXISTS links (
         id INTEGER PRIMARY KEY,
@@ -496,6 +505,33 @@ class SqliteVaultIndex implements VaultIndex {
   }
 
   @override
+  Future<void> saveGraphCache({
+    required String kind,
+    required String version,
+    required Map<String, Object?> payload,
+  }) async {
+    db.execute(
+      'INSERT OR REPLACE INTO graph_layout (kind, version, payload, created_at) '
+      'VALUES (?, ?, ?, ?)',
+      [kind, version, jsonEncode(payload), DateTime.now().millisecondsSinceEpoch],
+    );
+  }
+
+  @override
+  Future<Map<String, Object?>?> loadGraphCache({
+    required String kind,
+    required String version,
+  }) async {
+    final rows = db.select(
+      'SELECT version, payload FROM graph_layout WHERE kind = ?',
+      [kind],
+    );
+    if (rows.isEmpty || rows.first['version'] != version) return null;
+    return (jsonDecode(rows.first['payload'] as String) as Map)
+        .cast<String, Object?>();
+  }
+
+  @override
   Future<List<SearchHit>> search(String query, {int limit = 20}) async {
     final parsed = SearchQuery.parse(query);
     if (parsed.isEmpty) return const [];
@@ -648,12 +684,63 @@ class SqliteVaultIndex implements VaultIndex {
 /// Durable JSON index — fallback when native sqlite3 is unavailable.
 /// Same interface, same semantics; search is a scored linear scan which is
 /// sufficient for tests and small vaults (T1).
-class JsonVaultIndex implements VaultIndex {
+class JsonVaultIndex implements VaultIndex, GraphCacheStore {
   JsonVaultIndex(this.filePath);
 
   final String filePath;
   final List<IndexedNote> _notes = [];
   bool _loaded = false;
+  Map<String, Map<String, Object?>>? _graphCache;
+
+  String get _graphCachePath =>
+      p.join(p.dirname(filePath), 'graph_cache.json');
+
+  void _ensureGraphCacheLoaded() {
+    if (_graphCache != null) return;
+    _graphCache = {};
+    final file = File(_graphCachePath);
+    if (!file.existsSync()) return;
+    try {
+      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      for (final entry in decoded.entries) {
+        if (entry.value is Map) {
+          _graphCache![entry.key] = (entry.value as Map).cast<String, Object?>();
+        }
+      }
+    } catch (_) {
+      _graphCache = {};
+    }
+  }
+
+  Future<void> _flushGraphCache() async {
+    final file = File(_graphCachePath);
+    await file.parent.create(recursive: true);
+    final tmp = '$_graphCachePath.tmp';
+    await File(tmp).writeAsString(jsonEncode(_graphCache));
+    await File(tmp).rename(_graphCachePath);
+  }
+
+  @override
+  Future<void> saveGraphCache({
+    required String kind,
+    required String version,
+    required Map<String, Object?> payload,
+  }) async {
+    _ensureGraphCacheLoaded();
+    _graphCache![kind] = {'version': version, 'payload': payload};
+    await _flushGraphCache();
+  }
+
+  @override
+  Future<Map<String, Object?>?> loadGraphCache({
+    required String kind,
+    required String version,
+  }) async {
+    _ensureGraphCacheLoaded();
+    final entry = _graphCache![kind];
+    if (entry == null || entry['version'] != version) return null;
+    return (entry['payload'] as Map?)?.cast<String, Object?>();
+  }
 
   void _ensureLoaded() {
     if (_loaded) return;
