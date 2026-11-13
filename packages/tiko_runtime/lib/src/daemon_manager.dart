@@ -15,6 +15,8 @@ class DaemonManager {
     this.configPath = 'config/agent.yaml',
     this.safe = true,
     this.agentdEntry = 'apps/agentd/bin/agentd.dart',
+    this.agentdBinary,
+    this.workspaceRoot,
   });
 
   final String dataDir;
@@ -23,7 +25,61 @@ class DaemonManager {
   final bool safe;
   final String agentdEntry;
 
+  /// Compiled agentd executable for self-contained launches (desktop app).
+  /// When set and the file exists, the daemon is spawned directly from the
+  /// binary instead of `dart run` inside a repository checkout.
+  final String? agentdBinary;
+
+  /// Working directory for the daemon process. Defaults to [findRepoRoot]
+  /// (repository root) in dev mode, or the current directory when a bundled
+  /// binary is used without an explicit workspace.
+  final String? workspaceRoot;
+
   RuntimeLock get lock => RuntimeLock(p.join(dataDir, 'tiko.lock'));
+
+  /// Pure launch-plan resolver (testable): returns the executable and argv
+  /// used to start the daemon, plus the working directory.
+  static ({String exe, List<String> args, String? workingDir}) launchPlan({
+    required String dataDir,
+    required int apiPort,
+    required String configPath,
+    required bool safe,
+    String agentdEntry = 'apps/agentd/bin/agentd.dart',
+    String? agentdBinary,
+    String? workspaceRoot,
+  }) {
+    final useBinary = agentdBinary != null &&
+        agentdBinary.isNotEmpty &&
+        File(agentdBinary).existsSync();
+    if (useBinary) {
+      return (
+        exe: agentdBinary,
+        args: ['--api', if (!safe) '--no-safe'],
+        workingDir: workspaceRoot,
+      );
+    }
+    return (
+      exe: 'dart',
+      args: ['run', agentdEntry, '--api', if (!safe) '--no-safe'],
+      workingDir: workspaceRoot ?? findRepoRoot(),
+    );
+  }
+
+  /// Walks up from the current directory looking for the repository root
+  /// (a directory containing pubspec.yaml and apps/).
+  static String? findRepoRoot() {
+    Directory d = Directory.current;
+    for (var i = 0; i < 6; i++) {
+      if (File(p.join(d.path, 'pubspec.yaml')).existsSync() &&
+          Directory(p.join(d.path, 'apps')).existsSync()) {
+        return d.path;
+      }
+      final parent = d.parent;
+      if (parent.path == d.path) break;
+      d = parent;
+    }
+    return null;
+  }
 
   Future<Map<String, dynamic>> status() async {
     final info = await lock.read();
@@ -79,16 +135,27 @@ class DaemonManager {
     }
     env['AGENT_UI'] = '1';
     env['API_PORT'] = '$apiPort';
-    env['TIKO_CONFIG'] = p.absolute(configPath);
+    env['TIKO_CONFIG'] = p.absolute(
+      workspaceRoot != null && p.isAbsolute(configPath)
+          ? configPath
+          : p.join(workspaceRoot ?? Directory.current.path, configPath),
+    );
 
-    final args = ['run', agentdEntry, '--api'];
-    if (!safe) args.add('--no-safe');
+    final plan = launchPlan(
+      dataDir: dataDir,
+      apiPort: apiPort,
+      configPath: configPath,
+      safe: safe,
+      agentdEntry: agentdEntry,
+      agentdBinary: agentdBinary,
+      workspaceRoot: workspaceRoot,
+    );
     final proc = await Process.start(
-      'dart',
-      args,
+      plan.exe,
+      plan.args,
       environment: env,
       mode: ProcessStartMode.detachedWithStdio,
-      workingDirectory: _findRoot(),
+      workingDirectory: plan.workingDir ?? Directory.current.path,
     );
     proc.stdout.listen(log.add);
     proc.stderr.listen(log.add);
@@ -191,17 +258,5 @@ class DaemonManager {
     final random = Random.secure();
     final bytes = List<int>.generate(32, (_) => random.nextInt(256));
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  String _findRoot() {
-    var d = Directory.current;
-    for (var i = 0; i < 6; i++) {
-      if (File(p.join(d.path, 'pubspec.yaml')).existsSync() &&
-          Directory(p.join(d.path, 'apps')).existsSync()) {
-        return d.path;
-      }
-      d = d.parent;
-    }
-    return Directory.current.path;
   }
 }

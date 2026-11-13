@@ -67,6 +67,7 @@ Monorepo root `pubspec.yaml` memiliki workspace `agent_core`, `agent_calc`, `age
 | Telegram/Discord/Email outbound/WhatsApp webhook/Slack webhook | Implemented bersyarat; SMTP timeout hardening ada pada bundle lokal; Email inbound belum di-wire ke daemon |
 | Video generation (P2-1, Hermes-parity) | Implemented bersyarat: `features.video_generation: true` + `features.fal_api_key` → tool `generate_video` via FAL queue API (submit → poll terbatas → download, simpan ke `videos/`); tanpa kredensial tool tidak teregistrasi (fail-closed) |
 | Desktop build Flutter client (P2-2) | CI meng-generate scaffolding platform (`flutter create --platforms=...`) dan membangun artifact desktop Linux/Windows/macOS untuk `apps/agent_flutter` |
+| Desktop self-contained bootstrap (P2-4) | App men-spawn daemon `agentd` bundled sendiri (`dart compile exe` di CI + `--dart-define=AGENTD_BIN`), home `~/.tiko-agent`, config bootstrap otomatis, token dibaca dari `data/api.token` (agentd yang generate), daemon outlives app, stop hanya via `/v1/shutdown` terautentikasi |
 | Calculator exact decimal + isolate sandbox | Implemented |
 | OS sandbox | Conditional; efektivitas bergantung host dan jenis sandbox |
 

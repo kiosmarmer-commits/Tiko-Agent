@@ -451,6 +451,47 @@ providers:
     expect(cfg.workspace, value);
   });
 
+  test('DaemonManager.launchPlan memilih binary bundled vs dart run', () {
+    final temp = Directory.systemTemp.createTempSync('tiko_launch_plan');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final bin = File('${temp.path}/agentd')..writeAsStringSync('#!/bin/sh\n');
+
+    // Binary ada → spawn langsung binary, tanpa dart run.
+    final bundled = DaemonManager.launchPlan(
+      dataDir: '${temp.path}/data',
+      apiPort: 8787,
+      configPath: '${temp.path}/config/agent.yaml',
+      safe: true,
+      agentdBinary: bin.path,
+      workspaceRoot: temp.path,
+    );
+    expect(bundled.exe, bin.path);
+    expect(bundled.args, ['--api']);
+    expect(bundled.workingDir, temp.path);
+
+    // Binary tidak ada → fallback dart run di repo root.
+    final dev = DaemonManager.launchPlan(
+      dataDir: '${temp.path}/data',
+      apiPort: 8787,
+      configPath: 'config/agent.yaml',
+      safe: true,
+      agentdBinary: '${temp.path}/tidak-ada',
+    );
+    expect(dev.exe, 'dart');
+    expect(dev.args, ['run', 'apps/agentd/bin/agentd.dart', '--api']);
+    expect(dev.workingDir, isNotNull);
+
+    // unsafe menambahkan --no-safe di kedua mode.
+    final unsafe = DaemonManager.launchPlan(
+      dataDir: '${temp.path}/data',
+      apiPort: 8787,
+      configPath: 'config/agent.yaml',
+      safe: false,
+      agentdBinary: bin.path,
+    );
+    expect(unsafe.args, ['--api', '--no-safe']);
+  });
+
   test('DaemonManager generates a cryptographically random token shape', () {
     final manager = DaemonManager(dataDir: 'data', apiPort: 8787);
     final tokenA = manager.envToken();

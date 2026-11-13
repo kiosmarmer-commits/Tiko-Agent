@@ -3,16 +3,33 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
+import 'daemon/desktop_daemon.dart';
 import 'ui/chat_controller.dart';
 import 'ui/status_view.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const token = String.fromEnvironment('API_TOKEN', defaultValue: '');
-  const base = String.fromEnvironment(
+  var token = const String.fromEnvironment('API_TOKEN', defaultValue: '');
+  var base = const String.fromEnvironment(
     'API_BASE',
     defaultValue: 'http://127.0.0.1:8787',
   );
+  // Self-contained desktop bootstrap (Hermes-parity): spawn/reuse the bundled
+  // agentd daemon so the app works without a manually started daemon. Falls
+  // back to the dart-define connection settings when bootstrap does not apply
+  // (web/Android) or fails.
+  try {
+    final conn = await DesktopDaemon.ensure(
+      binaryOverride:
+          const String.fromEnvironment('AGENTD_BIN', defaultValue: ''),
+    );
+    if (conn != null) {
+      base = conn.baseUrl;
+      token = conn.token;
+    }
+  } catch (_) {
+    // Bootstrap is best-effort; the manual connection settings still work.
+  }
   runApp(AgentApp(initialBaseUrl: base, initialToken: token));
 }
 
@@ -1003,11 +1020,56 @@ class _SettingsPageState extends State<_SettingsPage> {
           ),
         ),
         const SizedBox(height: 24),
+        _DaemonStatusCard(),
+        const SizedBox(height: 16),
         const Text(
           'Pastikan daemon berjalan dengan perintah tiko daemon start. Token berada di data/api.token (permission POSIX 0600); pindahkan nilainya secara aman ke kolom Bearer token.',
           style: TextStyle(color: _muted, height: 1.5),
         ),
       ],
+    );
+  }
+}
+
+/// Shows the self-contained desktop daemon bootstrap state (Hermes-parity):
+/// which daemon the app is using, its home directory and log location.
+class _DaemonStatusCard extends StatelessWidget {
+  final DaemonConnection? conn = DesktopDaemon.lastConnection;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = conn;
+    final String modeText;
+    final String detail;
+    if (c == null) {
+      modeText = 'manual';
+      detail = 'Daemon tidak di-bootstrap otomatis; gunakan koneksi manual di atas.';
+    } else if (c.mode == 'reuse') {
+      modeText = 'daemon berjalan (reuse)';
+      detail = 'Terhubung ke daemon yang sudah sehat di ${c.baseUrl}. Home: ${c.home}';
+    } else if (c.mode == 'started') {
+      modeText = 'daemon di-spawn otomatis';
+      detail = 'Agentd diluncurkan dari binary bundled (pid ${c.pid}). Home: ${c.home}. Log: ${c.logPath}';
+    } else {
+      modeText = c.mode;
+      detail = c.home ?? '';
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Daemon: $modeText', style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(detail, style: const TextStyle(color: _muted, height: 1.4)),
+        ],
+      ),
     );
   }
 }
