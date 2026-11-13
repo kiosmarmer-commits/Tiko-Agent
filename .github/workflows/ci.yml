@@ -291,6 +291,56 @@ jobs:
         run: |
           [ -f .ci-flutter-testfailures.txt ] && sed -n '11,20p' .ci-flutter-testfailures.txt | sed 's/^/::error ::/' || true
 
+  flutter-desktop:
+    name: Flutter desktop build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          cache: true
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev
+      - name: Generate desktop platform scaffolding
+        working-directory: apps/agent_flutter
+        shell: bash
+        run: flutter create --platforms=${{ matrix.platform }} --org dev.tiko .
+      - name: Build desktop app
+        working-directory: apps/agent_flutter
+        shell: bash
+        run: flutter build ${{ matrix.platform }} --release
+      - name: Upload desktop artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent_flutter-linux
+          path: apps/agent_flutter/build/linux/x64/release/bundle/
+      - name: Upload desktop artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent_flutter-windows
+          path: apps/agent_flutter/build/windows/x64/runner/Release/
+      - name: Upload desktop artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent_flutter-macos
+          path: apps/agent_flutter/build/macos/Build/Products/Release/*.app
+
   termux-eco:
     name: Termux/eco host simulation (core tests + JSON memory fallback)
     runs-on: ubuntu-latest

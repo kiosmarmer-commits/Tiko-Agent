@@ -275,6 +275,7 @@ class TikoConfig {
     this.toolSubsetK = 20,
     this.apiPort = 8787,
     this.enableImageGeneration = false,
+    this.enableVideoGeneration = false,
     this.enableVision = false,
     this.sandboxDockerPersistent = false,
   });
@@ -314,6 +315,9 @@ class TikoConfig {
 
   /// Enable image generation tools (FAL.ai)
   final bool enableImageGeneration;
+
+  /// Enable video generation tools (FAL.ai queue API, Hermes-parity P2-1)
+  final bool enableVideoGeneration;
 
   /// Enable vision tools (image analysis, OCR)
   final bool enableVision;
@@ -480,6 +484,11 @@ class TikoConfig {
     if (imageGenValue != null && imageGenValue is! bool) {
       issues.add(const ConfigIssue(
           'features.image_generation', 'harus berupa boolean'));
+    }
+    final videoGenValue = featuresSec['video_generation'];
+    if (videoGenValue != null && videoGenValue is! bool) {
+      issues.add(const ConfigIssue(
+          'features.video_generation', 'harus berupa boolean'));
     }
     final visionValue = featuresSec['vision'];
     if (visionValue != null && visionValue is! bool) {
@@ -1049,6 +1058,7 @@ class TikoConfig {
           ? configuredPort
           : 8787,
       enableImageGeneration: imageGenValue == true,
+      enableVideoGeneration: videoGenValue == true,
       enableVision: visionValue == true,
       sandboxDockerPersistent:
           root['sandbox'] is YamlMap &&

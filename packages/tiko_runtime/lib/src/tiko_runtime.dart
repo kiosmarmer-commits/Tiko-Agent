@@ -394,6 +394,16 @@ class TikoRuntime {
       }
     }
 
+    // Video generation breadth (P2-1): FAL queue API when the FAL key is
+    // configured; the tool is registered only when explicitly enabled.
+    VideoProvider? videoRouter;
+    if (cfg.enableVideoGeneration) {
+      final falKey = TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env);
+      if (falKey != null && falKey.isNotEmpty) {
+        videoRouter = FalVideoGenerationProvider(apiKey: falKey);
+      }
+    }
+
     final sessionStore = FileSessionStore(path: p.join(dataDir, 'sessions.json'));
 
     final registry = ToolRegistry()
@@ -406,6 +416,8 @@ class TikoRuntime {
         falApiKey: TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env),
         openaiApiKey: TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: env),
         enableImageGeneration: cfg.enableImageGeneration,
+        enableVideoGeneration: cfg.enableVideoGeneration,
+        videoProvider: videoRouter,
         enableVision: cfg.enableVision,
         imageProvider: imageRouter,
       ))

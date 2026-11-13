@@ -17,6 +17,7 @@ import 'readability.dart';
 import 'browser_tool.dart';
 import 'skill_bundle.dart';
 import 'image_generation.dart';
+import 'video_generation.dart';
 import 'vision.dart';
 import 'code_execution.dart';
 import 'batch_processing.dart';
@@ -36,6 +37,8 @@ List<Tool> createBuiltinTools({
   String? openaiApiKey,
   ImageProvider? imageProvider,
   bool enableImageGeneration = false,
+  VideoProvider? videoProvider,
+  bool enableVideoGeneration = false,
   bool enableVision = false,
   bool enableContextFiles = true,
   bool enableContextReferences = true,
@@ -118,6 +121,17 @@ List<Tool> createBuiltinTools({
         provider: 'fal',
         apiKey: falApiKey,
         outputDirectory: p.join(root, 'images'),
+      ),
+    if (enableVideoGeneration && videoProvider != null)
+      VideoGenerationTool(
+        provider: videoProvider,
+        outputDirectory: p.join(root, 'videos'),
+      )
+    else if (enableVideoGeneration && falApiKey != null)
+      VideoGenerationToolFactory.create(
+        provider: 'fal',
+        apiKey: falApiKey,
+        outputDirectory: p.join(root, 'videos'),
       ),
     if (enableVision && openaiApiKey != null)
       ...VisionToolFactory.create(

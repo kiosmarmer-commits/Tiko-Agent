@@ -65,6 +65,8 @@ Monorepo root `pubspec.yaml` memiliki workspace `agent_core`, `agent_calc`, `age
 | Scheduler cron + IANA timezone/DST + delivery ack/retry | Implemented di daemon integration |
 | HTTP/WebSocket + Web UI + Flutter client | Implemented; uji visual perangkat nyata tetap perlu |
 | Telegram/Discord/Email outbound/WhatsApp webhook/Slack webhook | Implemented bersyarat; SMTP timeout hardening ada pada bundle lokal; Email inbound belum di-wire ke daemon |
+| Video generation (P2-1, Hermes-parity) | Implemented bersyarat: `features.video_generation: true` + `features.fal_api_key` → tool `generate_video` via FAL queue API (submit → poll terbatas → download, simpan ke `videos/`); tanpa kredensial tool tidak teregistrasi (fail-closed) |
+| Desktop build Flutter client (P2-2) | CI meng-generate scaffolding platform (`flutter create --platforms=...`) dan membangun artifact desktop Linux/Windows/macOS untuk `apps/agent_flutter` |
 | Calculator exact decimal + isolate sandbox | Implemented |
 | OS sandbox | Conditional; efektivitas bergantung host dan jenis sandbox |
 

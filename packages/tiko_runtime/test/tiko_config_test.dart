@@ -29,12 +29,14 @@ providers:
       type: mock
 features:
   image_generation: true
+  video_generation: true
   vision: true
   fal_api_key: "env:FAL_KEY"
   openai_api_key: "env:OPENAI_API_KEY"
 ''');
       expect(issues, isEmpty);
       expect(cfg.enableImageGeneration, isTrue);
+      expect(cfg.enableVideoGeneration, isTrue);
       expect(cfg.enableVision, isTrue);
       expect(cfg.falApiKeyRef, 'env:FAL_KEY');
       expect(cfg.openaiApiKeyRef, 'env:OPENAI_API_KEY');

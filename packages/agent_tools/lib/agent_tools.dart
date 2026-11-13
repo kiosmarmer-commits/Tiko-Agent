@@ -43,6 +43,7 @@ export 'src/skills_hub_tool.dart';
 export 'src/cloud_browser_tool.dart';
 export 'src/browser_backends.dart';
 export 'src/image_generation.dart' show ImageProvider;
+export 'src/video_generation.dart';
 export 'src/image_providers.dart';
 export 'src/session_search_tool.dart';
 export 'src/tool_search.dart';
