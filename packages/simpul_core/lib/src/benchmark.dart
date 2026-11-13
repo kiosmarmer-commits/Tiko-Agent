@@ -1,6 +1,9 @@
 import 'package:path/path.dart' as p;
 
+import 'embedding.dart';
 import 'graph_csr.dart';
+import 'hybrid_search.dart';
+import 'semantic_index.dart';
 import 'vault_index.dart';
 import 'vault_scanner.dart';
 
@@ -79,8 +82,103 @@ class BenchmarkRunner {
     report['bm06_edges'] = graph.edgeCount;
     report['bm06_orphans'] = graph.orphanNodes().length;
 
+    await _runIncrementalBench(index, notes, report);
+    await _runVectorBench(notes, report);
+
     await index.close();
     return report;
+  }
+
+  /// BM-04 (NFR-08): upsert a changed subset and measure time-to-indexed.
+  Future<void> _runIncrementalBench(
+    VaultIndex index,
+    List<ScannedNote> notes,
+    Map<String, Object?> report,
+  ) async {
+    if (notes.isEmpty) return;
+    final batch = notes.take(notes.length < 100 ? notes.length : 100).toList();
+    final changed = [
+      for (final n in batch)
+        IndexedNote(
+          path: n.path,
+          title: n.parsed.title,
+          mtimeNs: n.mtimeNs + 1,
+          sizeBytes: n.sizeBytes + 32,
+          contentHash: 'bm04-${n.contentHash}',
+          wordCount: n.parsed.wordCount,
+          props: n.parsed.props,
+          tags: n.parsed.tags,
+          aliases: n.parsed.aliases,
+          links: n.parsed.links,
+          chunks: n.parsed.chunks,
+        ),
+    ];
+    final watch = Stopwatch()..start();
+    await index.upsert(changed);
+    watch.stop();
+    report['bm04_upsert_notes'] = changed.length;
+    report['bm04_upsert_ms'] = watch.elapsedMilliseconds;
+  }
+
+  /// BM-07 (AI-30/31, ADR-06): int8 brute-force vector search latency and
+  /// recall@10 versus full-precision exact ranking.
+  Future<void> _runVectorBench(
+    List<ScannedNote> notes,
+    Map<String, Object?> report,
+  ) async {
+    const maxChunks = 2000;
+    final embedder = HashingEmbedder();
+    final chunks = <ChunkInput>[];
+    for (final note in notes) {
+      for (var i = 0; i < note.parsed.chunks.length; i++) {
+        final chunk = note.parsed.chunks[i];
+        chunks.add(ChunkInput(
+          notePath: note.path,
+          ord: i,
+          headingPath: chunk.headingPath,
+          text: chunk.text,
+          hash: '${note.contentHash}:$i',
+        ));
+        if (chunks.length >= maxChunks) break;
+      }
+      if (chunks.length >= maxChunks) break;
+    }
+    if (chunks.length < 2) return;
+
+    final embedWatch = Stopwatch()..start();
+    final semantic = InMemorySemanticIndex(embedder);
+    await semantic.replaceAll(chunks);
+    embedWatch.stop();
+    report['bm07_embed_chunks'] = chunks.length;
+    report['bm07_embed_ms'] = embedWatch.elapsedMilliseconds;
+
+    final exact = [
+      for (final chunk in chunks) embedder.embed(chunk.text),
+    ];
+    final queries = [
+      for (final term in _frequentTerms(notes).take(5)) embedder.embed(term),
+      if (chunks.isNotEmpty) embedder.embed(chunks.first.text),
+    ];
+
+    final chunkIndexByKey = <(String, int), int>{
+      for (var i = 0; i < chunks.length; i++) (chunks[i].notePath, chunks[i].ord): i,
+    };
+    final latencies = <int>[];
+    var recallSum = 0.0;
+    for (final query in queries) {
+      final watch = Stopwatch()..start();
+      final hits = await semantic.search(query, limit: 10);
+      latencies.add(watch.elapsedMicroseconds);
+      final exactTop = exactTopK(query, exact, 10).toSet();
+      final quantTop = [
+        for (final h in hits) chunkIndexByKey[(h.notePath, h.ord)],
+      ].whereType<int>().toSet();
+      recallSum += quantTop.intersection(exactTop).length / exactTop.length;
+    }
+    latencies.sort();
+    report['bm07_search_p50_us'] = latencies[latencies.length ~/ 2];
+    report['bm07_search_p95_us'] = latencies[(latencies.length - 1) * 95 ~/ 100];
+    report['bm07_recall_at10'] = recallSum / queries.length;
   }
 
   List<String> _frequentTerms(List<ScannedNote> notes) {

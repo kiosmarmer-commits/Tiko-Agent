@@ -23,6 +23,10 @@ Future<void> main(List<String> args) async {
         await _health(rest);
       case 'links':
         await _links(rest);
+      case 'layout':
+        await _layout(rest);
+      case 'semsearch':
+        await _semsearch(rest);
       case 'bench':
         await _bench(rest);
       case '--help' || 'help' || '-h':
@@ -58,8 +62,14 @@ Penggunaan:
       Laporan kesehatan: catatan, tautan, tautan rusak, orphan, judul ganda.
   simpul links <vault> <path-catatan>
       Daftar backlink ke sebuah catatan.
+  simpul layout <vault> [--iterations N]
+      Tata letak force-directed Barnes-Hut (GRA-L01); posisi JSON per node.
+  simpul semsearch <vault> "kueri" [--limit N]
+      Pencarian semantik atas indeks vektor (.simpul/vectors.json).
+  simpul search <vault> "kueri" [--hybrid]
+      --hybrid menggabungkan leksikal + vektor dengan RRF (AI-20).
   simpul bench <vault> [--iterations N]
-      Benchmark scan/index/search/backlink/CSR (BM-01..BM-06).
+      Benchmark scan/index/search/backlink/CSR/inkremental/vektor (BM-02..07).
 ''');
 }
 
@@ -121,7 +131,7 @@ Future<void> _generate(List<String> args) async {
 
 Future<void> _index(List<String> args) async {
   final vault = _positional(args);
-  final opts = _options(args, {});
+  final opts = _options(args, {'embed'});
   final outDir = opts['out'];
   final watch = Stopwatch()..start();
   final notes = await VaultScanner.scan(vault);
@@ -136,13 +146,56 @@ Future<void> _index(List<String> args) async {
     await index.close();
   }
   watch.stop();
+
+  var embedMs = 0;
+  var chunkCount = 0;
+  if (opts['embed'] == 'true') {
+    final embedWatch = Stopwatch()..start();
+    chunkCount = await _buildSemanticIndex(vault, notes, outDir);
+    embedMs = embedWatch.elapsedMilliseconds;
+  }
   stdout.writeln(jsonEncode({
     'backend': index is SqliteVaultIndex ? 'sqlite' : 'json',
     'index_file': index is SqliteVaultIndex ? file.path : p.setExtension(file.path, '.json'),
     'notes': notes.length,
     'scan_ms': scanned,
     'index_ms': watch.elapsedMilliseconds - scanned,
+    if (embedMs > 0 || chunkCount > 0) ...{
+      'embedded_chunks': chunkCount,
+      'embed_ms': embedMs,
+    },
   }));
+}
+
+Future<int> _buildSemanticIndex(
+  String vault,
+  List<ScannedNote> notes,
+  String? outDir,
+) async {
+  final dir = outDir ?? p.join(vault, '.simpul');
+  final semantic = InMemorySemanticIndex(
+    HashingEmbedder(),
+    filePath: p.join(dir, 'vectors.json'),
+  );
+  final chunks = <ChunkInput>[];
+  for (final note in notes) {
+    for (var i = 0; i < note.parsed.chunks.length; i++) {
+      final chunk = note.parsed.chunks[i];
+      chunks.add(ChunkInput(
+        notePath: note.path,
+        ord: i,
+        headingPath: chunk.headingPath,
+        text: chunk.text,
+        hash: '${note.contentHash}:$i',
+      ));
+    }
+  }
+  try {
+    await semantic.replaceAll(chunks);
+  } finally {
+    await semantic.close();
+  }
+  return chunks.length;
 }
 
 Future<void> _search(List<String> args) async {
@@ -152,11 +205,16 @@ Future<void> _search(List<String> args) async {
   }
   final vault = positional[0];
   final query = positional[1];
-  final opts = _options(args, {});
+  final opts = _options(args, {'hybrid'});
   final limit = int.parse(opts['limit'] ?? '20');
   final index = await _openIndex(vault, opts['out']);
   try {
-    final hits = await index.search(query, limit: limit);
+    List<SearchHit> hits;
+    if (opts['hybrid'] == 'true') {
+      hits = await _hybridSearch(vault, index, query, limit, opts['out']);
+    } else {
+      hits = await index.search(query, limit: limit);
+    }
     stdout.writeln(jsonEncode({
       'query': query,
       'hits': hits
@@ -171,6 +229,106 @@ Future<void> _search(List<String> args) async {
     }));
   } finally {
     await index.close();
+  }
+}
+
+Future<List<SearchHit>> _hybridSearch(
+  String vault,
+  VaultIndex index,
+  String query,
+  int limit,
+  String? outDir,
+) async {
+  final dir = outDir ?? p.join(vault, '.simpul');
+  final vectorsFile = File(p.join(dir, 'vectors.json'));
+  if (!vectorsFile.existsSync()) {
+    throw StateError(
+      'indeks vektor belum ada — jalankan: simpul index "$vault" --embed',
+    );
+  }
+  final embedder = HashingEmbedder();
+  final semantic = InMemorySemanticIndex(
+    embedder,
+    filePath: vectorsFile.path,
+  );
+  try {
+    return await HybridSearcher(
+      index: index,
+      semantic: semantic,
+      embedder: embedder,
+    ).search(query, limit: limit);
+  } finally {
+    await semantic.close();
+  }
+}
+
+Future<void> _layout(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final iterations = int.parse(opts['iterations'] ?? '300');
+  final notes = await VaultScanner.scan(vault);
+  final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
+  final result = ForceLayout.simulate(
+    graph,
+    config: ForceLayoutConfig(maxIterations: iterations),
+  );
+  stdout.writeln(jsonEncode({
+    'iterations': result.iterations,
+    'final_energy': result.finalEnergy,
+    'slept': result.slept,
+    'nodes': [
+      for (var i = 0; i < graph.nodeCount; i++)
+        {
+          'id': i,
+          'path': graph.paths[i],
+          'x': graph.positionsX[i],
+          'y': graph.positionsY[i],
+        },
+    ],
+  }));
+}
+
+Future<void> _semsearch(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul semsearch <vault> "kueri"');
+  }
+  final vault = positional[0];
+  final query = positional[1];
+  final opts = _options(args, {});
+  final limit = int.parse(opts['limit'] ?? '20');
+  final dir = opts['out'] ?? p.join(vault, '.simpul');
+  final vectorsFile = File(p.join(dir, 'vectors.json'));
+  if (!vectorsFile.existsSync()) {
+    throw StateError(
+      'indeks vektor belum ada — jalankan: simpul index "$vault" --embed',
+    );
+  }
+  final embedder = HashingEmbedder();
+  final semantic = InMemorySemanticIndex(
+    embedder,
+    filePath: vectorsFile.path,
+  );
+  try {
+    final hits = await semantic.search(
+      embedder.embed(query),
+      limit: limit,
+    );
+    stdout.writeln(jsonEncode({
+      'query': query,
+      'model': embedder.modelVersion,
+      'hits': [
+        for (final h in hits)
+          {
+            'path': h.notePath,
+            'chunk': h.ord,
+            'heading_path': h.headingPath,
+            'score': h.score,
+          },
+      ],
+    }));
+  } finally {
+    await semantic.close();
   }
 }
 

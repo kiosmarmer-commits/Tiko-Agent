@@ -162,6 +162,13 @@ class VaultHealthReport {
 /// Durable vault index (PRD `09-arsitektur-data.md` §3).
 abstract class VaultIndex {
   Future<void> replaceAll(List<IndexedNote> notes);
+
+  /// Incremental update (NFR-08): inserts or replaces notes by path; children
+  /// (links/tags/props/chunks) of replaced notes are rebuilt.
+  Future<void> upsert(List<IndexedNote> notes);
+
+  /// Removes notes by path together with their derived rows.
+  Future<void> removePaths(List<String> paths);
   Future<List<SearchHit>> search(String query, {int limit = 20});
   Future<List<String>> backlinks(String notePath);
   Future<VaultHealthReport> health();
@@ -251,6 +258,7 @@ class SqliteVaultIndex implements VaultIndex {
   void _migrate() {
     db.execute('PRAGMA journal_mode = WAL');
     db.execute('PRAGMA synchronous = NORMAL');
+    db.execute('PRAGMA foreign_keys = ON');
     db.execute('''
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
@@ -322,7 +330,6 @@ class SqliteVaultIndex implements VaultIndex {
 
   @override
   Future<void> replaceAll(List<IndexedNote> notes) async {
-    final resolved = _resolve(notes);
     db.execute('BEGIN');
     try {
       db.execute('DELETE FROM chunks_fts');
@@ -331,63 +338,7 @@ class SqliteVaultIndex implements VaultIndex {
       db.execute('DELETE FROM tags');
       db.execute('DELETE FROM links');
       db.execute('DELETE FROM notes');
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final insertNote = db.prepare(
-        'INSERT INTO notes (path, title, mtime_ns, size_bytes, content_hash, word_count, provenance, ai_access, indexed_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      );
-      final insertLink = db.prepare(
-        'INSERT INTO links (src_id, dst_id, dst_raw, kind, anchor, embed) VALUES (?, ?, ?, ?, ?, ?)',
-      );
-      final insertTag = db.prepare('INSERT INTO tags (note_id, tag) VALUES (?, ?)');
-      final insertProp = db.prepare('INSERT INTO props (note_id, key, value) VALUES (?, ?, ?)');
-      final insertChunk = db.prepare(
-        'INSERT INTO chunks (note_id, ord, heading_path, start_char, end_char) VALUES (?, ?, ?, ?, ?)',
-      );
-      final insertFts = db.prepare(
-        'INSERT INTO chunks_fts (rowid, title, heading_path, body) VALUES (?, ?, ?, ?)',
-      );
-      for (final note in notes) {
-        insertNote.execute([
-          note.path,
-          note.title,
-          note.mtimeNs,
-          note.sizeBytes,
-          note.contentHash,
-          note.wordCount,
-          note.provenance,
-          note.aiAccess,
-          now,
-        ]);
-        final noteId = db.lastInsertRowId;
-        for (final link in note.links) {
-          insertLink.execute([
-            noteId,
-            resolved[link.target],
-            link.target,
-            link.kind,
-            link.anchor,
-            link.embed ? 1 : 0,
-          ]);
-        }
-        for (final tag in note.tags) {
-          insertTag.execute([noteId, tag]);
-        }
-        for (final entry in note.props.entries) {
-          insertProp.execute([noteId, entry.key, entry.value?.toString()]);
-        }
-        for (var i = 0; i < note.chunks.length; i++) {
-          final chunk = note.chunks[i];
-          insertChunk.execute([noteId, i, chunk.headingPath, chunk.startChar, chunk.endChar]);
-          insertFts.execute([db.lastInsertRowId, note.title, chunk.headingPath, chunk.text]);
-        }
-      }
-      insertNote.dispose();
-      insertLink.dispose();
-      insertTag.dispose();
-      insertProp.dispose();
-      insertChunk.dispose();
-      insertFts.dispose();
+      _insertAll(notes);
       db.execute('COMMIT');
     } catch (_) {
       db.execute('ROLLBACK');
@@ -395,26 +346,135 @@ class SqliteVaultIndex implements VaultIndex {
     }
   }
 
-  Map<String, int> _resolve(List<IndexedNote> notes) {
+  @override
+  Future<void> upsert(List<IndexedNote> notes) async {
+    db.execute('BEGIN');
+    try {
+      final deleteFts = db.prepare(
+        'DELETE FROM chunks_fts WHERE rowid IN '
+        '(SELECT c.id FROM chunks c JOIN notes n ON n.id = c.note_id WHERE n.path = ?)',
+      );
+      final deleteNote = db.prepare('DELETE FROM notes WHERE path = ?');
+      for (final note in notes) {
+        deleteFts.execute([note.path]);
+        deleteNote.execute([note.path]);
+      }
+      deleteFts.dispose();
+      deleteNote.dispose();
+      _insertAll(notes);
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> removePaths(List<String> paths) async {
+    db.execute('BEGIN');
+    try {
+      final deleteFts = db.prepare(
+        'DELETE FROM chunks_fts WHERE rowid IN '
+        '(SELECT c.id FROM chunks c JOIN notes n ON n.id = c.note_id WHERE n.path = ?)',
+      );
+      final deleteNote = db.prepare('DELETE FROM notes WHERE path = ?');
+      for (final path in paths) {
+        deleteFts.execute([path]);
+        deleteNote.execute([path]);
+      }
+      deleteFts.dispose();
+      deleteNote.dispose();
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
+  void _insertAll(List<IndexedNote> notes) {
     final ids = <String, int>{};
     final byBasename = <String, String>{};
     final byPath = <String, String>{};
+    for (final row in db.select('SELECT id, path FROM notes')) {
+      final path = row['path'] as String;
+      ids[path] = row['id'] as int;
+      final withoutExt = path.replaceAll(RegExp(r'\.md$'), '');
+      byPath[withoutExt] = path;
+      byBasename.putIfAbsent(p.basename(withoutExt), () => path);
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final insertNote = db.prepare(
+      'INSERT INTO notes (path, title, mtime_ns, size_bytes, content_hash, word_count, provenance, ai_access, indexed_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
     for (final note in notes) {
-      final id = ids.length + 1;
-      ids[note.path] = id;
+      insertNote.execute([
+        note.path,
+        note.title,
+        note.mtimeNs,
+        note.sizeBytes,
+        note.contentHash,
+        note.wordCount,
+        note.provenance,
+        note.aiAccess,
+        now,
+      ]);
+      final noteId = db.lastInsertRowId;
+      ids[note.path] = noteId;
       final withoutExt = note.path.replaceAll(RegExp(r'\.md$'), '');
       byPath[withoutExt] = note.path;
       byBasename.putIfAbsent(p.basename(withoutExt), () => note.path);
-    }
-    final resolved = <String, int>{};
-    for (final note in notes) {
-      for (final link in note.links) {
-        if (link.target.isEmpty || resolved.containsKey(link.target)) continue;
-        final targetPath = resolveTarget(link.target, byBasename, byPath);
-        if (targetPath != null) resolved[link.target] = ids[targetPath]!;
+
+      for (final tag in note.tags) {
+        db.execute('INSERT INTO tags (note_id, tag) VALUES (?, ?)', [noteId, tag]);
+      }
+      for (final entry in note.props.entries) {
+        db.execute('INSERT INTO props (note_id, key, value) VALUES (?, ?, ?)', [
+          noteId,
+          entry.key,
+          entry.value?.toString(),
+        ]);
+      }
+      for (var i = 0; i < note.chunks.length; i++) {
+        final chunk = note.chunks[i];
+        db.execute(
+          'INSERT INTO chunks (note_id, ord, heading_path, start_char, end_char) VALUES (?, ?, ?, ?, ?)',
+          [noteId, i, chunk.headingPath, chunk.startChar, chunk.endChar],
+        );
+        db.execute(
+          'INSERT INTO chunks_fts (rowid, title, heading_path, body) VALUES (?, ?, ?, ?)',
+          [db.lastInsertRowId, note.title, chunk.headingPath, chunk.text],
+        );
       }
     }
-    return resolved;
+    insertNote.dispose();
+
+    final insertLink = db.prepare(
+      'INSERT INTO links (src_id, dst_id, dst_raw, kind, anchor, embed) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    final resolved = <String, int>{};
+    for (final note in notes) {
+      final srcId = ids[note.path]!;
+      for (final link in note.links) {
+        if (link.target.isEmpty) continue;
+        var dstId = resolved[link.target];
+        if (dstId == null) {
+          final targetPath = resolveTarget(link.target, byBasename, byPath);
+          dstId = targetPath == null ? null : ids[targetPath];
+          resolved[link.target] = dstId ?? -1;
+        }
+        insertLink.execute([
+          srcId,
+          (dstId != null && dstId > 0) ? dstId : null,
+          link.target,
+          link.kind,
+          link.anchor,
+          link.embed ? 1 : 0,
+        ]);
+      }
+    }
+    insertLink.dispose();
   }
 
   @override
@@ -601,6 +661,32 @@ class JsonVaultIndex implements VaultIndex {
     _notes
       ..clear()
       ..addAll(notes);
+    await _flush();
+  }
+
+  @override
+  Future<void> upsert(List<IndexedNote> notes) async {
+    _ensureLoaded();
+    final indexByPath = {
+      for (var i = 0; i < _notes.length; i++) _notes[i].path: i,
+    };
+    for (final note in notes) {
+      final existing = indexByPath[note.path];
+      if (existing != null) {
+        _notes[existing] = note;
+      } else {
+        indexByPath[note.path] = _notes.length;
+        _notes.add(note);
+      }
+    }
+    await _flush();
+  }
+
+  @override
+  Future<void> removePaths(List<String> paths) async {
+    _ensureLoaded();
+    final removed = paths.toSet();
+    _notes.removeWhere((note) => removed.contains(note.path));
     await _flush();
   }
 

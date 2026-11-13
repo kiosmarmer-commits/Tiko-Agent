@@ -7,8 +7,12 @@
 library;
 
 export 'src/benchmark.dart';
+export 'src/embedding.dart';
 export 'src/graph_csr.dart';
+export 'src/hybrid_search.dart';
 export 'src/note_parser.dart';
+export 'src/semantic_index.dart';
 export 'src/vault_generator.dart';
 export 'src/vault_index.dart';
 export 'src/vault_scanner.dart';
+export 'src/force_layout.dart';

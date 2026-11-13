@@ -103,6 +103,29 @@ Future<void> testIndex(VaultIndex index) async {
   await index.close();
 }
 
+Future<void> testIncremental(VaultIndex index) async {
+  await index.replaceAll([
+    note('satu.md', title: 'Satu', links: [('dua', false)], chunks: [('Isi', 'kata kunci pengukuran')]),
+    note('dua.md', title: 'Dua'),
+  ]);
+
+  await index.upsert([
+    note('dua.md', title: 'Dua Revisi', links: [('satu', false)], chunks: [('Isi', 'dua diperbarui')]),
+    note('tiga.md', title: 'Tiga'),
+  ]);
+
+  final revised = await index.search('Dua Revisi');
+  expect(revised.single.path, 'dua.md');
+  final newBacklinks = await index.backlinks('satu.md');
+  expect(newBacklinks, contains('dua.md'));
+
+  await index.removePaths(['tiga.md']);
+  final health = await index.health();
+  expect(health.noteCount, 2);
+
+  await index.close();
+}
+
 void main() {
   group('JsonVaultIndex', () {
     test('indexes, searches, backlinks, and reports health', () async {
@@ -135,6 +158,15 @@ void main() {
         return;
       }
       await testIndex(index);
+    });
+
+    test('incremental upsert and remove work when sqlite3 is available', () async {
+      final index = SqliteVaultIndex.tryOpen('/tmp/simpul-test-incremental.db');
+      if (index == null) {
+        markTestSkipped('libsqlite3 tidak tersedia di lingkungan ini');
+        return;
+      }
+      await testIncremental(index);
     });
   });
 }
