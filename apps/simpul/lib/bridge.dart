@@ -111,10 +111,21 @@ class SimpulBridge {
     final existing = _index;
     if (existing != null) return existing;
     final dir = p.join(vaultDir, '.simpul');
-    final sqlite = SqliteVaultIndex.tryOpen(p.join(dir, 'index.db'));
-    final VaultIndex index = sqlite ?? JsonVaultIndex(p.join(dir, 'index.json'));
-    _index = index;
-    return index;
+    final dbFile = File(p.join(dir, 'index.db'));
+    final jsonFile = File(p.join(dir, 'index.json'));
+    if (dbFile.existsSync()) {
+      final sqlite = SqliteVaultIndex.tryOpen(dbFile.path);
+      if (sqlite != null) {
+        _index = sqlite;
+        return sqlite;
+      }
+    }
+    if (jsonFile.existsSync()) {
+      final json = JsonVaultIndex(jsonFile.path);
+      _index = json;
+      return json;
+    }
+    throw ArgumentError('indeks belum ada — jalankan: simpul index "$vaultDir"');
   }
 
   Future<Object?> _search(Map<String, Object?> args) async {
