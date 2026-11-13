@@ -18,6 +18,46 @@ class GraphCsr {
     this.positionsY,
   );
 
+  /// Rebuilds a graph from raw buffers, e.g. inside a worker isolate after a
+  /// `TransferableTypedData` handoff (NFR-S08).
+  GraphCsr.fromBuffers({
+    required this.paths,
+    required this.offsets,
+    required this.targets,
+    required this.positionsX,
+    required this.positionsY,
+  });
+
+  /// Builds a synthetic graph over [nodeCount] nodes from deduplicated edge
+  /// pairs; used for coarsened layouts and tests.
+  factory GraphCsr.fromEdges(int nodeCount, Iterable<(int, int)> edges) {
+    final deduped = <(int, int)>{...edges}..removeWhere((e) => e.$1 == e.$2);
+    final perNode = List<List<int>>.generate(nodeCount, (_) => []);
+    for (final (src, dst) in deduped) {
+      if (src >= 0 && src < nodeCount && dst >= 0 && dst < nodeCount) {
+        perNode[src].add(dst);
+      }
+    }
+    final offsets = Uint32List(nodeCount + 1);
+    for (var i = 0; i < nodeCount; i++) {
+      offsets[i + 1] = offsets[i] + perNode[i].length;
+    }
+    final targets = Uint32List(offsets[nodeCount]);
+    var cursor = 0;
+    for (var i = 0; i < nodeCount; i++) {
+      for (final target in perNode[i]) {
+        targets[cursor++] = target;
+      }
+    }
+    return GraphCsr.fromBuffers(
+      paths: List.filled(nodeCount, ''),
+      offsets: offsets,
+      targets: targets,
+      positionsX: Float32List(nodeCount),
+      positionsY: Float32List(nodeCount),
+    );
+  }
+
   final List<String> paths;
   final Uint32List offsets;
   final Uint32List targets;

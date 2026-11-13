@@ -25,6 +25,8 @@ Future<void> main(List<String> args) async {
         await _links(rest);
       case 'layout':
         await _layout(rest);
+      case 'viewport':
+        await _viewport(rest);
       case 'semsearch':
         await _semsearch(rest);
       case 'sync':
@@ -68,8 +70,12 @@ Penggunaan:
       Laporan kesehatan: catatan, tautan, tautan rusak, orphan, judul ganda.
   simpul links <vault> <path-catatan>
       Daftar backlink ke sebuah catatan.
-  simpul layout <vault> [--iterations N]
+  simpul layout <vault> [--iterations N] [--isolate] [--multi-level]
       Tata letak force-directed Barnes-Hut (GRA-L01); posisi JSON per node.
+      --isolate menjalankan simulasi di isolate (NFR-S02/S08), --multi-level
+      memakai coarsening Louvain (GRA-L04).
+  simpul viewport <vault> [--min-x A --min-y B --max-x C --max-y D]
+      Culling viewport via quadtree (GRA-R02); node dalam persegi panjang.
   simpul semsearch <vault> "kueri" [--limit N]
       Pencarian semantik atas indeks vektor (.simpul/vectors.json).
   simpul search <vault> "kueri" [--hybrid]
@@ -277,20 +283,49 @@ Future<List<SearchHit>> _hybridSearch(
 
 Future<void> _layout(List<String> args) async {
   final vault = _positional(args);
-  final opts = _options(args, {});
+  final opts = _options(args, {'isolate', 'multi-level'});
   final iterations = int.parse(opts['iterations'] ?? '300');
   final notes = await VaultScanner.scan(vault);
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
-  final result = ForceLayout.simulate(
-    graph,
-    config: ForceLayoutConfig(maxIterations: iterations),
-  );
+  final config = ForceLayoutConfig(maxIterations: iterations);
+  final result = switch ((opts['isolate'], opts['multi-level'])) {
+    ('true', _) => await IsolateLayout.simulate(graph, config: config),
+    (_, 'true') => MultiLevelLayout.simulate(graph, config: config),
+    _ => ForceLayout.simulate(graph, config: config),
+  };
   stdout.writeln(jsonEncode({
     'iterations': result.iterations,
     'final_energy': result.finalEnergy,
     'slept': result.slept,
     'nodes': [
       for (var i = 0; i < graph.nodeCount; i++)
+        {
+          'id': i,
+          'path': graph.paths[i],
+          'x': graph.positionsX[i],
+          'y': graph.positionsY[i],
+        },
+    ],
+  }));
+}
+
+Future<void> _viewport(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final minX = double.parse(opts['min-x'] ?? '-1e9');
+  final minY = double.parse(opts['min-y'] ?? '-1e9');
+  final maxX = double.parse(opts['max-x'] ?? '1e9');
+  final maxY = double.parse(opts['max-y'] ?? '1e9');
+  final notes = await VaultScanner.scan(vault);
+  final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
+  ForceLayout.simulate(graph);
+  final tree = QuadtreeIndex.build(graph.positionsX, graph.positionsY);
+  final ids = tree.queryRegion(minX, minY, maxX, maxY);
+  stdout.writeln(jsonEncode({
+    'total': graph.nodeCount,
+    'visible': ids.length,
+    'nodes': [
+      for (final i in ids)
         {
           'id': i,
           'path': graph.paths[i],
