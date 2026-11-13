@@ -9,6 +9,11 @@ class TrajectoryLogger {
 
   final String directory;
 
+  /// Serializes appends: concurrent turns (parallel rollouts, concurrent
+  /// sessions) must not open the same file at the same end offset and
+  /// overwrite each other's lines.
+  Future<void> _writeChain = Future<void>.value();
+
   Future<void> logTurn({
     required String sessionId,
     required String input,
@@ -16,6 +21,28 @@ class TrajectoryLogger {
     required List<String> tools,
     int? latencyMs,
     bool success = true,
+  }) {
+    final next = _writeChain.then(
+      (_) => _logTurnUnchecked(
+        sessionId: sessionId,
+        input: input,
+        output: output,
+        tools: tools,
+        latencyMs: latencyMs,
+        success: success,
+      ),
+    );
+    _writeChain = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _logTurnUnchecked({
+    required String sessionId,
+    required String input,
+    required String output,
+    required List<String> tools,
+    int? latencyMs,
+    required bool success,
   }) async {
     await Directory(directory).create(recursive: true);
     final day = DateTime.now().toUtc().toIso8601String().substring(0, 10);
@@ -95,6 +122,97 @@ class TrajectoryLogger {
   }
 
   String _cap(String s, int max) => s.length <= max ? s : '${s.substring(0, max)}…';
+
+  /// Exports stored trajectories as ShareGPT-format JSONL (one conversation
+  /// object per session, turns ordered by timestamp) so the dataset can be
+  /// consumed directly by SFT/RL training frameworks. Applies the same
+  /// privacy guard as [exportForTraining]. Returns the number of exported
+  /// conversations.
+  Future<int> exportShareGpt({
+    required String outputPath,
+    Set<String> excludeSessions = const {},
+    int maxFieldChars = 2000,
+    bool redactSecrets = true,
+    Object? Function(String)? customRedactor,
+  }) async {
+    final dir = Directory(directory);
+    if (!dir.existsSync()) return 0;
+    final turns = <(String, String, Map<String, dynamic>)>[];
+    await for (final entity in dir.list()) {
+      if (entity is! File || !entity.path.endsWith('.jsonl')) continue;
+      await for (final line in entity
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        Map<String, dynamic> entry;
+        try {
+          entry = jsonDecode(trimmed) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
+        final session = entry['session']?.toString() ?? '';
+        if (excludeSessions.contains(session)) continue;
+        turns.add((entry['ts']?.toString() ?? '', session, entry));
+      }
+    }
+    turns.sort((a, b) {
+      final byTs = a.$1.compareTo(b.$1);
+      if (byTs != 0) return byTs;
+      return a.$2.compareTo(b.$2);
+    });
+    await Directory(p.dirname(outputPath)).create(recursive: true);
+    final out = File(outputPath);
+    final sink = out.openWrite(mode: FileMode.writeOnly);
+    var exported = 0;
+    try {
+      var currentSession = '';
+      var conversations = <Map<String, String>>[];
+      var lastTools = const <String>[];
+      var lastSuccess = true;
+      Future<void> flush() async {
+        if (conversations.isEmpty) return;
+        final row = {
+          'conversations': conversations,
+          'tools': lastTools,
+          'success': lastSuccess,
+        };
+        final encoded = jsonEncode(row);
+        sink.write(
+          '${customRedactor != null ? customRedactor(encoded) : encoded}\n',
+        );
+        exported++;
+        conversations = <Map<String, String>>[];
+      }
+
+      for (final (_, session, entry) in turns) {
+        if (session != currentSession) {
+          await flush();
+          currentSession = session;
+        }
+        final cap = maxFieldChars;
+        String clean(String key) {
+          final raw = _cap(entry[key]?.toString() ?? '', cap);
+          return redactSecrets ? redactSecretText(raw) : raw;
+        }
+
+        conversations.add({'from': 'human', 'value': clean('input')});
+        conversations.add({'from': 'gpt', 'value': clean('output')});
+        lastTools = (entry['tools'] as List?)
+                ?.map((t) => t.toString())
+                .take(16)
+                .toList() ??
+            const <String>[];
+        lastSuccess = entry['success'] == true;
+      }
+      await flush();
+    } finally {
+      await sink.flush();
+      await sink.close();
+    }
+    return exported;
+  }
 }
 
 /// Default secret patterns redacted before any trajectory leaves the process:

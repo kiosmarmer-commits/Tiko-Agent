@@ -23,6 +23,7 @@ export 'src/metrics.dart';
 export 'src/plan_execute.dart';
 export 'src/orchestrator.dart';
 export 'src/trajectory.dart';
+export 'src/rl_pipeline.dart';
 export 'src/self_consistency.dart';
 export 'src/parallel_tools.dart';
 export 'src/trace.dart';
