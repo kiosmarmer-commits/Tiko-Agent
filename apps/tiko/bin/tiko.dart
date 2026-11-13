@@ -14,6 +14,7 @@ tiko — Pasitiko local-first agent (control plane)
 
 Perintah utama:
   setup [--provider mock|ollama] [--workspace PATH] [--force]
+  setup --interactive         wizard kredensial provider + gateway
   chat [prompt]              chat (mode auto: embedded)
   run <prompt>
   daemon start|stop|restart|status
@@ -925,6 +926,7 @@ Future<void> _setup(String configPath, List<String> args) async {
   var provider = 'mock';
   var workspace = '.';
   var force = false;
+  var interactive = false;
   for (var i = 0; i < args.length; i++) {
     if (args[i] == '--provider' && i + 1 < args.length) {
       provider = args[++i];
@@ -932,11 +934,18 @@ Future<void> _setup(String configPath, List<String> args) async {
       workspace = args[++i];
     } else if (args[i] == '--force') {
       force = true;
+    } else if (args[i] == '--interactive') {
+      interactive = true;
     } else {
       stderr.writeln('Opsi setup tidak dikenal: ${args[i]}');
       exitCode = 2;
       return;
     }
+  }
+
+  if (interactive) {
+    await _setupInteractive(configPath, force);
+    return;
   }
 
   final file = File(configPath);
@@ -1020,4 +1029,125 @@ Future<void> _setup(String configPath, List<String> args) async {
   );
   stdout.writeln('Config: $configAbs');
   stdout.writeln('Lanjut: tiko doctor --probe && tiko calc 5+1 && tiko chat');
+}
+
+Future<void> _setupInteractive(String configPath, bool force) async {
+  stdout.writeln('Wizard onboarding Tiko — kredensial disimpan sebagai SecretRef');
+  stdout.writeln('env:VAR di config, nilai rahasianya di gateway.env (permission 600).');
+  stdout.writeln('');
+
+  String prompt(String label, {String? def, bool required = false}) {
+    while (true) {
+      final suffix = (def != null && def.isNotEmpty) ? ' [$def]' : '';
+      stdout.write('$label$suffix: ');
+      final line = stdin.readLineSync()?.trim() ?? '';
+      if (line.isEmpty && def != null && def.isNotEmpty) return def;
+      if (line.isNotEmpty) return line;
+      if (!required) return '';
+      stdout.writeln('  Wajib diisi.');
+    }
+  }
+
+  bool confirm(String label) {
+    stdout.write('$label [y/N]: ');
+    final line = (stdin.readLineSync()?.trim() ?? '').toLowerCase();
+    return line == 'y' || line == 'ya' || line == 'yes';
+  }
+
+  String providerType;
+  while (true) {
+    providerType = prompt(
+      'Tipe provider (mock | ollama_native | openai | deepseek | anthropic | '
+      'gemini | openai_compat | openai_responses | azure_openai | bedrock | '
+      'id preset lain)',
+      def: 'mock',
+      required: true,
+    );
+    try {
+      OnboardingWizard.renderConfigYaml(OnboardingProfile(
+        providerType: providerType,
+        workspace: '.',
+      ));
+      break;
+    } on ArgumentError {
+      stdout.writeln('  Tipe provider tidak dikenal, coba lagi.');
+    }
+  }
+
+  final needsKey = providerType != 'mock' && providerType != 'ollama_native';
+  final baseUrl = needsKey
+      ? prompt('base_url (kosongkan untuk default preset)')
+      : '';
+  final model = prompt('model (kosongkan untuk default)');
+
+  final env = <String, String>{};
+  String? apiKeyEnvVar;
+  if (needsKey) {
+    apiKeyEnvVar = OnboardingProfile.defaultApiKeyVar(providerType);
+    env[apiKeyEnvVar] = prompt('API key ($apiKeyEnvVar)', required: true);
+  }
+
+  if (confirm('Aktifkan gateway Telegram?')) {
+    env['TG_TOKEN'] = prompt('TG_TOKEN', required: true);
+    env['TG_ALLOW'] = prompt('TG_ALLOW (id user, dipisah koma)', required: true);
+  }
+  if (confirm('Aktifkan gateway Discord?')) {
+    env['DISCORD_BOT_TOKEN'] = prompt('DISCORD_BOT_TOKEN', required: true);
+    env['DISCORD_ALLOW'] = prompt('DISCORD_ALLOW (id user, dipisah koma)');
+  }
+  if (confirm('Aktifkan email SMTP (outbound)?')) {
+    env['EMAIL_FROM'] = prompt('EMAIL_FROM', required: true);
+    env['SMTP_HOST'] = prompt('SMTP_HOST', required: true);
+    env['SMTP_PORT'] = prompt('SMTP_PORT', def: '587');
+    final smtpUser = prompt('SMTP_USER');
+    if (smtpUser.isNotEmpty) {
+      env['SMTP_USER'] = smtpUser;
+      env['SMTP_PASS'] = prompt('SMTP_PASS', required: true);
+      env['SMTP_STARTTLS'] = '1';
+    }
+    final emailAllow = prompt('EMAIL_ALLOW (tujuan diizinkan, dipisah koma)');
+    if (emailAllow.isNotEmpty) env['EMAIL_ALLOW'] = emailAllow;
+  }
+  if (confirm('Aktifkan email inbound IMAP?')) {
+    env['IMAP_HOST'] = prompt('IMAP_HOST', required: true);
+    env['IMAP_PORT'] = prompt('IMAP_PORT', def: '993');
+    env['IMAP_USER'] = prompt('IMAP_USER', required: true);
+    env['IMAP_PASSWORD'] = prompt('IMAP_PASSWORD', required: true);
+    env['IMAP_ALLOW'] = prompt('IMAP_ALLOW (pengirim diizinkan)', required: true);
+  }
+
+  final profile = OnboardingProfile(
+    providerType: providerType,
+    workspace: prompt('Workspace', def: '.', required: true),
+    baseUrl: baseUrl.isEmpty ? null : baseUrl,
+    model: model.isEmpty ? null : model,
+    apiKeyEnvVar: apiKeyEnvVar,
+    env: env,
+  );
+
+  final configAbs = p.absolute(configPath);
+  final configDir = p.dirname(configAbs);
+  final projectRoot = p.basename(configDir) == 'config'
+      ? p.dirname(configDir)
+      : configDir;
+  try {
+    final paths = await OnboardingWizard.writeAll(
+      configPath: configPath,
+      dataDir: p.join(projectRoot, 'data'),
+      profile: profile,
+      force: force,
+    );
+    stdout.writeln('Config: ${paths.configPath}');
+    stdout.writeln('Env:    ${paths.envPath} (permission 600)');
+    stdout.writeln('');
+    stdout.writeln('Lanjut:');
+    stdout.writeln('  source ${paths.envPath}');
+    stdout.writeln('  tiko doctor --probe && tiko chat');
+  } on StateError catch (error) {
+    stderr.writeln(error.message);
+    exitCode = 1;
+  } on ArgumentError catch (error) {
+    stderr.writeln(error.message);
+    exitCode = 2;
+  }
 }

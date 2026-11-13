@@ -3,6 +3,7 @@ export 'src/tiko_config.dart';
 export 'src/provider_factory.dart';
 export 'src/runtime_lock.dart';
 export 'src/config_store.dart';
+export 'src/onboarding.dart';
 export 'src/daemon_manager.dart';
 export 'src/capability.dart';
 export 'src/event_bus.dart';
