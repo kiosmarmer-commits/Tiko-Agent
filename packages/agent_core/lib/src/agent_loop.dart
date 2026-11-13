@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'cancellation.dart';
 import 'interfaces.dart';
 import 'models.dart';
 import 'context_builder.dart';
@@ -166,6 +167,12 @@ class AgentLoop {
   final List<ToolCallTrace> _lastToolTraces = [];
   List<ToolCallTrace> get lastToolCalls => List.unmodifiable(_lastToolTraces);
 
+  /// Slugs of non-draft/non-retired skills whose use was recorded during the
+  /// most recent handle() call. Consumed by hosts so user feedback 👍/👎 can
+  /// be routed back to the exact skills involved in the turn.
+  List<String> _lastSkillsUsed = const [];
+  List<String> get lastSkillsUsed => _lastSkillsUsed;
+
   /// Total tokens reported by providers during the most recent handle() call.
   int get lastTokensUsed => _budget.tokensUsed;
   String? _lastAnswer;
@@ -182,12 +189,26 @@ class AgentLoop {
   final _loopDetector = LoopDetector();
   final _budget = BudgetGuard();
 
-  Future<void> handle(InboundMessage m, Session session) async {
+  /// Cooperative cancellation token for the turn currently being handled.
+  /// Hosts call [cancelTurn] (from a stop button, gateway command, or team
+  /// orchestrator) to abandon the turn at the next iteration/tool boundary.
+  CancellationToken? _turnCancel;
+
+  /// Cancels the turn currently being handled by this loop, if any.
+  void cancelTurn() => _turnCancel?.cancel();
+
+  Future<void> handle(
+    InboundMessage m,
+    Session session, {
+    CancellationToken? cancelToken,
+  }) async {
     _lastToolNames.clear();
     executedToolNames.clear();
     _lastToolTraces.clear();
+    _lastSkillsUsed = const [];
     _lastAnswer = null;
     _lastTurnSucceeded = false;
+    final cancel = _turnCancel = cancelToken ?? CancellationToken();
     final trace = TraceContext();
     trace.span('start');
 
@@ -242,6 +263,10 @@ class AgentLoop {
           await reply(m, 'Tugas dihentikan (stop).');
           success = false;
           break;
+        }
+        if (cancel.isCancelled) {
+          success = false;
+          break agentLoop;
         }
         if (_budget.exceeded) {
           await reply(m, 'Budget habis (${_budget.reason}). Berhenti.');
@@ -373,13 +398,22 @@ class AgentLoop {
           }
         }
 
-        // Execute allowed tools in parallel
+        // Execute allowed tools in parallel. The batch races the turn's
+        // cancellation token: a cancelled turn stops waiting on tool results
+        // (cooperative — long-running tools also observe the token via
+        // ToolContext.cancelToken and should stop early on their own).
         final runner = ParallelToolRunner(executor);
-        final executed = await runner.runAll(
-          allowed,
-          ToolContext(session: session, workspacePath: workspacePath),
-          parallel: allowed.length > 1,
-          isParallelSafe: isToolParallelSafe,
+        final executed = await cancel.guard(
+          runner.runAll(
+            allowed,
+            ToolContext(
+              session: session,
+              workspacePath: workspacePath,
+              cancelToken: cancel,
+            ),
+            parallel: allowed.length > 1,
+            isParallelSafe: isToolParallelSafe,
+          ),
         );
         for (final item in executed) {
           final call = item.call;
@@ -422,6 +456,12 @@ class AgentLoop {
         ctx = await compactor.maybeCompact(ctx);
       }
 
+    } on OperationCancelledException {
+      success = false;
+      _lastAnswer = null;
+      try {
+        await reply(m, 'Turn dibatalkan atas permintaan.');
+      } catch (_) {}
     } finally {
       // A route can reserve a half-open probe before execution begins. If the
       // loop exits before the first provider call (including an exception in
@@ -494,11 +534,14 @@ class AgentLoop {
       }
     }
     await memory.afterTurn(session);
+    final usedSkills = <String>[];
     for (final skill in skillRegistry?.match(m.text) ?? const <Skill>[]) {
       if (skill.status != SkillStatus.draft && skill.status != SkillStatus.retired) {
         skillRegistry?.recordUse(skill.slug, success: success);
+        usedSkills.add(skill.slug);
       }
     }
+    _lastSkillsUsed = List.unmodifiable(usedSkills);
     // FR-01 (closed-loop self-learning): compile a successful multi-tool
     // turn into a reusable SKILL.md draft when S_eval >= threshold.
     final registry = skillRegistry;

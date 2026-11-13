@@ -129,12 +129,31 @@ class SkillParser {
 class SkillRegistry {
   final Map<String, Skill> _skills = {};
 
-  /// Sink durabel opsional: dipanggil fire-and-forget setiap kali
-  /// [recordUse] mencatat pemakaian skill.
+  /// Sink durabel opsional: dipanggil setiap kali [recordUse] mencatat
+  /// pemakaian skill. Future-nya dilacak di [_pendingSinkWrites] sehingga
+  /// host dapat memastikan tulisan terakhir selesai lewat
+  /// [flushPendingSinks] sebelum keluar proses.
   Future<void> Function(String slug, {required bool success})? onUseRecorded;
 
-  /// Sink durabel opsional untuk feedback user ([applyFeedback]).
+  /// Sink durabel opsional untuk feedback user ([applyFeedback]);
+  /// pelacakannya sama dengan [onUseRecorded].
   Future<void> Function(String slug, {required bool positive})? onFeedbackRecorded;
+
+  final List<Future<void>> _pendingSinkWrites = [];
+
+  /// Menunggu semua tulisan sink yang masih berjalan. Dipanggil host saat
+  /// shutdown agar event metrik/feedback terakhir tidak hilang saat crash.
+  Future<void> flushPendingSinks() async {
+    final pending = List<Future<void>>.from(_pendingSinkWrites);
+    _pendingSinkWrites.clear();
+    for (final f in pending) {
+      try {
+        await f;
+      } catch (_) {
+        // Sink failure must never break shutdown.
+      }
+    }
+  }
 
   List<Skill> get all => _skills.values.toList();
   List<Skill> get active =>
@@ -213,7 +232,7 @@ class SkillRegistry {
     }
     final sink = onUseRecorded;
     if (sink != null) {
-      unawaited(sink(slug, success: success).catchError((Object _) {}));
+      _pendingSinkWrites.add(sink(slug, success: success).catchError((Object _) {}));
     }
   }
 
@@ -237,7 +256,9 @@ class SkillRegistry {
     }
     final sink = onFeedbackRecorded;
     if (sink != null) {
-      unawaited(sink(slug, positive: positive).catchError((Object _) {}));
+      _pendingSinkWrites.add(
+        sink(slug, positive: positive).catchError((Object _) {}),
+      );
     }
   }
 }

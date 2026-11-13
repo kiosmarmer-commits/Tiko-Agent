@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'cancellation.dart';
 
 /// Multi-agent orchestration (Hermes v0.6-style subagent teams).
 ///
@@ -297,11 +300,31 @@ class TeamOrchestrator {
   final int maxConcurrency;
   final String? defaultAgentId;
 
-  Future<TeamRunResult> run(TaskGraph graph, {String goal = ''}) async {
+  Future<TeamRunResult> run(
+    TaskGraph graph, {
+    String goal = '',
+    CancellationToken? cancelToken,
+  }) async {
     final blackboard = Blackboard();
     final results = <TaskResult>[];
     for (final wave in graph.waves()) {
-      final waveResults = await _runWave(wave, graph, blackboard);
+      if (cancelToken?.isCancelled == true) {
+        // Cancelled before this wave: every remaining node is skipped and
+        // recorded as a cancelled result so dependents never run on stale
+        // or missing upstream data.
+        for (final id in graph.waves().skip(results.length).expand((w) => w)) {
+          results.add(TaskResult(
+            taskId: id,
+            agentId: _resolveAgent(byIdOf(graph, id)).id,
+            output: '',
+            success: false,
+            error: 'cancelled before execution',
+          ));
+        }
+        break;
+      }
+      final waveResults = await _runWave(wave, graph, blackboard,
+          cancelToken: cancelToken);
       results.addAll(waveResults);
     }
     final synthesis = await _synthesize(goal, results);
@@ -312,11 +335,15 @@ class TeamOrchestrator {
     );
   }
 
+  static TaskNode byIdOf(TaskGraph graph, String id) =>
+      graph.nodes.firstWhere((n) => n.id == id);
+
   Future<List<TaskResult>> _runWave(
     List<String> wave,
     TaskGraph graph,
-    Blackboard blackboard,
-  ) async {
+    Blackboard blackboard, {
+    CancellationToken? cancelToken,
+  }) async {
     final byId = {for (final n in graph.nodes) n.id: n};
     final pending = List<TaskNode>.from(wave.map((id) => byId[id]!));
     final out = <TaskResult>[];
@@ -324,6 +351,15 @@ class TeamOrchestrator {
       final batch = pending.take(maxConcurrency).toList();
       pending.removeRange(0, batch.length);
       final settled = await Future.wait(batch.map((node) async {
+        if (cancelToken?.isCancelled == true) {
+          return TaskResult(
+            taskId: node.id,
+            agentId: _resolveAgent(node).id,
+            output: '',
+            success: false,
+            error: 'cancelled before execution',
+          );
+        }
         final agent = _resolveAgent(node);
         final augmented = TaskNode(
           id: node.id,
@@ -334,7 +370,14 @@ class TeamOrchestrator {
         );
         final watch = Stopwatch()..start();
         try {
-          final output = await executor(agent, augmented, blackboard);
+          // Race the node against cancellation: a cancelled orchestrator
+          // stops waiting for the node even if the underlying agent turn is
+          // still draining (the host should propagate the token into the
+          // nested AgentLoop via cancelTurn). The node's eventual result is
+          // discarded after cancellation.
+          final output = await (cancelToken == null
+              ? executor(agent, augmented, blackboard)
+              : cancelToken.guard(executor(agent, augmented, blackboard)));
           watch.stop();
           blackboard.write(Blackboard.resultSlot(node.id), output,
               writer: agent.id);

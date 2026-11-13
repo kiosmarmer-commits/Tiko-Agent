@@ -7,6 +7,7 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 import 'package:uuid/uuid.dart';
 
 import 'drift_schema.dart';
+import 'sqlite_vec_index.dart';
 
 /// SQLite + FTS5 MemoryStore (AGD-04). Falls back if native lib missing.
 ///
@@ -17,7 +18,11 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
   SqliteMemoryStore._(this.db, {this.vectorIndex, this.embedder});
 
   final Database db;
-  final VectorIndex? vectorIndex;
+
+  /// Active vector index. Mutable so the host can attach a durable
+  /// [SqliteVecIndex] after open; the in-memory warm-up is skipped for
+  /// durable indexes because they read the `embeddings` table directly.
+  VectorIndex? vectorIndex;
   final Future<List<double>> Function(String text)? embedder;
   final _uuid = const Uuid();
 
@@ -154,6 +159,10 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
   /// Rebuilds the in-memory vector index from the durable `embeddings` table.
   Future<void> _warmupVectorIndex() async {
     if (vectorIndex == null) return;
+    if (vectorIndex is SqliteVecIndex) {
+      // Durable index reads the embeddings table directly — nothing to warm.
+      return;
+    }
     try {
       final rows = db.select('SELECT id, vector, meta_json FROM embeddings');
       for (final r in rows) {

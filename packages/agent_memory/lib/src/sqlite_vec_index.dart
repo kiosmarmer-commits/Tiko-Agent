@@ -102,4 +102,14 @@ class SqliteVecIndex implements VectorIndex {
     if (d <= 0) return 0;
     return dot / (math.sqrt(d));
   }
+
+  /// Removes one embedding row; mirrors [BruteForceVectorIndex.remove] so
+  /// hosts can swap indexes without special-casing removal.
+  Future<void> remove(String id) async {
+    db.execute('DELETE FROM embeddings WHERE id = ?', [id]);
+  }
+
+  /// Number of durable embeddings backing this index.
+  int get length =>
+      db.select('SELECT COUNT(*) AS c FROM embeddings').first['c'] as int;
 }

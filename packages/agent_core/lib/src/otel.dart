@@ -62,9 +62,9 @@ class OtelSpan {
       };
 
   static Map<String, dynamic> _attrValue(Object? v) => switch (v) {
-        int i => {'intValue': '$i'},
-        double d => {'doubleValue': d},
-        bool b => {'boolValue': b},
+        final int i => {'intValue': '$i'},
+        final double d => {'doubleValue': d},
+        final bool b => {'boolValue': b},
         _ => {'stringValue': v?.toString() ?? ''},
       };
 }

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_memory/agent_memory.dart';
+import 'package:agent_providers/agent_providers.dart';
 import 'package:agent_security/agent_security.dart';
 import 'package:agent_scheduler/agent_scheduler.dart';
 import 'package:agent_tools/agent_tools.dart';
@@ -38,6 +39,7 @@ class ChatRunResult {
     this.tokensUsed = 0,
     this.toolCallCount = 0,
     this.toolCallTraces = const [],
+    this.skillsUsed = const [],
   });
   final String text;
   final bool success;
@@ -51,6 +53,19 @@ class ChatRunResult {
 
   /// Per-call traces (sanitized args, error status, duration) of the turn.
   final List<ToolCallTrace> toolCallTraces;
+
+  /// Slugs of skills whose use was recorded during the turn. Hosts route
+  /// user feedback 👍/👎 back to these via SkillRegistry.applyFeedback.
+  final List<String> skillsUsed;
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'success': success,
+        'retryable': retryable,
+        'tokens_used': tokensUsed,
+        'tool_call_count': toolCallCount,
+        'skills_used': skillsUsed,
+      };
 }
 
 class DoctorCheck {
@@ -183,6 +198,11 @@ class TikoRuntime {
   final TaintTracker _taint = TaintTracker();
   final SessionLock _lock = SessionLock();
   final SecuritySanitizer _sanitizer = SecuritySanitizer();
+
+  /// Cooperative cancellation registry keyed by session id (P1-11). One live
+  /// token per running turn; subagent turns chain to their parent's token so
+  /// cancelling a parent session also stops its nested subagents.
+  final CancellationRegistry cancellations = CancellationRegistry();
   final CapabilityVault capabilities;
   final EventBus events = EventBus();
   // Non-final agar tes dapat menyuntik broker dengan TTL pendek.
@@ -238,7 +258,7 @@ class TikoRuntime {
     // dormant and BM25/FTS authoritative.
     final embedder = factory.buildEmbedder(cfg);
 
-    final vectorIndex = BruteForceVectorIndex();
+    VectorIndex vectorIndex = BruteForceVectorIndex();
     MemoryStore memory;
     String backend;
     // TIKO_FORCE_JSON_MEMORY=1 skips the sqlite probe entirely — the escape
@@ -253,8 +273,15 @@ class TikoRuntime {
             embedder: embedder,
           );
     if (sqlite != null) {
+      // P4: durable vector index over the embeddings table becomes the
+      // default when SQLite is available — vectors survive restart without a
+      // warm-up rebuild pass (the sqlite-vec extension stays optional and
+      // the query path falls back to cosine brute-force over the table).
+      final durableIndex = SqliteVecIndex(sqlite.db);
+      sqlite.vectorIndex = durableIndex;
+      vectorIndex = durableIndex;
       memory = SafeMemoryStore(sqlite);
-      backend = 'sqlite-fts5';
+      backend = 'sqlite-fts5+vec';
     } else {
       memory = SafeMemoryStore(PersistentMemoryStore(dataDir: dataDir, vectorIndex: vectorIndex));
       backend = 'json-fallback (degraded: libsqlite3 tidak tersedia)';
@@ -1036,6 +1063,40 @@ class TikoRuntime {
 
   Map<String, dynamic> providerHealth() => _router.healthSnapshot();
 
+  /// Unified provider health (P1): [CircuitBreaker] adapter over the SAME
+  /// [ProviderHealth] state the Router uses for selection/fallback. Any
+  /// surface that calls a provider directly (scheduler delivery, gateway
+  /// tools, scripts) should acquire/record through this breaker so its
+  /// failures and probes are instantly visible to the Router — one state
+  /// machine per provider, no divergent health counters.
+  ///
+  /// The chat path records exactly once via AgentLoop; do not ALSO wrap
+  /// those providers in [BreakerLlmProvider] with this health or failures
+  /// would be double-counted.
+  CircuitBreaker breakerFor(String providerId) {
+    final h = _router.health.putIfAbsent(
+      providerId,
+      () => ProviderHealth(clock: _router.clock),
+    );
+    return CircuitBreaker(health: h);
+  }
+
+  /// Record a provider failure from any direct-use surface; lands in the
+  /// same [ProviderHealth] the Router and [breakerFor] share.
+  void recordProviderFailure(String providerId, String error) =>
+      _router.recordFailure(providerId, error);
+
+  /// Record a provider success (with latency) from any direct-use surface.
+  void recordProviderSuccess(String providerId, double latencyMs) =>
+      _router.recordSuccess(providerId, latencyMs);
+
+  /// Cooperatively cancels the turn running in [sessionId] (and, by chaining,
+  /// its nested subagents). Returns true when a live turn was cancelled.
+  bool cancelTurn(String sessionId) => cancellations.cancel(sessionId);
+
+  /// Cancels every live turn (runtime shutdown / kill switch support).
+  void cancelAllTurns() => cancellations.cancelAll();
+
   /// Provider instance by config id (for `tiko models` discovery).
   LlmProvider? providerById(String id) => _router.providers[id];
 
@@ -1335,6 +1396,17 @@ class TikoRuntime {
         },
       );
       final turnStart = DateTime.now();
+      final cancelToken = cancellations.begin(sessionId);
+      // Subagent turns chain to the parent's token: cancelling the parent
+      // session also stops this nested turn at its next boundary.
+      final subMarker = '/sub/';
+      final subIdx = sessionId.indexOf(subMarker);
+      if (subIdx > 0) {
+        final parentToken = cancellations.tokenOf(sessionId.substring(0, subIdx));
+        if (parentToken != null) {
+          unawaited(parentToken.whenCancelled.then((_) => cancelToken.cancel()));
+        }
+      }
       await loop.handle(
         InboundMessage(
           channel: channel,
@@ -1343,6 +1415,7 @@ class TikoRuntime {
           text: effectiveText,
         ),
         session,
+        cancelToken: cancelToken,
       );
       final answer = replies.join('\n');
       final outbound = promptGuard.inspectOutput(answer);
@@ -1367,6 +1440,7 @@ class TikoRuntime {
         tokensUsed: loop.lastTokensUsed,
         toolCallCount: loop.lastToolCalls.length,
         toolCallTraces: loop.lastToolCalls,
+        skillsUsed: loop.lastSkillsUsed,
       );
       unawaited(spans.recordTurn(
         traceId: session.id,
@@ -1771,6 +1845,14 @@ class TikoRuntime {
     } catch (_) {}
     try {
       await plugins.disposeAll();
+    } catch (_) {}
+    try {
+      // Feedback/metric sink writes are tracked, not fire-and-forget, so the
+      // last 👍/👎 and use events survive a graceful shutdown.
+      await skills.flushPendingSinks();
+    } catch (_) {}
+    try {
+      cancellations.cancelAll();
     } catch (_) {}
     try {
       await spans.close();

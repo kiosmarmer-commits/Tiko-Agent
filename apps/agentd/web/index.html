@@ -27,6 +27,7 @@
         <button type="button" data-tab="status" aria-pressed="false" aria-controls="tab-status">Status</button>
         <button type="button" data-tab="approvals" aria-pressed="false" aria-controls="tab-approvals">Approvals</button>
         <button type="button" data-tab="sessions" aria-pressed="false" aria-controls="tab-sessions">Sessions</button>
+        <button type="button" data-tab="skills" aria-pressed="false" aria-controls="tab-skills">Skills</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -89,6 +90,14 @@
           <button type="button" id="btn-refresh-sessions" class="secondary">Muat ulang</button>
         </div>
         <ul id="session-list" class="list"></ul>
+      </section>
+
+      <section id="tab-skills" class="tab" hidden aria-label="Skills">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">LEARNING LOOP</p><h1>Skills</h1><p class="subheading">Beri feedback 👍/👎 untuk melatih reliabilitas skill.</p></div>
+          <button type="button" id="btn-refresh-skills" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="skill-list" class="list"></ul>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">

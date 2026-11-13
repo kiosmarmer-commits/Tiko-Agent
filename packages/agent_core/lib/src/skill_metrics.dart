@@ -95,7 +95,7 @@ class SkillMetricsLedger {
     if (success) m.successes++;
     m.lastUsedAt = DateTime.now().toUtc();
     _prune(keep: slug);
-    await _flush();
+    await flush();
   }
 
   Future<void> recordFeedback(String slug, {required bool positive}) async {
@@ -106,7 +106,7 @@ class SkillMetricsLedger {
       m.negative++;
     }
     _prune(keep: slug);
-    await _flush();
+    await flush();
   }
 
   /// Membuang entri terlama saat melebihi [maxSkills], tanpa pernah
@@ -120,7 +120,21 @@ class SkillMetricsLedger {
     }
   }
 
-  Future<void> _flush() async {
+  /// Menulis keadaan metrik saat ini ke disk (tmp+rename atomik). Dipanggil
+  /// host yang butuh kepastian durabilitas segera, mis. setelah feedback user.
+  ///
+  /// Tulisan diserialisasi lewat rantai future: flush konkuren (sink
+  /// fire-and-forget + flush eksplisit host) tidak boleh saling menimpa file
+  /// .tmp — tanpa ini, rename kedua gagal PathNotFound dan event hilang.
+  Future<void> _flushChain = Future<void>.value();
+
+  Future<void> flush() {
+    final next = _flushChain.then((_) => _flushOnce());
+    _flushChain = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _flushOnce() async {
     final file = File(path);
     await file.parent.create(recursive: true);
     final tmp = File('$path.tmp');

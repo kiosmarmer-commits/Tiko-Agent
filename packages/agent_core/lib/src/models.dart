@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'cancellation.dart';
+
 /// Normalized inbound message from any gateway.
 class InboundMessage {
   const InboundMessage({
@@ -218,11 +220,17 @@ class ToolContext {
     required this.session,
     required this.workspacePath,
     this.tainted = false,
+    this.cancelToken,
   });
 
   final Session session;
   final String workspacePath;
   final bool tainted;
+
+  /// Cooperative cancellation signal for the current turn. Long-running
+  /// tools (shell, browser, cloud sandbox) should poll [CancellationToken
+  /// .isCancelled] between steps and stop early when cancelled.
+  final CancellationToken? cancelToken;
 }
 
 class TokenUsage {

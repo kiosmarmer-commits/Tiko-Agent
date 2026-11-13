@@ -38,4 +38,5 @@ export 'src/skill_synthesis.dart';
 export 'src/skill_ledger.dart';
 export 'src/skill_metrics.dart';
 export 'src/context_files.dart';
+export 'src/cancellation.dart';
 export 'src/otel.dart';

@@ -7,6 +7,8 @@ import 'package:agent_gateway/agent_gateway.dart';
 import 'package:agent_tools/agent_tools.dart';
 import 'package:tiko_runtime/tiko_runtime.dart';
 
+import 'runtime_skill_api.dart';
+
 /// agentd — thin host around [TikoRuntime] (gateways + scheduler + HTTP).
 Future<void> main(List<String> args) async {
   final useTelegram =
@@ -334,6 +336,37 @@ Future<void> main(List<String> args) async {
     return null;
   }
 
+  /// Parses `/feedback <slug> up|down` (also 👍/👎, +1/-1) and applies it to
+  /// the skill registry. In-memory reliability updates immediately; the
+  /// durable SkillMetricsLedger sink persists the event. Returns the reply
+  /// text, or null when [m] is not a feedback command.
+  String? maybeHandleFeedbackCommand(InboundMessage m) {
+    final text = m.text.trim();
+    if (!text.toLowerCase().startsWith('/feedback')) return null;
+    final parts = text.split(RegExp(r'\s+'));
+    if (parts.length < 3) {
+      return 'Format: /feedback <slug> up|down (atau 👍/👎)';
+    }
+    final slug = parts[1];
+    final raw = parts[2].toLowerCase();
+    final positive =
+        raw == 'up' || raw == '👍' || raw == '+1' || raw == 'yes';
+    final negative =
+        raw == 'down' || raw == '👎' || raw == '-1' || raw == 'no';
+    if (!positive && !negative) {
+      return 'Nilai feedback tidak dikenal: "$raw". Gunakan up|down.';
+    }
+    final skill = rt.skills.get(slug);
+    if (skill == null) return 'Skill "$slug" tidak dikenal.';
+    if (skill.status == SkillStatus.draft ||
+        skill.status == SkillStatus.retired) {
+      return 'Skill "$slug" berstatus ${skill.status.name}; '
+          'feedback hanya berlaku untuk skill aktif.';
+    }
+    rt.skills.applyFeedback(slug, positive: positive);
+    return 'Feedback ${positive ? '👍' : '👎'} untuk skill "$slug" dicatat.';
+  }
+
   Future<void> handleMessage(InboundMessage m, {Gateway? replyVia}) async {
     if (!rateLimiter.allow(m.userKey)) {
       await replyVia?.send(OutboundMessage(
@@ -367,6 +400,16 @@ Future<void> main(List<String> args) async {
     }
 
     final gw = replyVia ?? gatewayForChannel(m.channel);
+
+    // Closed feedback loop: chat users on any channel can rate the skill(s)
+    // of the previous turn with `/feedback <slug> up|down` (or 👍/👎).
+    final feedbackReply = maybeHandleFeedbackCommand(m);
+    if (feedbackReply != null) {
+      await (gw?.send(OutboundMessage(sessionKey: m.sessionKey, text: feedbackReply)) ??
+          Future.value());
+      if (gw == null && m.channel == 'cli') stdout.writeln('assistant> $feedbackReply');
+      return;
+    }
 
     // P1-4 progressive streaming: telegram/discord get one live message that
     // is edited in place as deltas arrive; other channels keep the plain
@@ -510,6 +553,7 @@ Future<void> main(List<String> args) async {
         onShutdown: () async {
           if (!shutdownSignal.isCompleted) shutdownSignal.complete();
         },
+        skillApi: RuntimeSkillApi(rt),
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

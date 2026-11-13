@@ -149,6 +149,65 @@
     }
   }
 
+  async function loadSkills() {
+    const list = $('#skill-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat skills…'));
+    try {
+      const data = await api('/v1/skills');
+      const skills = Array.isArray(data.skills) ? data.skills : [];
+      list.replaceChildren();
+      if (!skills.length) {
+        list.appendChild(emptyItem('Belum ada skill terdaftar.'));
+        return;
+      }
+      for (const skill of skills) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(skill.slug || skill.name || '');
+        const meta = document.createElement('span');
+        meta.className = 'hint';
+        const m = skill.metrics || {};
+        meta.textContent = ' · ' + String(skill.status || 'draft') +
+          ' · uses ' + String(m.uses ?? 0) +
+          ' · 👍 ' + String(m.positive ?? 0) +
+          ' · 👎 ' + String(m.negative ?? 0);
+        const row = document.createElement('div');
+        row.className = 'row';
+        const up = document.createElement('button');
+        up.type = 'button';
+        up.className = 'secondary';
+        up.textContent = '👍';
+        up.setAttribute('aria-label', 'Feedback positif untuk ' + String(skill.slug || ''));
+        up.addEventListener('click', () => sendSkillFeedback(skill.slug, true));
+        const down = document.createElement('button');
+        down.type = 'button';
+        down.className = 'danger-button';
+        down.textContent = '👎';
+        down.setAttribute('aria-label', 'Feedback negatif untuk ' + String(skill.slug || ''));
+        down.addEventListener('click', () => sendSkillFeedback(skill.slug, false));
+        row.append(up, down);
+        li.append(title, meta, row);
+        list.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat skills: ' + error.message));
+    }
+  }
+
+  async function sendSkillFeedback(slug, positive) {
+    try {
+      await api('/v1/skills/' + encodeURIComponent(slug) + '/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ positive }),
+      });
+      addMsg('system', 'Feedback ' + (positive ? '👍' : '👎') + ' untuk skill "' + slug + '" dicatat.');
+      loadSkills();
+    } catch (error) {
+      addMsg('system', 'Gagal mengirim feedback: ' + error.message);
+    }
+  }
+
   async function requestApproval(id, approve) {
     return api('/v1/approvals/' + encodeURIComponent(id), {
       method: 'POST',
@@ -388,6 +447,7 @@
       if (target === 'memory') loadMemory();
       if (target === 'approvals') loadApprovals();
       if (target === 'sessions') loadSessions();
+      if (target === 'skills') loadSkills();
     });
   });
 
@@ -420,6 +480,7 @@
   $('#refreshMem')?.addEventListener('click', loadMemory);
   $('#btn-refresh-approvals')?.addEventListener('click', loadApprovals);
   $('#btn-refresh-sessions')?.addEventListener('click', loadSessions);
+  $('#btn-refresh-skills')?.addEventListener('click', loadSkills);
 
   addMsg('system', 'Selamat datang di Tiko. Kirim pesan untuk mulai; konfirmasi tool berisiko akan muncul di sini.');
   ping();

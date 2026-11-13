@@ -4,6 +4,7 @@ import 'package:agent_core/agent_core.dart';
 
 import 'fts_index.dart';
 
+import 'sqlite_vec_index.dart';
 import 'vector_index.dart';
 
 /// Advanced RAG pipeline: chunking → dual retrieval (dense + BM25) →
@@ -259,6 +260,10 @@ class RagPipeline {
 
   final Map<String, RagChunk> _chunks = {};
 
+  /// Cached chunk embeddings captured at ingest; powers the hybrid semantic
+  /// rerank in [retrieve] without re-embedding chunks per query.
+  final Map<String, List<double>> _chunkVectors = {};
+
   int get chunkCount => _chunks.length;
 
   RagChunk? getChunk(String id) => _chunks[id];
@@ -278,6 +283,7 @@ class RagPipeline {
       if (embed != null) {
         final vector = await embed(chunk.text);
         if (vector.isNotEmpty) {
+          _chunkVectors[chunk.id] = vector;
           await dense.upsert(chunk.id, vector, {
             'doc_id': chunk.docId,
             'index': chunk.index,
@@ -295,9 +301,12 @@ class RagPipeline {
         .toList();
     for (final id in ids) {
       _chunks.remove(id);
+      _chunkVectors.remove(id);
       lexical.remove(id);
       if (dense is BruteForceVectorIndex) {
         await (dense as BruteForceVectorIndex).remove(id);
+      } else if (dense is SqliteVecIndex) {
+        await (dense as SqliteVecIndex).remove(id);
       }
     }
   }
@@ -330,18 +339,78 @@ class RagPipeline {
         if (byScore != 0) return byScore;
         return a.key.compareTo(b.key);
       });
+
+    // Hybrid rerank (P4): with an embedder available, re-score the top
+    // candidates on a common 0..1 scale — fused rank (RRF position), direct
+    // semantic similarity (cosine of query vs cached chunk vector) and
+    // lexical overlap. Semantic similarity catches paraphrases the pure
+    // rank fusion misses; lexical overlap still anchors exact terms.
+    // Without an embedder the pipeline keeps the original lexical-only
+    // formula (fused + 0.1 * overlap) so behavior is unchanged.
+    final queryEmbedding = await _safeEmbed(query);
+    final rerankPool = ranked.take(
+      math.max(k, math.min(ranked.length, k * 3)),
+    ).toList();
+    final reranked = <(String, double)>[];
+    if (queryEmbedding.isNotEmpty) {
+      for (var pos = 0; pos < rerankPool.length; pos++) {
+        final entry = rerankPool[pos];
+        final chunk = _chunks[entry.key];
+        if (chunk == null) continue;
+        final chunkVec = _chunkVectors[entry.key];
+        final fusedNorm =
+            1.0 - (pos / math.max(1, rerankPool.length));
+        final semantic = chunkVec == null
+            ? 0.0
+            : math.max(0.0, _cosine(queryEmbedding, chunkVec));
+        final overlap = _lexicalOverlap(query, chunk.text);
+        final score = 0.4 * fusedNorm + 0.4 * semantic + 0.2 * overlap;
+        reranked.add((entry.key, score));
+      }
+      reranked.sort((a, b) {
+        final byScore = b.$2.compareTo(a.$2);
+        if (byScore != 0) return byScore;
+        return a.$1.compareTo(b.$1);
+      });
+    } else {
+      for (var pos = 0; pos < rerankPool.length; pos++) {
+        final entry = rerankPool[pos];
+        final chunk = _chunks[entry.key];
+        if (chunk == null) continue;
+        final overlap = _lexicalOverlap(query, chunk.text);
+        reranked.add((entry.key, entry.value + 0.1 * overlap));
+      }
+      reranked.sort((a, b) {
+        final byScore = b.$2.compareTo(a.$2);
+        if (byScore != 0) return byScore;
+        return a.$1.compareTo(b.$1);
+      });
+    }
+
     final hits = <RagHit>[];
-    for (final entry in ranked.take(k)) {
-      final chunk = _chunks[entry.key];
+    for (final entry in reranked.take(k)) {
+      final chunk = _chunks[entry.$1];
       if (chunk == null) continue;
-      final overlap = _lexicalOverlap(query, chunk.text);
-      hits.add(RagHit(chunk: chunk, score: entry.value + 0.1 * overlap,
-          rank: 0));
+      hits.add(RagHit(chunk: chunk, score: entry.$2, rank: 0));
     }
     for (var i = 0; i < hits.length; i++) {
       hits[i] = RagHit(chunk: hits[i].chunk, score: hits[i].score, rank: i);
     }
     return RagResult(hits: hits, context: _assemble(hits));
+  }
+
+  static double _cosine(List<double> a, List<double> b) {
+    final n = a.length < b.length ? a.length : b.length;
+    if (n == 0) return 0;
+    var dot = 0.0, na = 0.0, nb = 0.0;
+    for (var i = 0; i < n; i++) {
+      dot += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    final d = na * nb;
+    if (d <= 0) return 0;
+    return dot / math.sqrt(d);
   }
 
   Future<List<double>> _safeEmbed(String text) async {
