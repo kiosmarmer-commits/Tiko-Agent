@@ -13,6 +13,20 @@ abstract class EmbeddingProvider {
   Float32List embed(String text);
 }
 
+/// Async variant of [EmbeddingProvider] for embedders backed by a local or
+/// remote server (AI-03). Stored vectors still carry [modelVersion] so
+/// vectors from different models are never mixed (AI-13).
+abstract class AsyncEmbeddingProvider {
+  String get modelVersion;
+  int get dimension;
+
+  /// Returns an L2-normalized vector for [text].
+  Future<Float32List> embed(String text);
+
+  /// Embeds several texts, ideally in one server round-trip (AI-12).
+  Future<List<Float32List>> embedBatch(List<String> texts);
+}
+
 /// Deterministic local embedder via feature hashing over word unigrams,
 /// bigrams, and character trigrams. Language-agnostic (Indonesia and English
 /// behave identically since no vocabulary is needed) and requires no model

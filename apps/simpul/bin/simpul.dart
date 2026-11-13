@@ -40,6 +40,8 @@ Future<void> main(List<String> args) async {
         await _suggestLinks(rest);
       case 'bench':
         await _bench(rest);
+      case 'eval':
+        await _eval(rest);
       case '--help' || 'help' || '-h':
         _usage();
       default:
@@ -95,6 +97,11 @@ Penggunaan:
       Saran tautan antar catatan serupa yang belum tertaut (AI-25).
   simpul bench <vault> [--iterations N]
       Benchmark scan/index/search/backlink/CSR/inkremental/vektor (BM-02..07).
+  simpul eval [--embedder hashing|ollama] [--model M] [--base-url U]
+              [--dim N] [--k K]
+      Evaluasi retrieval korpus AI-E01: recall@k dan MRR (AI-E02). Default
+      embedder hashing (deterministik, tanpa jaringan); ollama butuh server
+      lokal berjalan (AI-03).
 ''');
 }
 
@@ -516,4 +523,27 @@ Future<void> _bench(List<String> args) async {
     searchIterations: iterations,
   );
   stdout.writeln(jsonEncode(report));
+}
+
+Future<void> _eval(List<String> args) async {
+  final opts = _options(args, {});
+  final embedder = opts['embedder'] ?? 'hashing';
+  final k = int.parse(opts['k'] ?? '5');
+  final EvalResult result;
+  switch (embedder) {
+    case 'hashing':
+      result = EvalHarness.run(k: k);
+    case 'ollama':
+      final ollama = OllamaEmbedder(
+        model: opts['model'] ?? 'nomic-embed-text',
+        baseUrl: opts['base-url'] ?? 'http://localhost:11434',
+        dimension: opts['dim'] == null ? null : int.parse(opts['dim']!),
+      );
+      result = await EvalHarness.runAsync(embedder: ollama, k: k);
+    default:
+      throw ArgumentError(
+        'embedder tidak dikenal: $embedder (pilihan: hashing, ollama)',
+      );
+  }
+  stdout.writeln(jsonEncode(result.toJson()));
 }
