@@ -208,6 +208,147 @@
     }
   }
 
+  const KANBAN_STATES = ['backlog', 'doing', 'done', 'failed'];
+  let eventFeedItems = 0;
+
+  async function loadTasks() {
+    const board = $('#task-board');
+    if (!board) return;
+    board.replaceChildren();
+    const loading = document.createElement('p');
+    loading.className = 'hint';
+    loading.textContent = 'Memuat tugas\u2026';
+    board.appendChild(loading);
+    try {
+      const data = await api('/v1/tasks');
+      const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+      board.replaceChildren();
+      board.classList.remove('loading');
+      for (const state of KANBAN_STATES) {
+        const col = document.createElement('div');
+        col.className = 'board-col board-col-' + state;
+        const heading = document.createElement('h3');
+        heading.textContent = state + ' (' + tasks.filter((t) => t.state === state).length + ')';
+        col.appendChild(heading);
+        const cards = tasks.filter((t) => t.state === state);
+        if (!cards.length) {
+          const empty = document.createElement('p');
+          empty.className = 'hint';
+          empty.textContent = '(kosong)';
+          col.appendChild(empty);
+        }
+        for (const task of cards) {
+          const card = document.createElement('div');
+          card.className = 'task-card';
+          const title = document.createElement('strong');
+          title.textContent = String(task.title || '');
+          const meta = document.createElement('p');
+          meta.className = 'hint';
+          meta.textContent = String(task.id || '') +
+            (task.claimed_by ? ' \u00b7 by ' + String(task.claimed_by) : '') +
+            (task.result ? ' \u00b7 ' + String(task.result) : '');
+          card.append(title, meta);
+          col.appendChild(card);
+        }
+        board.appendChild(col);
+      }
+    } catch (error) {
+      board.classList.remove('loading');
+      board.replaceChildren();
+      const fail = document.createElement('p');
+      fail.className = 'hint';
+      fail.textContent = 'Gagal memuat tugas: ' + error.message;
+      board.appendChild(fail);
+    }
+  }
+
+  function appendEventFeed(detail) {
+    const feed = $('#event-feed');
+    if (!feed) return;
+    const li = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = String(detail.type || 'event');
+    const meta = document.createElement('span');
+    meta.className = 'hint';
+    meta.textContent = ' \u00b7 ' + String(detail.at || '') +
+      (detail.tool ? ' \u00b7 ' + String(detail.tool) : '') +
+      (detail.id ? ' \u00b7 ' + String(detail.id) : '');
+    li.append(title, meta);
+    feed.prepend(li);
+    eventFeedItems += 1;
+    while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+  }
+
+  let watchSocket = null;
+  let watchBackoffMs = 1000;
+
+  function watchEvents() {
+    if (!store.token || watchSocket) return;
+    let ws;
+    try {
+      ws = new WebSocket(websocketUrl());
+    } catch (_) {
+      return;
+    }
+    watchSocket = ws;
+    ws.addEventListener('message', (message) => {
+      try {
+        const payload = JSON.parse(message.data);
+        if (payload.type === 'event' && payload.event) {
+          appendEventFeed(payload.event);
+          const type = String(payload.event.type || '');
+          if (type.startsWith('job.') && !$('#tab-tasks').hidden) loadTasks();
+        }
+      } catch (_) { /* ignore malformed frames */ }
+    });
+    ws.addEventListener('close', () => {
+      watchSocket = null;
+      window.setTimeout(watchEvents, watchBackoffMs);
+      watchBackoffMs = Math.min(watchBackoffMs * 2, 30000);
+    });
+    ws.addEventListener('open', () => { watchBackoffMs = 1000; });
+  }
+
+  async function loadLogs() {
+    const select = $('#logSelect');
+    if (!select) return;
+    try {
+      const data = await api('/v1/logs');
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      select.replaceChildren();
+      if (!logs.length) {
+        const option = document.createElement('option');
+        option.textContent = '(belum ada log)';
+        select.appendChild(option);
+        return;
+      }
+      for (const log of logs) {
+        const option = document.createElement('option');
+        option.value = String(log.name || '');
+        option.textContent = String(log.name || '') + ' (' + String(log.bytes ?? '?') + ' B)';
+        select.appendChild(option);
+      }
+      await loadLogContent(String(logs[0].name || ''));
+    } catch (error) {
+      const view = $('#log-view');
+      if (view) view.textContent = 'Gagal memuat daftar log: ' + error.message;
+    }
+  }
+
+  async function loadLogContent(name) {
+    const view = $('#log-view');
+    if (!view || !name) return;
+    view.textContent = 'Memuat ' + name + '\u2026';
+    try {
+      const data = await api('/v1/logs/' + encodeURIComponent(name));
+      const header = (data.truncated ? '[dipotong, 64KB terakhir] ' : '') +
+        String(data.name || name) + ' \u00b7 ' + String(data.bytes ?? '?') + ' B\n\n';
+      view.textContent = header + String(data.content ?? '');
+    } catch (error) {
+      view.textContent = 'Gagal memuat log: ' + error.message;
+    }
+  }
+
   async function requestApproval(id, approve) {
     return api('/v1/approvals/' + encodeURIComponent(id), {
       method: 'POST',
@@ -448,6 +589,7 @@
       if (target === 'approvals') loadApprovals();
       if (target === 'sessions') loadSessions();
       if (target === 'skills') loadSkills();
+      if (target === 'tasks') { loadTasks(); loadLogs(); }
     });
   });
 
@@ -481,8 +623,18 @@
   $('#btn-refresh-approvals')?.addEventListener('click', loadApprovals);
   $('#btn-refresh-sessions')?.addEventListener('click', loadSessions);
   $('#btn-refresh-skills')?.addEventListener('click', loadSkills);
+  $('#btn-refresh-tasks')?.addEventListener('click', () => { loadTasks(); loadLogs(); });
+  $('#btn-refresh-logs')?.addEventListener('click', loadLogs);
+  $('#btn-clear-events')?.addEventListener('click', () => {
+    eventFeedItems = 0;
+    $('#event-feed')?.replaceChildren();
+  });
+  $('#logSelect')?.addEventListener('change', (event) => {
+    loadLogContent(String(event.target?.value || ''));
+  });
 
   addMsg('system', 'Selamat datang di Tiko. Kirim pesan untuk mulai; konfirmasi tool berisiko akan muncul di sini.');
   ping();
   window.setInterval(ping, 15000);
+  watchEvents();
 })();

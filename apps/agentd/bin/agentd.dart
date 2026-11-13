@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -546,6 +547,12 @@ Future<void> main(List<String> args) async {
           onMessage: (m) => handleMessage(m),
         )
       : null;
+
+  // Agent manager (P2-05): read-only view of the shared kanban board and
+  // audit logs. A second KanbanBoard instance is safe: every mutation is
+  // guarded by the same CrossProcessLock as the tool instance.
+  final tasksBoard = KanbanBoard('${rt.dataDir}/kanban.json');
+  final logsDirectory = Directory(rt.audit.directory);
   if (useApi) {
     // apiToken was validated and persisted before any background service ran.
     final token = apiToken!;
@@ -600,6 +607,52 @@ Future<void> main(List<String> args) async {
           if (!shutdownSignal.isCompleted) shutdownSignal.complete();
         },
         skillApi: RuntimeSkillApi(rt),
+        tasksProvider: () async =>
+            (await tasksBoard.list()).map((t) => t.toJson()).toList(),
+        logsProvider: () async {
+          if (!await logsDirectory.exists()) return <Map<String, dynamic>>[];
+          final files = <File>[];
+          await for (final entity in logsDirectory.list()) {
+            if (entity is File &&
+                _baseName(entity.path).startsWith('audit-') &&
+                entity.path.endsWith('.jsonl')) {
+              files.add(entity);
+            }
+          }
+          files.sort((a, b) => b.path.compareTo(a.path));
+          return [
+            for (final f in files)
+              {
+                'name': _baseName(f.path),
+                'bytes': await f.length(),
+              },
+          ];
+        },
+        logContentProvider: (name) async {
+          if (!name.startsWith('audit-') || !name.endsWith('.jsonl')) return null;
+          final file = File('${logsDirectory.path}/$name');
+          if (!await file.exists()) return null;
+          const maxBytes = 64 * 1024;
+          final length = await file.length();
+          final start = length > maxBytes ? length - maxBytes : 0;
+          final raf = await file.open();
+          try {
+            await raf.setPosition(start);
+            var content = utf8.decode(await raf.read(maxBytes), allowMalformed: true);
+            if (start > 0) {
+              final nl = content.indexOf('\n');
+              if (nl >= 0) content = content.substring(nl + 1);
+            }
+            return {
+              'name': name,
+              'bytes': length,
+              'truncated': start > 0,
+              'content': content,
+            };
+          } finally {
+            await raf.close();
+          }
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,
@@ -896,4 +949,9 @@ class _CollectGateway implements Gateway {
 
   @override
   Future<void> close() async {}
+}
+
+String _baseName(String path) {
+  final idx = path.lastIndexOf('/');
+  return idx < 0 ? path : path.substring(idx + 1);
 }

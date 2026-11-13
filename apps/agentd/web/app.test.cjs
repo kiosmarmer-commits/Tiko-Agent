@@ -46,7 +46,14 @@ class FakeElement {
   }
   appendChild(child) { this.children.push(child); return child; }
   append(...children) { this.children.push(...children); }
+  prepend(...children) { this.children.unshift(...children); }
   replaceChildren(...children) { this.children = [...children]; }
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    return child;
+  }
+  get lastChild() { return this.children[this.children.length - 1] ?? null; }
   querySelectorAll(selector) {
     if (selector === 'button') return this.children.filter((item) => item.tagName === 'button');
     return [];
@@ -80,16 +87,18 @@ function createHarness() {
     'confirmText', 'confirmYes', 'confirmNo', 'cfgBase', 'cfgToken', 'statusBox',
     'memList', 'approval-list', 'session-list', 'saveCfg', 'refreshStatus',
     'refreshMem', 'btn-refresh-approvals', 'btn-refresh-sessions',
+    'task-board', 'event-feed', 'logSelect', 'log-view',
+    'btn-refresh-tasks', 'btn-clear-events', 'btn-refresh-logs',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -119,7 +128,7 @@ function createHarness() {
     },
     URL,
     WebSocket: FakeWebSocket,
-    window: { setInterval: () => 1 },
+    window: { setInterval: () => 1, setTimeout: () => 1 },
     fetch: async (url, options = {}) => {
       calls.push({ url: String(url), options });
       const pathname = new URL(String(url), 'http://127.0.0.1').pathname;
@@ -129,6 +138,12 @@ function createHarness() {
       else if (pathname === '/v1/approvals') body = { approvals: [{ id: 'apr_1', state: 'pending', tool: 'write_file', risk: 'high' }] };
       else if (pathname === '/v1/sessions') body = { sessions: [{ id: 'web:default', channel: 'http', turns: 2 }] };
       else if (pathname.startsWith('/v1/approvals/')) body = { ok: true };
+      else if (pathname === '/v1/tasks') body = { tasks: [
+        { id: 'kb-1', title: '<script>alert(1)</script>', state: 'doing', claimed_by: 'agent', result: '' },
+        { id: 'kb-2', title: 'rapikan README', state: 'done', claimed_by: '', result: 'selesai' },
+      ] };
+      else if (pathname === '/v1/logs') body = { logs: [{ name: 'audit-20261113.jsonl', bytes: 42 }] };
+      else if (pathname.startsWith('/v1/logs/')) body = { name: decodeURIComponent(pathname.slice('/v1/logs/'.length)), bytes: 42, truncated: true, content: '<img src=x onerror=alert(1)>\n{"tool":"shell"}' };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
   };
@@ -180,4 +195,34 @@ test('Chat uses encoded-token WebSocket streaming and the shared approval API', 
   ws.fire('message', { data: JSON.stringify({ type: 'text', text: 'Selesai.' }) });
   ws.fire('message', { data: JSON.stringify({ type: 'done' }) });
   assert.equal(h.elements.sendBtn.disabled, false);
+});
+
+test('Tasks tab renders the kanban board, log list, and log content as text', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'tasks').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-tasks').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/tasks')));
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/logs')));
+  const board = h.elements['task-board'];
+  assert.equal(board.children.length, 4);
+  const doing = board.children.find((col) => col.className.includes('board-col-doing'));
+  assert.equal(doing.children[1].children[0].textContent, '<script>alert(1)</script>');
+  const logView = h.elements['log-view'];
+  assert.ok(logView.textContent.includes('<img src=x onerror=alert(1)>'));
+  assert.ok(logView.textContent.includes('[dipotong, 64KB terakhir]'));
+});
+
+test('Live event watcher appends streamed events to the event feed', async () => {
+  const h = createHarness();
+  const watcher = FakeWebSocket.instances.at(-1);
+  assert.ok(watcher, 'watcher socket dibuka saat load');
+  watcher.fire('open');
+  watcher.fire('message', { data: JSON.stringify({ type: 'event', event: { type: 'job.completed', at: '2026-11-13T02:00:00.000Z', id: 'jb-9' } }) });
+  const feed = h.elements['event-feed'];
+  assert.equal(feed.children.length, 1);
+  assert.equal(feed.children[0].children[0].textContent, 'job.completed');
+  watcher.fire('message', { data: 'bukan-json' });
+  assert.equal(feed.children.length, 1);
 });

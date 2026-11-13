@@ -109,3 +109,20 @@ code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 6px; colo
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.board-col { padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; min-height: 90px; }
+.board-col h3 { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.board-col-backlog h3 { color: #9db4cc; }
+.board-col-doing h3 { color: #f6d999; }
+.board-col-done h3 { color: var(--accent); }
+.board-col-failed h3 { color: var(--danger); }
+.task-card { padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); overflow-wrap: anywhere; }
+.task-card strong { display: block; font-size: 13px; line-height: 1.4; }
+.task-card p { margin: 4px 0 0; }
+.event-feed { max-height: 240px; overflow-y: auto; scrollbar-width: thin; }
+.event-feed li { padding: 9px 13px; font-size: 13px; }
+.log-select { max-width: 280px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px; color: var(--text); background: #111923; font-size: 13px; }
+.log-view { max-height: 300px; overflow: auto; }
+@media (max-width: 900px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .board { grid-template-columns: 1fr; } }

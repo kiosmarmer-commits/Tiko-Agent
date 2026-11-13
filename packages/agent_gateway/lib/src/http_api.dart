@@ -31,6 +31,9 @@ class HttpApiServer {
     this.onShutdown,
     this.webhookEndpoint,
     this.skillApi,
+    this.tasksProvider,
+    this.logsProvider,
+    this.logContentProvider,
   });
 
   final MessageHandler onMessage;
@@ -55,6 +58,11 @@ class HttpApiServer {
 
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
+
+  /// Agent manager callbacks (P2-05): kanban tasks, log files, log content.
+  final Future<List<Map<String, dynamic>>> Function()? tasksProvider;
+  final Future<List<Map<String, dynamic>>> Function()? logsProvider;
+  final Future<Map<String, dynamic>?> Function(String name)? logContentProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -222,6 +230,29 @@ class HttpApiServer {
         _json(req, capabilitiesProvider?.call() ?? {'ok': true});
       } else if (path == '/v1/events' && req.method == 'GET') {
         _json(req, {'events': eventsProvider?.call() ?? []});
+      } else if (path == '/v1/tasks' && req.method == 'GET') {
+        final tasks =
+            await (tasksProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
+        _json(req, {'tasks': tasks});
+      } else if (path == '/v1/logs' && req.method == 'GET') {
+        final logs =
+            await (logsProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
+        _json(req, {'logs': logs});
+      } else if (path.startsWith('/v1/logs/') && req.method == 'GET') {
+        final name = Uri.decodeComponent(path.substring('/v1/logs/'.length));
+        if (name.isEmpty || name.contains('/') || name.contains('\\') || name.contains('..')) {
+          req.response.statusCode = 400;
+          _json(req, {'error': 'invalid log name'});
+        } else {
+          final content = await (logContentProvider?.call(name) ??
+              Future<Map<String, dynamic>?>.value(null));
+          if (content == null) {
+            req.response.statusCode = 404;
+            _json(req, {'error': 'log not found'});
+          } else {
+            _json(req, content);
+          }
+        }
       } else if (path == '/v1/approvals' && req.method == 'GET') {
         final list = await (listApprovals?.call() ?? Future.value(<Map<String, dynamic>>[]));
         _json(req, {'approvals': list});

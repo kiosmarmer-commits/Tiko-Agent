@@ -28,6 +28,7 @@
         <button type="button" data-tab="approvals" aria-pressed="false" aria-controls="tab-approvals">Approvals</button>
         <button type="button" data-tab="sessions" aria-pressed="false" aria-controls="tab-sessions">Sessions</button>
         <button type="button" data-tab="skills" aria-pressed="false" aria-controls="tab-skills">Skills</button>
+        <button type="button" data-tab="tasks" aria-pressed="false" aria-controls="tab-tasks">Tugas</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -98,6 +99,28 @@
           <button type="button" id="btn-refresh-skills" class="secondary">Muat ulang</button>
         </div>
         <ul id="skill-list" class="list"></ul>
+      </section>
+
+      <section id="tab-tasks" class="tab" hidden aria-label="Tugas">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">AGENT MANAGER</p><h1>Tugas &amp; Log</h1><p class="subheading">Papan tugas durable, event runtime live, dan log audit.</p></div>
+          <button type="button" id="btn-refresh-tasks" class="secondary">Muat ulang</button>
+        </div>
+        <div id="task-board" class="board" aria-label="Papan tugas"></div>
+        <div class="section-heading compact">
+          <div><p class="eyebrow">LIVE</p><h2>Event runtime</h2></div>
+          <button type="button" id="btn-clear-events" class="secondary">Bersihkan</button>
+        </div>
+        <ul id="event-feed" class="list event-feed" aria-live="polite"></ul>
+        <div class="section-heading compact">
+          <div><p class="eyebrow">AUDIT</p><h2>Log</h2></div>
+          <div class="row">
+            <label class="sr-only" for="logSelect">Pilih file log</label>
+            <select id="logSelect" class="log-select"></select>
+            <button type="button" id="btn-refresh-logs" class="secondary">Muat ulang</button>
+          </div>
+        </div>
+        <pre id="log-view" class="code log-view">Pilih file log untuk melihat isinya.</pre>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">
