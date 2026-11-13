@@ -37,7 +37,7 @@ jobs:
           set +e
           fail=0
           report="$(mktemp)"
-          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli apps/simpul; do
             [[ -d "$dir" ]] || continue
             echo "== analyze: $dir =="
             out="$( cd "$dir" && dart analyze --fatal-warnings 2>&1 )"
@@ -73,7 +73,7 @@ jobs:
           set +e
           fail=0
           tf="$(mktemp)"
-          for dir in packages/* apps/agentd apps/tiko apps/agent_cli; do
+          for dir in packages/* apps/agentd apps/tiko apps/agent_cli apps/simpul; do
             if [[ -d "$dir/test" ]]; then
               echo "== dart test: $dir =="
               out="$(mktemp)"

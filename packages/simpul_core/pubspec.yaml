@@ -1,0 +1,18 @@
+name: simpul_core
+description: Simpul P0 — vault Obsidian-compatible parser, index, synthetic generator, benchmark.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  crypto: ^3.0.0
+  meta: ^1.16.0
+  path: ^1.9.0
+  sqlite3: ^2.4.6
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

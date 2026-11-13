@@ -12,3 +12,7 @@ coverage/
 **/api.token.tmp
 **/tiko.lock
 **/daemon.log
+
+# Simpul local index and benchmark artifacts
+.simpul/
+.simpul_bench/

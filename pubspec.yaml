@@ -17,9 +17,11 @@ workspace:
   - packages/agent_scheduler
   - packages/agent_security
   - packages/tiko_runtime
+  - packages/simpul_core
   - apps/agentd
   - apps/agent_cli
   - apps/tiko
+  - apps/simpul
 
 
 dev_dependencies:
