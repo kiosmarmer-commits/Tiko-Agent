@@ -321,6 +321,7 @@ jobs:
         shell: bash
         run: |
           dart pub get
+          mkdir -p agentd-bundle
           dart compile exe apps/agentd/bin/agentd.dart -o agentd-bundle/${{ matrix.agentd_out }}
       - name: Generate desktop platform scaffolding
         working-directory: apps/agent_flutter
