@@ -30,6 +30,9 @@ class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
   Future<List<String>> backlinks(String notePath) => _unsupported();
 
   @override
+  Future<IndexedNote?> noteByPath(String path) => _unsupported();
+
+  @override
   Future<Map<String, List<String>>> tagsOf(Set<String> paths) =>
       _unsupported();
 

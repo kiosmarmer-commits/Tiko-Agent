@@ -176,6 +176,10 @@ abstract class VaultIndex {
   Future<List<SearchHit>> search(String query, {int limit = 20});
   Future<List<String>> backlinks(String notePath);
 
+  /// Full note row by vault-relative path (RAG chunk text, AI-21); null when
+  /// the path is not indexed.
+  Future<IndexedNote?> noteByPath(String path);
+
   /// Tags per requested path (missing paths are absent from the map) — the
   /// input for tag-based AI access rules (DIF-04).
   Future<Map<String, List<String>>> tagsOf(Set<String> paths);
@@ -541,6 +545,15 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
       }
     }
     return sources.toList()..sort();
+  }
+
+  @override
+  Future<IndexedNote?> noteByPath(String path) async {
+    _ensureLoaded();
+    for (final note in _notes) {
+      if (note.path == path) return note;
+    }
+    return null;
   }
 
   @override

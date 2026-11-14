@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'graph_cache.dart';
+import 'note_parser.dart';
 import 'vault_index.dart';
 
 /// SQLite-backed index per PRD §3. Returns null when the native sqlite3
@@ -408,6 +409,75 @@ class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
       ORDER BY src.path
     ''', [notePath]);
     return [for (final row in rows) row['path'] as String];
+  }
+
+  @override
+  Future<IndexedNote?> noteByPath(String path) async {
+    final noteRows = db.select(
+      'SELECT * FROM notes WHERE path = ? LIMIT 1',
+      [path],
+    );
+    if (noteRows.isEmpty) return null;
+    final row = noteRows.first;
+    final noteId = row['id'] as int;
+    final tags = [
+      for (final t in db.select(
+        'SELECT tag FROM tags WHERE note_id = ? ORDER BY tag',
+        [noteId],
+      ))
+        t['tag'] as String,
+    ];
+    final props = {
+      for (final pr in db.select(
+        'SELECT key, value FROM props WHERE note_id = ? ORDER BY key',
+        [noteId],
+      ))
+        pr['key'] as String: pr['value'],
+    };
+    final links = [
+      for (final l in db.select(
+        'SELECT dst_raw, kind, anchor, embed FROM links '
+        'WHERE src_id = ? ORDER BY rowid',
+        [noteId],
+      ))
+        ParsedLink(
+          target: l['dst_raw'] as String,
+          anchor: l['anchor'] as String? ?? '',
+          alias: '',
+          kind: l['kind'] as String? ?? 'wikilink',
+          embed: (l['embed'] as int? ?? 0) == 1,
+          offset: 0,
+        ),
+    ];
+    final chunks = [
+      for (final c in db.select(
+        'SELECT c.heading_path, c.start_char, c.end_char, f.body '
+        'FROM chunks c JOIN chunks_fts f ON f.rowid = c.id '
+        'WHERE c.note_id = ? ORDER BY c.ord',
+        [noteId],
+      ))
+        NoteChunk(
+          headingPath: c['heading_path'] as String? ?? '',
+          startChar: c['start_char'] as int,
+          endChar: c['end_char'] as int,
+          text: c['body'] as String? ?? '',
+        ),
+    ];
+    return IndexedNote(
+      path: row['path'] as String,
+      title: row['title'] as String,
+      mtimeNs: row['mtime_ns'] as int,
+      sizeBytes: row['size_bytes'] as int,
+      contentHash: row['content_hash'] as String,
+      wordCount: (row['word_count'] as num?)?.toInt() ?? 0,
+      props: props,
+      tags: tags,
+      aliases: const [],
+      links: links,
+      chunks: chunks,
+      provenance: row['provenance'] as String? ?? 'human',
+      aiAccess: row['ai_access'] as String? ?? 'ask',
+    );
   }
 
   @override

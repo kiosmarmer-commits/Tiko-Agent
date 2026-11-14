@@ -304,4 +304,38 @@ void main() {
     expect(text['hits'], isEmpty);
     expect(text['filtered'], 1);
   });
+
+  test('ask_vault answers extractively with citations from the vault', () async {
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'ask_vault',
+      'arguments': {'query': 'saraf'},
+    });
+    final text = jsonDecode(
+      ((response['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['mode'], 'extractive');
+    final citations = text['citations'] as List;
+    expect(citations, isNotEmpty);
+    expect((citations.first as Map)['path'], 'catatan/satu.md');
+  });
+
+  test('ask_vault answers not_found when every citation is denied', () async {
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync(
+      jsonEncode({
+        'notes': {'catatan/satu.md': 'tolak'},
+      }),
+    );
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'ask_vault',
+      'arguments': {'query': 'saraf'},
+    });
+    final text = jsonDecode(
+      ((response['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['mode'], 'not_found');
+    expect(text['citations'], isEmpty);
+    expect(text['filtered'], 1);
+  });
 }
