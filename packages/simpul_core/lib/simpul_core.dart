@@ -46,3 +46,6 @@ export 'src/vault_sync.dart';
 export 'src/vault_transfer.dart';
 export 'src/vault_watcher.dart';
 export 'src/force_layout.dart';
+export 'src/fuzzy.dart';
+export 'src/resource_monitor.dart';
+export 'src/saved_search.dart';

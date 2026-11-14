@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'graph_cache.dart';
+import 'fuzzy.dart';
 import 'note_parser.dart';
 import 'vault_crypto.dart';
 
@@ -485,7 +486,17 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
           }
         }
       }
-      if (termScore == 0) return null;
+      if (termScore == 0) {
+        // FR-33: tolerate 1-2 typos at reduced weight before giving up.
+        final fuzzy = _fuzzyScore(note, term);
+        if (fuzzy == null) return null;
+        score += fuzzy.$1;
+        if (bestSnippet.isEmpty && fuzzy.$2 != null) {
+          bestSnippet = fuzzy.$2!;
+          bestHeading = fuzzy.$3 ?? '';
+        }
+        continue;
+      }
       score += termScore;
     }
 
@@ -513,6 +524,29 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
       }
     }
     return (score, bestSnippet, bestHeading);
+  }
+
+  /// FR-33: fuzzy term score (null when no tolerated match). Exact term
+  /// match is preferred by the caller; this only rescues typo'd queries.
+  (double, String?, String?)? _fuzzyScore(IndexedNote note, String term) {
+    final tolerance = fuzzyTolerance(term.length);
+    if (tolerance == 0) return null;
+    var score = 0.0;
+    String? snippet;
+    String? heading;
+    if (fuzzyMatches(wordTokens(note.title), term).isNotEmpty) {
+      score += 1.5;
+    }
+    for (final chunk in note.chunks) {
+      final hits = fuzzyMatches(wordTokens(chunk.text), term);
+      if (hits.isNotEmpty) {
+        score += 0.5 * hits.length;
+        snippet ??= _snippet(chunk.text, hits.first.word);
+        heading ??= chunk.headingPath;
+      }
+    }
+    if (score == 0) return null;
+    return (score, snippet, heading);
   }
 
   String _snippet(String text, String needle) {

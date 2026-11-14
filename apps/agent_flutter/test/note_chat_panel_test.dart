@@ -134,7 +134,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Jawaban AI lokal.'), findsOneWidget);
-      expect(find.textContaining('~'), findsOneWidget);
+      expect(find.textContaining('Konteks: ~'), findsOneWidget);
       expect(find.text('ai.md'), findsOneWidget);
 
       await tester.tap(find.text('Sisipkan ke catatan (AI-U05)'));
@@ -165,6 +165,68 @@ void main() {
       await tester.tap(find.text('Tanya AI lokal'));
       await tester.pumpAndSettle();
       expect(find.textContaining('ditolak'), findsOneWidget);
+    });
+
+    testWidgets('pause toggle blocks send (AI-U03)', (tester) async {
+      var asked = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SimpulNoteChatPanel(
+            vault: '/nonexistent-vault',
+            notePath: 'ai.md',
+            askOverride: (
+              question, {
+              required scope,
+              notePath,
+              confirmAsk = false,
+            }) async {
+              asked++;
+              return fakeAnswer('x');
+            },
+            onInsert: (_) {},
+          ),
+        ),
+      ));
+      await tester.tap(find.byIcon(Icons.pause));
+      await tester.pump();
+      expect(find.text('AI dijeda (AI-U03).'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'q');
+      await tester.tap(find.text('Tanya AI lokal'));
+      await tester.pumpAndSettle();
+      expect(asked, 0);
+    });
+
+    testWidgets('power saver gate blocks send on battery (AI-U04)',
+        (tester) async {
+      var asked = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SimpulNoteChatPanel(
+            vault: '/nonexistent-vault',
+            notePath: 'ai.md',
+            powerSaverEnabled: true,
+            pluggedInOverride: () => false,
+            askOverride: (
+              question, {
+              required scope,
+              notePath,
+              confirmAsk = false,
+            }) async {
+              asked++;
+              return fakeAnswer('x');
+            },
+            onInsert: (_) {},
+          ),
+        ),
+      ));
+      expect(
+        find.text('Mode hemat daya: AI dijeda sampai perangkat dicolokkan.'),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byType(TextField), 'q');
+      await tester.tap(find.text('Tanya AI lokal'));
+      await tester.pumpAndSettle();
+      expect(asked, 0);
     });
   });
 }

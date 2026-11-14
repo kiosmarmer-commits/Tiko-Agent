@@ -78,6 +78,16 @@ Future<void> main(List<String> args) async {
         await _exportHtml(rest);
       case 'export-graph':
         await _exportGraph(rest);
+      case 'search-save':
+        await _searchSave(rest);
+      case 'search-list':
+        await _searchList(rest);
+      case 'search-run':
+        await _searchRun(rest);
+      case 'search-delete':
+        await _searchDelete(rest);
+      case 'resources':
+        await _resources(rest);
       case 'tui' || 'repl':
         await _tui(rest);
       case 'ask':
@@ -224,6 +234,16 @@ Penggunaan:
   simpul export-graph <vault> [--format json|graphml] [--out path]
       Ekspor graf tautan vault ke JSON (kompatibel Obsidian) atau GraphML
       untuk Gephi/yEd (FR-72).
+  simpul search-save <vault> <nama> "kueri"
+      Simpan kueri pencarian bernama di .simpul/searches.json (FR-34).
+  simpul search-list <vault>
+      Daftar pencarian tersimpan.
+  simpul search-run <vault> <nama> [--limit N]
+      Jalankan pencarian tersimpan (FR-34).
+  simpul search-delete <vault> <nama>
+      Hapus pencarian tersimpan.
+  simpul resources
+      Snapshot sumber daya proses: RSS, jumlah CPU, load rata-rata (AI-U03).
   simpul tui <vault>
       Antarmuka terminal interaktif (paritas Hermes): editing per karakter
       dengan riwayat (↑/↓), autocomplete Tab untuk perintah dan path catatan,
@@ -1315,6 +1335,77 @@ Future<void> _exportGraph(List<String> args) async {
     await File(out).writeAsString(const JsonEncoder.withIndent('  ').convert(json));
     stdout.writeln('JSON tersimpan: $out');
   }
+}
+
+Future<void> _searchSave(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 3) {
+    throw ArgumentError('pemakaian: simpul search-save <vault> <nama> "kueri"');
+  }
+  final store = SavedSearchStore(positional.first);
+  await store.save(positional[1], positional[2]);
+  stdout.writeln('tersimpan: ${positional[1]}');
+}
+
+Future<void> _searchList(List<String> args) async {
+  final store = SavedSearchStore(_positional(args));
+  final searches = await store.list();
+  for (final s in searches) {
+    stdout.writeln('${s.name}\t${s.query}');
+  }
+  if (searches.isEmpty) stdout.writeln('(belum ada pencarian tersimpan)');
+}
+
+Future<void> _searchRun(List<String> args) async {
+  final opts = _options(args, {});
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul search-run <vault> <nama>');
+  }
+  final store = SavedSearchStore(positional.first);
+  final saved = await store.resolve(positional[1]);
+  if (saved == null) {
+    throw StateError('pencarian tidak ditemukan: ${positional[1]}');
+  }
+  final limit = int.parse(opts['limit'] ?? '20');
+  final index = await _openIndex(positional.first, opts['out']);
+  try {
+    final hits = await index.search(saved.query, limit: limit);
+    stdout.writeln(jsonEncode({
+      'name': saved.name,
+      'query': saved.query,
+      'hits': hits
+          .map((h) => {
+                'path': h.path,
+                'title': h.title,
+                'score': h.score,
+                'snippet': h.snippet,
+              })
+          .toList(),
+    }));
+  } finally {
+    await index.close();
+  }
+}
+
+Future<void> _searchDelete(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul search-delete <vault> <nama>');
+  }
+  final removed =
+      await SavedSearchStore(positional.first).delete(positional[1]);
+  stdout.writeln(removed
+      ? 'dihapus: ${positional[1]}'
+      : 'tidak ditemukan: ${positional[1]}');
+}
+
+Future<void> _resources(List<String> args) async {
+  final snapshot = ResourceMonitor.snapshot();
+  stdout.writeln(jsonEncode({
+    ...snapshot.toJson(),
+    'plugged_in': ResourceMonitor.isPluggedIn(),
+  }));
 }
 
 Future<void> _vaultStatus(List<String> args) async {
