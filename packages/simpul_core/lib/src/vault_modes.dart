@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'vault_crypto.dart';
+import 'vault_recovery.dart';
 
 /// Encryption modes from PRD `06-enkripsi.md` (SEC-01 staged migration
 /// M0→M1→M2→M3): M0 plaintext, M1 index artifacts only, M2 adds notes in
@@ -17,6 +18,7 @@ class VaultLockResult {
     required this.folders,
     required this.encrypted,
     required this.keyCratePath,
+    this.shares = const [],
   });
 
   final String mode;
@@ -24,6 +26,10 @@ class VaultLockResult {
   final List<String> folders;
   final List<String> encrypted;
   final String keyCratePath;
+
+  /// Shamir recovery shares (SEC-06) when requested at lock time; store
+  /// them offline — they reconstruct the vault key without the password.
+  final List<String> shares;
 }
 
 class VaultUnlockResult {
@@ -70,6 +76,8 @@ abstract final class VaultModes {
     required String password,
     String mode = 'm1',
     List<String> folders = const [],
+    int? recoveryShares,
+    int? recoveryThreshold,
   }) async {
     final marker = markerFile(vault);
     if (marker.existsSync()) {
@@ -127,18 +135,31 @@ abstract final class VaultModes {
         'created_at': DateTime.now().toUtc().toIso8601String(),
       })),
     );
+    var shares = const <String>[];
+    if (recoveryShares != null) {
+      shares = VaultRecovery.splitKey(
+        crypto.vaultKeyBytes(),
+        shares: recoveryShares,
+        threshold: recoveryThreshold ?? (recoveryShares ~/ 2 + 1),
+      );
+    }
     return VaultLockResult(
       mode: _modeName(parsed),
       kdf: crypto.kdf.toJson(),
       folders: resolvedFolders,
       encrypted: encrypted,
       keyCratePath: cratePath,
+      shares: shares,
     );
   }
 
+  /// Unlocks the vault with the password, or — when [recoveryShares] is
+  /// given (SEC-06) — by reconstructing the vault key from at least the
+  /// recorded threshold of Shamir shares, without any password.
   static Future<VaultUnlockResult> unlock(
     String vault, {
-    required String password,
+    String? password,
+    List<String> recoveryShares = const [],
   }) async {
     final marker = markerFile(vault);
     if (!marker.existsSync()) throw StateError('vault tidak terkunci');
@@ -148,8 +169,18 @@ abstract final class VaultModes {
         'crate kunci vault tidak ditemukan: ${crateFile.path}',
       );
     }
-    final crypto =
-        await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+    final VaultCrypto crypto;
+    if (recoveryShares.isNotEmpty) {
+      final recovered = VaultRecovery.combineKey(recoveryShares);
+      crypto = VaultCrypto.withVaultKey(recovered);
+    } else if (password != null && password.isNotEmpty) {
+      crypto =
+          await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+    } else {
+      throw ArgumentError(
+        'butuh password atau recovery-shares untuk membuka vault',
+      );
+    }
     final decrypted = <String>[];
     for (final name in indexFiles) {
       final file = File(p.join(vault, '.simpul', name));

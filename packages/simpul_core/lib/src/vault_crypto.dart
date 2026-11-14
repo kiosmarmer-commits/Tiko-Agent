@@ -64,6 +64,38 @@ class VaultCryptoException implements Exception {
 class VaultCrypto {
   VaultCrypto._(this._vaultKey, this.kdf);
 
+  /// Wraps an already-known vault key (e.g. reconstructed from Shamir
+  /// recovery shares, SEC-06) without re-deriving from a password.
+  VaultCrypto.withVaultKey(
+    List<int> vaultKey, {
+    this.kdf = const KdfParams(),
+  })  : _vaultKey = Uint8List.fromList(vaultKey),
+        _wiped = false;
+
+  bool _wiped = false;
+
+  /// True after [wipe] — the instance can no longer encrypt or decrypt.
+  bool get isWiped => _wiped;
+
+  /// Zeroes the in-memory vault key (SEC-16 auto-lock). Any later
+  /// encrypt/decrypt throws [VaultCryptoException] instead of silently
+  /// working with stale key material.
+  void wipe() {
+    if (_vaultKey is Uint8List) {
+      _vaultKey.fillRange(0, _vaultKey.length, 0);
+    }
+    _wiped = true;
+  }
+
+  /// Exposes the raw vault key for recovery-key splitting (SEC-06). Treat
+  /// the result as a secret: split it, then let it go out of scope.
+  List<int> vaultKeyBytes() {
+    if (_wiped) {
+      throw VaultCryptoException('kunci vault sudah di-wipe (auto-lock)');
+    }
+    return Uint8List.fromList(_vaultKey);
+  }
+
   static const magic = 'SMPLCRT1';
   static const formatVersion = 1;
   static const _algoXchacha20Poly1305 = 1;
@@ -118,6 +150,7 @@ class VaultCrypto {
 
   /// Encrypts [plain] under a fresh per-file DEK (SEC-07/08).
   List<int> encryptBytes(List<int> plain) {
+    _ensureNotWiped();
     final dek = _randomBytes(32);
     final wrapped = _wrapSync(dek, _vaultKey);
     final box = _aead.encryptSync(
@@ -138,6 +171,7 @@ class VaultCrypto {
   /// Decrypts crate bytes; tampering or a wrong key throws
   /// [VaultCryptoException] (fail-closed, SEC-I04).
   List<int> decryptBytes(List<int> stored) {
+    _ensureNotWiped();
     final header = _parseHeader(stored);
     final dek = _unwrapSync(header.wrapped, _vaultKey, what: 'kunci data');
     final body = _BodyOffsets.parse(stored, header.wrappedEnd);
@@ -166,6 +200,12 @@ class VaultCrypto {
   Future<void> decryptFileInPlace(String path) async {
     final raw = File(path).readAsBytesSync();
     await writeBytesAtomically(path, decryptBytes(raw));
+  }
+
+  void _ensureNotWiped() {
+    if (_wiped) {
+      throw VaultCryptoException('kunci vault sudah di-wipe (auto-lock)');
+    }
   }
 
   static Future<void> writeBytesAtomically(String path, List<int> bytes) async {

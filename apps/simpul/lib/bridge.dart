@@ -14,6 +14,7 @@ class SimpulBridge {
     required this.vaultDir,
     this.token,
     this.password,
+    this.autoLockTimeout,
     AiAccessPolicy Function()? policyLoader,
   }) : policyLoader = policyLoader ?? (() => AiAccessPolicy.load(vaultDir));
 
@@ -23,6 +24,11 @@ class SimpulBridge {
   /// Optional explicit vault password (overrides SIMPUL_PASSWORD) so embedded
   /// hosts can unlock a locked vault without touching process environment.
   final String? password;
+
+  /// Idle auto-lock (SEC-16): when set, the derived vault key is wiped from
+  /// memory after this idle period; the next tool call re-derives it from
+  /// the available credentials.
+  final Duration? autoLockTimeout;
 
   /// Reloaded on every tool call so permission changes take effect
   /// immediately (DIF-04); a corrupt config fails closed to deny-all.
@@ -246,9 +252,17 @@ class SimpulBridge {
     }
   }
 
+  VaultCrypto? _cachedCrypto;
+  VaultAutoLock? _autoLock;
+
   Future<VaultCrypto?> _vaultCrypto() async {
     final modeFile = File(p.join(vaultDir, '.simpul', 'vault-mode.json'));
     if (!modeFile.existsSync()) return null;
+    final cached = _cachedCrypto;
+    if (cached != null && !cached.isWiped) {
+      _autoLock?.touch();
+      return cached;
+    }
     final password = this.password ?? Platform.environment['SIMPUL_PASSWORD'];
     if (password == null || password.isEmpty) {
       throw ArgumentError(
@@ -259,7 +273,18 @@ class SimpulBridge {
     if (!crateFile.existsSync()) {
       throw StateError('crate kunci vault tidak ditemukan: ${crateFile.path}');
     }
-    return VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+    final crypto =
+        await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+    _cachedCrypto = crypto;
+    final timeout = autoLockTimeout;
+    if (timeout != null) {
+      _autoLock ??= VaultAutoLock(
+        idleTimeout: timeout,
+        onLock: () => _cachedCrypto?.wipe(),
+      );
+      _autoLock!.touch();
+    }
+    return crypto;
   }
 
   Future<VaultIndex> _openIndex() async {

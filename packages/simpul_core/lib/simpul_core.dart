@@ -27,12 +27,14 @@ export 'src/ollama_chat.dart';
 export 'src/ollama_embedder.dart';
 export 'src/semantic_index.dart';
 export 'src/tag_suggester.dart';
+export 'src/vault_auto_lock.dart';
 export 'src/vault_crypto.dart';
 export 'src/vault_generator.dart';
 export 'src/vault_index.dart';
 export 'src/vault_index_sqlite_stub.dart'
     if (dart.library.ffi) 'src/vault_index_sqlite.dart';
 export 'src/vault_modes.dart';
+export 'src/vault_recovery.dart';
 export 'src/vault_scanner.dart';
 export 'src/vault_sync.dart';
 export 'src/vault_watcher.dart';
