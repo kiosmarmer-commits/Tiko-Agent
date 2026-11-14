@@ -282,11 +282,11 @@
   let watchSocket = null;
   let watchBackoffMs = 1000;
 
-  function watchEvents() {
+  async function watchEvents() {
     if (!store.token || watchSocket) return;
     let ws;
     try {
-      ws = new WebSocket(websocketUrl());
+      ws = new WebSocket(await websocketUrl());
     } catch (_) {
       return;
     }
@@ -458,10 +458,22 @@
     }
   }
 
-  function websocketUrl() {
-    const url = new URL(store.base.replace(/\/+$/, '') + '/v1/stream');
+  async function websocketUrl() {
+    const root = store.base.replace(/\/+$/, '');
+    const url = new URL(root + '/v1/stream');
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('token', store.token);
+    try {
+      const res = await fetch(root + '/v1/auth/ticket', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + store.token },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        url.searchParams.set('ticket', data.ticket);
+      }
+    } catch (error) {
+      addMsg('system', 'Gagal mendapatkan ticket stream: ' + error.message);
+    }
     return url.toString();
   }
 
@@ -520,7 +532,7 @@
     }
   }
 
-  function submitMessage(text) {
+  async function submitMessage(text) {
     if (!text || busy) return;
     if (!store.token) {
       addMsg('system', 'Masukkan Bearer token pada tab Bantuan → Setelan koneksi terlebih dahulu.');
@@ -528,7 +540,7 @@
     }
     let ws;
     try {
-      ws = new WebSocket(websocketUrl());
+      ws = new WebSocket(await websocketUrl());
     } catch (error) {
       addMsg('system', 'Tidak dapat membuka koneksi streaming: ' + error.message);
       return;

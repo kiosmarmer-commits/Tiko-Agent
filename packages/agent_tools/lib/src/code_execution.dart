@@ -8,10 +8,10 @@ import 'package:path/path.dart' as p;
 
 import 'sandbox.dart';
 
-/// Generate a random ID
+/// Generate a random ID (B-11: CSPRNG)
 String _generateId({int length = 32}) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  final random = Random();
+  final random = Random.secure();
   return List.generate(length, (_) => chars[random.nextInt(chars.length)]).join();
 }
 

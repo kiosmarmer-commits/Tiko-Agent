@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
@@ -330,7 +332,16 @@ class ApiServer {
   int? get port => _port;
   String? get url => _server != null ? 'http://${_server!.address.host}:${_server!.port}' : null;
 
-  /// Start the API server
+  /// Effective auth token (B-03): the configured token, or an auto-generated
+  /// secure token when none was configured. Exposed so the host process can
+  /// surface it once to the operator.
+  String? get effectiveAuthToken => _effectiveToken;
+
+  String? _effectiveToken;
+  StreamSubscription<HttpRequest>? _subscription;
+
+  /// Start the API server (B-05/B-06): non-blocking, `onStart` fires before
+  /// the accept loop serves its first request, and the socket is not shared.
   Future<void> start() async {
     if (_status != ApiServerStatus.stopped) {
       throw Exception('Server is already running or in transition');
@@ -343,16 +354,33 @@ class ApiServer {
       _server = await HttpServer.bind(
         config.host,
         config.port,
-        shared: true,
+        shared: false,
       );
 
       _port = _server!.port;
       _status = ApiServerStatus.running;
 
-      // Setup request handling
-      await for (final request in _server!) {
+      _effectiveToken =
+          (config.authToken != null && config.authToken!.isNotEmpty)
+              ? config.authToken
+              : _generateToken();
+
+      // Call onStart callback before serving any request
+      if (onStart != null) {
+        await onStart!(this);
+      }
+
+      _subscription = _server!.listen((request) async {
         try {
           await _handleRequest(request);
+        } on _RequestTooLarge {
+          request.response
+            ..statusCode = HttpStatus.requestEntityTooLarge
+            ..write(jsonEncode({
+              'error': true,
+              'message': 'Request too large',
+            }))
+            ..close();
         } catch (e) {
           // Log error but don't crash
           if (onError != null) {
@@ -367,12 +395,7 @@ class ApiServer {
             }))
             ..close();
         }
-      }
-
-      // Call onStart callback
-      if (onStart != null) {
-        await onStart!(this);
-      }
+      });
     } catch (e) {
       _status = ApiServerStatus.error;
       rethrow;
@@ -388,7 +411,9 @@ class ApiServer {
     _status = ApiServerStatus.stopping;
 
     try {
-      await _server?.close();
+      await _subscription?.cancel();
+      _subscription = null;
+      await _server?.close(force: true);
       _server = null;
       _port = null;
       _status = ApiServerStatus.stopped;
@@ -409,10 +434,41 @@ class ApiServer {
     await start();
   }
 
+  /// Generate a secure token (B-03): 32 bytes from a CSPRNG, hex-encoded.
+  String _generateToken() {
+    final bytes = List<int>.generate(32, (_) => Random.secure().nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
   /// Handle incoming HTTP request
   Future<void> _handleRequest(HttpRequest request) async {
+    // Enforce CORS allowlist (B-04): only configured origins get ACAO.
+    final origin = request.headers.value('origin');
+    if (origin != null && origin.isNotEmpty) {
+      final allowAll = config.corsOrigins.contains('*');
+      if (allowAll || config.corsOrigins.contains(origin)) {
+        request.response.headers.set(
+          'Access-Control-Allow-Origin',
+          allowAll ? '*' : origin,
+        );
+        request.response.headers.set('Vary', 'Origin');
+      }
+    }
+
     // Parse request
-    final apiRequest = await _parseRequest(request);
+    final ApiRequest apiRequest;
+    try {
+      apiRequest = await _parseRequest(request);
+    } on _RequestTooLarge {
+      request.response
+        ..statusCode = HttpStatus.requestEntityTooLarge
+        ..write(jsonEncode({
+          'error': true,
+          'message': 'Request too large',
+        }))
+        ..close();
+      return;
+    }
 
     // Apply middleware
     for (final mw in [...middleware, ..._getRouteMiddleware(apiRequest.path, apiRequest.method)]) {
@@ -461,12 +517,19 @@ class ApiServer {
     final path = request.uri.path;
     final queryParameters = request.uri.queryParameters;
     
-    // Read body
+    // Read body with a hard size cap (B-04)
     String rawBody = '';
     Map<String, dynamic> body = {};
     
     if (request.contentLength > 0) {
-      rawBody = await utf8.decoder.bind(request).join();
+      final builder = BytesBuilder();
+      await for (final chunk in request) {
+        builder.add(chunk);
+        if (builder.length > config.maxRequestSize) {
+          throw const _RequestTooLarge();
+        }
+      }
+      rawBody = utf8.decode(builder.takeBytes(), allowMalformed: true);
       
       if (request.headers.contentType?.mimeType == 'application/json') {
         try {
@@ -577,14 +640,20 @@ class ApiServer {
     return route?.authRequired ?? false;
   }
 
-  /// Validate authentication token
+  /// Validate authentication token (B-03): fail-closed and constant-time.
   bool _validateAuth(ApiRequest request) {
-    if (config.authToken == null || config.authToken!.isEmpty) {
-      return true; // No auth configured
+    final expected = _effectiveToken;
+    if (expected == null || expected.isEmpty) {
+      return false; // No auth configured -> deny
     }
-    
-    final token = request.authToken;
-    return token == config.authToken;
+
+    final token = request.authToken ?? '';
+    if (token.length != expected.length) return false;
+    var diff = 0;
+    for (var i = 0; i < expected.length; i++) {
+      diff |= token.codeUnitAt(i) ^ expected.codeUnitAt(i);
+    }
+    return diff == 0;
   }
 
   /// Generate OpenAPI/Swagger specification
@@ -911,4 +980,8 @@ class ApiServerException implements Exception {
 
   @override
   String toString() => 'ApiServerException: $message${code != null ? ' ($code)' : ''}';
+}
+
+class _RequestTooLarge implements Exception {
+  const _RequestTooLarge();
 }

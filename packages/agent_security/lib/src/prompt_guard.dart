@@ -11,6 +11,7 @@
 ///   loops and credential-stuffing patterns.
 library;
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:agent_core/agent_core.dart';
@@ -127,7 +128,7 @@ class PromptGuard {
     (
       id: 'PI-005',
       pattern: RegExp(r'\b[A-Za-z0-9+/]{120,}={0,2}\b'),
-      severity: GuardSeverity.medium,
+      severity: GuardSeverity.low,
       description: 'Long base64 blob (possible encoded payload)',
     ),
     (
@@ -139,6 +140,36 @@ class PromptGuard {
       ),
       severity: GuardSeverity.medium,
       description: 'Tool invocation instruction embedded in content',
+    ),
+    (
+      id: 'PI-007',
+      pattern: RegExp(
+        r'(abaikan|lupakan|tolak)\s+(semua\s+)?'
+        r'(instruksi|perintah|aturan)\s+(sebelumnya|di\s+atas|di\s+modul\s+lain)?',
+        caseSensitive: false,
+      ),
+      severity: GuardSeverity.critical,
+      description: 'Instruction override attempt (Bahasa Indonesia)',
+    ),
+    (
+      id: 'PI-008',
+      pattern: RegExp(
+        r'(kirim|kirimkan|ekspor|salin|exfiltrate)\s+[^.]{0,80}'
+        r'(ke\s+server\s+penyerang|ke\s+alamat\s+penyerang|'
+        r'tanpa\s+sepengetahuan)',
+        caseSensitive: false,
+      ),
+      severity: GuardSeverity.critical,
+      description: 'Data exfiltration instruction (Bahasa Indonesia)',
+    ),
+    (
+      id: 'PI-009',
+      pattern: RegExp(
+        r'(?:^|\n)[ ]{0,8}system\s*:',
+        caseSensitive: false,
+      ),
+      severity: GuardSeverity.high,
+      description: 'Fake system-role line at message start',
     ),
   ];
 
@@ -190,18 +221,42 @@ class PromptGuard {
     ),
   ];
 
-  /// Scans untrusted input for prompt-injection techniques. Untrusted
-  /// provenance ([Provenance.web], [Provenance.email], [Provenance.mcp],
+  /// Scans untrusted input for prompt-injection techniques. Input is
+  /// normalized first (B-14): zero-width characters are stripped and
+  /// whitespace runs are folded so evasions via invisible characters or
+  /// spacing cannot slip past the rules. Untrusted provenance
+  /// ([Provenance.web], [Provenance.email], [Provenance.mcp],
   /// [Provenance.unknown]) escalates every finding by one severity level.
+  /// A long base64 blob (PI-005) is decoded and the plaintext is re-scanned;
+  /// only a decoded match against another injection rule blocks, keeping
+  /// benign encoded payloads to a low-severity sanitize.
   GuardVerdict inspectInput(
     String text, {
     Provenance provenance = Provenance.unknown,
   }) {
     final untrusted = _isUntrusted(provenance);
+    final normalized = _normalize(text);
     final findings = <GuardFinding>[];
     for (final rule in _injectionRules) {
-      final match = rule.pattern.firstMatch(text);
+      final match = rule.pattern.firstMatch(normalized);
       if (match == null) continue;
+      if (rule.id == 'PI-005') {
+        final decoded = _tryDecodeBase64(match.group(0) ?? '');
+        final nested = decoded == null
+            ? const <GuardFinding>[]
+            : _scanRules(decoded, exclude: {'PI-005'}, untrusted: untrusted);
+        if (nested.isNotEmpty) {
+          findings.add(GuardFinding(
+            ruleId: 'PI-005-decoded',
+            description:
+                'Base64 payload decodes to injection content: '
+                '${nested.map((f) => f.ruleId).join(",")}',
+            severity: GuardSeverity.critical,
+            excerpt: _excerpt(nested.first.excerpt),
+          ));
+          continue;
+        }
+      }
       var severity = rule.severity;
       if (untrusted) {
         severity = _escalate(severity);
@@ -214,6 +269,50 @@ class PromptGuard {
       ));
     }
     return _verdict(text, findings);
+  }
+
+  static List<GuardFinding> _scanRules(
+    String text, {
+    Set<String> exclude = const {},
+    required bool untrusted,
+  }) {
+    final findings = <GuardFinding>[];
+    for (final rule in _injectionRules) {
+      if (exclude.contains(rule.id)) continue;
+      final match = rule.pattern.firstMatch(text);
+      if (match == null) continue;
+      var severity = rule.severity;
+      if (untrusted) severity = _escalate(severity);
+      findings.add(GuardFinding(
+        ruleId: rule.id,
+        description: rule.description,
+        severity: severity,
+        excerpt: _excerpt(match.group(0) ?? ''),
+      ));
+    }
+    return findings;
+  }
+
+  /// Strips zero-width/invisible characters and folds whitespace runs.
+  static String _normalize(String text) {
+    final stripped = text.replaceAll(RegExp(r'[\u200b-\u200f\u2060\ufeff]'), '');
+    return stripped.replaceAll(RegExp(r'[ \t\x0B\f\r]+'), ' ');
+  }
+
+  /// Decodes a candidate base64 string; returns null when it is not valid
+  /// base64 or does not decode to printable text.
+  static String? _tryDecodeBase64(String blob) {
+    try {
+      final padded = blob.padRight((blob.length + 3) ~/ 4 * 4, '=');
+      final bytes = base64Decode(padded);
+      if (bytes.isEmpty) return null;
+      final text = utf8.decode(bytes, allowMalformed: false);
+      final printable = text.replaceAll(RegExp(r'[^\x20-\x7e\n\t]'), '');
+      if (printable.length * 2 < text.length) return null;
+      return text;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Scans outbound text for secrets and PII. Findings below the sanitize

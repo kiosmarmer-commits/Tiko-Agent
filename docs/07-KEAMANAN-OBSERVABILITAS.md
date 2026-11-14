@@ -78,4 +78,13 @@ CI mencakup static analysis/test suites; uji penetrasi dan konfigurasi akun ekst
 
 ## 8. Content-plane guard (baru)
 
-`packages/agent_security/lib/src/prompt_guard.dart` melengkapi Tirith pada bidang konten: `PromptGuard.inspectInput()` mendeteksi prompt injection (instruction override, ekstraksi system prompt, delimiter chat-template, persona jailbreak, blob base64, instruksi tool-call tertanam) dengan eskalasi severity untuk provenance tak tepercaya; `PromptGuard.inspectOutput()` menyaring kebocoran secret/PII menjadi `[REDACTED:*]`; `AnomalyDetector` mendeteksi lonjakan rate per key. Guard ini bersifat heuristik deterministik dan tidak menggantikan PermissionGate/approval.
+`packages/agent_security/lib/src/prompt_guard.dart` melengkapi Tirith pada bidang konten: `PromptGuard.inspectInput()` mendeteksi prompt injection (instruction override EN/ID, ekstraksi system prompt, delimiter chat-template, persona jailbreak, blob base64, instruksi tool-call tertanam, instruksi eksfiltrasi, baris `system:` palsu) dengan eskalasi severity untuk provenance tak tepercaya; input dinormalisasi dulu (zero-width dihapus, whitespace difold) dan blob base64 di-decode lalu di-scan ulang — blob polos hanya menyebabkan sanitize, blob yang terdekode menjadi konten injeksi diblokir; `PromptGuard.inspectOutput()` menyaring kebocoran secret/PII menjadi `[REDACTED:*]`; `AnomalyDetector` mendeteksi lonjakan rate per key. Guard ini bersifat heuristik deterministik dan tidak menggantikan PermissionGate/approval.
+
+## 8a. Secret at-rest (hardening 2026-11-15)
+
+- `SecretStore` (`agent_security`) mengenkripsi payload dengan XChaCha20-Poly1305 di bawah kunci Argon2id (19 MiB, t=2, p=1), format file v2 `TSS2|salt|nonce|cipher|mac`, tulis atomik + chmod 600, dan migrasi otomatis dari format legacy XOR.
+- `CredentialManager` menyimpan kredensial dengan tulis atomik + chmod 600 wajib; kegagalan simpan dilempar ke pemanggil, dan file lama ber-permission longgar diperketat saat `initialize()`.
+- `HttpApiServer` hanya menerima Bearer (constant-time); WebSocket memakai ticket sekali pakai TTL 30 detik; Host asing ditolak 421; tanpa `Access-Control-Allow-Origin: *`.
+- `ApiServer` fail-closed: tanpa token dikonfigurasi, token acak CSPRNG digenerate dan endpoint ber-auth tetap terkunci; body dibatasi `maxRequestSize` (413); CORS mengikuti `corsOrigins`.
+
+Detail lengkap per bug: [`SECURITY-HARDENING-2026-11-15.md`](SECURITY-HARDENING-2026-11-15.md).

@@ -630,31 +630,24 @@ class ShellTool implements Tool {
       return const ToolResult(callId: '', content: 'cmd kosong', isError: true);
     }
 
-    // Workspace jail: reject path args that escape workspace (AGD-07 sandbox light).
+    // Workspace jail (AGD-07 sandbox light, B-09): flag values are checked
+    // too, and every path-like argument is resolved canonically via
+    // PathSafety (symlink-aware, fail-closed) instead of a lexical '..' scan.
     final root = p.normalize(Directory(ctx.workspacePath).absolute.path);
     for (final part in parts.skip(1)) {
-      if (part.startsWith('-')) continue;
-      if (part.contains('..')) {
-        return const ToolResult(
+      final value = part.startsWith('-') && part.contains('=')
+          ? part.substring(part.indexOf('=') + 1)
+          : part.startsWith('-')
+              ? null
+              : part;
+      if (value == null || value.isEmpty) continue;
+      final resolved = PathSafety.resolveInRoot(root, value);
+      if (resolved == null) {
+        return ToolResult(
           callId: '',
-          content: 'Path dengan .. dilarang (workspace jail)',
+          content: 'Path di luar workspace: $part',
           isError: true,
         );
-      }
-      if (part.startsWith('/') ||
-          part.contains(':\\') ||
-          RegExp(r'^[A-Za-z]:').hasMatch(part)) {
-        try {
-          final resolved = p.normalize(File(part).absolute.path);
-          final insideRoot = resolved == root || p.isWithin(root, resolved);
-          if (!insideRoot) {
-            return ToolResult(
-              callId: '',
-              content: 'Path di luar workspace: $part',
-              isError: true,
-            );
-          }
-        } catch (_) {}
       }
     }
 

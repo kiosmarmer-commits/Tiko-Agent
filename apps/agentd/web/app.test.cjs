@@ -133,7 +133,8 @@ function createHarness() {
       calls.push({ url: String(url), options });
       const pathname = new URL(String(url), 'http://127.0.0.1').pathname;
       let body = {};
-      if (pathname === '/v1/status') body = { provider: 'mock' };
+      if (pathname === '/v1/auth/ticket') body = { ticket: 'test-ticket' };
+      else if (pathname === '/v1/status') body = { provider: 'mock' };
       else if (pathname === '/v1/memories') body = { memories: [{ kind: '<img src=x onerror=alert(1)>', importance: '<b>high</b>', text: '<script>alert(1)</script>' }] };
       else if (pathname === '/v1/approvals') body = { approvals: [{ id: 'apr_1', state: 'pending', tool: 'write_file', risk: 'high' }] };
       else if (pathname === '/v1/sessions') body = { sessions: [{ id: 'web:default', channel: 'http', turns: 2 }] };
@@ -178,12 +179,18 @@ test('Memory content is rendered as text, never interpolated as HTML', async () 
   assert.equal(item.children[2].textContent, '<script>alert(1)</script>');
 });
 
-test('Chat uses encoded-token WebSocket streaming and the shared approval API', async () => {
+test('Chat streams over one-time-ticket WebSocket and the shared approval API', async () => {
   const h = createHarness();
   h.elements.input.value = 'buat file';
   h.elements.chatForm.dispatch('submit');
+  await tick();
+  await tick();
   const ws = FakeWebSocket.instances.at(-1);
-  assert.equal(new URL(ws.url).searchParams.get('token'), 's3cr+et & token');
+  const url = new URL(ws.url);
+  assert.equal(url.searchParams.get('ticket'), 'test-ticket');
+  assert.equal(url.searchParams.get('token'), null);
+  assert.ok(!ws.url.includes(encodeURIComponent('s3cr+et & token')), 'token mentah tidak boleh ada di URL stream');
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/auth/ticket') && call.options.method === 'POST' && call.options.headers.Authorization === 'Bearer s3cr+et & token'));
   ws.fire('open');
   assert.equal(JSON.parse(ws.sent[0]).text, 'buat file');
   ws.fire('message', { data: JSON.stringify({ type: 'confirm', id: 'apr_1', prompt: 'Izinkan write_file?' }) });
@@ -216,6 +223,8 @@ test('Tasks tab renders the kanban board, log list, and log content as text', as
 
 test('Live event watcher appends streamed events to the event feed', async () => {
   const h = createHarness();
+  await tick();
+  await tick();
   const watcher = FakeWebSocket.instances.at(-1);
   assert.ok(watcher, 'watcher socket dibuka saat load');
   watcher.fire('open');
