@@ -277,8 +277,7 @@ class AgentLoop {
         final callSw = Stopwatch()..start();
         initialProviderAttempted = true;
         var resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
-        var isErr = resp.finishReason == 'error' ||
-            (resp.text.contains('[error]') && resp.toolCalls.isEmpty);
+        var isErr = resp.finishReason == 'error';
         final attemptedProviders = <String>{activeProviderId};
         if (isErr) {
           router.recordFailure(activeProviderId, resp.text);
@@ -296,8 +295,7 @@ class AgentLoop {
             attemptedProviders.add(activeProviderId);
             final fallbackSw = Stopwatch()..start();
             resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
-            isErr = resp.finishReason == 'error' ||
-                (resp.text.contains('[error]') && resp.toolCalls.isEmpty);
+            isErr = resp.finishReason == 'error';
             if (isErr) {
               router.recordFailure(activeProviderId, resp.text);
             } else {
