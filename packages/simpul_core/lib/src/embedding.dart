@@ -106,6 +106,38 @@ class HashingEmbedder implements EmbeddingProvider {
   }
 }
 
+/// Serves pre-computed vectors by exact text (AI-03 integration bridge).
+/// Async embedders (e.g. [OllamaEmbedder]) batch-embed texts first, then sync
+/// call sites ([InMemorySemanticIndex], [HybridSearcher]) consume the results
+/// through this adapter. Fail-closed: an unknown text is a StateError, never
+/// a silent zero vector.
+class ReplayEmbedder implements EmbeddingProvider {
+  ReplayEmbedder({
+    required this.modelVersion,
+    required this.dimension,
+    Map<String, Float32List> vectors = const {},
+  }) : _vectors = Map.of(vectors);
+
+  @override
+  final String modelVersion;
+
+  final Map<String, Float32List> _vectors;
+
+  @override
+  final int dimension;
+
+  @override
+  Float32List embed(String text) {
+    final vector = _vectors[text];
+    if (vector == null) {
+      throw StateError('vektor untuk teks tidak tersedia (ReplayEmbedder)');
+    }
+    return vector;
+  }
+
+  void put(String text, Float32List vector) => _vectors[text] = vector;
+}
+
 /// int8-quantized vector (AI-14). Input must be L2-normalized so values fit
 /// in [-1, 1] and the scale factor is constant at 1/127.
 class QuantizedVector {

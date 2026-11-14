@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 import 'package:simpul/simpul.dart' show SimpulBridge;
@@ -65,9 +66,11 @@ Simpul — indeks vault Markdown lokal-first (kompatibel Obsidian).
 Penggunaan:
   simpul generate --notes N --seed S --out DIR [--attachments N]
       Buat vault sintetis deterministik untuk benchmark (BM-01).
-  simpul index <vault> [--out DIR]
+  simpul index <vault> [--out DIR] [--embed] [--embedder hashing|ollama]
+                [--model M] [--base-url U] [--dim N]
       Indeks seluruh vault (default: <vault>/.simpul). Backend SQLite bila
-      tersedia, otomatis fallback ke JSON.
+      tersedia, otomatis fallback ke JSON. --embed membangun indeks vektor;
+      --embedder ollama memakai server Ollama lokal (AI-03).
   simpul search <vault> "kueri" [--limit N]
       Cari catatan. Dukungan: kata (AND), "frasa", tag:a/b, path:folder,
       prop:kunci=nilai, -kecualikan.
@@ -76,21 +79,25 @@ Penggunaan:
   simpul links <vault> <path-catatan>
       Daftar backlink ke sebuah catatan.
   simpul layout <vault> [--iterations N] [--isolate] [--multi-level]
+                [--no-cache]
       Tata letak force-directed Barnes-Hut (GRA-L01); posisi JSON per node.
       --isolate menjalankan simulasi di isolate (NFR-S02/S08), --multi-level
-      memakai coarsening Louvain (GRA-L04).
+      memakai coarsening Louvain (GRA-L04). Hasil dicache ber-versi dan
+      dipakai sebagai warm start (GRA-L02, NFR-S09); --no-cache mematikan.
   simpul viewport <vault> [--min-x A --min-y B --max-x C --max-y D]
       Culling viewport via quadtree (GRA-R02); node dalam persegi panjang.
   simpul serve <vault> [--token T]
       Server MCP "Simpul Bridge" (AI-44) via stdio JSON-RPC: search,
       semsearch, health, backlinks, read_note, clusters, suggest_links.
-  simpul semsearch <vault> "kueri" [--limit N]
-      Pencarian semantik atas indeks vektor (.simpul/vectors.json).
-  simpul search <vault> "kueri" [--hybrid]
+  simpul semsearch <vault> "kueri" [--limit N] [--embedder ollama]
+      Pencarian semantik atas indeks vektor (.simpul/vectors.json); model
+      kueri harus sama dengan model indeks (fail-closed, AI-13).
+  simpul search <vault> "kueri" [--hybrid] [--embedder ollama]
       --hybrid menggabungkan leksikal + vektor dengan RRF (AI-20).
-  simpul sync <vault>
+  simpul sync <vault> [--embedder ollama]
       Pembaruan inkremental: hanya file berubah/baru/hapus yang diproses
-      (NFR-S05, NFR-08).
+      (NFR-S05, NFR-08); vektor chunk yang berubah ikut diperbarui bila
+      indeks vektor ada dan modelnya cocok.
   simpul clusters <vault>
       Deteksi komunitas Louvain (GRA-L05); id komunitas per node.
   simpul suggest-links <vault> [--limit N] [--min-score S]
@@ -161,6 +168,50 @@ Future<void> _generate(List<String> args) async {
   stdout.writeln(jsonEncode(manifest.toJson()));
 }
 
+OllamaEmbedder? _ollamaFromOptions(Map<String, String> opts) {
+  if (opts['embedder'] != 'ollama') return null;
+  return OllamaEmbedder(
+    model: opts['model'] ?? 'nomic-embed-text',
+    baseUrl: opts['base-url'] ?? 'http://localhost:11434',
+    dimension: opts['dim'] == null ? null : int.parse(opts['dim']!),
+  );
+}
+
+/// Batch-embeds [texts] through an async embedder and wraps the results in a
+/// sync [ReplayEmbedder] so existing sync call sites keep working (AI-03,
+/// AI-12).
+Future<ReplayEmbedder> _replayEmbedder(
+  OllamaEmbedder ollama,
+  List<String> texts,
+) async {
+  const batchSize = 32;
+  final vectors = <String, Float32List>{};
+  for (var i = 0; i < texts.length; i += batchSize) {
+    final batch = texts.sublist(i, i + batchSize > texts.length ? texts.length : i + batchSize);
+    final embedded = await ollama.embedBatch(batch);
+    for (var j = 0; j < batch.length; j++) {
+      vectors[batch[j]] = embedded[j];
+    }
+  }
+  return ReplayEmbedder(
+    modelVersion: ollama.modelVersion,
+    dimension: ollama.dimension,
+    vectors: vectors,
+  );
+}
+
+/// Fail-closed model check (AI-13): the stored vector file must match the
+/// requested embedder before any search opens it.
+void _checkVectorModel(String vectorsPath, String expectedModel) {
+  final stored = InMemorySemanticIndex.storedModelVersion(vectorsPath);
+  if (stored != null && stored != expectedModel) {
+    throw StateError(
+      'indeks vektor dibuat dengan model "$stored", bukan "$expectedModel" '
+      '\u2014 jalankan ulang: simpul index <vault> --embed --embedder ...',
+    );
+  }
+}
+
 Future<void> _index(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {'embed'});
@@ -181,9 +232,13 @@ Future<void> _index(List<String> args) async {
 
   var embedMs = 0;
   var chunkCount = 0;
+  String? model;
   if (opts['embed'] == 'true') {
     final embedWatch = Stopwatch()..start();
-    chunkCount = await _buildSemanticIndex(vault, notes, outDir);
+    final (builtChunks, builtModel) =
+        await _buildSemanticIndex(vault, notes, outDir, opts);
+    chunkCount = builtChunks;
+    model = builtModel;
     embedMs = embedWatch.elapsedMilliseconds;
   }
   stdout.writeln(jsonEncode({
@@ -195,20 +250,18 @@ Future<void> _index(List<String> args) async {
     if (embedMs > 0 || chunkCount > 0) ...{
       'embedded_chunks': chunkCount,
       'embed_ms': embedMs,
+      if (model != null) 'model': model,
     },
   }));
 }
 
-Future<int> _buildSemanticIndex(
+Future<(int, String)> _buildSemanticIndex(
   String vault,
   List<ScannedNote> notes,
   String? outDir,
+  Map<String, String> opts,
 ) async {
   final dir = outDir ?? p.join(vault, '.simpul');
-  final semantic = InMemorySemanticIndex(
-    HashingEmbedder(),
-    filePath: p.join(dir, 'vectors.json'),
-  );
   final chunks = <ChunkInput>[];
   for (final note in notes) {
     for (var i = 0; i < note.parsed.chunks.length; i++) {
@@ -222,12 +275,26 @@ Future<int> _buildSemanticIndex(
       ));
     }
   }
+  final ollama = _ollamaFromOptions(opts);
+  final EmbeddingProvider embedder;
+  if (ollama != null) {
+    embedder = await _replayEmbedder(
+      ollama,
+      [for (final chunk in chunks) chunk.text],
+    );
+  } else {
+    embedder = HashingEmbedder();
+  }
+  final semantic = InMemorySemanticIndex(
+    embedder,
+    filePath: p.join(dir, 'vectors.json'),
+  );
   try {
     await semantic.replaceAll(chunks);
   } finally {
     await semantic.close();
   }
-  return chunks.length;
+  return (chunks.length, embedder.modelVersion);
 }
 
 Future<void> _search(List<String> args) async {
@@ -243,7 +310,7 @@ Future<void> _search(List<String> args) async {
   try {
     List<SearchHit> hits;
     if (opts['hybrid'] == 'true') {
-      hits = await _hybridSearch(vault, index, query, limit, opts['out']);
+      hits = await _hybridSearch(vault, index, query, limit, opts);
     } else {
       hits = await index.search(query, limit: limit);
     }
@@ -269,16 +336,29 @@ Future<List<SearchHit>> _hybridSearch(
   VaultIndex index,
   String query,
   int limit,
-  String? outDir,
+  Map<String, String> opts,
 ) async {
-  final dir = outDir ?? p.join(vault, '.simpul');
+  final dir = opts['out'] ?? p.join(vault, '.simpul');
   final vectorsFile = File(p.join(dir, 'vectors.json'));
   if (!vectorsFile.existsSync()) {
     throw StateError(
       'indeks vektor belum ada — jalankan: simpul index "$vault" --embed',
     );
   }
-  final embedder = HashingEmbedder();
+  final ollama = _ollamaFromOptions(opts);
+  final expectedModel = ollama?.modelVersion ?? HashingEmbedder().modelVersion;
+  _checkVectorModel(vectorsFile.path, expectedModel);
+  final EmbeddingProvider embedder;
+  if (ollama != null) {
+    final queryVec = await ollama.embed(query);
+    embedder = ReplayEmbedder(
+      modelVersion: ollama.modelVersion,
+      dimension: ollama.dimension,
+      vectors: {query: queryVec},
+    );
+  } else {
+    embedder = HashingEmbedder();
+  }
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
@@ -296,20 +376,50 @@ Future<List<SearchHit>> _hybridSearch(
 
 Future<void> _layout(List<String> args) async {
   final vault = _positional(args);
-  final opts = _options(args, {'isolate', 'multi-level'});
+  final opts = _options(args, {'isolate', 'multi-level', 'no-cache'});
   final iterations = int.parse(opts['iterations'] ?? '300');
   final notes = await VaultScanner.scan(vault);
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
   final config = ForceLayoutConfig(maxIterations: iterations);
-  final result = switch ((opts['isolate'], opts['multi-level'])) {
-    ('true', _) => await IsolateLayout.simulate(graph, config: config),
-    (_, 'true') => MultiLevelLayout.simulate(graph, config: config),
-    _ => ForceLayout.simulate(graph, config: config),
+  final multiLevel = opts['multi-level'] == 'true';
+  final kind = multiLevel ? 'layout-multi-level' : 'layout';
+  final version =
+      '${multiLevel ? 'multi-level-v1' : 'barnes-hut-v1'}:$iterations'
+      ':${_graphFingerprint(graph)}';
+  final cache = _openCacheStore(vault, opts['out']);
+  Map<String, Object?>? cached;
+  if (cache != null && opts['no-cache'] != 'true') {
+    try {
+      cached = await cache.loadGraphCache(kind: kind, version: version);
+    } finally {
+      await (cache as VaultIndex).close();
+    }
+  }
+  if (cached != null) {
+    _applyWarmStart(graph, cached);
+  }
+  final warm = cached != null && !multiLevel;
+  final result = switch ((opts['isolate'], multiLevel)) {
+    ('true', _) => await IsolateLayout.simulate(graph, config: config, warmStart: warm),
+    (_, true) => MultiLevelLayout.simulate(graph, config: config),
+    _ => ForceLayout.simulate(graph, config: config, warmStart: warm),
   };
+  final payload = {
+    'x': [for (final x in graph.positionsX) x],
+    'y': [for (final y in graph.positionsY) y],
+  };
+  if (cache != null && opts['no-cache'] != 'true') {
+    try {
+      await cache.saveGraphCache(kind: kind, version: version, payload: payload);
+    } finally {
+      await (cache as VaultIndex).close();
+    }
+  }
   stdout.writeln(jsonEncode({
     'iterations': result.iterations,
     'final_energy': result.finalEnergy,
     'slept': result.slept,
+    'warm_start': cached != null,
     'nodes': [
       for (var i = 0; i < graph.nodeCount; i++)
         {
@@ -320,6 +430,55 @@ Future<void> _layout(List<String> args) async {
         },
     ],
   }));
+}
+
+/// Best-effort cache store: only an already-existing index file is opened so
+/// a bare vault never gets an index created just for caching.
+GraphCacheStore? _openCacheStore(String vault, String? outDir) {
+  final file = _resolveIndexFile(vault, outDir);
+  if (p.extension(file.path) == '.json') {
+    return file.existsSync() ? JsonVaultIndex(file.path) : null;
+  }
+  return SqliteVaultIndex.tryOpen(file.path);
+}
+
+/// Deterministic fingerprint of graph structure (nodes + edges); any change
+/// to the vault topology invalidates the cached layout (NFR-S09).
+String _graphFingerprint(GraphCsr graph) {
+  var hash = 0x811c9dc5;
+  void mix(String s) {
+    for (final code in utf8.encode(s)) {
+      hash ^= code;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    hash ^= 0x0a;
+    hash = (hash * 0x01000193) & 0xFFFFFFFF;
+  }
+  for (final path in graph.paths) {
+    mix(path);
+  }
+  for (var i = 0; i < graph.nodeCount; i++) {
+    for (var off = graph.offsets[i]; off < graph.offsets[i + 1]; off++) {
+      mix('$i->${graph.targets[off]}');
+    }
+  }
+  return hash.toRadixString(16);
+}
+
+/// Pre-fills [graph] positions from a cached payload; a stale-shaped payload
+/// is ignored (cold start) instead of corrupting the simulation.
+void _applyWarmStart(GraphCsr graph, Map<String, Object?> payload) {
+  final xs = payload['x'];
+  final ys = payload['y'];
+  if (xs is! List || ys is! List) return;
+  if (xs.length != graph.nodeCount || ys.length != graph.nodeCount) return;
+  for (var i = 0; i < graph.nodeCount; i++) {
+    if (xs[i] is! num || ys[i] is! num) return;
+  }
+  for (var i = 0; i < graph.nodeCount; i++) {
+    graph.positionsX[i] = (xs[i] as num).toDouble();
+    graph.positionsY[i] = (ys[i] as num).toDouble();
+  }
 }
 
 Future<void> _viewport(List<String> args) async {
@@ -377,14 +536,30 @@ Future<void> _semsearch(List<String> args) async {
       'indeks vektor belum ada — jalankan: simpul index "$vault" --embed',
     );
   }
-  final embedder = HashingEmbedder();
+  final ollama = _ollamaFromOptions(opts);
+  final expectedModel = ollama?.modelVersion ?? HashingEmbedder().modelVersion;
+  _checkVectorModel(vectorsFile.path, expectedModel);
+  final EmbeddingProvider embedder;
+  final Float32List queryVec;
+  if (ollama != null) {
+    queryVec = await ollama.embed(query);
+    embedder = ReplayEmbedder(
+      modelVersion: ollama.modelVersion,
+      dimension: ollama.dimension,
+      vectors: {query: queryVec},
+    );
+  } else {
+    final hashing = HashingEmbedder();
+    queryVec = hashing.embed(query);
+    embedder = hashing;
+  }
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
   );
   try {
     final hits = await semantic.search(
-      embedder.embed(query),
+      queryVec,
       limit: limit,
     );
     stdout.writeln(jsonEncode({
@@ -411,11 +586,43 @@ Future<void> _sync(List<String> args) async {
   final file = _resolveIndexFile(vault, opts['out']);
   final VaultIndex index =
       SqliteVaultIndex.tryOpen(file.path) ?? JsonVaultIndex(p.setExtension(file.path, '.json'));
+  final dir = opts['out'] ?? p.join(vault, '.simpul');
+  final vectorsFile = File(p.join(dir, 'vectors.json'));
+  var vectorsState = vectorsFile.existsSync() ? 'unchanged' : 'absent';
   try {
-    final result = await VaultSync.apply(index, vault);
+    final result = await VaultSync.apply(
+      index,
+      vault,
+      semanticFactory: (changed) async {
+        if (!vectorsFile.existsSync()) return null;
+        final ollama = _ollamaFromOptions(opts);
+        final expectedModel =
+            ollama?.modelVersion ?? HashingEmbedder().modelVersion;
+        final stored = InMemorySemanticIndex.storedModelVersion(vectorsFile.path);
+        if (stored != null && stored != expectedModel) {
+          vectorsState = 'skipped_model_mismatch';
+          return null;
+        }
+        final EmbeddingProvider embedder;
+        if (ollama != null) {
+          embedder = await _replayEmbedder(
+            ollama,
+            [
+              for (final note in changed)
+                for (final chunk in note.parsed.chunks) chunk.text,
+            ],
+          );
+        } else {
+          embedder = HashingEmbedder();
+        }
+        vectorsState = 'updated';
+        return InMemorySemanticIndex(embedder, filePath: vectorsFile.path);
+      },
+    );
     stdout.writeln(jsonEncode({
       'backend': index is SqliteVaultIndex ? 'sqlite' : 'json',
       ...result.toJson(),
+      'vectors': vectorsState,
       'detail': {
         'added': result.added,
         'updated': result.updated,

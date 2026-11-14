@@ -65,6 +65,20 @@ abstract class SemanticIndex {
 class InMemorySemanticIndex implements SemanticIndex {
   InMemorySemanticIndex(this.embedder, {this.filePath});
 
+  /// Returns the `model_version` stored in the vector file at [path], or null
+  /// when the file is absent or unreadable. Callers use this to fail closed
+  /// before opening an index with a mismatched embedder (AI-13).
+  static String? storedModelVersion(String path) {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    try {
+      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      return decoded['model_version']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   final EmbeddingProvider embedder;
   final String? filePath;
 
