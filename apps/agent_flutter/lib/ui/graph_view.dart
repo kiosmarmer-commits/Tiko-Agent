@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:simpul_core/simpul_core.dart';
 
 import 'command_palette.dart';
+import 'jank_monitor.dart';
 import 'note_editor.dart';
 
 /// Level of detail for the graph canvas (GRA-R03): far zoom draws community
@@ -776,7 +777,22 @@ class _SimpulGraphPageState extends State<SimpulGraphPage> {
     return PaletteShortcut(
       onPalette: () => _openGraphPalette(graph),
       child: Scaffold(
-      appBar: AppBar(title: const Text('Graf Vault (Simpul)')),
+      appBar: AppBar(
+        title: const Text('Graf Vault (Simpul)'),
+        actions: [
+          const JankBadge(),
+          IconButton(
+            tooltip: 'Mode pengembang frame (NFR-O01)',
+            icon: const Icon(Icons.speed),
+            isSelected: JankMonitor.instance.listening,
+            onPressed: () {
+              final monitor = JankMonitor.instance;
+              monitor.listening ? monitor.stop() : monitor.start();
+              setState(() {});
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
