@@ -22,6 +22,7 @@ import 'reflection_loop.dart';
 import 'kanban_board.dart';
 import 'self_learning_engine.dart';
 import 'memory_nudge.dart';
+import 'turn_redirect.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
@@ -115,6 +116,7 @@ class TikoRuntime {
     required this.layeredMemory,
     required this.curatedMemory,
     required this.memoryNudge,
+    required this.turnRedirects,
     required this.ragPipeline,
     this.reflectionEngine,
     this.personaPrompt,
@@ -184,6 +186,9 @@ class TikoRuntime {
 
   /// Nudge periodik + penerapan blok memory-ops dari balasan model.
   final MemoryNudgeEngine memoryNudge;
+
+  /// Interrupt-and-redirect: pesan baru saat sesi sibuk memotong turn aktif.
+  final TurnRedirectCoordinator turnRedirects;
 
   /// Hybrid RAG pipeline (dense + BM25 + RRF) shared with the vector index.
   final RagPipeline ragPipeline;
@@ -629,6 +634,7 @@ class TikoRuntime {
       layeredMemory: layeredMemory,
       curatedMemory: curatedMemory,
       memoryNudge: memoryNudge,
+      turnRedirects: TurnRedirectCoordinator(),
       ragPipeline: rag,
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
@@ -1228,11 +1234,46 @@ class TikoRuntime {
     Set<String>? toolFilter,
     void Function(String delta)? onTextDelta,
     bool internalCommand = false,
+    String? interruptNote,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
     // luarnya — SessionLock tidak re-entrant.
     final locked = !internalCommand;
     if (locked && !_lock.tryAcquire(sessionId)) {
+      // Interrupt-and-redirect: alih-alih menolak, batalkan turn aktif
+      // secara kooperatif dan tunggu lock lepas (bounded).
+      if (!internalCommand && config.interruptRedirect) {
+        final hadLiveTurn = cancellations.tokenOf(sessionId) != null;
+        final ready = await turnRedirects.interruptAndWait(
+          cancelActive: () => cancellations.cancel(sessionId),
+          isBusy: () => _lock.isBusy(sessionId),
+        );
+        if (ready) {
+          if (hadLiveTurn) {
+            events.emit('turn.interrupted', {
+              'session': sessionId,
+              'channel': channel,
+            });
+          }
+          return chatWithStatus(
+            text,
+            sessionId: sessionId,
+            channel: channel,
+            userKey: userKey,
+            confirm: confirm,
+            gateOverride: gateOverride,
+            configOverride: configOverride,
+            toolFilter: toolFilter,
+            onTextDelta: onTextDelta,
+            internalCommand: internalCommand,
+            interruptNote: hadLiveTurn
+                ? 'Turn sebelumnya diinterupsi oleh pesan baru dari '
+                    'pengguna. Abaikan arah turn lama dan kerjakan '
+                    'permintaan terbaru ini.'
+                : null,
+          );
+        }
+      }
       return const ChatRunResult(
         text: 'Sesi masih memproses pesan sebelumnya.',
         success: false,
@@ -1312,6 +1353,7 @@ class TikoRuntime {
           nudgeDirective: memoryNudge.shouldNudge(sessionId)
               ? MemoryNudgeEngine.directive
               : null,
+          interruptNote: interruptNote,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
         ),

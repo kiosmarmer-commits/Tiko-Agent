@@ -256,6 +256,7 @@ class RuntimeContext extends ContextBuilder {
     this.layeredMemory,
     this.curatedMemoryBlock,
     this.nudgeDirective,
+    this.interruptNote,
     this.toolSubsetThreshold = 24,
     this.toolSubsetK = 20,
   });
@@ -264,6 +265,7 @@ class RuntimeContext extends ContextBuilder {
   final String? personaPrompt;
   final String? curatedMemoryBlock;
   final String? nudgeDirective;
+  final String? interruptNote;
   final ReflectionEngine? reflectionEngine;
   final RagPipeline? ragPipeline;
   final LayeredMemory? layeredMemory;
@@ -300,6 +302,10 @@ class RuntimeContext extends ContextBuilder {
     final nudge = nudgeDirective;
     if (nudge != null && nudge.isNotEmpty) {
       ctx.messages.add(ChatMessage(role: 'system', content: nudge));
+    }
+    final interrupted = interruptNote;
+    if (interrupted != null && interrupted.isNotEmpty) {
+      ctx.messages.add(ChatMessage(role: 'system', content: interrupted));
     }
     final extras = await _retrievedContext(m.text);
     if (subsetActive) {
