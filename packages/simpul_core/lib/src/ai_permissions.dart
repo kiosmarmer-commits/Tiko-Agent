@@ -8,6 +8,22 @@ import 'package:path/path.dart' as p;
 /// `deny` (tolak — never appears in results, context, or prompt logs).
 enum AiAccessDecision { allow, ask, deny }
 
+/// Parses a per-note `ai-access` rule (AI-42 frontmatter). Only explicit
+/// `izin`/`tolak` contribute a note-level rule; absent values, `tanya`, and
+/// unknown values return null so the config-file layers decide as before
+/// (stored indexes default to `ask`, which must stay rule-free).
+AiAccessDecision? parseNoteAiAccess(Object? value) {
+  if (value == null) return null;
+  switch (value.toString().trim().toLowerCase()) {
+    case 'izin' || 'izin penuh' || 'allow':
+      return AiAccessDecision.allow;
+    case 'tolak' || 'deny':
+      return AiAccessDecision.deny;
+    default:
+      return null;
+  }
+}
+
 AiAccessDecision _parseDecision(Object? value) {
   switch (value?.toString().toLowerCase()) {
     case 'izin' || 'izin penuh' || 'allow':
@@ -126,8 +142,16 @@ class AiAccessPolicy {
   /// default, the LONGEST matching folder prefix (a more specific folder
   /// overrides a broader one), the exact note rule, and any matching tag
   /// ([tags] use nested-tag ancestor matching, Obsidian-style).
-  AiAccessDecision decide(String notePath, {Set<String> tags = const {}}) {
+  AiAccessDecision decide(
+    String notePath, {
+    Set<String> tags = const {},
+    Object? noteAiAccess,
+  }) {
     var decision = defaultValue;
+    final noteRule = parseNoteAiAccess(noteAiAccess);
+    if (noteRule != null) {
+      decision = _mostRestructive(decision, noteRule);
+    }
     final normalized = notePath.toLowerCase();
     final exact = notes[normalized];
     if (exact != null) {

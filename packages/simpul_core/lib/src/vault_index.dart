@@ -52,6 +52,7 @@ class IndexedNote {
         aliases: note.aliases,
         links: note.links,
         chunks: note.chunks,
+        aiAccess: note.aiAccess,
       );
 
   Map<String, Object?> toJson() => {
