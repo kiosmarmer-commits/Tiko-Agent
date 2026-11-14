@@ -35,4 +35,42 @@ void main() {
     });
   });
 
+  group('cpuPercent (AI-U03)', () {
+    ResourceSnapshot snap(int? ticks) => ResourceSnapshot(
+          rssMb: null,
+          cpuCount: 4,
+          loadAvg1: null,
+          cpuTicks: ticks,
+        );
+
+    test('computes percent from tick delta over interval', () {
+      final pct = ResourceMonitor.cpuPercent(
+        snap(100),
+        snap(300),
+        intervalSeconds: 1.0,
+      );
+      expect(pct, closeTo(200.0, 1e-9));
+    });
+
+    test('null when ticks missing or interval invalid', () {
+      expect(
+        ResourceMonitor.cpuPercent(snap(null), snap(100),
+            intervalSeconds: 1.0),
+        isNull,
+      );
+      expect(
+        ResourceMonitor.cpuPercent(snap(0), snap(100), intervalSeconds: 0),
+        isNull,
+      );
+    });
+
+    test('null when ticks go backwards (snapshot order mistake)', () {
+      expect(
+        ResourceMonitor.cpuPercent(snap(300), snap(100),
+            intervalSeconds: 1.0),
+        isNull,
+      );
+    });
+  });
+
 }

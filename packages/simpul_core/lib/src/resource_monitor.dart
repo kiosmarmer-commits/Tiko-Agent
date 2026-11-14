@@ -14,6 +14,7 @@ class ResourceSnapshot {
     required this.rssMb,
     required this.cpuCount,
     required this.loadAvg1,
+    this.cpuTicks,
   });
 
   /// Resident set size of the current process, in MiB.
@@ -23,10 +24,16 @@ class ResourceSnapshot {
   /// 1-minute load average (Linux).
   final double? loadAvg1;
 
+  /// Cumulative process CPU time in jiffies (utime+stime from
+  /// /proc/self/stat). Delta between two snapshots over a known interval
+  /// yields CPU usage via [ResourceMonitor.cpuPercent].
+  final int? cpuTicks;
+
   Map<String, Object?> toJson() => {
         if (rssMb != null) 'rss_mb': rssMb,
         'cpu_count': cpuCount,
         if (loadAvg1 != null) 'load_avg_1': loadAvg1,
+        if (cpuTicks != null) 'cpu_ticks': cpuTicks,
       };
 }
 
@@ -37,7 +44,47 @@ abstract final class ResourceMonitor {
       rssMb: _rssMb(),
       cpuCount: Platform.numberOfProcessors,
       loadAvg1: _loadAvg(),
+      cpuTicks: _cpuTicks(),
     );
+  }
+
+  /// Process CPU usage in percent between two snapshots taken
+  /// [intervalSeconds] apart. Assumes the Linux-standard 100 Hz jiffy clock;
+  /// returns null when either snapshot lacks cpu ticks or the interval is
+  /// not positive.
+  static double? cpuPercent(
+    ResourceSnapshot previous,
+    ResourceSnapshot current, {
+    required double intervalSeconds,
+  }) {
+    final prev = previous.cpuTicks;
+    final curr = current.cpuTicks;
+    if (prev == null || curr == null || intervalSeconds <= 0) return null;
+    final delta = curr - prev;
+    if (delta < 0) return null;
+    return (delta / (intervalSeconds * clockTicksPerSecond)) * 100;
+  }
+
+  /// Linux userland clock tick rate (CLK_TCK is 100 on every mainstream
+  /// kernel; procfs does not expose it directly).
+  static const int clockTicksPerSecond = 100;
+
+  static int? _cpuTicks() {
+    try {
+      final stat = File('/proc/self/stat');
+      if (!stat.existsSync()) return null;
+      final raw = stat.readAsStringSync();
+      final afterComm = raw.lastIndexOf(')');
+      if (afterComm < 0 || afterComm + 2 > raw.length) return null;
+      final fields = raw.substring(afterComm + 2).split(' ');
+      if (fields.length < 13) return null;
+      final utime = int.tryParse(fields[11]);
+      final stime = int.tryParse(fields[12]);
+      if (utime == null || stime == null) return null;
+      return utime + stime;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   static double? _rssMb() {
