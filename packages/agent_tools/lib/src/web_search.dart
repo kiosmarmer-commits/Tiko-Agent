@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart' as io;
 
 import 'ssrf.dart';
 
@@ -90,7 +91,7 @@ class WebSearchTool implements Tool {
     }
 
     final tavilyKey = (tavilyApiKey ?? '').trim();
-    final client = _client ?? http.Client();
+    final client = _client ?? io.IOClient(_ssrf.pinnedHttpClient());
     try {
       final (hits, engine) = await _acquireHits(
         client,
@@ -138,9 +139,38 @@ class WebSearchTool implements Tool {
             continue;
           }
           try {
-            final page = await client
-                .get(Uri.parse(url), headers: {'User-Agent': 'agent_dart/0.1'})
-                .timeout(const Duration(seconds: 12));
+            // Manual redirect handling: re-check every hop (B-07).
+            var current = url;
+            http.Response? page;
+            var blocked = false;
+            for (var hop = 0; hop <= _ssrf.maxRedirects; hop++) {
+              final blockHop = await _ssrf.checkUrl(current);
+              if (blockHop != null) {
+                pageBlocks.add(
+                  '[${c['n']}] ${c['title']}\n(SSRF blocked on redirect: $blockHop)',
+                );
+                blocked = true;
+                break;
+              }
+              page = await client
+                  .get(Uri.parse(current),
+                      headers: {'User-Agent': 'agent_dart/0.1'})
+                  .timeout(const Duration(seconds: 12));
+              if (page.statusCode >= 300 && page.statusCode < 400) {
+                final loc = page.headers['location'];
+                if (loc == null) break;
+                current = Uri.parse(current).resolve(loc).toString();
+                page = null;
+                continue;
+              }
+              break;
+            }
+            if (blocked || page == null) {
+              if (!blocked) {
+                pageBlocks.add('[${c['n']}] ${c['title']}\n(tidak ada respons)');
+              }
+              continue;
+            }
             if (page.statusCode >= 400) {
               pageBlocks.add('[${c['n']}] HTTP ${page.statusCode}');
               continue;
