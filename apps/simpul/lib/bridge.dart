@@ -10,11 +10,19 @@ import 'package:simpul_core/simpul_core.dart';
 /// network listener at all; when [token] is set, every request must carry it
 /// under `params._meta.token` (fail-closed).
 class SimpulBridge {
-  SimpulBridge({required this.vaultDir, this.token, AiAccessPolicy Function()? policyLoader})
-      : policyLoader = policyLoader ?? (() => AiAccessPolicy.load(vaultDir));
+  SimpulBridge({
+    required this.vaultDir,
+    this.token,
+    this.password,
+    AiAccessPolicy Function()? policyLoader,
+  }) : policyLoader = policyLoader ?? (() => AiAccessPolicy.load(vaultDir));
 
   final String vaultDir;
   final String? token;
+
+  /// Optional explicit vault password (overrides SIMPUL_PASSWORD) so embedded
+  /// hosts can unlock a locked vault without touching process environment.
+  final String? password;
 
   /// Reloaded on every tool call so permission changes take effect
   /// immediately (DIF-04); a corrupt config fails closed to deny-all.
@@ -236,7 +244,7 @@ class SimpulBridge {
   Future<VaultCrypto?> _vaultCrypto() async {
     final modeFile = File(p.join(vaultDir, '.simpul', 'vault-mode.json'));
     if (!modeFile.existsSync()) return null;
-    final password = Platform.environment['SIMPUL_PASSWORD'];
+    final password = this.password ?? Platform.environment['SIMPUL_PASSWORD'];
     if (password == null || password.isEmpty) {
       throw ArgumentError(
         'vault terkunci — set SIMPUL_PASSWORD sebelum menjalankan bridge',
@@ -418,15 +426,28 @@ class SimpulBridge {
     if (!file.existsSync()) {
       throw StateError('catatan tidak ditemukan: $path');
     }
-    var text = file.readAsStringSync();
+    var text = await _readNoteText(file);
     if (text.length > _maxReadChars) {
       text = text.substring(0, _maxReadChars);
     }
     return {'path': path, 'content': text};
   }
 
+  Future<String> _readNoteText(File file) async {
+    final bytes = await file.readAsBytes();
+    if (!VaultCrypto.looksEncrypted(bytes)) return utf8.decode(bytes);
+    final crypto = await _vaultCrypto();
+    if (crypto == null) {
+      throw VaultCryptoException(
+        'catatan terenkripsi dibaca tanpa kunci (vault terkunci) \u2014 '
+        'set SIMPUL_PASSWORD atau jalankan: simpul unlock <vault>',
+      );
+    }
+    return utf8.decode(crypto.decryptBytes(bytes));
+  }
+
   Future<Object?> _clusters(AiAccessPolicy policy) async {
-    final notes = await VaultScanner.scan(vaultDir);
+    final notes = await VaultScanner.scan(vaultDir, crypto: await _vaultCrypto());
     final allowed = [
       for (final note in notes)
         if (policy.decide(note.path, tags: note.parsed.tags.toSet()) ==
@@ -449,7 +470,7 @@ class SimpulBridge {
   }
 
   Future<Object?> _suggestLinks(Map<String, Object?> args, AiAccessPolicy policy) async {
-    final notes = await VaultScanner.scan(vaultDir);
+    final notes = await VaultScanner.scan(vaultDir, crypto: await _vaultCrypto());
     final allowed = [
       for (final note in notes)
         if (policy.decide(note.path, tags: note.parsed.tags.toSet()) ==
