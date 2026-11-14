@@ -16,3 +16,9 @@ coverage/
 # Simpul local index and benchmark artifacts
 .simpul/
 .simpul_bench/
+
+# Python bytecode and local database artifacts (B-12)
+__pycache__/
+*.pyc
+data/*.db
+data/*.db-journal
