@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:simpul_core/simpul_core.dart';
 
+import 'command_palette.dart';
 import 'note_editor.dart';
 
 /// Level of detail for the graph canvas (GRA-R03): far zoom draws community
@@ -772,7 +773,9 @@ class _SimpulGraphPageState extends State<SimpulGraphPage> {
   @override
   Widget build(BuildContext context) {
     final graph = controller.graph;
-    return Scaffold(
+    return PaletteShortcut(
+      onPalette: () => _openGraphPalette(graph),
+      child: Scaffold(
       appBar: AppBar(title: const Text('Graf Vault (Simpul)')),
       body: Column(
         children: [
@@ -903,6 +906,7 @@ class _SimpulGraphPageState extends State<SimpulGraphPage> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -997,6 +1001,17 @@ class _SimpulGraphPageState extends State<SimpulGraphPage> {
     final dir = vaultField.text.trim();
     if (dir.isEmpty) return;
     await controller.load(dir);
+  }
+
+  void _openGraphPalette(dynamic graph) {
+    final actions = <PaletteAction>[
+      for (var i = 0; i < graph.paths.length; i++)
+        PaletteAction(
+          'Buka: ${graph.paths[i]}',
+          () => _openNote(context, graph.paths[i]),
+        ),
+    ];
+    showCommandPalette(context, actions);
   }
 
   void _openNote(BuildContext context, String path) {

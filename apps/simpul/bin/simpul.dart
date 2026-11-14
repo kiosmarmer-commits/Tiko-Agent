@@ -70,6 +70,14 @@ Future<void> main(List<String> args) async {
         await _syncExport(rest);
       case 'sync-import':
         await _syncImport(rest);
+      case 'template':
+        await _template(rest);
+      case 'import':
+        await _importVault(rest);
+      case 'export-html':
+        await _exportHtml(rest);
+      case 'export-graph':
+        await _exportGraph(rest);
       case 'tui' || 'repl':
         await _tui(rest);
       case 'ask':
@@ -202,6 +210,20 @@ Penggunaan:
       pernah menimpa diam-diam: keep-both (default) menulis file
       n.conflict-<device>-<stamp>.md, newest memilih mtime terbaru, ours
       mempertahankan lokal, theirs menerima delta.
+  simpul template list <vault>
+      Daftar template catatan di <vault>/.simpul/templates/*.md (FR-43).
+  simpul template create <vault> <nama>
+      Buat template baru dengan isi dari stdin (FR-43).
+  simpul import --from DIR [--format obsidian|logseq|joplin|notion]
+                [--out DIR]
+      Impor vault dari aplikasi lain ke vault Simpul (FR-70). Default
+      --out: <from>-simpul. Notion: strip sufiks uuid 32-hex; Logseq:
+      halaman pages/*.md + rewrite block ref.
+  simpul export-html <vault> <catatan> [--out path]
+      Ekspor satu catatan ke HTML mandiri (FR-71).
+  simpul export-graph <vault> [--format json|graphml] [--out path]
+      Ekspor graf tautan vault ke JSON (kompatibel Obsidian) atau GraphML
+      untuk Gephi/yEd (FR-72).
   simpul tui <vault>
       Antarmuka terminal interaktif (paritas Hermes): editing per karakter
       dengan riwayat (↑/↓), autocomplete Tab untuk perintah dan path catatan,
@@ -1185,6 +1207,114 @@ Future<void> _syncImport(List<String> args) async {
     strategy: strategy,
   );
   stdout.writeln(jsonEncode(result.toJson()));
+}
+
+Future<void> _template(List<String> args) async {
+  final sub = args.isNotEmpty ? args.first : 'list';
+  final rest = args.length > 1 ? args.sublist(1) : <String>[];
+  switch (sub) {
+    case 'list':
+      final vault = _positional(rest);
+      final templates = await TemplateStore.listTemplates(Directory(vault));
+      for (final t in templates) {
+        stdout.writeln(t.name);
+      }
+      if (templates.isEmpty) {
+        stdout.writeln('(belum ada template di .simpul/templates)');
+      }
+    case 'create':
+      final positional = rest.where((a) => !a.startsWith('--')).toList();
+      if (positional.length < 2) {
+        throw ArgumentError('pemakaian: simpul template create <vault> <nama>');
+      }
+      final body = await stdin.transform(utf8.decoder).join();
+      final file = await TemplateStore.create(
+          Directory(positional.first), positional[1], body);
+      stdout.writeln('template tersimpan: ${file.path}');
+    default:
+      throw ArgumentError(
+          'subperintah template tidak dikenal: $sub (list|create)');
+  }
+}
+
+Future<void> _importVault(List<String> args) async {
+  final opts = _options(args, {});
+  final from = opts['from'];
+  if (from == null) {
+    throw ArgumentError('pemakaian: simpul import --from DIR [--format f] [--out DIR]');
+  }
+  const formats = {
+    'obsidian': ImportFormat.obsidian,
+    'logseq': ImportFormat.logseq,
+    'joplin': ImportFormat.joplin,
+    'notion': ImportFormat.notion,
+  };
+  final formatName = opts['format'] ?? 'obsidian';
+  final format = formats[formatName] ??
+      (throw ArgumentError(
+        'format tidak dikenal: $formatName (obsidian|logseq|joplin|notion)',
+      ));
+  final dest = opts['out'] ?? '$from-simpul';
+  final result = await VaultImporter.importFolder(
+    Directory(from),
+    Directory(dest),
+    format: format,
+  );
+  stdout.writeln(jsonEncode({
+    'from': from,
+    'to': dest,
+    'format': formatName,
+    'notes_copied': result.notesCopied,
+    'attachments_copied': result.attachmentsCopied,
+    'links_rewritten': result.linksRewritten,
+    'skipped': result.skipped,
+  }));
+}
+
+Future<void> _exportHtml(List<String> args) async {
+  final opts = _options(args, {});
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul export-html <vault> <catatan> [--out path]');
+  }
+  final vault = positional.first;
+  final notePath = positional[1];
+  final noteFile = File(p.join(vault, notePath));
+  if (!await noteFile.exists()) {
+    throw StateError('catatan tidak ditemukan: $notePath');
+  }
+  final markdown = await noteFile.readAsString();
+  final title = p.basenameWithoutExtension(notePath);
+  final html = VaultExporter.noteToHtml(markdown, title: title);
+  final out = opts['out'] ?? '${p.setExtension(notePath, '.html')}.html';
+  final outFile = File(p.join(vault, out));
+  await outFile.parent.create(recursive: true);
+  await outFile.writeAsString(html);
+  stdout.writeln('HTML tersimpan: ${outFile.path}');
+}
+
+Future<void> _exportGraph(List<String> args) async {
+  final opts = _options(args, {'json', 'graphml'});
+  final vault = _positional(args);
+  final format = opts['format'] ??
+      (opts['graphml'] == 'true' ? 'graphml' : 'json');
+  if (format != 'json' && format != 'graphml') {
+    throw ArgumentError('format tidak dikenal: $format (json|graphml)');
+  }
+  final crypto = await _vaultCryptoFor(vault);
+  final notes = await VaultScanner.scan(vault, crypto: crypto);
+  final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
+  if (format == 'graphml') {
+    final xml = VaultExporter.graphToGraphml(graph);
+    final out = opts['out'] ?? 'graph.graphml';
+    await File(out).writeAsString(xml);
+    stdout.writeln('GraphML tersimpan: $out');
+  } else {
+    final json = VaultExporter.graphToJson(graph);
+    final out = opts['out'] ?? 'graph.json';
+    await File(out).writeAsString(const JsonEncoder.withIndent('  ').convert(json));
+    stdout.writeln('JSON tersimpan: $out');
+  }
 }
 
 Future<void> _vaultStatus(List<String> args) async {

@@ -1,8 +1,11 @@
 import 'dart:convert';
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:simpul_core/simpul_core.dart';
 
+import 'command_palette.dart';
 import 'theme.dart';
 
 /// Opens the note editor page for [path] inside [vault].
@@ -207,6 +210,153 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
     }
   }
 
+  Future<void> _openPalette() async {
+    final vault = vaultField.text.trim();
+    final actions = <PaletteAction>[
+      PaletteAction('Toggle pratinjau', () => setState(() {
+            preview = !preview;
+            completions = const [];
+          })),
+      if (editor != null)
+        PaletteAction('Simpan catatan', _save),
+      if (editor != null)
+        PaletteAction('Tampilkan panel tautan (FR-20/21)', () {
+          setState(() => preview = false);
+        }),
+    ];
+    if (vault.isNotEmpty) {
+      try {
+        final notes = await VaultScanner.scan(vault);
+        for (final note in notes) {
+          actions.add(PaletteAction(
+            'Buka: ${note.path}',
+            () => _openPath(note.path),
+            hint: note.parsed.title,
+          ));
+        }
+      } catch (_) {
+        // Vault scan failure must not block fixed actions.
+      }
+    }
+    if (!mounted) return;
+    await showCommandPalette(context, actions);
+  }
+
+  Future<void> _newNoteFromTemplate() async {
+    final vault = vaultField.text.trim();
+    if (vault.isEmpty) return;
+    try {
+      final templates = await TemplateStore.listTemplates(Directory(vault));
+      if (templates.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Belum ada template (.simpul/templates/*.md).'),
+          ));
+        }
+        return;
+      }
+      if (!mounted) return;
+      final selected = await showDialog<TemplateFile>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('Pilih template (FR-43)'),
+          children: [
+            for (final t in templates)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(dialogContext).pop(t),
+                child: Text(t.name),
+              ),
+          ],
+        ),
+      );
+      if (selected == null || !mounted) return;
+      final title = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            title: Text('Judul catatan (${selected.name})'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              onSubmitted: (v) => Navigator.of(dialogContext).pop(v),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(controller.text),
+                child: const Text('Buat'),
+              ),
+            ],
+          );
+        },
+      );
+      if (title == null || title.trim().isEmpty || !mounted) return;
+      final cleanTitle = title.trim();
+      final fileName =
+          '${NoteTemplate.sanitizeFileName(cleanTitle)}.md';
+      final target = File(
+          '${Directory(vault).path}${Platform.pathSeparator}$fileName');
+      if (await target.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Catatan sudah ada: $fileName'),
+          ));
+        }
+        return;
+      }
+      final body = await selected.file.readAsString();
+      final rendered = NoteTemplate.render(
+        body,
+        title: cleanTitle,
+        path: fileName.replaceAll(RegExp(r'\.md$'), ''),
+      );
+      final tmp = File('${target.path}.tmp');
+      await tmp.writeAsString(rendered);
+      await tmp.rename(target.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Catatan dibuat: $fileName'),
+      ));
+      _openPath(fileName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal membuat catatan: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportNoteHtml() async {
+    final noteEditor = editor;
+    if (noteEditor == null) return;
+    try {
+      final html = VaultExporter.noteToHtml(textField.text,
+          title: noteEditor.path);
+      final outPath = '${noteEditor.path}.html';
+      final target = File(
+          '${noteEditor.vaultDir}${Platform.pathSeparator}$outPath');
+      await target.parent.create(recursive: true);
+      await target.writeAsString(html);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('HTML tersimpan: $outPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengekspor: $e')),
+        );
+      }
+    }
+  }
+
   void _openPath(String path) {
     final noteEditor = editor;
     if (noteEditor != null && noteEditor.dirty) {
@@ -222,7 +372,9 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
+    return PaletteShortcut(
+      onPalette: _openPalette,
+      child: Scaffold(
       backgroundColor: context.simpulBg,
       appBar: AppBar(
         title: Text(
@@ -230,6 +382,21 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Command palette (Ctrl+K, FR-44)',
+            icon: const Icon(Icons.search),
+            onPressed: _openPalette,
+          ),
+          IconButton(
+            tooltip: 'Catatan baru dari template (FR-43)',
+            icon: const Icon(Icons.note_add),
+            onPressed: _newNoteFromTemplate,
+          ),
+          IconButton(
+            tooltip: 'Ekspor HTML (FR-71)',
+            icon: const Icon(Icons.html),
+            onPressed: editor == null ? null : _exportNoteHtml,
+          ),
           IconButton(
             tooltip: 'Undo (FR-16)',
             icon: const Icon(Icons.undo),
@@ -346,6 +513,7 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
             ),
           if (editor != null) _linksPanel(),
         ],
+      ),
       ),
     );
   }
