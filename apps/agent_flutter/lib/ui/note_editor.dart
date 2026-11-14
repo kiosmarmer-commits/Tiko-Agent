@@ -25,10 +25,14 @@ class SimpulNoteEditorPage extends StatefulWidget {
     required this.vault,
     this.initialPath = '',
     this.initialEditor,
+    this.powerSaverEnabled = false,
   });
 
   final String vault;
   final String initialPath;
+
+  /// AI-U04: gates AI work in the chat panel on external power.
+  final bool powerSaverEnabled;
 
   /// Preloaded editor (tests); skips the vault scan + load when given.
   final NoteEditor? initialEditor;
@@ -561,6 +565,7 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                     vault: vaultField.text.trim(),
                     notePath: editor!.path,
                     onInsert: _insertAiBlock,
+                    powerSaverEnabled: widget.powerSaverEnabled,
                   ),
               ],
             ),

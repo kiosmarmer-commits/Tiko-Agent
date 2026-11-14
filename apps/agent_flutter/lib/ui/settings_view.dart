@@ -225,6 +225,19 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                 ),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.battery_saver_outlined),
+                title: const Text('Mode hemat daya (AI-U04)'),
+                subtitle: Text(
+                  'AI (embedding/LLM) hanya berjalan saat perangkat dicolokkan.',
+                  style: TextStyle(
+                    color: SimpulTheme.mutedText(brightness),
+                  ),
+                ),
+                value: settings.powerSaver,
+                onChanged: (value) =>
+                    _update(settings.copyWith(powerSaver: value)),
+              ),
             ],
           ),
         ),

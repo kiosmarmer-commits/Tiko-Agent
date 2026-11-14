@@ -15,6 +15,8 @@ class SimpulNoteChatPanel extends StatefulWidget {
     required this.onInsert,
     this.sessionOverride,
     this.askOverride,
+    this.powerSaverEnabled = false,
+    this.pluggedInOverride,
   });
 
   final String vault;
@@ -37,6 +39,12 @@ class SimpulNoteChatPanel extends StatefulWidget {
     bool confirmAsk,
   })? askOverride;
 
+  /// AI-U04: when true, AI work is gated on external power.
+  final bool powerSaverEnabled;
+
+  /// Power-state override (tests); defaults to [ResourceMonitor.isPluggedIn].
+  final bool? Function()? pluggedInOverride;
+
   @override
   State<SimpulNoteChatPanel> createState() => _SimpulNoteChatPanelState();
 }
@@ -45,8 +53,17 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
   NoteChatScope scope = NoteChatScope.note;
   final TextEditingController question = TextEditingController();
   bool busy = false;
+  bool paused = false;
+  double? ramMb;
   NoteChatAnswer? answer;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    final snapshot = ResourceMonitor.snapshot();
+    ramMb = snapshot.rssMb;
+  }
 
   @override
   void dispose() {
@@ -57,9 +74,23 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
   NoteChatSession _session() =>
       widget.sessionOverride ?? NoteChatSession(vaultDir: widget.vault);
 
+  bool get _powerSaverBlocked {
+    if (!widget.powerSaverEnabled) return false;
+    final gate = PowerSaverGate(
+      pluggedIn: widget.pluggedInOverride ?? ResourceMonitor.isPluggedIn,
+    );
+    return !gate.allowsWork(powerSaverEnabled: true);
+  }
+
   Future<void> _send({bool confirmAsk = false}) async {
     final q = question.text.trim();
-    if (q.isEmpty || busy) return;
+    if (q.isEmpty || busy || paused) return;
+    if (_powerSaverBlocked) {
+      setState(() {
+        error = 'Mode hemat daya: AI dijeda sampai perangkat dicolokkan.';
+      });
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -138,6 +169,55 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: [
+                if (ramMb != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Tooltip(
+                      message: 'Penggunaan RAM proses (AI-U03)',
+                      child: Text(
+                        'RAM ~${ramMb!.round()} MB',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: context.simpulMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                Tooltip(
+                  message: paused ? 'Lanjutkan AI' : 'Jeda AI (AI-U03)',
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 18,
+                    isSelected: paused,
+                    selectedIcon: const Icon(Icons.play_arrow),
+                    icon: const Icon(Icons.pause),
+                    onPressed: () => setState(() => paused = !paused),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (paused)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Text(
+                'AI dijeda (AI-U03).',
+                style: TextStyle(fontSize: 11, color: context.simpulMuted),
+              ),
+            ),
+          if (_powerSaverBlocked)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Text(
+                'Mode hemat daya: AI dijeda sampai perangkat dicolokkan.',
+                style: TextStyle(fontSize: 11, color: context.simpulDanger),
+              ),
+            ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: DropdownButtonFormField<NoteChatScope>(
               initialValue: scope,
@@ -180,17 +260,26 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: FilledButton.icon(
-              onPressed: busy ? null : () => _send(),
-              icon: busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send, size: 16),
-              label: const Text('Tanya AI lokal'),
-            ),
+            child: paused || _powerSaverBlocked
+                ? Tooltip(
+                    message: paused ? 'AI dijeda' : 'Mode hemat daya aktif',
+                    child: FilledButton.icon(
+                      onPressed: null,
+                      icon: const Icon(Icons.send, size: 16),
+                      label: const Text('Tanya AI lokal'),
+                    ),
+                  )
+                : FilledButton.icon(
+                    onPressed: busy ? null : () => _send(),
+                    icon: busy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send, size: 16),
+                    label: const Text('Tanya AI lokal'),
+                  ),
           ),
           if (error != null)
             Padding(

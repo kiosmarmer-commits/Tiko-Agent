@@ -13,6 +13,7 @@ class AppSettings {
     this.ollamaHost = 'http://127.0.0.1:11434',
     this.vaultPath = '',
     this.autoLockMinutes = 0,
+    this.powerSaver = false,
   });
 
   final ThemeMode themeMode;
@@ -21,11 +22,16 @@ class AppSettings {
   final String vaultPath;
   final int autoLockMinutes;
 
+  /// AI-U04: when enabled, embedding/LLM work only runs while the device
+  /// is plugged in (unknown power state is treated as plugged).
+  final bool powerSaver;
+
   static const _kThemeMode = 'ui.themeMode';
   static const _kAccent = 'ui.accent';
   static const _kOllamaHost = 'ui.ollamaHost';
   static const _kVaultPath = 'ui.vaultPath';
   static const _kAutoLock = 'ui.autoLockMinutes';
+  static const _kPowerSaver = 'ui.powerSaver';
 
   static const accents = [
     Color(0xFF2A9D8F),
@@ -41,6 +47,7 @@ class AppSettings {
     String? ollamaHost,
     String? vaultPath,
     int? autoLockMinutes,
+    bool? powerSaver,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -48,6 +55,7 @@ class AppSettings {
       ollamaHost: ollamaHost ?? this.ollamaHost,
       vaultPath: vaultPath ?? this.vaultPath,
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+      powerSaver: powerSaver ?? this.powerSaver,
     );
   }
 
@@ -71,6 +79,7 @@ class AppSettings {
           prefs.getString(_kOllamaHost) ?? 'http://127.0.0.1:11434',
       vaultPath: prefs.getString(_kVaultPath) ?? '',
       autoLockMinutes: prefs.getInt(_kAutoLock) ?? 0,
+      powerSaver: prefs.getBool(_kPowerSaver) ?? false,
     );
   }
 
@@ -81,5 +90,6 @@ class AppSettings {
     await prefs.setString(_kOllamaHost, ollamaHost);
     await prefs.setString(_kVaultPath, vaultPath);
     await prefs.setInt(_kAutoLock, autoLockMinutes);
+    await prefs.setBool(_kPowerSaver, powerSaver);
   }
 }

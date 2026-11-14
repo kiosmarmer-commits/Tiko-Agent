@@ -1055,6 +1055,7 @@ class _MorePage extends StatelessWidget {
             Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => SimpulNoteEditorPage(
                 vault: settings.vaultPath,
+                powerSaverEnabled: settings.powerSaver,
               ),
             ));
           },
