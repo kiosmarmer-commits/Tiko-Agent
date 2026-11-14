@@ -1,4 +1,4 @@
-import 'package:simpul/tui/line_editor.dart';
+import 'package:tiko_tui/line_editor.dart';
 import 'package:test/test.dart';
 
 KeyEvent ch(String c) => KeyEvent(KeyType.char, c);

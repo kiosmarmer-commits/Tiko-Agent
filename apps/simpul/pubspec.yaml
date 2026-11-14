@@ -11,6 +11,8 @@ dependencies:
   path: ^1.9.0
   simpul_core:
     path: ../../packages/simpul_core
+  tiko_tui:
+    path: ../../packages/tiko_tui
 
 dev_dependencies:
   lints: ^5.0.0

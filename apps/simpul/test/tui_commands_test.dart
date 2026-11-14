@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:simpul/tui/commands.dart';
+import 'package:tiko_tui/tiko_tui.dart';
 import 'package:simpul_core/simpul_core.dart';
 import 'package:test/test.dart';
 

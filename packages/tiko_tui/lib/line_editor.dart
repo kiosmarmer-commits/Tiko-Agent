@@ -1,5 +1,5 @@
-/// Interactive TUI for the Simpul CLI (Hermes-parity): raw-mode line editing
-/// with history, tab autocomplete and multiline input.
+/// Terminal UI engine (Hermes-parity): raw-mode line editing with history,
+/// tab autocomplete and multiline input, shared by the Tiko and Simpul CLIs.
 library;
 
 /// A single decoded key event from a terminal byte sequence.

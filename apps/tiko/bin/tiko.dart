@@ -6,6 +6,7 @@ import 'package:agent_providers/agent_providers.dart' show OpenAiCompatProvider;
 import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
+import 'package:tiko_tui/tiko_tui.dart';
 
 const _usage = '''
 tiko — Pasitiko local-first agent (control plane)
@@ -662,20 +663,24 @@ Future<void> main(List<String> argv) async {
                 stdout.writeln(ans);
                 return;
               }
-              stdout.writeln('tiko chat (remote daemon) — /quit keluar');
-              while (true) {
-                stdout.write('you> ');
-                final line = stdin.readLineSync();
-                if (line == null) break;
-                final x = line.trim();
-                if (x.isEmpty) continue;
-                if (x == '/quit' || x == '/exit') break;
-                try {
-                  stdout.writeln('tiko> ${await remote.chat(x)}');
-                } catch (e) {
-                  stdout.writeln('error: $e');
-                }
-              }
+              await TuiSession(
+                handler: (input) async {
+                  if (input == '/quit' || input == '/exit') {
+                    return const TuiOutcome([], exit: true);
+                  }
+                  try {
+                    return TuiOutcome(['tiko> ${await remote.chat(input)}']);
+                  } catch (e) {
+                    return TuiOutcome(['error: $e']);
+                  }
+                },
+                completer: _chatCompleter,
+                historyStore: TuiHistoryStore(
+                  p.join(rt.dataDir, 'tui-history.txt'),
+                ),
+                banner: ['tiko chat (remote daemon) — /quit keluar'],
+                prompt: 'you> ',
+              ).run();
               return;
             }
           }
@@ -691,27 +696,33 @@ Future<void> main(List<String> argv) async {
         return;
       }
       // interactive
-      stdout.writeln('tiko chat — /quit keluar, /doctor, /status');
-      while (true) {
-        stdout.write('you> ');
-        final line = stdin.readLineSync();
-        if (line == null) break;
-        final t = line.trim();
-        if (t.isEmpty) continue;
-        if (t == '/quit' || t == '/exit') break;
-        if (t == '/doctor') {
-          for (final c in await rt.doctor()) {
-            stdout.writeln('${c.status.name} ${c.name}: ${c.detail}');
+      await TuiSession(
+        handler: (input) async {
+          if (input == '/quit' || input == '/exit') {
+            return const TuiOutcome([], exit: true);
           }
-          continue;
-        }
-        if (t == '/status') {
-          stdout.writeln('provider=${rt.config.defaultProvider} memory=${rt.memoryBackend}');
-          continue;
-        }
-        final answer = await rt.chat(t, confirm: askUser);
-        stdout.writeln('tiko> $answer');
-      }
+          if (input == '/doctor') {
+            return TuiOutcome([
+              for (final c in await rt.doctor())
+                '${c.status.name} ${c.name}: ${c.detail}',
+            ]);
+          }
+          if (input == '/status') {
+            return TuiOutcome([
+              'provider=${rt.config.defaultProvider} '
+                  'memory=${rt.memoryBackend}',
+            ]);
+          }
+          final answer = await rt.chat(input, confirm: askUser);
+          return TuiOutcome(['tiko> $answer']);
+        },
+        completer: _chatCompleter,
+        historyStore: TuiHistoryStore(
+          p.join(rt.dataDir, 'tui-history.txt'),
+        ),
+        banner: ['tiko chat — /quit keluar, /doctor, /status'],
+        prompt: 'you> ',
+      ).run();
       return;
 
     default:
@@ -944,7 +955,13 @@ Future<void> _setup(String configPath, List<String> args) async {
   }
 
   if (interactive) {
-    await _setupInteractive(configPath, force);
+    try {
+      await _setupInteractive(configPath, force);
+    } on PromptAborted {
+      stdout.writeln();
+      stdout.writeln('Setup dibatalkan.');
+      exitCode = 130;
+    }
     return;
   }
 
@@ -1035,33 +1052,29 @@ Future<void> _setupInteractive(String configPath, bool force) async {
   stdout.writeln('Wizard onboarding Tiko — kredensial disimpan sebagai SecretRef');
   stdout.writeln('env:VAR di config, nilai rahasianya di gateway.env (permission 600).');
   stdout.writeln('');
-
-  String prompt(String label, {String? def, bool required = false}) {
-    while (true) {
-      final suffix = (def != null && def.isNotEmpty) ? ' [$def]' : '';
-      stdout.write('$label$suffix: ');
-      final line = stdin.readLineSync()?.trim() ?? '';
-      if (line.isEmpty && def != null && def.isNotEmpty) return def;
-      if (line.isNotEmpty) return line;
-      if (!required) return '';
-      stdout.writeln('  Wajib diisi.');
-    }
-  }
-
-  bool confirm(String label) {
-    stdout.write('$label [y/N]: ');
-    final line = (stdin.readLineSync()?.trim() ?? '').toLowerCase();
-    return line == 'y' || line == 'ya' || line == 'yes';
-  }
+  final prompts = PromptRunner();
+  const providerTypes = [
+    'mock',
+    'ollama_native',
+    'openai',
+    'deepseek',
+    'anthropic',
+    'gemini',
+    'openai_compat',
+    'openai_responses',
+    'azure_openai',
+    'bedrock',
+  ];
 
   String providerType;
   while (true) {
-    providerType = prompt(
+    providerType = await prompts.prompt(
       'Tipe provider (mock | ollama_native | openai | deepseek | anthropic | '
       'gemini | openai_compat | openai_responses | azure_openai | bedrock | '
       'id preset lain)',
       def: 'mock',
       required: true,
+      completions: providerTypes,
     );
     try {
       OnboardingWizard.renderConfigYaml(OnboardingProfile(
@@ -1076,49 +1089,49 @@ Future<void> _setupInteractive(String configPath, bool force) async {
 
   final needsKey = providerType != 'mock' && providerType != 'ollama_native';
   final baseUrl = needsKey
-      ? prompt('base_url (kosongkan untuk default preset)')
+      ? await prompts.prompt('base_url (kosongkan untuk default preset)')
       : '';
-  final model = prompt('model (kosongkan untuk default)');
+  final model = await prompts.prompt('model (kosongkan untuk default)');
 
   final env = <String, String>{};
   String? apiKeyEnvVar;
   if (needsKey) {
     apiKeyEnvVar = OnboardingProfile.defaultApiKeyVar(providerType);
-    env[apiKeyEnvVar] = prompt('API key ($apiKeyEnvVar)', required: true);
+    env[apiKeyEnvVar] = await prompts.prompt('API key ($apiKeyEnvVar)', required: true);
   }
 
-  if (confirm('Aktifkan gateway Telegram?')) {
-    env['TG_TOKEN'] = prompt('TG_TOKEN', required: true);
-    env['TG_ALLOW'] = prompt('TG_ALLOW (id user, dipisah koma)', required: true);
+  if (await prompts.confirm('Aktifkan gateway Telegram?')) {
+    env['TG_TOKEN'] = await prompts.prompt('TG_TOKEN', required: true);
+    env['TG_ALLOW'] = await prompts.prompt('TG_ALLOW (id user, dipisah koma)', required: true);
   }
-  if (confirm('Aktifkan gateway Discord?')) {
-    env['DISCORD_BOT_TOKEN'] = prompt('DISCORD_BOT_TOKEN', required: true);
-    env['DISCORD_ALLOW'] = prompt('DISCORD_ALLOW (id user, dipisah koma)');
+  if (await prompts.confirm('Aktifkan gateway Discord?')) {
+    env['DISCORD_BOT_TOKEN'] = await prompts.prompt('DISCORD_BOT_TOKEN', required: true);
+    env['DISCORD_ALLOW'] = await prompts.prompt('DISCORD_ALLOW (id user, dipisah koma)');
   }
-  if (confirm('Aktifkan email SMTP (outbound)?')) {
-    env['EMAIL_FROM'] = prompt('EMAIL_FROM', required: true);
-    env['SMTP_HOST'] = prompt('SMTP_HOST', required: true);
-    env['SMTP_PORT'] = prompt('SMTP_PORT', def: '587');
-    final smtpUser = prompt('SMTP_USER');
+  if (await prompts.confirm('Aktifkan email SMTP (outbound)?')) {
+    env['EMAIL_FROM'] = await prompts.prompt('EMAIL_FROM', required: true);
+    env['SMTP_HOST'] = await prompts.prompt('SMTP_HOST', required: true);
+    env['SMTP_PORT'] = await prompts.prompt('SMTP_PORT', def: '587');
+    final smtpUser = await prompts.prompt('SMTP_USER');
     if (smtpUser.isNotEmpty) {
       env['SMTP_USER'] = smtpUser;
-      env['SMTP_PASS'] = prompt('SMTP_PASS', required: true);
+      env['SMTP_PASS'] = await prompts.prompt('SMTP_PASS', required: true);
       env['SMTP_STARTTLS'] = '1';
     }
-    final emailAllow = prompt('EMAIL_ALLOW (tujuan diizinkan, dipisah koma)');
+    final emailAllow = await prompts.prompt('EMAIL_ALLOW (tujuan diizinkan, dipisah koma)');
     if (emailAllow.isNotEmpty) env['EMAIL_ALLOW'] = emailAllow;
   }
-  if (confirm('Aktifkan email inbound IMAP?')) {
-    env['IMAP_HOST'] = prompt('IMAP_HOST', required: true);
-    env['IMAP_PORT'] = prompt('IMAP_PORT', def: '993');
-    env['IMAP_USER'] = prompt('IMAP_USER', required: true);
-    env['IMAP_PASSWORD'] = prompt('IMAP_PASSWORD', required: true);
-    env['IMAP_ALLOW'] = prompt('IMAP_ALLOW (pengirim diizinkan)', required: true);
+  if (await prompts.confirm('Aktifkan email inbound IMAP?')) {
+    env['IMAP_HOST'] = await prompts.prompt('IMAP_HOST', required: true);
+    env['IMAP_PORT'] = await prompts.prompt('IMAP_PORT', def: '993');
+    env['IMAP_USER'] = await prompts.prompt('IMAP_USER', required: true);
+    env['IMAP_PASSWORD'] = await prompts.prompt('IMAP_PASSWORD', required: true);
+    env['IMAP_ALLOW'] = await prompts.prompt('IMAP_ALLOW (pengirim diizinkan)', required: true);
   }
 
   final profile = OnboardingProfile(
     providerType: providerType,
-    workspace: prompt('Workspace', def: '.', required: true),
+    workspace: await prompts.prompt('Workspace', def: '.', required: true),
     baseUrl: baseUrl.isEmpty ? null : baseUrl,
     model: model.isEmpty ? null : model,
     apiKeyEnvVar: apiKeyEnvVar,
@@ -1151,3 +1164,10 @@ Future<void> _setupInteractive(String configPath, bool force) async {
     exitCode = 2;
   }
 }
+
+const _chatCommands = ['/quit', '/exit', '/doctor', '/status'];
+
+List<String> _chatCompleter(String prefix, String token) => [
+      for (final command in _chatCommands)
+        if (command.startsWith(token)) command,
+    ];
