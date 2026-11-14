@@ -18,6 +18,7 @@ workspace:
   - packages/agent_security
   - packages/tiko_runtime
   - packages/simpul_core
+  - packages/tiko_tui
   - apps/agentd
   - apps/agent_cli
   - apps/tiko

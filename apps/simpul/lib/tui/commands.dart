@@ -1,17 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:simpul_core/simpul_core.dart';
-
-/// Result of running one TUI command.
-class TuiOutcome {
-  const TuiOutcome(this.lines, {this.exit = false, this.clear = false});
-
-  final List<String> lines;
-  final bool exit;
-  final bool clear;
-}
+import 'package:tiko_tui/tiko_tui.dart';
 
 /// Executes TUI slash-commands against a vault. Pure-ish (I/O only on the
 /// vault itself) so the command surface is unit-testable without a tty.
@@ -277,37 +268,5 @@ class TuiCommands {
     var path = notePath.replaceAll('\\', '/');
     if (!path.endsWith('.md')) path = '$path.md';
     return path;
-  }
-}
-
-/// Persistence for TUI history across sessions.
-class TuiHistoryStore {
-  TuiHistoryStore(this.path);
-
-  final String path;
-
-  List<String> load({int limit = 500}) {
-    final file = File(path);
-    if (!file.existsSync()) return [];
-    try {
-      final lines = const LineSplitter()
-          .convert(file.readAsStringSync())
-          .where((l) => l.trim().isNotEmpty)
-          .toList();
-      return lines.length <= limit ? lines : lines.sublist(lines.length - limit);
-    } on FileSystemException {
-      return [];
-    }
-  }
-
-  Future<void> save(List<String> lines, {int limit = 500}) async {
-    final trimmed = lines.length <= limit
-        ? lines
-        : lines.sublist(lines.length - limit);
-    await File(path).parent.create(recursive: true);
-    await File(path).writeAsString(
-      '${trimmed.join('\n')}\n',
-      flush: true,
-    );
   }
 }
