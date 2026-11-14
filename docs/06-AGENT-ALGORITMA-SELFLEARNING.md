@@ -91,3 +91,22 @@ CI menjalankan unit test paket, golden fixtures kalkulator dan smoke CLI, tetapi
 - Reranker neural model yang tidak terlihat di jalur runtime.
 - Self-consistency aktif secara default.
 - Router yang memakai Jev/Laya pada default config tanpa konfigurasi eksternal.
+
+## 8. /learn dan memori terkurasi (2026-11-15)
+
+Dua gap Hermes-parity telah diimplementasikan (detail lengkap di
+`LEARN-CURATED-MEMORY-2026-11-15.md`):
+
+- **`/learn`** — authoring skill dari direktori/URL/catatan/percakapan.
+  Turn authoring memakai toolset read-only; hasil tervalidasi
+  (SkillValidator + SkillScanner) dan disimpan sebagai draft. Tersedia di
+  semua permukaan lewat funnel `chatWithStatus`.
+- **Memori terkurasi MEMORY.md/USER.md + nudge periodik** — setiap
+  `memory.nudge_interval_turns` (default 10) agent menerima directive
+  internal untuk mengeluarkan blok `memory-ops`; operasi dipindai
+  PromptGuard (fail-closed) sebelum diterapkan dengan anggaran karakter
+  ketat (default 3575). Snapshot di-inject ke system prompt setiap turn;
+  `/memory` menampilkan status.
+
+Bagian 2.2 laporan audit yang menyebut `/learn` ❌ dan "memory nudge ❌"
+kini sudah tertangani.

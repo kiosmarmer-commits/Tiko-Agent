@@ -12,6 +12,7 @@ export 'src/file_session_store.dart';
 export 'src/safe_memory_store.dart';
 export 'src/rag_pipeline.dart';
 export 'src/memory_layers.dart';
+export 'src/curated_memory.dart';
 export 'src/memory_providers.dart';
 export 'src/cloud_memory_providers.dart';
 export 'src/agent_migration.dart';

@@ -15,6 +15,7 @@ export 'src/router_eval.dart';
 export 'src/loop_detector.dart';
 export 'src/budget_guard.dart';
 export 'src/skills.dart';
+export 'src/learn.dart';
 export 'src/feedback.dart';
 export 'src/golden.dart';
 export 'src/eval_harness.dart';
