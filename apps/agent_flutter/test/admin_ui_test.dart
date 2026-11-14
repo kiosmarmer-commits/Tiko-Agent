@@ -1,4 +1,5 @@
 import 'package:agent_flutter/main.dart';
+import 'package:agent_flutter/ui/settings_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,9 +8,10 @@ void main() {
   group('Admin UI via AgentApp', () {
     testWidgets('AgentApp builds', (tester) async {
       await tester.pumpWidget(
-        const AgentApp(
+        AgentApp(
           initialBaseUrl: 'http://localhost:8787',
           initialToken: 'test-token',
+          initialSettings: AppSettings(),
         ),
       );
       await tester.pump();
@@ -18,9 +20,10 @@ void main() {
 
     testWidgets('no exception on pump', (tester) async {
       await tester.pumpWidget(
-        const AgentApp(
+        AgentApp(
           initialBaseUrl: 'http://localhost:8787',
           initialToken: 'test-token',
+          initialSettings: AppSettings(),
         ),
       );
       await tester.pump();

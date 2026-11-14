@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:simpul/simpul.dart' show SimpulBridge;
 import 'package:simpul_core/simpul_core.dart';
+import 'package:simpul/tui/repl.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -61,6 +62,16 @@ Future<void> main(List<String> args) async {
         await _bundleExport(rest);
       case 'bundle-import':
         await _bundleImport(rest);
+      case 'sync-init':
+        await _syncInit(rest);
+      case 'sync-status':
+        await _syncStatus(rest);
+      case 'sync-export':
+        await _syncExport(rest);
+      case 'sync-import':
+        await _syncImport(rest);
+      case 'tui' || 'repl':
+        await _tui(rest);
       case 'ask':
         await _ask(rest);
       case 'suggest-improve':
@@ -175,6 +186,28 @@ Penggunaan:
       Buka bundle .simpulbag dengan SIMPUL_PASSWORD dan tulis vault di <dir>
       (plaintext m0 — jalankan `simpul lock` di tujuan bila perlu). Entri
       dengan path traversal (.., absolut) ditolak sebelum ditulis.
+  simpul sync-init <vault> --device ID
+      Inisialisasi jurnal sinkronisasi dua arah (.simpul/sync/journal.json)
+      untuk perangkat ini. Jalan lagi kapan pun untuk memindai ulang;
+      file yang hilang dari disk otomatis menjadi tombstone hapus.
+  simpul sync-status <vault>
+      Ringkasan jurnal: deviceId, revisi, jumlah file, tombstone, peer.
+  simpul sync-export <vault> (--peer ID | --peer-journal FILE)
+                     [--out path] [--encrypt]
+      Ekspor delta terenkripsi SMPLDLT1 berisi hanya file yang berbeda dari
+      jurnal peer (dua arah, offline). --encrypt menyegel delta dengan
+      SIMPUL_PASSWORD; tanpa flag delta polos untuk transfer lokal.
+  simpul sync-import <vault> <delta> [--strategy keep-both|newest|theirs|ours]
+      Terapkan delta dari perangkat lain. Konflik (dua sisi berubah) tidak
+      pernah menimpa diam-diam: keep-both (default) menulis file
+      n.conflict-<device>-<stamp>.md, newest memilih mtime terbaru, ours
+      mempertahankan lokal, theirs menerima delta.
+  simpul tui <vault>
+      Antarmuka terminal interaktif (paritas Hermes): editing per karakter
+      dengan riwayat (↑/↓), autocomplete Tab untuk perintah dan path catatan,
+      multiline (akhiri baris dengan backslash atau blok /begin … /end), pintasan
+      Ctrl+A/E/K/U/W, warna ANSI (hormati NO_COLOR). Fallback mode baris
+      bila terminal tidak mendukung raw mode.
   simpul vault-status <vault>
       Status enkripsi vault: mode, parameter KDF, folder terenkripsi (m2),
       jumlah catatan terenkripsi, dan daftar file indeks.
@@ -1078,6 +1111,80 @@ Future<void> _bundleImport(List<String> args) async {
     'vault': result.dir,
     'files': result.fileCount,
   }));
+}
+
+Future<void> _tui(List<String> args) async {
+  final vault = _positional(args);
+  if (!Directory(vault).existsSync()) {
+    throw ArgumentError('vault tidak ditemukan: $vault');
+  }
+  await runTui(vault);
+}
+
+Future<void> _syncInit(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final device = opts['device'] ??
+      Platform.environment['SIMPUL_DEVICE'] ??
+      Platform.localHostname;
+  final status = await DeltaSync.initJournal(vault, deviceId: device);
+  stdout.writeln(jsonEncode(status.toJson()));
+}
+
+Future<void> _syncStatus(List<String> args) async {
+  final vault = _positional(args);
+  stdout.writeln(jsonEncode((await DeltaSync.status(vault)).toJson()));
+}
+
+Future<void> _syncExport(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {'encrypt'});
+  final password = opts.containsKey('encrypt') ? _passwordFromEnv() : null;
+  if (opts.containsKey('encrypt') && password == null) {
+    throw ArgumentError('--encrypt butuh SIMPUL_PASSWORD');
+  }
+  final result = await DeltaSync.exportDelta(
+    vault,
+    peerDeviceId: opts['peer'],
+    peerJournalFile: opts['peer-journal'],
+    password: password,
+    outPath: opts['out'],
+    crypto: await _vaultCryptoFor(vault),
+  );
+  stdout.writeln(jsonEncode({
+    'delta': result.path,
+    'files': result.fileCount,
+    'tombstones': result.tombstoneCount,
+    'bytes': result.sizeBytes,
+    'peer': result.peerDeviceId,
+  }));
+}
+
+Future<void> _syncImport(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul sync-import <vault> <delta>');
+  }
+  final opts = _options(args, {});
+  const strategies = {
+    'keep-both': ConflictStrategy.keepBoth,
+    'newest': ConflictStrategy.newest,
+    'theirs': ConflictStrategy.theirs,
+    'ours': ConflictStrategy.ours,
+  };
+  final strategyName = opts['strategy'] ?? 'keep-both';
+  final strategy = strategies[strategyName] ??
+      (throw ArgumentError(
+        'strategi tidak dikenal: $strategyName (keep-both|newest|theirs|ours)',
+      ));
+  final result = await DeltaSync.importDelta(
+    positional.first,
+    positional[1],
+    password: _passwordFromEnv(),
+    crypto: await _vaultCryptoFor(positional.first),
+    strategy: strategy,
+  );
+  stdout.writeln(jsonEncode(result.toJson()));
 }
 
 Future<void> _vaultStatus(List<String> args) async {

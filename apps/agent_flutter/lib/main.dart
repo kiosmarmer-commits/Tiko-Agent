@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'agent_api_client.dart';
 import 'daemon/desktop_daemon.dart';
 import 'ui/chat_controller.dart';
+import 'ui/settings_store.dart';
+import 'ui/settings_view.dart';
+import 'ui/theme.dart';
 import 'ui/graph_view.dart';
 import 'ui/status_view.dart';
 
@@ -31,28 +34,25 @@ Future<void> main() async {
   } catch (_) {
     // Bootstrap is best-effort; the manual connection settings still work.
   }
-  runApp(AgentApp(initialBaseUrl: base, initialToken: token));
+  final settings = await AppSettings.load();
+  runApp(AgentApp(
+    initialBaseUrl: base,
+    initialToken: token,
+    initialSettings: settings,
+  ));
 }
-
-const _bg = Color(0xFF0F1115);
-const _panel = Color(0xFF171A21);
-const _accent = Color(0xFF2A9D8F);
-const _userBubble = Color(0xFF1B3A4B);
-const _botBubble = Color(0xFF1E2430);
-const _border = Color(0xFF2A2F3A);
-const _muted = Color(0xFF9AA0A6);
-const _warn = Color(0xFFE9C46A);
-const _danger = Color(0xFFE76F51);
 
 class AgentApp extends StatefulWidget {
   const AgentApp({
     super.key,
     required this.initialBaseUrl,
     required this.initialToken,
+    required this.initialSettings,
   });
 
   final String initialBaseUrl;
   final String initialToken;
+  final AppSettings initialSettings;
 
   @override
   State<AgentApp> createState() => _AgentAppState();
@@ -61,6 +61,7 @@ class AgentApp extends StatefulWidget {
 class _AgentAppState extends State<AgentApp> {
   late String baseUrl;
   late String token;
+  late AppSettings settings = widget.initialSettings;
   late AgentApiClient client;
   late ChatController chat;
   Timer? statusTimer;
@@ -148,6 +149,11 @@ class _AgentAppState extends State<AgentApp> {
     unawaited(refreshAdmin(force: true));
   }
 
+  Future<void> _applySettings(AppSettings next) async {
+    setState(() => settings = next);
+    await next.save();
+  }
+
   @override
   void dispose() {
     statusTimer?.cancel();
@@ -162,21 +168,15 @@ class _AgentAppState extends State<AgentApp> {
     return MaterialApp(
       title: 'Tiko',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: _bg,
-        colorScheme: const ColorScheme.dark(
-          primary: _accent,
-          surface: _panel,
-        ),
-        useMaterial3: true,
-      ),
+      theme: SimpulTheme.theme(Brightness.light, settings.accent),
+      darkTheme: SimpulTheme.theme(Brightness.dark, settings.accent),
+      themeMode: settings.themeMode,
       home: Scaffold(
         body: wide
             ? Row(
                 children: [
                   NavigationRail(
-                    backgroundColor: _panel,
+                    backgroundColor: context.simpulPanel,
                     selectedIndex: tab.clamp(0, 5),
                     onDestinationSelected: (i) {
                       setState(() => tab = i);
@@ -210,7 +210,7 @@ class _AgentAppState extends State<AgentApp> {
                       ),
                     ],
                   ),
-                  const VerticalDivider(width: 1, color: _border),
+                  VerticalDivider(width: 1, color: context.simpulBorder),
                   Expanded(
                     child: AnimatedBuilder(
                       animation: chat,
@@ -228,7 +228,7 @@ class _AgentAppState extends State<AgentApp> {
                     ),
                   ),
                   NavigationBar(
-                    backgroundColor: _panel,
+                    backgroundColor: context.simpulPanel,
                     selectedIndex: tab.clamp(0, 4),
                     onDestinationSelected: (i) {
                       setState(() => tab = i);
@@ -273,6 +273,8 @@ class _AgentAppState extends State<AgentApp> {
         online: chat.online,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
+        settings: settings,
+        onSettingsChanged: _applySettings,
       );
     }
     switch (tab) {
@@ -342,11 +344,14 @@ class _AgentAppState extends State<AgentApp> {
           },
         );
       case 5:
-        return _SettingsPage(
+        return SettingsView(
+          settings: settings,
           baseUrl: baseUrl,
           token: token,
           online: chat.online,
           onConnect: updateConnection,
+          onSettingsChanged: _applySettings,
+          daemonCard: _DaemonStatusCard(),
         );
       default:
         return const SizedBox.shrink();
@@ -413,10 +418,10 @@ class _ChatPageState extends State<_ChatPage> {
             ),
             Expanded(
               child: chat.messages.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Mulai percakapan dengan Tiko',
-                        style: TextStyle(color: _muted),
+                        style: TextStyle(color: context.simpulMuted),
                       ),
                     )
                   : ListView.builder(
@@ -433,9 +438,9 @@ class _ChatPageState extends State<_ChatPage> {
                             padding: const EdgeInsets.all(12),
                             constraints: const BoxConstraints(maxWidth: 640),
                             decoration: BoxDecoration(
-                              color: user ? _userBubble : _botBubble,
+                              color: user ? context.simpulUserBubble : context.simpulBotBubble,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: _border),
+                              border: Border.all(color: context.simpulBorder),
                             ),
                             child: SelectableText(
                               (message['text'] ?? '').toString(),
@@ -449,14 +454,14 @@ class _ChatPageState extends State<_ChatPage> {
             if (chat.pendingConfirm != null)
               Container(
                 width: double.infinity,
-                color: _panel,
+                color: context.simpulPanel,
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Konfirmasi: ${chat.pendingConfirm!.prompt}',
-                      style: const TextStyle(color: _warn),
+                      style: TextStyle(color: context.simpulWarn),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -523,9 +528,9 @@ class _ComposerState extends State<_Composer> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      decoration: const BoxDecoration(
-        color: _panel,
-        border: Border(top: BorderSide(color: _border)),
+      decoration: BoxDecoration(
+        color: context.simpulPanel,
+        border: Border(top: BorderSide(color: context.simpulBorder)),
       ),
       child: Row(
         children: [
@@ -604,7 +609,7 @@ class _DashboardPage extends StatelessWidget {
         if (error != null)
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(error!, style: const TextStyle(color: _danger)),
+            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
           ),
         Expanded(
           child: ListView(
@@ -635,14 +640,14 @@ class _DashboardPage extends StatelessWidget {
                           Text(
                               'tier $tier → ${routing.providerForTier(tier)}'),
                         if (routing.health.isEmpty)
-                          const Text('belum ada data kesehatan',
-                              style: TextStyle(color: _muted)),
+                          Text('belum ada data kesehatan',
+                              style: TextStyle(color: context.simpulMuted)),
                         for (final e in routing.health.entries)
                           Text(
                             '${e.key}: ${e.value['open'] == true ? 'circuit open' : 'sehat'}'
                             ' (${e.value['failures'] ?? 0} gagal)',
                             style: TextStyle(
-                              color: e.value['open'] == true ? _danger : _muted,
+                              color: e.value['open'] == true ? context.simpulDanger : context.simpulMuted,
                             ),
                           ),
                       ],
@@ -651,9 +656,9 @@ class _DashboardPage extends StatelessWidget {
                   _Card(
                     title: 'MCP',
                     child: routing.mcpServers.isEmpty
-                        ? const Text(
+                        ? Text(
                             'Tidak ada server MCP.',
-                            style: TextStyle(color: _muted),
+                            style: TextStyle(color: context.simpulMuted),
                           )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -663,7 +668,7 @@ class _DashboardPage extends StatelessWidget {
                                   '${s['id']} · ${s['type']} · '
                                   '${s['enabled'] == true ? 'aktif' : 'nonaktif'}',
                                   style: TextStyle(
-                                    color: s['enabled'] == true ? null : _muted,
+                                    color: s['enabled'] == true ? null : context.simpulMuted,
                                   ),
                                 ),
                             ],
@@ -676,7 +681,7 @@ class _DashboardPage extends StatelessWidget {
                           ? 'Tidak ada pending'
                           : '$pending menunggu keputusan',
                       style: TextStyle(
-                        color: pending > 0 ? _warn : _muted,
+                        color: pending > 0 ? context.simpulWarn : context.simpulMuted,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -686,15 +691,15 @@ class _DashboardPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: doctor.isEmpty
-                          ? [const Text('—', style: TextStyle(color: _muted))]
+                          ? [Text('—', style: TextStyle(color: context.simpulMuted))]
                           : doctor
                               .map((c) => Text(
                                     '[${c['status']}] ${c['name']}: ${c['detail']}',
                                     style: TextStyle(
                                       color: c['status'] == 'fail'
-                                          ? _danger
+                                          ? context.simpulDanger
                                           : c['status'] == 'warn'
-                                              ? _warn
+                                              ? context.simpulWarn
                                               : null,
                                       height: 1.4,
                                     ),
@@ -755,12 +760,12 @@ class _ApprovalsPage extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             children: [
               if (pending.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('Tidak ada permintaan izin.', style: TextStyle(color: _muted)),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('Tidak ada permintaan izin.', style: TextStyle(color: context.simpulMuted)),
                 ),
               ...pending.map((a) => Card(
-                    color: _panel,
+                    color: context.simpulPanel,
                     child: ListTile(
                       title: Text('${a['tool']} · ${a['risk']}', maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
@@ -775,12 +780,12 @@ class _ApprovalsPage extends StatelessWidget {
                           IconButton(
                             tooltip: 'Approve',
                             onPressed: () => onDecide('${a['id']}', true),
-                            icon: const Icon(Icons.check_circle, color: _accent),
+                            icon: Icon(Icons.check_circle, color: context.simpulAccent),
                           ),
                           IconButton(
                             tooltip: 'Deny',
                             onPressed: () => onDecide('${a['id']}', false),
-                            icon: const Icon(Icons.cancel, color: _danger),
+                            icon: Icon(Icons.cancel, color: context.simpulDanger),
                           ),
                         ],
                       ),
@@ -836,7 +841,7 @@ class _SessionsPage extends StatelessWidget {
         if (loading) const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: sessions.isEmpty
-              ? const Center(child: Text('Belum ada sesi.', style: TextStyle(color: _muted)))
+              ? Center(child: Text('Belum ada sesi.', style: TextStyle(color: context.simpulMuted)))
               : ListView.builder(
                   itemCount: sessions.length,
                   itemBuilder: (context, i) {
@@ -892,11 +897,11 @@ class _MemoryPage extends StatelessWidget {
         if (error != null)
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(error!, style: const TextStyle(color: _danger)),
+            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
           ),
         Expanded(
           child: memories.isEmpty
-              ? const Center(child: Text('Kosong', style: TextStyle(color: _muted)))
+              ? Center(child: Text('Kosong', style: TextStyle(color: context.simpulMuted)))
               : ListView.builder(
                   itemCount: memories.length,
                   itemBuilder: (context, i) {
@@ -932,106 +937,6 @@ class _MemoryPage extends StatelessWidget {
 }
 
 // ——— Settings ———
-class _SettingsPage extends StatefulWidget {
-  const _SettingsPage({
-    required this.baseUrl,
-    required this.token,
-    required this.online,
-    required this.onConnect,
-  });
-  final String baseUrl;
-  final String token;
-  final bool online;
-  final void Function({required String base, required String tok}) onConnect;
-
-  @override
-  State<_SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<_SettingsPage> {
-  final _formKey = GlobalKey<FormState>();
-  late final baseC = TextEditingController(text: widget.baseUrl);
-  late final tokC = TextEditingController(text: widget.token);
-
-  @override
-  void dispose() {
-    baseC.dispose();
-    tokC.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _TopBar(title: 'Settings', subtitle: 'API', online: widget.online),
-        Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: baseC,
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'API base URL',
-                  hintText: 'http://127.0.0.1:8787',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  final uri = Uri.tryParse((value ?? '').trim());
-                  if (uri == null || !uri.hasAuthority || uri.host.isEmpty ||
-                      !const ['http', 'https'].contains(uri.scheme) ||
-                      uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
-                    return 'Masukkan URL HTTP(S) yang valid.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: tokC,
-                obscureText: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Bearer token',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => (value ?? '').trim().isEmpty
-                    ? 'Bearer token wajib diisi.'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    if (!_formKey.currentState!.validate()) return;
-                    widget.onConnect(
-                      base: baseC.text.trim().replaceFirst(RegExp(r'/+$'), ''),
-                      tok: tokC.text.trim(),
-                    );
-                  },
-                  child: const Text('Simpan & hubungkan'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        _DaemonStatusCard(),
-        const SizedBox(height: 16),
-        const Text(
-          'Pastikan daemon berjalan dengan perintah tiko daemon start. Token berada di data/api.token (permission POSIX 0600); pindahkan nilainya secara aman ke kolom Bearer token.',
-          style: TextStyle(color: _muted, height: 1.5),
-        ),
-      ],
-    );
-  }
-}
-
 /// Shows the self-contained desktop daemon bootstrap state (Hermes-parity):
 /// which daemon the app is using, its home directory and log location.
 class _DaemonStatusCard extends StatelessWidget {
@@ -1059,16 +964,16 @@ class _DaemonStatusCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _panel,
+        color: context.simpulPanel,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
+        border: Border.all(color: context.simpulBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Daemon: $modeText', style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          Text(detail, style: const TextStyle(color: _muted, height: 1.4)),
+          Text(detail, style: TextStyle(color: context.simpulMuted, height: 1.4)),
         ],
       ),
     );
@@ -1084,6 +989,8 @@ class _MorePage extends StatelessWidget {
     required this.online,
     required this.onRefresh,
     required this.onConnect,
+    required this.settings,
+    required this.onSettingsChanged,
   });
   final AgentApiClient client;
   final String baseUrl;
@@ -1092,6 +999,8 @@ class _MorePage extends StatelessWidget {
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
+  final AppSettings settings;
+  final void Function(AppSettings) onSettingsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1144,11 +1053,14 @@ class _MorePage extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => Scaffold(
-                body: _SettingsPage(
+                body: SettingsView(
+                  settings: settings,
                   baseUrl: baseUrl,
                   token: token,
                   online: online,
                   onConnect: onConnect,
+                  onSettingsChanged: onSettingsChanged,
+                  daemonCard: _DaemonStatusCard(),
                 ),
               ),
             ));
@@ -1175,9 +1087,9 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: const BoxDecoration(
-        color: _panel,
-        border: Border(bottom: BorderSide(color: _border)),
+      decoration: BoxDecoration(
+        color: context.simpulPanel,
+        border: Border(bottom: BorderSide(color: context.simpulBorder)),
       ),
       child: Row(
         children: [
@@ -1201,7 +1113,7 @@ class _TopBar extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: _muted, fontSize: 12),
+                  style: TextStyle(color: context.simpulMuted, fontSize: 12),
                 ),
               ],
             ),
@@ -1212,7 +1124,7 @@ class _TopBar extends StatelessWidget {
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: online ? _accent : _danger,
+              color: online ? context.simpulAccent : context.simpulDanger,
             ),
           ),
           if (trailing != null) trailing!,
@@ -1238,9 +1150,9 @@ class _Card extends StatelessWidget {
           width: width,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: _panel,
+            color: context.simpulPanel,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _border),
+            border: Border.all(color: context.simpulBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
