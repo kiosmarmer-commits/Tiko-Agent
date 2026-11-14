@@ -57,6 +57,10 @@ Future<void> main(List<String> args) async {
         await _recoverySplit(rest);
       case 'canvas':
         await _canvas(rest);
+      case 'bundle-export':
+        await _bundleExport(rest);
+      case 'bundle-import':
+        await _bundleImport(rest);
       case 'ask':
         await _ask(rest);
       case 'suggest-improve':
@@ -161,6 +165,16 @@ Penggunaan:
       Obsidian (FR-41): tiap catatan menjadi node "file" dengan posisi
       force layout, tiap tautan menjadi edge, warna per folder. Vault
       terenkripsi membaca SIMPUL_PASSWORD seperti perintah lain.
+  simpul bundle-export <vault> [--out path]
+      Segel seluruh vault (catatan + artefak indeks) menjadi satu bundle
+      terenkripsi end-to-end .simpulbag (SEC-20..22): XChaCha20-Poly1305
+      dengan kunci vault terbungkus Argon2id dari SIMPUL_PASSWORD. Pindahkan
+      file dengan saluran apa pun; hanya password yang membukanya. Vault
+      terkunci membaca SIMPUL_PASSWORD untuk dekripsi in-memory.
+  simpul bundle-import <bag> --out <dir>
+      Buka bundle .simpulbag dengan SIMPUL_PASSWORD dan tulis vault di <dir>
+      (plaintext m0 — jalankan `simpul lock` di tujuan bila perlu). Entri
+      dengan path traversal (.., absolut) ditolak sebelum ditulis.
   simpul vault-status <vault>
       Status enkripsi vault: mode, parameter KDF, folder terenkripsi (m2),
       jumlah catatan terenkripsi, dan daftar file indeks.
@@ -1018,6 +1032,51 @@ Future<void> _canvas(List<String> args) async {
     'canvas': out,
     'nodes': document.nodes.length,
     'edges': document.edges.length,
+  }));
+}
+
+/// SEC-20..22: seals the whole vault (notes + index artifacts) into one
+/// portable encrypted bundle; plaintext never touches the wire.
+Future<void> _bundleExport(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final password = _passwordFromEnv() ??
+      (throw ArgumentError('set SIMPUL_PASSWORD untuk menyegel bundle'));
+  final out = opts['out'] ?? '$vault.simpulbag';
+  final result = await VaultBundle.exportBundle(
+    vault,
+    password: password,
+    outPath: out,
+    crypto: await _vaultCryptoFor(vault),
+  );
+  stdout.writeln(jsonEncode({
+    'bundle': result.path,
+    'files': result.fileCount,
+    'bytes': result.sizeBytes,
+  }));
+}
+
+/// SEC-20..22: opens an encrypted bundle with SIMPUL_PASSWORD and unpacks
+/// the vault at --out (plaintext m0; jalankan `simpul lock` di tujuan bila
+/// perlu).
+Future<void> _bundleImport(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.isEmpty) {
+    throw ArgumentError('pemakaian: simpul bundle-import <bag> --out <dir>');
+  }
+  final opts = _options(args, {});
+  final password = _passwordFromEnv() ??
+      (throw ArgumentError('set SIMPUL_PASSWORD untuk membuka bundle'));
+  final out = opts['out'] ??
+      (throw ArgumentError('opsi --out wajib diisi, contoh: --out vault-restored'));
+  final result = await VaultBundle.importBundle(
+    positional.first,
+    password: password,
+    outDir: out,
+  );
+  stdout.writeln(jsonEncode({
+    'vault': result.dir,
+    'files': result.fileCount,
   }));
 }
 
