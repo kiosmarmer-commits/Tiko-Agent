@@ -15,6 +15,7 @@ export 'src/graph_cache.dart';
 export 'src/graph_csr.dart';
 export 'src/hybrid_search.dart';
 export 'src/isolate_layout.dart';
+export 'src/json_canvas.dart';
 export 'src/ivf_index.dart';
 export 'src/layout_cache.dart';
 export 'src/link_suggester.dart';

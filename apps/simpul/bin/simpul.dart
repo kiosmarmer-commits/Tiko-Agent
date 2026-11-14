@@ -55,6 +55,8 @@ Future<void> main(List<String> args) async {
         await _vaultStatus(rest);
       case 'recovery-split':
         await _recoverySplit(rest);
+      case 'canvas':
+        await _canvas(rest);
       case 'ask':
         await _ask(rest);
       case 'suggest-improve':
@@ -152,6 +154,11 @@ Penggunaan:
       Pecahkan kunci vault yang sedang terkunci menjadi N share Shamir
       (SEC-06), threshold K (default ceil(N/2)); satu baris JSON per share
       ke stdout. Wajib SIMPUL_PASSWORD.
+  simpul canvas <vault> [--out path] [--iterations N]
+      Ekspor graf vault sebagai file JSON Canvas (.canvas) kompatibel
+      Obsidian (FR-41): tiap catatan menjadi node "file" dengan posisi
+      force layout, tiap tautan menjadi edge, warna per folder. Vault
+      terenkripsi membaca SIMPUL_PASSWORD seperti perintah lain.
   simpul vault-status <vault>
       Status enkripsi vault: mode, parameter KDF, folder terenkripsi (m2),
       jumlah catatan terenkripsi, dan daftar file indeks.
@@ -985,6 +992,27 @@ Future<void> _recoverySplit(List<String> args) async {
     'SIMPER: simpan tiap share di lokasi terpisah; butuh $threshold dari '
     '$shares share untuk pemulihan tanpa password.',
   );
+}
+
+/// FR-41: exports the vault graph as an Obsidian-compatible JSON Canvas
+/// (.canvas) file, laid out by the force layout, colored per folder.
+Future<void> _canvas(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final out = opts['out'] ?? p.join(vault, 'graph.canvas');
+  final iterations = int.parse(opts['iterations'] ?? '200');
+  final notes =
+      await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
+  final document = VaultCanvas.fromNotes(
+    notes.map((n) => n.toIndexed()).toList(),
+    config: ForceLayoutConfig(maxIterations: iterations),
+  );
+  await VaultCrypto.writeBytesAtomically(out, utf8.encode(document.encode()));
+  stdout.writeln(jsonEncode({
+    'canvas': out,
+    'nodes': document.nodes.length,
+    'edges': document.edges.length,
+  }));
 }
 
 Future<void> _vaultStatus(List<String> args) async {
