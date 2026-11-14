@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:simpul_core/simpul_core.dart';
 
 import 'command_palette.dart';
+import 'index_dashboard.dart';
+import 'note_chat_panel.dart';
 import 'theme.dart';
 
 /// Opens the note editor page for [path] inside [vault].
@@ -44,6 +46,7 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
   NoteEditor? editor;
   VaultLinkResolver? resolver;
   bool preview = false;
+  bool chatOpen = false;
   String? error;
   bool dirty = false;
   List<({String path, String label})> completions = const [];
@@ -357,6 +360,21 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
     }
   }
 
+  void _insertAiBlock(String block) {
+    final noteEditor = editor;
+    if (noteEditor == null) return;
+    final current = textField.text;
+    final next = current.isEmpty || current.endsWith('\n')
+        ? '$current\n$block'
+        : '$current\n\n$block';
+    noteEditor.text = next;
+    textField.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+    setState(() => dirty = noteEditor.dirty);
+  }
+
   void _openPath(String path) {
     final noteEditor = editor;
     if (noteEditor != null && noteEditor.dirty) {
@@ -382,6 +400,20 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Chat AI konteks catatan (AI-U01)',
+            icon: const Icon(Icons.forum_outlined),
+            isSelected: chatOpen,
+            onPressed: editor == null
+                ? null
+                : () => setState(() => chatOpen = !chatOpen),
+          ),
+          IconButton(
+            tooltip: 'Status indeks (NFR-O03)',
+            icon: const Icon(Icons.data_usage),
+            onPressed: () =>
+                showIndexDashboard(context, vaultField.text.trim()),
+          ),
           IconButton(
             tooltip: 'Command palette (Ctrl+K, FR-44)',
             icon: const Icon(Icons.search),
@@ -480,38 +512,59 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                 style: TextStyle(color: theme.colorScheme.error),
               ),
             ),
-          if (completions.isNotEmpty) _completionList(),
-          if (preview && editor != null)
-            Expanded(
-              child: MarkdownPreview(text: textField.text),
-            )
-          else if (editor != null)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: TextField(
-                  controller: textField,
-                  focusNode: editorFocus,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: 'Tulis markdown di sini\u2026',
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      if (completions.isNotEmpty) _completionList(),
+                      if (preview && editor != null)
+                        Expanded(
+                          child: MarkdownPreview(text: textField.text),
+                        )
+                      else if (editor != null)
+                        Expanded(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            child: TextField(
+                              controller: textField,
+                              focusNode: editorFocus,
+                              maxLines: null,
+                              expands: true,
+                              textAlignVertical: TextAlignVertical.top,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 14,
+                                height: 1.5,
+                              ),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                hintText: 'Tulis markdown di sini\u2026',
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        const Expanded(
+                          child: Center(
+                              child: Text('Buka catatan untuk mulai mengedit.')),
+                        ),
+                      if (editor != null) _linksPanel(),
+                    ],
                   ),
                 ),
-              ),
-            )
-          else
-            const Expanded(
-              child: Center(child: Text('Buka catatan untuk mulai mengedit.')),
+                if (chatOpen && editor != null)
+                  SimpulNoteChatPanel(
+                    vault: vaultField.text.trim(),
+                    notePath: editor!.path,
+                    onInsert: _insertAiBlock,
+                  ),
+              ],
             ),
-          if (editor != null) _linksPanel(),
+          ),
         ],
       ),
       ),
