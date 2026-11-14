@@ -175,6 +175,11 @@ abstract class VaultIndex {
   Future<Map<String, ({int mtimeNs, int sizeBytes, String hash})>> stats();
   Future<List<SearchHit>> search(String query, {int limit = 20});
   Future<List<String>> backlinks(String notePath);
+
+  /// Tags per requested path (missing paths are absent from the map) — the
+  /// input for tag-based AI access rules (DIF-04).
+  Future<Map<String, List<String>>> tagsOf(Set<String> paths);
+
   Future<VaultHealthReport> health();
   Future<void> close();
 }
@@ -642,6 +647,23 @@ class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
   }
 
   @override
+  Future<Map<String, List<String>>> tagsOf(Set<String> paths) async {
+    if (paths.isEmpty) return const {};
+    final placeholders = List.filled(paths.length, '?').join(', ');
+    final rows = db.select(
+      'SELECT n.path AS path, t.tag AS tag FROM tags t '
+      'JOIN notes n ON n.id = t.note_id '
+      'WHERE n.path IN ($placeholders) ORDER BY n.path, t.tag',
+      paths.toList(),
+    );
+    final out = <String, List<String>>{};
+    for (final row in rows) {
+      out.putIfAbsent(row['path'] as String, () => []).add(row['tag'] as String);
+    }
+    return out;
+  }
+
+  @override
   Future<VaultHealthReport> health() async {
     final noteCount = db.select('SELECT COUNT(*) AS n FROM notes').first['n'] as int;
     final linkCount = db.select('SELECT COUNT(*) AS n FROM links').first['n'] as int;
@@ -969,6 +991,19 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
       }
     }
     return sources.toList()..sort();
+  }
+
+  @override
+  Future<Map<String, List<String>>> tagsOf(Set<String> paths) async {
+    _ensureLoaded();
+    if (paths.isEmpty) return const {};
+    final out = <String, List<String>>{};
+    for (final note in _notes) {
+      if (paths.contains(note.path) && note.tags.isNotEmpty) {
+        out[note.path] = List.of(note.tags);
+      }
+    }
+    return out;
   }
 
   @override

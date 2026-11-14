@@ -181,4 +181,127 @@ void main() {
       process.kill();
     }
   });
+
+  test('folder deny rule filters search hits and reports filtered count', () async {
+    await Directory('$vault/rahasia').create(recursive: true);
+    await File('$vault/rahasia/kunci.md').writeAsString(
+      '---\ntitle: Kunci\n---\nkunci rahasia bank\n',
+    );
+    final index = JsonVaultIndex('$vault/.simpul/index.json');
+    final notes = await VaultScanner.scan(vault);
+    await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
+    await index.close();
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync(
+      jsonEncode({
+        'folders': {'rahasia': 'tolak'},
+      }),
+    );
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'search',
+      'arguments': {'query': 'kunci'},
+    });
+    final text = jsonDecode(
+      ((response['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['hits'], isEmpty);
+    expect(text['filtered'], greaterThanOrEqualTo(1));
+  });
+
+  test('read_note refuses denied notes and writes an audit line', () async {
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync(
+      jsonEncode({
+        'notes': {'catatan/satu.md': 'tolak'},
+      }),
+    );
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    final result = response['result'] as Map<String, Object?>;
+    expect(result['isError'], isTrue);
+    expect(
+      (result['content'] as List).first['text'],
+      contains('akses ditolak kebijakan AI'),
+    );
+    final entries = [
+      for (final line in File('$vault/.simpul/ai-audit.jsonl').readAsLinesSync())
+        jsonDecode(line) as Map<String, Object?>,
+    ];
+    expect(
+      entries.any((e) => e['tool'] == 'read_note' && e['decision'] == 'deny'),
+      isTrue,
+    );
+  });
+
+  test('ask status is refused in headless tooling', () async {
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync(
+      jsonEncode({
+        'notes': {'catatan/satu.md': 'tanya'},
+      }),
+    );
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    final result = response['result'] as Map<String, Object?>;
+    expect(result['isError'], isTrue);
+    expect(
+      (result['content'] as List).first['text'],
+      contains('persetujuan manusia'),
+    );
+    final entries = [
+      for (final line in File('$vault/.simpul/ai-audit.jsonl').readAsLinesSync())
+        jsonDecode(line) as Map<String, Object?>,
+    ];
+    expect(entries.any((e) => e['decision'] == 'ask'), isTrue);
+  });
+
+  test('tag deny rules filter search hits through index tagsOf', () async {
+    await File('$vault/catatan/tiga.md').writeAsString(
+      '---\ntitle: Tiga\ntags: [pribadi]\n---\ncatatan pribadi keluarga\n',
+    );
+    final index = JsonVaultIndex('$vault/.simpul/index.json');
+    final notes = await VaultScanner.scan(vault);
+    await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
+    await index.close();
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync(
+      jsonEncode({
+        'tags': {'pribadi': 'tolak'},
+      }),
+    );
+    final bridge = SimpulBridge(vaultDir: vault);
+    final response = await request(bridge, 'tools/call', {
+      'name': 'search',
+      'arguments': {'query': 'pribadi'},
+    });
+    final text = jsonDecode(
+      ((response['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['hits'], isEmpty);
+    expect(text['filtered'], 1);
+  });
+
+  test('corrupt permission config fails closed to deny-all', () async {
+    File('$vault/.simpul/ai-permissions.json').writeAsStringSync('{bukan json');
+    final bridge = SimpulBridge(vaultDir: vault);
+
+    final read = await request(bridge, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    expect((read['result'] as Map)['isError'], isTrue);
+
+    final search = await request(bridge, 'tools/call', {
+      'name': 'search',
+      'arguments': {'query': 'saraf'},
+    });
+    final text = jsonDecode(
+      ((search['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['hits'], isEmpty);
+    expect(text['filtered'], 1);
+  });
 }

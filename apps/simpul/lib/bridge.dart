@@ -10,14 +10,41 @@ import 'package:simpul_core/simpul_core.dart';
 /// network listener at all; when [token] is set, every request must carry it
 /// under `params._meta.token` (fail-closed).
 class SimpulBridge {
-  SimpulBridge({required this.vaultDir, this.token});
+  SimpulBridge({required this.vaultDir, this.token, AiAccessPolicy Function()? policyLoader})
+      : policyLoader = policyLoader ?? (() => AiAccessPolicy.load(vaultDir));
 
   final String vaultDir;
   final String? token;
 
+  /// Reloaded on every tool call so permission changes take effect
+  /// immediately (DIF-04); a corrupt config fails closed to deny-all.
+  final AiAccessPolicy Function() policyLoader;
+
   static const _maxReadChars = 20000;
 
   VaultIndex? _index;
+
+  AiAccessPolicy _policy() {
+    try {
+      return policyLoader();
+    } catch (_) {
+      return AiAccessPolicy.denyAll();
+    }
+  }
+
+  /// Effective decision for a set of paths; tag rules need the notes' tags,
+  /// fetched from the index only when tag rules exist.
+  Future<AiAccessDecision> _decide(
+    AiAccessPolicy policy,
+    VaultIndex index,
+    String path,
+  ) async {
+    var tags = const <String>{};
+    if (policy.tags.isNotEmpty) {
+      tags = (await index.tagsOf({path}))[path]?.toSet() ?? const {};
+    }
+    return policy.decide(path, tags: tags);
+  }
 
   Future<String> handleLine(String line) async {
     Object? id;
@@ -74,23 +101,46 @@ class SimpulBridge {
     }
     final args =
         (params['arguments'] as Map?)?.cast<String, Object?>() ?? const {};
+    final policy = _policy();
+    final audit = AiAuditLogger(vaultDir);
+    final target = (args['query'] ?? args['path'] ?? '-').toString();
     try {
       final data = await switch (name) {
-        'search' => _search(args),
-        'semsearch' => _semsearch(args),
+        'search' => _search(args, policy, audit),
+        'semsearch' => _semsearch(args, policy, audit),
         'health' => _health(),
-        'backlinks' => _backlinks(args),
-        'read_note' => _readNote(args),
-        'clusters' => _clusters(),
-        'suggest_links' => _suggestLinks(args),
+        'backlinks' => _backlinks(args, policy),
+        'read_note' => _readNote(args, policy),
+        'clusters' => _clusters(policy),
+        'suggest_links' => _suggestLinks(args, policy),
         _ => throw ArgumentError('tool tidak dikenal: $name'),
       };
+      audit.log(tool: name, target: target, decision: AiAccessDecision.allow);
       return _result(id, {
         'content': [
           {'type': 'text', 'text': jsonEncode(data)},
         ],
       });
+    } on AiAccessDenied catch (e) {
+      audit.log(
+        tool: name,
+        target: target,
+        decision: e.decision,
+        detail: {'reason': e.message},
+      );
+      return _result(id, {
+        'content': [
+          {'type': 'text', 'text': e.message},
+        ],
+        'isError': true,
+      });
     } on ArgumentError catch (e) {
+      audit.log(
+        tool: name,
+        target: target,
+        decision: AiAccessDecision.allow,
+        detail: {'status': 'argument_error'},
+      );
       return _result(id, {
         'content': [
           {'type': 'text', 'text': '${e.message}'},
@@ -98,6 +148,12 @@ class SimpulBridge {
         'isError': true,
       });
     } catch (e) {
+      audit.log(
+        tool: name,
+        target: target,
+        decision: AiAccessDecision.allow,
+        detail: {'status': 'error'},
+      );
       return _result(id, {
         'content': [
           {'type': 'text', 'text': 'gagal: $e'},
@@ -128,23 +184,46 @@ class SimpulBridge {
     throw ArgumentError('indeks belum ada — jalankan: simpul index "$vaultDir"');
   }
 
-  Future<Object?> _search(Map<String, Object?> args) async {
+  Future<Object?> _search(
+    Map<String, Object?> args,
+    AiAccessPolicy policy,
+    AiAuditLogger audit,
+  ) async {
     final query = args['query'];
     if (query is! String || query.isEmpty) {
       throw ArgumentError('query wajib string non-kosong');
     }
     final index = await _openIndex();
     final hits = await index.search(query, limit: _intArg(args, 'limit', 20));
+    final allowed = <SearchHit>[];
+    for (final h in hits) {
+      if (await _decide(policy, index, h.path) == AiAccessDecision.allow) {
+        allowed.add(h);
+      }
+    }
+    if (allowed.length < hits.length) {
+      audit.log(
+        tool: 'search',
+        target: query,
+        decision: AiAccessDecision.allow,
+        detail: {'filtered': hits.length - allowed.length},
+      );
+    }
     return {
       'query': query,
+      if (allowed.length < hits.length) 'filtered': hits.length - allowed.length,
       'hits': [
-        for (final h in hits)
+        for (final h in allowed)
           {'path': h.path, 'score': h.score, 'snippet': h.snippet},
       ],
     };
   }
 
-  Future<Object?> _semsearch(Map<String, Object?> args) async {
+  Future<Object?> _semsearch(
+    Map<String, Object?> args,
+    AiAccessPolicy policy,
+    AiAuditLogger audit,
+  ) async {
     final query = args['query'];
     if (query is! String || query.isEmpty) {
       throw ArgumentError('query wajib string non-kosong');
@@ -165,11 +244,27 @@ class SimpulBridge {
         embedder.embed(query),
         limit: _intArg(args, 'limit', 20),
       );
+      final index = await _openIndex();
+      final allowed = <SemanticHit>[];
+      for (final h in hits) {
+        if (await _decide(policy, index, h.notePath) == AiAccessDecision.allow) {
+          allowed.add(h);
+        }
+      }
+      if (allowed.length < hits.length) {
+        audit.log(
+          tool: 'semsearch',
+          target: query,
+          decision: AiAccessDecision.allow,
+          detail: {'filtered': hits.length - allowed.length},
+        );
+      }
       return {
         'query': query,
         'model': embedder.modelVersion,
+        if (allowed.length < hits.length) 'filtered': hits.length - allowed.length,
         'hits': [
-          for (final h in hits)
+          for (final h in allowed)
             {
               'path': h.notePath,
               'chunk': h.ord,
@@ -195,19 +290,30 @@ class SimpulBridge {
     };
   }
 
-  Future<Object?> _backlinks(Map<String, Object?> args) async {
+  Future<Object?> _backlinks(Map<String, Object?> args, AiAccessPolicy policy) async {
     final path = args['path'];
     if (path is! String || path.isEmpty) {
       throw ArgumentError('path wajib string non-kosong');
     }
     final index = await _openIndex();
-    return {'path': path, 'backlinks': await index.backlinks(path)};
+    final sources = <String>[];
+    for (final source in await index.backlinks(path)) {
+      if (await _decide(policy, index, source) == AiAccessDecision.allow) {
+        sources.add(source);
+      }
+    }
+    return {'path': path, 'backlinks': sources};
   }
 
-  Future<Object?> _readNote(Map<String, Object?> args) async {
+  Future<Object?> _readNote(Map<String, Object?> args, AiAccessPolicy policy) async {
     final path = args['path'];
     if (path is! String || path.isEmpty) {
       throw ArgumentError('path wajib string non-kosong');
+    }
+    final index = await _openIndex();
+    final decision = await _decide(policy, index, path);
+    if (decision != AiAccessDecision.allow) {
+      throw AiAccessDenied(decision, path);
     }
     final canonicalVault = p.canonicalize(vaultDir);
     final requested = p.canonicalize(p.join(vaultDir, path));
@@ -225,9 +331,15 @@ class SimpulBridge {
     return {'path': path, 'content': text};
   }
 
-  Future<Object?> _clusters() async {
+  Future<Object?> _clusters(AiAccessPolicy policy) async {
     final notes = await VaultScanner.scan(vaultDir);
-    final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
+    final allowed = [
+      for (final note in notes)
+        if (policy.decide(note.path, tags: note.parsed.tags.toSet()) ==
+            AiAccessDecision.allow)
+          note,
+    ];
+    final graph = GraphCsr.build(allowed.map((n) => n.toIndexed()).toList());
     final result = CommunityDetector.louvain(graph);
     final sizes = <int, int>{};
     for (final c in result.communityOf) {
@@ -242,10 +354,16 @@ class SimpulBridge {
     };
   }
 
-  Future<Object?> _suggestLinks(Map<String, Object?> args) async {
+  Future<Object?> _suggestLinks(Map<String, Object?> args, AiAccessPolicy policy) async {
     final notes = await VaultScanner.scan(vaultDir);
+    final allowed = [
+      for (final note in notes)
+        if (policy.decide(note.path, tags: note.parsed.tags.toSet()) ==
+            AiAccessDecision.allow)
+          note,
+    ];
     final suggestions = await LinkSuggester.suggest(
-      notes.map((n) => n.toIndexed()).toList(),
+      allowed.map((n) => n.toIndexed()).toList(),
       limit: _intArg(args, 'limit', 20),
       minScore: _doubleArg(args, 'min_score', LinkSuggester.defaultMinScore),
     );

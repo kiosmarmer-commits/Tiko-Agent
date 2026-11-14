@@ -39,6 +39,8 @@ Future<void> main(List<String> args) async {
         await _clusters(rest);
       case 'suggest-links':
         await _suggestLinks(rest);
+      case 'suggest-tags':
+        await _suggestTags(rest);
       case 'bench':
         await _bench(rest);
       case 'eval':
@@ -102,6 +104,9 @@ Penggunaan:
       Deteksi komunitas Louvain (GRA-L05); id komunitas per node.
   simpul suggest-links <vault> [--limit N] [--min-score S]
       Saran tautan antar catatan serupa yang belum tertaut (AI-25).
+  simpul suggest-tags <vault> [--limit N] [--min-score S]
+      Saran tag per catatan dari centroid tag yang sudah ada (AI-26);
+      saran saja — penerapan selalu butuh persetujuan manusia.
   simpul bench <vault> [--iterations N]
       Benchmark scan/index/search/backlink/CSR/inkremental/vektor (BM-02..07).
   simpul eval [--embedder hashing|ollama] [--model M] [--base-url U]
@@ -730,6 +735,26 @@ Future<void> _bench(List<String> args) async {
     searchIterations: iterations,
   );
   stdout.writeln(jsonEncode(report));
+}
+
+Future<void> _suggestTags(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final limit = int.parse(opts['limit'] ?? '5');
+  final minScore =
+      double.parse(opts['min-score'] ?? '${TagSuggester.defaultMinScore}');
+  final notes = await VaultScanner.scan(vault);
+  final suggestions = TagSuggester.suggest(
+    notes.map((n) => n.toIndexed()).toList(),
+    limit: limit,
+    minScore: minScore,
+  );
+  stdout.writeln(jsonEncode({
+    'suggestions': [
+      for (final s in suggestions)
+        {'path': s.path, 'tag': s.tag, 'score': s.score},
+    ],
+  }));
 }
 
 Future<void> _eval(List<String> args) async {
