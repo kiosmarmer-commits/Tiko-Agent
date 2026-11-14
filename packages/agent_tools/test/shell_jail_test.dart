@@ -46,9 +46,55 @@ void main() {
         ctx,
       );
       expect(res.isError, isTrue);
-      expect(res.content, contains('..'));
+      expect(res.content, contains('di luar workspace'));
     } finally {
       await root.delete(recursive: true);
+    }
+  });
+
+  test('nilai flag --file=/etc/passwd ditolak (B-09)', () async {
+    final ctx = ToolContext(
+      session: Session(id: 's4', channel: 'cli', userKey: 'u1'),
+      workspacePath: Directory.systemTemp.path,
+    );
+    final res = await ShellTool().run({'cmd': 'cat --file=/etc/passwd'}, ctx);
+    expect(res.isError, isTrue);
+    expect(res.content, contains('di luar workspace'));
+  });
+
+  test('flag boolean tanpa nilai tetap lolos jail', () async {
+    final root = await Directory.systemTemp.createTemp('tiko_jail3_');
+    try {
+      Directory('${root.path}/sub').createSync();
+      File('${root.path}/sub/a.txt').writeAsStringSync('isi');
+      final ctx = ToolContext(
+        session: Session(id: 's5', channel: 'cli', userKey: 'u1'),
+        workspacePath: root.path,
+      );
+      final res = await ShellTool().run({'cmd': 'ls -la sub'}, ctx);
+      expect(res.content, isNot(contains('di luar workspace')));
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('symlink keluar workspace ditolak', () async {
+    final root = await Directory.systemTemp.createTemp('tiko_jail4_');
+    final outside = await Directory.systemTemp.createTemp('tiko_jail4_out_');
+    try {
+      File('${outside.path}/secret.txt').writeAsStringSync('rahasia');
+      await Link('${root.path}/leak')
+          .create(outside.path, recursive: true);
+      final ctx = ToolContext(
+        session: Session(id: 's6', channel: 'cli', userKey: 'u1'),
+        workspacePath: root.path,
+      );
+      final res = await ShellTool().run({'cmd': 'cat leak/secret.txt'}, ctx);
+      expect(res.isError, isTrue);
+      expect(res.content, contains('di luar workspace'));
+    } finally {
+      await root.delete(recursive: true);
+      await outside.delete(recursive: true);
     }
   });
 }
