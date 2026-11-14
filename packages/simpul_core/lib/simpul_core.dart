@@ -32,6 +32,7 @@ export 'src/vault_generator.dart';
 export 'src/vault_index.dart';
 export 'src/vault_index_sqlite_stub.dart'
     if (dart.library.ffi) 'src/vault_index_sqlite.dart';
+export 'src/vault_modes.dart';
 export 'src/vault_scanner.dart';
 export 'src/vault_sync.dart';
 export 'src/force_layout.dart';

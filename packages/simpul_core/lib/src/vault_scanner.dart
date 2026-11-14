@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'note_parser.dart';
+import 'vault_crypto.dart';
 import 'vault_index.dart';
 
 /// One scanned file: stat + hash + parsed content (DATA-10).
@@ -30,8 +31,12 @@ class ScannedNote {
 /// Walks a vault folder and parses every `.md` file (FR-01: read-only).
 abstract final class VaultScanner {
   /// Scans [vaultDir]; skips hidden folders (`.obsidian`, `.simpul`, `.git`).
+  /// Encrypted notes (M2/M3) are decrypted in memory when [crypto] is given;
+  /// without a key the scan fails closed (SEC-12) instead of parsing
+  /// ciphertext.
   static Future<List<ScannedNote>> scan(
     String vaultDir, {
+    VaultCrypto? crypto,
     void Function(String path, int done, int total)? onProgress,
   }) async {
     final files = <File>[];
@@ -50,7 +55,15 @@ abstract final class VaultScanner {
     var done = 0;
     for (final file in files) {
       final stat = await file.stat();
-      final raw = await file.readAsString();
+      final bytes = await file.readAsBytes();
+      final encrypted = VaultCrypto.looksEncrypted(bytes);
+      if (encrypted && crypto == null) {
+        throw VaultCryptoException(
+          'catatan terenkripsi dibaca tanpa kunci: "${p.relative(file.path, from: vaultDir)}" '
+          '(set SIMPUL_PASSWORD atau jalankan: simpul unlock <vault>)',
+        );
+      }
+      final raw = utf8.decode(encrypted ? crypto!.decryptBytes(bytes) : bytes);
       final hash = sha256.convert(utf8.encode(raw)).toString();
       final relative = p.relative(file.path, from: vaultDir).replaceAll('\\', '/');
       notes.add(ScannedNote(
@@ -71,9 +84,10 @@ abstract final class VaultScanner {
   /// only for the changed subset).
   static Future<ScanDiff> diff(
     String vaultDir,
-    Map<String, ({int mtimeNs, int sizeBytes, String hash})> previous,
-  ) async {
-    final all = await scan(vaultDir);
+    Map<String, ({int mtimeNs, int sizeBytes, String hash})> previous, {
+    VaultCrypto? crypto,
+  }) async {
+    final all = await scan(vaultDir, crypto: crypto);
     final changed = <ScannedNote>[];
     final unchanged = <String>[];
     final removed = previous.keys.toSet();

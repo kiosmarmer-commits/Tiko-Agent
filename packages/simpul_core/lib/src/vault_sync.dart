@@ -1,4 +1,5 @@
 import 'semantic_index.dart';
+import 'vault_crypto.dart';
 import 'vault_index.dart';
 import 'vault_scanner.dart';
 
@@ -36,9 +37,10 @@ abstract final class VaultSync {
     String vaultDir, {
     Future<SemanticIndex?> Function(List<ScannedNote> changed)?
         semanticFactory,
+    VaultCrypto? crypto,
   }) async {
     final previous = await index.stats();
-    final diff = await VaultScanner.diff(vaultDir, previous);
+    final diff = await VaultScanner.diff(vaultDir, previous, crypto: crypto);
 
     final added = [
       for (final note in diff.changed)

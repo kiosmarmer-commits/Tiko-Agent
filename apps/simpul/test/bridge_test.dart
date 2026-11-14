@@ -338,4 +338,42 @@ void main() {
     expect(text['citations'], isEmpty);
     expect(text['filtered'], 1);
   });
+
+  test('read_note decrypts notes on a locked M3 vault with the password', () async {
+    final crate = await VaultCrypto.create(password: 's3cret');
+    await for (final file in VaultModes.noteFiles(vault)) {
+      await crate.crypto.encryptFileInPlace(file.path);
+    }
+    await Directory('$vault/.simpul').create(recursive: true);
+    await File('$vault/.simpul/vault-key.crate')
+        .writeAsBytes(crate.keyCrate, flush: true);
+    await VaultCrypto.writeBytesAtomically(
+      '$vault/.simpul/vault-mode.json',
+      utf8.encode(jsonEncode({
+        'mode': 'm3',
+        'kdf': crate.crypto.kdf.toJson(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      })),
+    );
+
+    final locked = SimpulBridge(vaultDir: vault);
+    final denied = await request(locked, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    expect((denied['result'] as Map)['isError'], isTrue);
+
+    final unlocked = SimpulBridge(vaultDir: vault, password: 's3cret');
+    final ok = await request(unlocked, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    final text = jsonDecode(
+      ((ok['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(text['content'], contains('jaringan saraf'));
+
+    final clusters = await request(unlocked, 'tools/call', {'name': 'clusters'});
+    expect((clusters['result'] as Map)['isError'], isNull);
+  });
 }

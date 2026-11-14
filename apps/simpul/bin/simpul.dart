@@ -124,16 +124,19 @@ Penggunaan:
       Evaluasi retrieval korpus AI-E01: recall@k dan MRR (AI-E02). Default
       embedder hashing (deterministik, tanpa jaringan); ollama butuh server
       lokal berjalan (AI-03).
-  simpul lock <vault>
-      Enkripsi indeks (mode M1, SEC-01/10/11/12): index.json, vectors.json,
-      graph_cache.json dienkripsi XChaCha20-Poly1305 (SEC-03) dengan kunci
-      vault terbungkus Argon2id (SEC-05/07); file .md tetap polos. Wajib
-      SIMPUL_PASSWORD. Backend sqlite ditolak (SQLCipher belum didukung).
+  simpul lock <vault> [--mode m1|m2|m3] [--folders a,b]
+      Enkripsi vault bertahap (SEC-01): m1 (default) hanya artefak indeks
+      (index.json, vectors.json, graph_cache.json); m2 menambahkan catatan
+      .md di folder terpilih; m3 seluruh catatan .md. Semua file dienkripsi
+      XChaCha20-Poly1305 (SEC-03) dengan kunci vault terbungkus Argon2id
+      (SEC-05/07). Wajib SIMPUL_PASSWORD. m2 butuh --folders (dipisah koma).
+      Backend sqlite ditolak (SQLCipher belum didukung).
   simpul unlock <vault>
-      Dekripsi balik indeks dan hapus crate kunci + penanda mode. Wajib
-      SIMPUL_PASSWORD.
+      Dekripsi balik indeks dan seluruh catatan terenkripsi, hapus crate
+      kunci + penanda mode. Wajib SIMPUL_PASSWORD.
   simpul vault-status <vault>
-      Status enkripsi vault: mode, parameter KDF, daftar file terenkripsi.
+      Status enkripsi vault: mode, parameter KDF, folder terenkripsi (m2),
+      jumlah catatan terenkripsi, dan daftar file indeks.
       Perintah lain membaca SIMPUL_PASSWORD otomatis saat vault terkunci;
       tanpa password, operasi gagal fail-closed (SEC-16: kunci hanya hidup
       di memori selama proses berjalan).
@@ -296,11 +299,11 @@ Future<void> _index(List<String> args) async {
   final opts = _options(args, {'embed'});
   final outDir = opts['out'];
   final watch = Stopwatch()..start();
-  final notes = await VaultScanner.scan(vault);
+  final crypto = await _vaultCryptoFor(vault);
+  final notes = await VaultScanner.scan(vault, crypto: crypto);
   final scanned = watch.elapsedMilliseconds;
   final file = _resolveIndexFile(vault, outDir);
   final VaultIndex index = await _openIndexFile(vault, file);
-  final crypto = await _vaultCryptoFor(vault);
   try {
     await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
   } finally {
@@ -464,7 +467,7 @@ Future<void> _layout(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {'isolate', 'multi-level', 'no-cache'});
   final iterations = int.parse(opts['iterations'] ?? '300');
-  final notes = await VaultScanner.scan(vault);
+  final notes = await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
   final config = ForceLayoutConfig(maxIterations: iterations);
   final multiLevel = opts['multi-level'] == 'true';
@@ -532,7 +535,7 @@ Future<void> _viewport(List<String> args) async {
   final minY = double.parse(opts['min-y'] ?? '-1e9');
   final maxX = double.parse(opts['max-x'] ?? '1e9');
   final maxY = double.parse(opts['max-y'] ?? '1e9');
-  final notes = await VaultScanner.scan(vault);
+  final notes = await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
   ForceLayout.simulate(graph);
   final tree = QuadtreeIndex.build(graph.positionsX, graph.positionsY);
@@ -653,6 +656,7 @@ Future<void> _sync(List<String> args) async {
     final result = await VaultSync.apply(
       index,
       vault,
+      crypto: crypto,
       semanticFactory: (changed) async {
         if (!vectorsFile.existsSync()) return null;
         final ollama = _ollamaFromOptions(opts);
@@ -703,7 +707,7 @@ Future<void> _sync(List<String> args) async {
 
 Future<void> _clusters(List<String> args) async {
   final vault = _positional(args);
-  final notes = await VaultScanner.scan(vault);
+  final notes = await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
   final result = CommunityDetector.louvain(graph);
   final counts = <int, int>{};
@@ -733,7 +737,7 @@ Future<void> _suggestLinks(List<String> args) async {
   final opts = _options(args, {});
   final limit = int.parse(opts['limit'] ?? '20');
   final minScore = double.parse(opts['min-score'] ?? '${LinkSuggester.defaultMinScore}');
-  final notes = await VaultScanner.scan(vault);
+  final notes = await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
   final suggestions = await LinkSuggester.suggest(
     notes.map((n) => n.toIndexed()).toList(),
     limit: limit,
@@ -805,7 +809,7 @@ Future<void> _suggestTags(List<String> args) async {
   final limit = int.parse(opts['limit'] ?? '5');
   final minScore =
       double.parse(opts['min-score'] ?? '${TagSuggester.defaultMinScore}');
-  final notes = await VaultScanner.scan(vault);
+  final notes = await VaultScanner.scan(vault, crypto: await _vaultCryptoFor(vault));
   final suggestions = TagSuggester.suggest(
     notes.map((n) => n.toIndexed()).toList(),
     limit: limit,
@@ -842,103 +846,53 @@ Future<void> _eval(List<String> args) async {
   stdout.writeln(jsonEncode(result.toJson()));
 }
 
-const _encryptedIndexFiles = ['index.json', 'vectors.json', 'graph_cache.json'];
-
 Future<void> _lock(List<String> args) async {
   final vault = _positional(args);
-  final dir = p.join(vault, '.simpul');
-  final modeFile = File(p.join(dir, 'vault-mode.json'));
-  if (modeFile.existsSync()) {
-    throw StateError('vault sudah terkunci \u2014 jalankan: simpul unlock <vault>');
-  }
+  final opts = _options(args, {});
   final password = _passwordFromEnv() ??
       (throw ArgumentError('set SIMPUL_PASSWORD untuk mengenkripsi vault'));
-  final indexFile = _resolveIndexFile(vault, null);
-  if (p.extension(indexFile.path) == '.db' && indexFile.existsSync()) {
-    throw StateError(
-      'backend sqlite belum didukung enkripsi (SQLCipher belum tersedia) '
-      '\u2014 hapus index.db atau jalankan ulang dengan backend JSON',
-    );
-  }
-  final created = await VaultCrypto.create(password: password);
-  final crypto = created.crypto;
-  final encrypted = <String>[];
-  for (final name in _encryptedIndexFiles) {
-    final file = File(p.join(dir, name));
-    if (file.existsSync()) {
-      await crypto.encryptFileInPlace(file.path);
-      encrypted.add(name);
-    }
-  }
-  await File(p.join(dir, 'vault-key.crate'))
-      .writeAsBytes(await crypto.sealKeyCrate(password), flush: true);
-  await VaultCrypto.writeBytesAtomically(
-    modeFile.path,
-    utf8.encode(jsonEncode({
-      'mode': 'm1',
-      'kdf': crypto.kdf.toJson(),
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    })),
+  final result = await VaultModes.lock(
+    vault,
+    password: password,
+    mode: opts['mode'] ?? 'm1',
+    folders: [
+      for (final folder in (opts['folders'] ?? '').split(','))
+        if (folder.trim().isNotEmpty) folder.trim(),
+    ],
   );
   stdout.writeln(jsonEncode({
     'locked': true,
-    'mode': 'm1',
-    'kdf': crypto.kdf.toJson(),
-    'encrypted': encrypted,
-    'key_crate': p.join(dir, 'vault-key.crate'),
+    'mode': result.mode,
+    'kdf': result.kdf,
+    'encrypted': result.encrypted,
+    'key_crate': result.keyCratePath,
+    if (result.folders.isNotEmpty) 'folders': result.folders,
   }));
 }
 
 Future<void> _unlock(List<String> args) async {
   final vault = _positional(args);
-  final dir = p.join(vault, '.simpul');
-  final modeFile = File(p.join(dir, 'vault-mode.json'));
-  if (!modeFile.existsSync()) {
-    throw StateError('vault tidak terkunci');
-  }
   final password = _passwordFromEnv() ??
       (throw ArgumentError('set SIMPUL_PASSWORD untuk membuka vault'));
-  final crateFile = File(p.join(dir, 'vault-key.crate'));
-  if (!crateFile.existsSync()) {
-    throw VaultCryptoException('crate kunci vault tidak ditemukan: ${crateFile.path}');
-  }
-  final crypto = await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
-  final decrypted = <String>[];
-  for (final name in _encryptedIndexFiles) {
-    final file = File(p.join(dir, name));
-    if (file.existsSync() && VaultCrypto.isFileEncrypted(file.path)) {
-      await crypto.decryptFileInPlace(file.path);
-      decrypted.add(name);
-    }
-  }
-  crateFile.deleteSync();
-  modeFile.deleteSync();
+  final result = await VaultModes.unlock(vault, password: password);
   stdout.writeln(jsonEncode({
     'unlocked': true,
-    'decrypted': decrypted,
+    'decrypted': result.decrypted,
   }));
 }
 
 Future<void> _vaultStatus(List<String> args) async {
   final vault = _positional(args);
-  final dir = p.join(vault, '.simpul');
-  final modeFile = File(p.join(dir, 'vault-mode.json'));
-  final locked = modeFile.existsSync();
-  Map<String, Object?>? kdf;
-  if (locked) {
-    final decoded = jsonDecode(modeFile.readAsStringSync()) as Map<String, Object?>;
-    kdf = (decoded['kdf'] as Map?)?.cast<String, Object?>();
-  }
-  final files = <String, bool>{
-    for (final name in _encryptedIndexFiles)
-      name: VaultCrypto.isFileEncrypted(p.join(dir, name)),
-  };
+  final status = await VaultModes.status(vault);
   stdout.writeln(jsonEncode({
     'vault': vault,
-    'mode': locked ? 'm1' : 'm0',
-    'locked': locked,
-    if (kdf != null) 'kdf': kdf,
-    'files': files,
+    'mode': status.mode,
+    'locked': status.locked,
+    if (status.kdf != null) 'kdf': status.kdf,
+    if (status.folders.isNotEmpty) 'folders': status.folders,
+    'files': status.indexFiles,
+    'encrypted_notes': status.encryptedNotes,
+    'total_notes': status.totalNotes,
     'password_available': _passwordFromEnv() != null,
   }));
 }
