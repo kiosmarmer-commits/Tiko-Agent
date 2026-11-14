@@ -163,13 +163,36 @@ class SimpulBridge {
     }
   }
 
+  Future<VaultCrypto?> _vaultCrypto() async {
+    final modeFile = File(p.join(vaultDir, '.simpul', 'vault-mode.json'));
+    if (!modeFile.existsSync()) return null;
+    final password = Platform.environment['SIMPUL_PASSWORD'];
+    if (password == null || password.isEmpty) {
+      throw ArgumentError(
+        'vault terkunci — set SIMPUL_PASSWORD sebelum menjalankan bridge',
+      );
+    }
+    final crateFile = File(p.join(vaultDir, '.simpul', 'vault-key.crate'));
+    if (!crateFile.existsSync()) {
+      throw StateError('crate kunci vault tidak ditemukan: ${crateFile.path}');
+    }
+    return VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+  }
+
   Future<VaultIndex> _openIndex() async {
     final existing = _index;
     if (existing != null) return existing;
     final dir = p.join(vaultDir, '.simpul');
     final dbFile = File(p.join(dir, 'index.db'));
     final jsonFile = File(p.join(dir, 'index.json'));
+    final crypto = await _vaultCrypto();
     if (dbFile.existsSync()) {
+      if (crypto != null) {
+        throw StateError(
+          'backend sqlite belum didukung pada vault terenkripsi '
+          '(SQLCipher belum tersedia) — pakai backend JSON',
+        );
+      }
       final sqlite = SqliteVaultIndex.tryOpen(dbFile.path);
       if (sqlite != null) {
         _index = sqlite;
@@ -177,7 +200,7 @@ class SimpulBridge {
       }
     }
     if (jsonFile.existsSync()) {
-      final json = JsonVaultIndex(jsonFile.path);
+      final json = JsonVaultIndex(jsonFile.path, crypto: crypto);
       _index = json;
       return json;
     }
@@ -238,6 +261,7 @@ class SimpulBridge {
     final semantic = InMemorySemanticIndex(
       embedder,
       filePath: vectorsFile.path,
+      crypto: await _vaultCrypto(),
     );
     try {
       final hits = await semantic.search(

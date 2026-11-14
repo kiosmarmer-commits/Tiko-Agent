@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import 'graph_cache.dart';
 import 'graph_csr.dart';
+import 'vault_crypto.dart';
 import 'vault_index.dart';
 import 'vault_index_sqlite_stub.dart'
     if (dart.library.ffi) 'vault_index_sqlite.dart';
@@ -64,7 +65,11 @@ void applyWarmStart(GraphCsr graph, Map<String, Object?> payload) {
 
 /// Best-effort cache store: only an already-existing index file is opened so
 /// a bare vault never gets an index created just for caching.
-GraphCacheStore? openVaultCacheStore(String vaultDir, {String? outDir}) {
+GraphCacheStore? openVaultCacheStore(
+  String vaultDir, {
+  String? outDir,
+  VaultCrypto? crypto,
+}) {
   final dir = outDir ?? p.join(vaultDir, '.simpul');
   final sqlite = p.join(dir, 'index.db');
   final json = p.join(dir, 'index.json');
@@ -72,7 +77,7 @@ GraphCacheStore? openVaultCacheStore(String vaultDir, {String? outDir}) {
       ? File(sqlite)
       : (File(json).existsSync() ? File(json) : File(sqlite));
   if (p.extension(file.path) == '.json') {
-    return file.existsSync() ? JsonVaultIndex(file.path) : null;
+    return file.existsSync() ? JsonVaultIndex(file.path, crypto: crypto) : null;
   }
   return file.existsSync() ? SqliteVaultIndex.tryOpen(file.path) : null;
 }

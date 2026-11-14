@@ -45,6 +45,12 @@ Future<void> main(List<String> args) async {
         await _bench(rest);
       case 'eval':
         await _eval(rest);
+      case 'lock':
+        await _lock(rest);
+      case 'unlock':
+        await _unlock(rest);
+      case 'vault-status':
+        await _vaultStatus(rest);
       case '--help' || 'help' || '-h':
         _usage();
       default:
@@ -114,6 +120,19 @@ Penggunaan:
       Evaluasi retrieval korpus AI-E01: recall@k dan MRR (AI-E02). Default
       embedder hashing (deterministik, tanpa jaringan); ollama butuh server
       lokal berjalan (AI-03).
+  simpul lock <vault>
+      Enkripsi indeks (mode M1, SEC-01/10/11/12): index.json, vectors.json,
+      graph_cache.json dienkripsi XChaCha20-Poly1305 (SEC-03) dengan kunci
+      vault terbungkus Argon2id (SEC-05/07); file .md tetap polos. Wajib
+      SIMPUL_PASSWORD. Backend sqlite ditolak (SQLCipher belum didukung).
+  simpul unlock <vault>
+      Dekripsi balik indeks dan hapus crate kunci + penanda mode. Wajib
+      SIMPUL_PASSWORD.
+  simpul vault-status <vault>
+      Status enkripsi vault: mode, parameter KDF, daftar file terenkripsi.
+      Perintah lain membaca SIMPUL_PASSWORD otomatis saat vault terkunci;
+      tanpa password, operasi gagal fail-closed (SEC-16: kunci hanya hidup
+      di memori selama proses berjalan).
 ''');
 }
 
@@ -148,15 +167,50 @@ File _resolveIndexFile(String vault, String? outDir) {
   return File(sqlite);
 }
 
-Future<VaultIndex> _openIndex(String vault, String? outDir) async {
-  final file = _resolveIndexFile(vault, outDir);
+String? _passwordFromEnv() {
+  final password = Platform.environment['SIMPUL_PASSWORD'];
+  return (password == null || password.isEmpty) ? null : password;
+}
+
+/// Opens the vault key crate when the vault is locked (mode marker present);
+/// returns null for a plain M0 vault. Locked without SIMPUL_PASSWORD fails
+/// closed (SEC-16).
+Future<VaultCrypto?> _vaultCryptoFor(String vault) async {
+  final modeFile = File(p.join(vault, '.simpul', 'vault-mode.json'));
+  if (!modeFile.existsSync()) return null;
+  final password = _passwordFromEnv();
+  if (password == null) {
+    throw VaultCryptoException(
+      'vault terkunci \u2014 set SIMPUL_PASSWORD atau jalankan: simpul unlock <vault>',
+    );
+  }
+  final crateFile = File(p.join(vault, '.simpul', 'vault-key.crate'));
+  if (!crateFile.existsSync()) {
+    throw VaultCryptoException(
+      'crate kunci vault tidak ditemukan: ${crateFile.path}',
+    );
+  }
+  return VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+}
+
+Future<VaultIndex> _openIndexFile(String vault, File file) async {
+  final crypto = await _vaultCryptoFor(vault);
   if (p.extension(file.path) == '.json') {
-    return JsonVaultIndex(file.path);
+    return JsonVaultIndex(file.path, crypto: crypto);
+  }
+  if (crypto != null) {
+    throw VaultCryptoException(
+      'backend sqlite belum didukung pada vault terenkripsi '
+      '(SQLCipher belum tersedia) \u2014 pakai backend JSON',
+    );
   }
   final sqlite = SqliteVaultIndex.tryOpen(file.path);
   if (sqlite != null) return sqlite;
   return JsonVaultIndex(p.setExtension(file.path, '.json'));
 }
+
+Future<VaultIndex> _openIndex(String vault, String? outDir) async =>
+    _openIndexFile(vault, _resolveIndexFile(vault, outDir));
 
 Future<void> _generate(List<String> args) async {
   final opts = _options(args, {});
@@ -207,8 +261,12 @@ Future<ReplayEmbedder> _replayEmbedder(
 
 /// Fail-closed model check (AI-13): the stored vector file must match the
 /// requested embedder before any search opens it.
-void _checkVectorModel(String vectorsPath, String expectedModel) {
-  final stored = InMemorySemanticIndex.storedModelVersion(vectorsPath);
+void _checkVectorModel(
+  String vectorsPath,
+  String expectedModel, {
+  VaultCrypto? crypto,
+}) {
+  final stored = InMemorySemanticIndex.storedModelVersion(vectorsPath, crypto: crypto);
   if (stored != null && stored != expectedModel) {
     throw StateError(
       'indeks vektor dibuat dengan model "$stored", bukan "$expectedModel" '
@@ -225,9 +283,8 @@ Future<void> _index(List<String> args) async {
   final notes = await VaultScanner.scan(vault);
   final scanned = watch.elapsedMilliseconds;
   final file = _resolveIndexFile(vault, outDir);
-  final sqlite = SqliteVaultIndex.tryOpen(file.path);
-  final VaultIndex index = sqlite ??
-      JsonVaultIndex(p.setExtension(file.path, '.json'));
+  final VaultIndex index = await _openIndexFile(vault, file);
+  final crypto = await _vaultCryptoFor(vault);
   try {
     await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
   } finally {
@@ -241,7 +298,7 @@ Future<void> _index(List<String> args) async {
   if (opts['embed'] == 'true') {
     final embedWatch = Stopwatch()..start();
     final (builtChunks, builtModel) =
-        await _buildSemanticIndex(vault, notes, outDir, opts);
+        await _buildSemanticIndex(vault, notes, outDir, opts, crypto);
     chunkCount = builtChunks;
     model = builtModel;
     embedMs = embedWatch.elapsedMilliseconds;
@@ -265,6 +322,7 @@ Future<(int, String)> _buildSemanticIndex(
   List<ScannedNote> notes,
   String? outDir,
   Map<String, String> opts,
+  VaultCrypto? crypto,
 ) async {
   final dir = outDir ?? p.join(vault, '.simpul');
   final chunks = <ChunkInput>[];
@@ -293,6 +351,7 @@ Future<(int, String)> _buildSemanticIndex(
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: p.join(dir, 'vectors.json'),
+    crypto: crypto,
   );
   try {
     await semantic.replaceAll(chunks);
@@ -352,7 +411,8 @@ Future<List<SearchHit>> _hybridSearch(
   }
   final ollama = _ollamaFromOptions(opts);
   final expectedModel = ollama?.modelVersion ?? HashingEmbedder().modelVersion;
-  _checkVectorModel(vectorsFile.path, expectedModel);
+  final crypto = await _vaultCryptoFor(vault);
+  _checkVectorModel(vectorsFile.path, expectedModel, crypto: crypto);
   final EmbeddingProvider embedder;
   if (ollama != null) {
     final queryVec = await ollama.embed(query);
@@ -367,6 +427,7 @@ Future<List<SearchHit>> _hybridSearch(
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
+    crypto: crypto,
   );
   try {
     return await HybridSearcher(
@@ -390,7 +451,11 @@ Future<void> _layout(List<String> args) async {
   final kind = layoutCacheKind(multiLevel: multiLevel);
   final version =
       layoutCacheVersion(graph, iterations: iterations, multiLevel: multiLevel);
-  final cache = openVaultCacheStore(vault, outDir: opts['out']);
+  final cache = openVaultCacheStore(
+    vault,
+    outDir: opts['out'],
+    crypto: await _vaultCryptoFor(vault),
+  );
   Map<String, Object?>? cached;
   if (cache != null && opts['no-cache'] != 'true') {
     try {
@@ -497,7 +562,8 @@ Future<void> _semsearch(List<String> args) async {
   }
   final ollama = _ollamaFromOptions(opts);
   final expectedModel = ollama?.modelVersion ?? HashingEmbedder().modelVersion;
-  _checkVectorModel(vectorsFile.path, expectedModel);
+  final crypto = await _vaultCryptoFor(vault);
+  _checkVectorModel(vectorsFile.path, expectedModel, crypto: crypto);
   final EmbeddingProvider embedder;
   final Float32List queryVec;
   if (ollama != null) {
@@ -515,6 +581,7 @@ Future<void> _semsearch(List<String> args) async {
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
+    crypto: crypto,
   );
   try {
     final hits = await semantic.search(
@@ -543,8 +610,8 @@ Future<void> _sync(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {});
   final file = _resolveIndexFile(vault, opts['out']);
-  final VaultIndex index =
-      SqliteVaultIndex.tryOpen(file.path) ?? JsonVaultIndex(p.setExtension(file.path, '.json'));
+  final VaultIndex index = await _openIndexFile(vault, file);
+  final crypto = await _vaultCryptoFor(vault);
   final dir = opts['out'] ?? p.join(vault, '.simpul');
   final vectorsFile = File(p.join(dir, 'vectors.json'));
   var vectorsState = vectorsFile.existsSync() ? 'unchanged' : 'absent';
@@ -557,7 +624,10 @@ Future<void> _sync(List<String> args) async {
         final ollama = _ollamaFromOptions(opts);
         final expectedModel =
             ollama?.modelVersion ?? HashingEmbedder().modelVersion;
-        final stored = InMemorySemanticIndex.storedModelVersion(vectorsFile.path);
+        final stored = InMemorySemanticIndex.storedModelVersion(
+          vectorsFile.path,
+          crypto: crypto,
+        );
         if (stored != null && stored != expectedModel) {
           vectorsState = 'skipped_model_mismatch';
           return null;
@@ -575,7 +645,11 @@ Future<void> _sync(List<String> args) async {
           embedder = HashingEmbedder();
         }
         vectorsState = 'updated';
-        return InMemorySemanticIndex(embedder, filePath: vectorsFile.path);
+        return InMemorySemanticIndex(
+          embedder,
+          filePath: vectorsFile.path,
+          crypto: crypto,
+        );
       },
     );
     stdout.writeln(jsonEncode({
@@ -732,4 +806,105 @@ Future<void> _eval(List<String> args) async {
       );
   }
   stdout.writeln(jsonEncode(result.toJson()));
+}
+
+const _encryptedIndexFiles = ['index.json', 'vectors.json', 'graph_cache.json'];
+
+Future<void> _lock(List<String> args) async {
+  final vault = _positional(args);
+  final dir = p.join(vault, '.simpul');
+  final modeFile = File(p.join(dir, 'vault-mode.json'));
+  if (modeFile.existsSync()) {
+    throw StateError('vault sudah terkunci \u2014 jalankan: simpul unlock <vault>');
+  }
+  final password = _passwordFromEnv() ??
+      (throw ArgumentError('set SIMPUL_PASSWORD untuk mengenkripsi vault'));
+  final indexFile = _resolveIndexFile(vault, null);
+  if (p.extension(indexFile.path) == '.db' && indexFile.existsSync()) {
+    throw StateError(
+      'backend sqlite belum didukung enkripsi (SQLCipher belum tersedia) '
+      '\u2014 hapus index.db atau jalankan ulang dengan backend JSON',
+    );
+  }
+  final created = await VaultCrypto.create(password: password);
+  final crypto = created.crypto;
+  final encrypted = <String>[];
+  for (final name in _encryptedIndexFiles) {
+    final file = File(p.join(dir, name));
+    if (file.existsSync()) {
+      await crypto.encryptFileInPlace(file.path);
+      encrypted.add(name);
+    }
+  }
+  await File(p.join(dir, 'vault-key.crate'))
+      .writeAsBytes(await crypto.sealKeyCrate(password), flush: true);
+  await VaultCrypto.writeBytesAtomically(
+    modeFile.path,
+    utf8.encode(jsonEncode({
+      'mode': 'm1',
+      'kdf': crypto.kdf.toJson(),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    })),
+  );
+  stdout.writeln(jsonEncode({
+    'locked': true,
+    'mode': 'm1',
+    'kdf': crypto.kdf.toJson(),
+    'encrypted': encrypted,
+    'key_crate': p.join(dir, 'vault-key.crate'),
+  }));
+}
+
+Future<void> _unlock(List<String> args) async {
+  final vault = _positional(args);
+  final dir = p.join(vault, '.simpul');
+  final modeFile = File(p.join(dir, 'vault-mode.json'));
+  if (!modeFile.existsSync()) {
+    throw StateError('vault tidak terkunci');
+  }
+  final password = _passwordFromEnv() ??
+      (throw ArgumentError('set SIMPUL_PASSWORD untuk membuka vault'));
+  final crateFile = File(p.join(dir, 'vault-key.crate'));
+  if (!crateFile.existsSync()) {
+    throw VaultCryptoException('crate kunci vault tidak ditemukan: ${crateFile.path}');
+  }
+  final crypto = await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+  final decrypted = <String>[];
+  for (final name in _encryptedIndexFiles) {
+    final file = File(p.join(dir, name));
+    if (file.existsSync() && VaultCrypto.isFileEncrypted(file.path)) {
+      await crypto.decryptFileInPlace(file.path);
+      decrypted.add(name);
+    }
+  }
+  crateFile.deleteSync();
+  modeFile.deleteSync();
+  stdout.writeln(jsonEncode({
+    'unlocked': true,
+    'decrypted': decrypted,
+  }));
+}
+
+Future<void> _vaultStatus(List<String> args) async {
+  final vault = _positional(args);
+  final dir = p.join(vault, '.simpul');
+  final modeFile = File(p.join(dir, 'vault-mode.json'));
+  final locked = modeFile.existsSync();
+  Map<String, Object?>? kdf;
+  if (locked) {
+    final decoded = jsonDecode(modeFile.readAsStringSync()) as Map<String, Object?>;
+    kdf = (decoded['kdf'] as Map?)?.cast<String, Object?>();
+  }
+  final files = <String, bool>{
+    for (final name in _encryptedIndexFiles)
+      name: VaultCrypto.isFileEncrypted(p.join(dir, name)),
+  };
+  stdout.writeln(jsonEncode({
+    'vault': vault,
+    'mode': locked ? 'm1' : 'm0',
+    'locked': locked,
+    if (kdf != null) 'kdf': kdf,
+    'files': files,
+    'password_available': _passwordFromEnv() != null,
+  }));
 }

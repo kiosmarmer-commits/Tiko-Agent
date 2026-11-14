@@ -24,6 +24,7 @@ export 'src/note_parser.dart';
 export 'src/ollama_embedder.dart';
 export 'src/semantic_index.dart';
 export 'src/tag_suggester.dart';
+export 'src/vault_crypto.dart';
 export 'src/vault_generator.dart';
 export 'src/vault_index.dart';
 export 'src/vault_index_sqlite_stub.dart'

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'embedding.dart';
+import 'vault_crypto.dart';
 
 /// One chunk offered to a semantic index.
 class ChunkInput {
@@ -63,17 +64,20 @@ abstract class SemanticIndex {
 /// Brute-force scan over quantized vectors; ADR-06 records why ANN is not
 /// needed at P1 scale.
 class InMemorySemanticIndex implements SemanticIndex {
-  InMemorySemanticIndex(this.embedder, {this.filePath});
+  InMemorySemanticIndex(this.embedder, {this.filePath, this.crypto});
 
   /// Returns the `model_version` stored in the vector file at [path], or null
   /// when the file is absent or unreadable. Callers use this to fail closed
   /// before opening an index with a mismatched embedder (AI-13).
-  static String? storedModelVersion(String path) {
+  static String? storedModelVersion(String path, {VaultCrypto? crypto}) {
     final file = File(path);
     if (!file.existsSync()) return null;
     try {
-      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      final raw = VaultFiles.readBytes(path, crypto: crypto);
+      final decoded = jsonDecode(utf8.decode(raw)) as Map<String, Object?>;
       return decoded['model_version']?.toString();
+    } on VaultCryptoException {
+      rethrow;
     } catch (_) {
       return null;
     }
@@ -81,6 +85,7 @@ class InMemorySemanticIndex implements SemanticIndex {
 
   final EmbeddingProvider embedder;
   final String? filePath;
+  final VaultCrypto? crypto;
 
   final _entries = <_Entry>[];
   bool _loaded = false;
@@ -175,7 +180,8 @@ class InMemorySemanticIndex implements SemanticIndex {
     final file = File(path);
     if (!file.existsSync()) return;
     try {
-      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      final raw = VaultFiles.readBytes(path, crypto: crypto);
+      final decoded = jsonDecode(utf8.decode(raw)) as Map<String, Object?>;
       if (decoded['model_version'] != modelVersion) return;
       for (final raw in (decoded['chunks'] as List? ?? const [])) {
         final map = (raw as Map).cast<String, Object?>();
@@ -190,6 +196,9 @@ class InMemorySemanticIndex implements SemanticIndex {
           ),
         ));
       }
+    } on VaultCryptoException {
+      _entries.clear();
+      rethrow;
     } catch (_) {
       _entries.clear();
     }
@@ -198,25 +207,25 @@ class InMemorySemanticIndex implements SemanticIndex {
   Future<void> _flush() async {
     final path = filePath;
     if (path == null) return;
-    final file = File(path);
-    await file.parent.create(recursive: true);
-    final tmp = '$path.tmp';
-    await File(tmp).writeAsString(jsonEncode({
-      'schema_version': 1,
-      'model_version': modelVersion,
-      'dim': embedder.dimension,
-      'chunks': [
-        for (final e in _entries)
-          {
-            'path': e.path,
-            'ord': e.ord,
-            'heading_path': e.headingPath,
-            'hash': e.hash,
-            'vec': base64Encode(Uint8List.view(e.vec.data.buffer)),
-          },
-      ],
-    }));
-    await File(tmp).rename(path);
+    await VaultFiles.writeBytes(
+      path,
+      utf8.encode(jsonEncode({
+        'schema_version': 1,
+        'model_version': modelVersion,
+        'dim': embedder.dimension,
+        'chunks': [
+          for (final e in _entries)
+            {
+              'path': e.path,
+              'ord': e.ord,
+              'heading_path': e.headingPath,
+              'hash': e.hash,
+              'vec': base64Encode(Uint8List.view(e.vec.data.buffer)),
+            },
+        ],
+      })),
+      crypto: crypto,
+    );
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import 'graph_cache.dart';
 import 'note_parser.dart';
+import 'vault_crypto.dart';
 
 /// One indexed note row (PRD DATA-03 `notes` + derived rows).
 class IndexedNote {
@@ -247,9 +248,10 @@ class SearchQuery {
 /// Same interface, same semantics; search is a scored linear scan which is
 /// sufficient for tests and small vaults (T1).
 class JsonVaultIndex implements VaultIndex, GraphCacheStore {
-  JsonVaultIndex(this.filePath);
+  JsonVaultIndex(this.filePath, {this.crypto});
 
   final String filePath;
+  final VaultCrypto? crypto;
   final List<IndexedNote> _notes = [];
   bool _loaded = false;
   Map<String, Map<String, Object?>>? _graphCache;
@@ -263,23 +265,27 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
     final file = File(_graphCachePath);
     if (!file.existsSync()) return;
     try {
-      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      final raw = VaultFiles.readBytes(_graphCachePath, crypto: crypto);
+      final decoded = jsonDecode(utf8.decode(raw)) as Map<String, Object?>;
       for (final entry in decoded.entries) {
         if (entry.value is Map) {
           _graphCache![entry.key] = (entry.value as Map).cast<String, Object?>();
         }
       }
+    } on VaultCryptoException {
+      _graphCache = {};
+      rethrow;
     } catch (_) {
       _graphCache = {};
     }
   }
 
   Future<void> _flushGraphCache() async {
-    final file = File(_graphCachePath);
-    await file.parent.create(recursive: true);
-    final tmp = '$_graphCachePath.tmp';
-    await File(tmp).writeAsString(jsonEncode(_graphCache));
-    await File(tmp).rename(_graphCachePath);
+    await VaultFiles.writeBytes(
+      _graphCachePath,
+      utf8.encode(jsonEncode(_graphCache)),
+      crypto: crypto,
+    );
   }
 
   @override
@@ -310,13 +316,17 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
     final file = File(filePath);
     if (!file.existsSync()) return;
     try {
-      final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+      final raw = VaultFiles.readBytes(filePath, crypto: crypto);
+      final decoded = jsonDecode(utf8.decode(raw)) as Map<String, Object?>;
       _notes
         ..clear()
         ..addAll([
           for (final raw in (decoded['notes'] as List? ?? const []))
             IndexedNote.fromJson((raw as Map).cast<String, Object?>()),
         ]);
+    } on VaultCryptoException {
+      _notes.clear();
+      rethrow;
     } catch (_) {
       _notes.clear();
     }
@@ -358,14 +368,14 @@ class JsonVaultIndex implements VaultIndex, GraphCacheStore {
   }
 
   Future<void> _flush() async {
-    final file = File(filePath);
-    await file.parent.create(recursive: true);
-    final tmp = '$filePath.tmp';
-    await File(tmp).writeAsString(jsonEncode({
-      'schema_version': 1,
-      'notes': [for (final n in _notes) n.toJson()],
-    }));
-    await File(tmp).rename(filePath);
+    await VaultFiles.writeBytes(
+      filePath,
+      utf8.encode(jsonEncode({
+        'schema_version': 1,
+        'notes': [for (final n in _notes) n.toJson()],
+      })),
+      crypto: crypto,
+    );
   }
 
   List<IndexedNote> _resolvedInbound() {
