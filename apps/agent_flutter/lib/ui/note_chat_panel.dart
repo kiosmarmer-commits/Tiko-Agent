@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:simpul_core/simpul_core.dart';
 
@@ -17,6 +19,8 @@ class SimpulNoteChatPanel extends StatefulWidget {
     this.askOverride,
     this.powerSaverEnabled = false,
     this.pluggedInOverride,
+    this.resourceStats = false,
+    this.snapshotOverride,
   });
 
   final String vault;
@@ -45,6 +49,12 @@ class SimpulNoteChatPanel extends StatefulWidget {
   /// Power-state override (tests); defaults to [ResourceMonitor.isPluggedIn].
   final bool? Function()? pluggedInOverride;
 
+  /// AI-U03: enables the periodic RAM/CPU readout next to the pause button.
+  final bool resourceStats;
+
+  /// Snapshot override (tests); defaults to [ResourceMonitor.snapshot].
+  final ResourceSnapshot Function()? snapshotOverride;
+
   @override
   State<SimpulNoteChatPanel> createState() => _SimpulNoteChatPanelState();
 }
@@ -55,18 +65,40 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
   bool busy = false;
   bool paused = false;
   double? ramMb;
+  double? cpuPercent;
+  ResourceSnapshot? prevSnapshot;
+  Timer? resourceTimer;
   NoteChatAnswer? answer;
   String? error;
 
   @override
   void initState() {
     super.initState();
-    final snapshot = ResourceMonitor.snapshot();
+    final snapshot =
+        widget.snapshotOverride?.call() ?? ResourceMonitor.snapshot();
+    prevSnapshot = snapshot;
     ramMb = snapshot.rssMb;
+    if (widget.resourceStats) {
+      resourceTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (!mounted) return;
+        final next =
+            widget.snapshotOverride?.call() ?? ResourceMonitor.snapshot();
+        setState(() {
+          ramMb = next.rssMb;
+          cpuPercent = ResourceMonitor.cpuPercent(
+            prevSnapshot ?? next,
+            next,
+            intervalSeconds: 2.0,
+          );
+          prevSnapshot = next;
+        });
+      });
+    }
   }
 
   @override
   void dispose() {
+    resourceTimer?.cancel();
     question.dispose();
     super.dispose();
   }
@@ -178,7 +210,8 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
                     child: Tooltip(
                       message: 'Penggunaan RAM proses (AI-U03)',
                       child: Text(
-                        'RAM ~${ramMb!.round()} MB',
+                        'RAM ~${ramMb!.round()} MB'
+                        '${cpuPercent == null ? '' : ' \u2022 CPU ~${cpuPercent!.round()}%'}',
                         style: TextStyle(
                           fontSize: 10,
                           color: context.simpulMuted,

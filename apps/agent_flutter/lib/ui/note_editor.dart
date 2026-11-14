@@ -26,6 +26,8 @@ class SimpulNoteEditorPage extends StatefulWidget {
     this.initialPath = '',
     this.initialEditor,
     this.powerSaverEnabled = false,
+    this.resourceStats = false,
+    this.initialTabs = const [],
   });
 
   final String vault;
@@ -33,6 +35,12 @@ class SimpulNoteEditorPage extends StatefulWidget {
 
   /// AI-U04: gates AI work in the chat panel on external power.
   final bool powerSaverEnabled;
+
+  /// AI-U03: enables the periodic CPU/RAM readout in the chat panel.
+  final bool resourceStats;
+
+  /// Preloaded tab set (tests); skips the vault scan + load when given.
+  final List<NoteEditor> initialTabs;
 
   /// Preloaded editor (tests); skips the vault scan + load when given.
   final NoteEditor? initialEditor;
@@ -51,6 +59,10 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
   VaultLinkResolver? resolver;
   bool preview = false;
   bool chatOpen = false;
+  bool split = false;
+  bool focusMode = false;
+  final List<NoteEditor> tabs = [];
+  int activeTab = -1;
   String? error;
   bool dirty = false;
   List<({String path, String label})> completions = const [];
@@ -67,6 +79,12 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
       editor = preloaded;
       resolver = preloaded.resolver;
       textField.text = preloaded.text;
+    } else if (widget.initialTabs.isNotEmpty) {
+      tabs.addAll(widget.initialTabs);
+      activeTab = tabs.length - 1;
+      editor = tabs.last;
+      resolver = editor!.resolver;
+      textField.text = editor!.text;
     } else if (widget.vault.isNotEmpty && widget.initialPath.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _open());
     }
@@ -94,9 +112,17 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
         resolver: linkResolver,
       );
       await noteEditor.load(path);
+      final existing = tabs.indexWhere((t) => t.path == noteEditor.path);
       setState(() {
         resolver = linkResolver;
         editor = noteEditor;
+        if (existing >= 0) {
+          tabs[existing] = noteEditor;
+          activeTab = existing;
+        } else {
+          tabs.add(noteEditor);
+          activeTab = tabs.length - 1;
+        }
         textField.text = noteEditor.text;
         dirty = false;
         error = null;
@@ -380,15 +406,104 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
   }
 
   void _openPath(String path) {
-    final noteEditor = editor;
-    if (noteEditor != null && noteEditor.dirty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Simpan dulu sebelum pindah catatan.')),
-      );
+    final existing = tabs.indexWhere((t) => t.path == path);
+    if (existing >= 0) {
+      _activateTab(existing);
       return;
     }
     pathField.text = path;
     _open();
+  }
+
+  void _activateTab(int i) {
+    if (i < 0 || i >= tabs.length) return;
+    setState(() {
+      activeTab = i;
+      editor = tabs[i];
+      textField.text = editor!.text;
+      dirty = editor!.dirty;
+      pathField.text = editor!.path;
+      completions = const [];
+      preview = false;
+    });
+  }
+
+  Future<void> _closeTab(int i) async {
+    final tab = tabs[i];
+    if (tab.dirty) {
+      try {
+        await tab.save();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal menyimpan: $e')),
+          );
+        }
+        return;
+      }
+    }
+    tabs.removeAt(i);
+    if (tabs.isEmpty) {
+      setState(() {
+        activeTab = -1;
+        editor = null;
+        textField.clear();
+        dirty = false;
+        completions = const [];
+      });
+    } else {
+      _activateTab(i < tabs.length ? i : tabs.length - 1);
+    }
+  }
+
+  Widget _tabBar() {
+    return Container(
+      height: 40,
+      color: context.simpulPanel,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [for (var i = 0; i < tabs.length; i++) _tab(i)],
+      ),
+    );
+  }
+
+  Widget _tab(int i) {
+    final tab = tabs[i];
+    final name = tab.path.split('/').last;
+    final active = i == activeTab;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      child: Material(
+        color: active
+            ? Theme.of(context).colorScheme.secondaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: () => _activateTab(i),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name, style: const TextStyle(fontSize: 12)),
+                if (tab.dirty)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: CircleAvatar(
+                      radius: 3,
+                      backgroundColor: Colors.orangeAccent,
+                    ),
+                  ),
+                GestureDetector(
+                  onTap: () => _closeTab(i),
+                  child: const Icon(Icons.close, size: 14),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -404,6 +519,20 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Bagi layar editor + pratinjau (FR-15)',
+            icon: const Icon(Icons.splitscreen),
+            isSelected: split,
+            onPressed: editor == null
+                ? null
+                : () => setState(() => split = !split),
+          ),
+          IconButton(
+            tooltip: 'Mode fokus (FR-15)',
+            icon: const Icon(Icons.center_focus_strong),
+            isSelected: focusMode,
+            onPressed: () => setState(() => focusMode = !focusMode),
+          ),
           IconButton(
             tooltip: 'Chat AI konteks catatan (AI-U01)',
             icon: const Icon(Icons.forum_outlined),
@@ -476,9 +605,10 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+          if (!focusMode)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
               children: [
                 Expanded(
                   child: TextField(
@@ -507,7 +637,8 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                 FilledButton(onPressed: _open, child: const Text('Buka')),
               ],
             ),
-          ),
+            ),
+          if (!focusMode && tabs.isNotEmpty) _tabBar(),
           if (error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -528,35 +659,29 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                         Expanded(
                           child: MarkdownPreview(text: textField.text),
                         )
-                      else if (editor != null)
+                      else if (editor != null && split)
                         Expanded(
-                          child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 12),
-                            child: TextField(
-                              controller: textField,
-                              focusNode: editorFocus,
-                              maxLines: null,
-                              expands: true,
-                              textAlignVertical: TextAlignVertical.top,
-                              style: const TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 14,
-                                height: 1.5,
+                          child: Row(
+                            children: [
+                              Expanded(child: _editorPane()),
+                              VerticalDivider(
+                                width: 1,
+                                color: context.simpulBorder,
                               ),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                hintText: 'Tulis markdown di sini\u2026',
+                              Expanded(
+                                child: MarkdownPreview(text: textField.text),
                               ),
-                            ),
+                            ],
                           ),
                         )
+                      else if (editor != null)
+                        Expanded(child: _editorPane())
                       else
                         const Expanded(
                           child: Center(
                               child: Text('Buka catatan untuk mulai mengedit.')),
                         ),
-                      if (editor != null) _linksPanel(),
+                      if (editor != null && !focusMode) _linksPanel(),
                     ],
                   ),
                 ),
@@ -566,12 +691,35 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                     notePath: editor!.path,
                     onInsert: _insertAiBlock,
                     powerSaverEnabled: widget.powerSaverEnabled,
+                    resourceStats: widget.resourceStats,
                   ),
               ],
             ),
           ),
         ],
       ),
+      ),
+    );
+  }
+
+  Widget _editorPane() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: TextField(
+        controller: textField,
+        focusNode: editorFocus,
+        maxLines: null,
+        expands: true,
+        textAlignVertical: TextAlignVertical.top,
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 14,
+          height: 1.5,
+        ),
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Tulis markdown di sini\u2026',
+        ),
       ),
     );
   }
