@@ -136,9 +136,9 @@ class AgentApiClient {
     final wsBase = base.startsWith('https')
         ? base.replaceFirst('https', 'wss')
         : base.replaceFirst('http', 'ws');
-    // QueryParameters performs correct escaping for tokens containing +, &, etc.
+    final ticket = await _requestStreamTicket(base);
     final uri = Uri.parse('$wsBase/v1/stream').replace(
-      queryParameters: {'token': token},
+      queryParameters: ticket == null ? {} : {'ticket': ticket},
     );
     final channel = WebSocketChannel.connect(uri);
     try {
@@ -163,6 +163,21 @@ class AgentApiClient {
   void _throwIf(http.Response res, String what) {
     if (res.statusCode >= 400) {
       throw Exception('$what ${res.statusCode}: ${res.body}');
+    }
+  }
+
+  /// Exchanges the Bearer token for a short-lived one-time stream ticket.
+  /// The main token never travels in a URL query.
+  Future<String?> _requestStreamTicket(String base) async {
+    try {
+      final res = await _http
+          .post(Uri.parse('$base/v1/auth/ticket'), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode >= 400) return null;
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return json['ticket'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 

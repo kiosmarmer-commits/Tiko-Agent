@@ -25,7 +25,7 @@ Buka `http://127.0.0.1:8787/`, lalu masukkan token dari `data/api.token` pada ta
 - Navigasi tab menyinkronkan class aktif dan properti `hidden`.
 - Nilai dari API dimasukkan ke DOM dengan node dan `textContent`, bukan dirender sebagai HTML mentah.
 - Chat menggunakan WebSocket; UI tidak otomatis mengirim ulang pesan melalui HTTP saat stream gagal karena tindakan tool dapat terduplikasi.
-- URL WebSocket menggunakan `URL` dan `searchParams` untuk token.
+- URL WebSocket dibangun dari ticket sekali pakai (`POST /v1/auth/ticket` dengan Bearer → `?ticket=`); token utama tidak pernah dikirim via query.
 - UI memiliki status memuat/kosong/error, label aksesibilitas, layout responsif dan reduced-motion behavior.
 
 ## Validasi
