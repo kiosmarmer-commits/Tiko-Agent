@@ -74,5 +74,5 @@ GraphCacheStore? openVaultCacheStore(String vaultDir, {String? outDir}) {
   if (p.extension(file.path) == '.json') {
     return file.existsSync() ? JsonVaultIndex(file.path) : null;
   }
-  return SqliteVaultIndex.tryOpen(file.path);
+  return file.existsSync() ? SqliteVaultIndex.tryOpen(file.path) : null;
 }
