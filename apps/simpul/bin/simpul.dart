@@ -51,6 +51,10 @@ Future<void> main(List<String> args) async {
         await _unlock(rest);
       case 'vault-status':
         await _vaultStatus(rest);
+      case 'ask':
+        await _ask(rest);
+      case 'suggest-improve':
+        await _suggestImprove(rest);
       case '--help' || 'help' || '-h':
         _usage();
       default:
@@ -133,6 +137,18 @@ Penggunaan:
       Perintah lain membaca SIMPUL_PASSWORD otomatis saat vault terkunci;
       tanpa password, operasi gagal fail-closed (SEC-16: kunci hanya hidup
       di memori selama proses berjalan).
+  simpul ask <vault> "pertanyaan" [--limit N] [--budget N] [--llm]
+                [--llm-model M] [--llm-base-url U] [--embedder ollama]
+      "Tanya vault" (RAG, AI-21): bukti diambil leksikal + semantik (RRF),
+      dirakit dengan sitasi [n] ke catatan + heading dalam anggaran token
+      (AI-23). Tanpa --llm jawaban ekstraktif (bukti apa adanya); dengan
+      --llm model lokal Ollama menyusun jawaban ber-sitasi. Bukti kurang →
+      "tidak ditemukan" (AI-22) — tidak pernah mengarang.
+  simpul suggest-improve <vault> <path> --op ringkasan|tulis-ulang|terjemahan|tugas
+                [--lang KODE] [--llm-model M] [--llm-base-url U]
+      Saran perbaikan catatan dari LLM lokal (AI-24): ringkasan, tulis
+      ulang, terjemahan, atau ekstraksi tugas. Hasil hanya SARAN (tidak
+      pernah menimpa catatan; penerapan = keputusan manusia, AI-41).
 ''');
 }
 
@@ -368,7 +384,7 @@ Future<void> _search(List<String> args) async {
   }
   final vault = positional[0];
   final query = positional[1];
-  final opts = _options(args, {'hybrid'});
+  final opts = _options(args, {'hybrid', 'prefilter'});
   final limit = int.parse(opts['limit'] ?? '20');
   final index = await _openIndex(vault, opts['out']);
   try {
@@ -424,6 +440,10 @@ Future<List<SearchHit>> _hybridSearch(
   } else {
     embedder = HashingEmbedder();
   }
+  Set<String>? prefilterPaths;
+  if (opts['prefilter'] == 'true') {
+    prefilterPaths = await lexicalPrefilter(index, query);
+  }
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
@@ -434,7 +454,7 @@ Future<List<SearchHit>> _hybridSearch(
       index: index,
       semantic: semantic,
       embedder: embedder,
-    ).search(query, limit: limit);
+    ).search(query, limit: limit, allowedPaths: prefilterPaths);
   } finally {
     await semantic.close();
   }
@@ -551,7 +571,7 @@ Future<void> _semsearch(List<String> args) async {
   }
   final vault = positional[0];
   final query = positional[1];
-  final opts = _options(args, {});
+  final opts = _options(args, {'prefilter'});
   final limit = int.parse(opts['limit'] ?? '20');
   final dir = opts['out'] ?? p.join(vault, '.simpul');
   final vectorsFile = File(p.join(dir, 'vectors.json'));
@@ -578,6 +598,17 @@ Future<void> _semsearch(List<String> args) async {
     queryVec = hashing.embed(query);
     embedder = hashing;
   }
+  Set<String>? prefilterPaths;
+  var prefilterCount = 0;
+  if (opts['prefilter'] == 'true') {
+    final lexicalIndex = await _openIndex(vault, opts['out']);
+    try {
+      prefilterPaths = await lexicalPrefilter(lexicalIndex, query);
+      prefilterCount = prefilterPaths.length;
+    } finally {
+      await lexicalIndex.close();
+    }
+  }
   final semantic = InMemorySemanticIndex(
     embedder,
     filePath: vectorsFile.path,
@@ -587,10 +618,13 @@ Future<void> _semsearch(List<String> args) async {
     final hits = await semantic.search(
       queryVec,
       limit: limit,
+      allowedPaths: prefilterPaths,
     );
     stdout.writeln(jsonEncode({
       'query': query,
       'model': embedder.modelVersion,
+      if (opts['prefilter'] == 'true')
+        'prefilter_candidates': prefilterCount,
       'hits': [
         for (final h in hits)
           {
@@ -907,4 +941,121 @@ Future<void> _vaultStatus(List<String> args) async {
     'files': files,
     'password_available': _passwordFromEnv() != null,
   }));
+}
+
+OllamaChat? _chatFromOptions(Map<String, String> opts) {
+  if (opts['llm'] != 'true') return null;
+  return OllamaChat(
+    model: opts['llm-model'] ?? 'llama3.2',
+    baseUrl: opts['llm-base-url'] ?? 'http://localhost:11434',
+  );
+}
+
+Future<void> _ask(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError('pemakaian: simpul ask <vault> "pertanyaan"');
+  }
+  final vault = positional[0];
+  final question = positional[1];
+  final opts = _options(args, {'llm'});
+  final limit = int.parse(opts['limit'] ?? '8');
+  final budget = int.parse(opts['budget'] ?? '2048');
+  final dir = opts['out'] ?? p.join(vault, '.simpul');
+  final index = await _openIndex(vault, opts['out']);
+  try {
+    final vectorsFile = File(p.join(dir, 'vectors.json'));
+    EmbeddingProvider embedder = HashingEmbedder();
+    InMemorySemanticIndex? semantic;
+    if (vectorsFile.existsSync()) {
+      final ollama = _ollamaFromOptions(opts);
+      final expectedModel = ollama?.modelVersion ?? HashingEmbedder().modelVersion;
+      final crypto = await _vaultCryptoFor(vault);
+      _checkVectorModel(vectorsFile.path, expectedModel, crypto: crypto);
+      if (ollama != null) {
+        final queryVec = await ollama.embed(question);
+        embedder = ReplayEmbedder(
+          modelVersion: ollama.modelVersion,
+          dimension: ollama.dimension,
+          vectors: {question: queryVec},
+        );
+      }
+      semantic = InMemorySemanticIndex(
+        embedder,
+        filePath: vectorsFile.path,
+        crypto: crypto,
+      );
+    }
+    try {
+      final answer = await VaultAnswerer(
+        index: index,
+        semantic: semantic,
+        embedder: embedder,
+        chat: _chatFromOptions(opts),
+        tokenBudget: budget,
+      ).ask(question, limit: limit);
+      stdout.writeln(jsonEncode(answer.toJson()));
+    } finally {
+      await semantic?.close();
+    }
+  } finally {
+    await index.close();
+  }
+}
+
+Future<void> _suggestImprove(List<String> args) async {
+  final positional = args.where((a) => !a.startsWith('--')).toList();
+  if (positional.length < 2) {
+    throw ArgumentError(
+      'pemakaian: simpul suggest-improve <vault> <path> --op '
+      'ringkasan|tulis-ulang|terjemahan|tugas',
+    );
+  }
+  final vault = positional[0];
+  final target = positional[1];
+  final opts = _options(args, {});
+  final op = SuggestOp.parse(
+    opts['op'] ?? (throw ArgumentError('opsi --op wajib diisi')),
+  );
+  var notePath = target.startsWith('./') ? target.substring(2) : target;
+  if (notePath.endsWith('.md')) {
+    notePath = notePath.substring(0, notePath.length - 3);
+  }
+  final index = await _openIndex(vault, opts['out']);
+  try {
+    final resolved = await index.noteByPath(notePath) != null
+        ? notePath
+        : await _resolveByBasename(index, notePath);
+    if (resolved == null) {
+      throw ArgumentError('catatan tidak ditemukan di indeks: $target');
+    }
+    final file = File(p.join(vault, resolved));
+    if (!file.existsSync()) {
+      throw StateError('file catatan tidak ada: ${file.path}');
+    }
+    final content = file.readAsStringSync();
+    final chat = OllamaChat(
+      model: opts['llm-model'] ?? 'llama3.2',
+      baseUrl: opts['llm-base-url'] ?? 'http://localhost:11434',
+    );
+    final suggestion = await NoteSuggester(chat: chat)
+        .suggest(op, content, targetLang: opts['lang']);
+    stdout.writeln(jsonEncode({
+      'path': resolved,
+      'op': op.label,
+      if (opts['lang'] != null) 'lang': opts['lang'],
+      'suggestion': suggestion,
+      'applied': false,
+    }));
+  } finally {
+    await index.close();
+  }
+}
+
+Future<String?> _resolveByBasename(VaultIndex index, String notePath) async {
+  final basename = p.basename(notePath);
+  for (final hit in await index.search('path:$basename', limit: 5)) {
+    if (hit.path.endsWith('$basename.md') || hit.path == notePath) return hit.path;
+  }
+  return null;
 }

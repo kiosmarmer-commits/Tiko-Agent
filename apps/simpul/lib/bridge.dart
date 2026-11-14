@@ -108,6 +108,7 @@ class SimpulBridge {
       final data = await switch (name) {
         'search' => _search(args, policy, audit),
         'semsearch' => _semsearch(args, policy, audit),
+        'ask_vault' => _askVault(args, policy, audit),
         'health' => _health(),
         'backlinks' => _backlinks(args, policy),
         'read_note' => _readNote(args, policy),
@@ -160,6 +161,75 @@ class SimpulBridge {
         ],
         'isError': true,
       });
+    }
+  }
+
+  /// "Tanya vault" (AI-21/22/23) over the bridge: retrieval is fused from
+  /// lexical + vector hits, then a second pass re-asks restricted to
+  /// policy-allowed paths so no denied content can leak into the answer
+  /// (headless = extractive mode; an LLM would need human-in-the-loop).
+  Future<Object?> _askVault(
+    Map<String, Object?> args,
+    AiAccessPolicy policy,
+    AiAuditLogger audit,
+  ) async {
+    final query = args['query'];
+    if (query is! String || query.isEmpty) {
+      throw ArgumentError('query wajib string non-kosong');
+    }
+    final index = await _openIndex();
+    final vectorsFile = File(p.join(vaultDir, '.simpul', 'vectors.json'));
+    final semantic = vectorsFile.existsSync()
+        ? InMemorySemanticIndex(
+            HashingEmbedder(),
+            filePath: vectorsFile.path,
+            crypto: await _vaultCrypto(),
+          )
+        : null;
+    try {
+      final answerer = VaultAnswerer(
+        index: index,
+        semantic: semantic,
+        embedder: HashingEmbedder(),
+      );
+      final limit = _intArg(args, 'limit', 8);
+      final first = await answerer.ask(query, limit: limit);
+      final allowed = <String>{};
+      var denied = 0;
+      for (final chunk in first.citations) {
+        if (await _decide(policy, index, chunk.path) == AiAccessDecision.allow) {
+          allowed.add(chunk.path);
+        } else {
+          denied++;
+        }
+      }
+      final RagAnswer answer;
+      if (denied == 0) {
+        answer = first;
+      } else if (allowed.isEmpty) {
+        answer = const RagAnswer(
+          mode: 'not_found',
+          answer: 'Tidak ada bukti yang diizinkan untuk pertanyaan ini.',
+          citations: [],
+        );
+      } else {
+        answer = await answerer.ask(query, limit: limit, allowedPaths: allowed);
+      }
+      if (denied > 0) {
+        audit.log(
+          tool: 'ask_vault',
+          target: query,
+          decision: AiAccessDecision.allow,
+          detail: {'filtered': denied},
+        );
+      }
+      return {
+        'query': query,
+        ...answer.toJson(),
+        if (denied > 0) 'filtered': denied,
+      };
+    } finally {
+      await semantic?.close();
     }
   }
 
@@ -418,6 +488,18 @@ class SimpulBridge {
           'query': {'type': 'string'},
           'limit': {'type': 'integer'},
         }, ['query']),
+        _tool(
+          'ask_vault',
+          'Tanya vault (RAG, AI-21): jawaban ekstraktif ber-sitasi [n] ke '
+              'catatan + heading dari bukti yang diizinkan; bukti kurang → '
+              '"tidak ditemukan" (AI-22)',
+          {
+            'query': {'type': 'string'},
+            'limit': {'type': 'integer'},
+            'budget': {'type': 'integer'},
+          },
+          ['query'],
+        ),
         _tool('health', 'Laporan kesehatan vault (tautan rusak, orphan, judul ganda)', {}, []),
         _tool('backlinks', 'Daftar backlink ke sebuah catatan', {
           'path': {'type': 'string'},

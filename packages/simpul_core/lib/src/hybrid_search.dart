@@ -23,12 +23,17 @@ class HybridSearcher {
     String query, {
     int limit = 20,
     bool useSemantic = true,
+    Set<String>? allowedPaths,
   }) async {
     final lexical = await index.search(query, limit: limit);
     if (!useSemantic) return lexical;
 
     final queryVec = embedder.embed(query);
-    final semanticHits = await semantic.search(queryVec, limit: limit);
+    final semanticHits = await semantic.search(
+      queryVec,
+      limit: limit,
+      allowedPaths: allowedPaths,
+    );
 
     final byPath = <String, SearchHit>{};
     final scores = <String, double>{};
