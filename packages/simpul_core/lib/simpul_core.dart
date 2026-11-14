@@ -22,6 +22,7 @@ export 'src/link_suggester.dart';
 export 'src/multi_level_layout.dart';
 export 'src/quadtree.dart';
 export 'src/rag.dart';
+export 'src/note_editor.dart';
 export 'src/note_parser.dart';
 export 'src/note_suggester.dart';
 export 'src/ollama_chat.dart';
