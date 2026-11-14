@@ -388,4 +388,32 @@ void main() {
     ) as Map<String, Object?>;
     expect(searchText['hits'], isEmpty);
   });
+
+  test('auto-lock wipes the derived key after idle, then re-derives (SEC-16)',
+      () async {
+    await VaultModes.lock(vault, password: 's3cret', mode: 'm3');
+    final bridge = SimpulBridge(
+      vaultDir: vault,
+      password: 's3cret',
+      autoLockTimeout: const Duration(milliseconds: 40),
+    );
+    Future<Map<String, Object?>> call() => request(bridge, 'tools/call', {
+          'name': 'read_note',
+          'arguments': {'path': 'catatan/satu.md'},
+        });
+
+    final first = await call();
+    expect((first['result'] as Map)['isError'], isNull);
+
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    final after = await call();
+    expect((after['result'] as Map)['isError'], isNull);
+
+    final stillLocked = SimpulBridge(vaultDir: vault);
+    final denied = await request(stillLocked, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    expect((denied['result'] as Map)['isError'], isTrue);
+  });
 }

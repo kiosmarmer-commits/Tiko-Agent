@@ -53,6 +53,8 @@ Future<void> main(List<String> args) async {
         await _unlock(rest);
       case 'vault-status':
         await _vaultStatus(rest);
+      case 'recovery-split':
+        await _recoverySplit(rest);
       case 'ask':
         await _ask(rest);
       case 'suggest-improve':
@@ -132,15 +134,24 @@ Penggunaan:
       Folder tersembunyi diabaikan; vault terenkripsi membaca
       SIMPUL_PASSWORD seperti perintah lain.
   simpul lock <vault> [--mode m1|m2|m3] [--folders a,b]
+      [--recovery-shares N] [--recovery-threshold K]
       Enkripsi vault bertahap (SEC-01): m1 (default) hanya artefak indeks
       (index.json, vectors.json, graph_cache.json); m2 menambahkan catatan
       .md di folder terpilih; m3 seluruh catatan .md. Semua file dienkripsi
       XChaCha20-Poly1305 (SEC-03) dengan kunci vault terbungkus Argon2id
       (SEC-05/07). Wajib SIMPUL_PASSWORD. m2 butuh --folders (dipisah koma).
-      Backend sqlite ditolak (SQLCipher belum didukung).
-  simpul unlock <vault>
+      Backend sqlite ditolak (SQLCipher belum didukung). Dengan
+      --recovery-shares, share Shamir (SEC-06) dicetak ke stdout untuk
+      disimpan offline; default threshold = ceil(N/2).
+  simpul unlock <vault> [--recovery-shares s1,s2,...] [--recovery-file path]
       Dekripsi balik indeks dan seluruh catatan terenkripsi, hapus crate
-      kunci + penanda mode. Wajib SIMPUL_PASSWORD.
+      kunci + penanda mode. Wajib SIMPUL_PASSWORD, atau share pemulihan
+      Shamir (SEC-06) via --recovery-shares (dipisah koma) / --recovery-file
+      (satu share per baris) bila password hilang.
+  simpul recovery-split <vault> [--shares N] [--threshold K]
+      Pecahkan kunci vault yang sedang terkunci menjadi N share Shamir
+      (SEC-06), threshold K (default ceil(N/2)); satu baris JSON per share
+      ke stdout. Wajib SIMPUL_PASSWORD.
   simpul vault-status <vault>
       Status enkripsi vault: mode, parameter KDF, folder terenkripsi (m2),
       jumlah catatan terenkripsi, dan daftar file indeks.
@@ -885,6 +896,7 @@ Future<void> _lock(List<String> args) async {
   final opts = _options(args, {});
   final password = _passwordFromEnv() ??
       (throw ArgumentError('set SIMPUL_PASSWORD untuk mengenkripsi vault'));
+  final recoveryCount = int.tryParse(opts['recovery-shares'] ?? '');
   final result = await VaultModes.lock(
     vault,
     password: password,
@@ -893,6 +905,8 @@ Future<void> _lock(List<String> args) async {
       for (final folder in (opts['folders'] ?? '').split(','))
         if (folder.trim().isNotEmpty) folder.trim(),
     ],
+    recoveryShares: recoveryCount,
+    recoveryThreshold: int.tryParse(opts['recovery-threshold'] ?? ''),
   );
   stdout.writeln(jsonEncode({
     'locked': true,
@@ -901,18 +915,76 @@ Future<void> _lock(List<String> args) async {
     'encrypted': result.encrypted,
     'key_crate': result.keyCratePath,
     if (result.folders.isNotEmpty) 'folders': result.folders,
+    if (result.shares.isNotEmpty) 'recovery_shares': result.shares,
   }));
+  if (result.shares.isNotEmpty) {
+    stderr.writeln(
+      'SIMPER: simpan ${result.shares.length} share pemulihan di tempat '
+      'terpisah (SEC-06) \u2014 share merekonstruksi kunci vault tanpa password.',
+    );
+  }
 }
 
 Future<void> _unlock(List<String> args) async {
   final vault = _positional(args);
-  final password = _passwordFromEnv() ??
-      (throw ArgumentError('set SIMPUL_PASSWORD untuk membuka vault'));
-  final result = await VaultModes.unlock(vault, password: password);
+  final opts = _options(args, {});
+  final shares = <String>[
+    for (final share in (opts['recovery-shares'] ?? '').split(','))
+      if (share.trim().isNotEmpty) share.trim(),
+  ];
+  final recoveryFile = opts['recovery-file'];
+  if (recoveryFile != null) {
+    shares.addAll([
+      for (final line in File(recoveryFile).readAsLinesSync())
+        if (line.trim().isNotEmpty) line.trim(),
+    ]);
+  }
+  final password = _passwordFromEnv();
+  if (password == null && shares.isEmpty) {
+    throw ArgumentError(
+      'set SIMPUL_PASSWORD atau --recovery-shares/--recovery-file '
+      'untuk membuka vault',
+    );
+  }
+  final result = await VaultModes.unlock(
+    vault,
+    password: password,
+    recoveryShares: shares,
+  );
   stdout.writeln(jsonEncode({
     'unlocked': true,
+    if (shares.isNotEmpty) 'via': 'recovery-shares',
     'decrypted': result.decrypted,
   }));
+}
+
+/// SEC-06: splits the current vault key into Shamir shares while the vault
+/// is locked; shares print to stdout (store them offline).
+Future<void> _recoverySplit(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final shares = int.parse(opts['shares'] ?? '5');
+  final threshold = int.parse(opts['threshold'] ?? (shares ~/ 2 + 1).toString());
+  final crateFile = File(p.join(vault, '.simpul', 'vault-key.crate'));
+  if (!crateFile.existsSync()) {
+    throw StateError('vault tidak terkunci \u2014 recovery-split hanya untuk vault terkunci');
+  }
+  final password = _passwordFromEnv() ??
+      (throw ArgumentError('set SIMPUL_PASSWORD untuk membaca crate kunci'));
+  final crypto =
+      await VaultCrypto.open(crateFile.readAsBytesSync(), password: password);
+  final split = VaultRecovery.splitKey(
+    crypto.vaultKeyBytes(),
+    shares: shares,
+    threshold: threshold,
+  );
+  for (var i = 0; i < split.length; i++) {
+    stdout.writeln(jsonEncode({'share': i + 1, 'of': shares, 'value': split[i]}));
+  }
+  stderr.writeln(
+    'SIMPER: simpan tiap share di lokasi terpisah; butuh $threshold dari '
+    '$shares share untuk pemulihan tanpa password.',
+  );
 }
 
 Future<void> _vaultStatus(List<String> args) async {
