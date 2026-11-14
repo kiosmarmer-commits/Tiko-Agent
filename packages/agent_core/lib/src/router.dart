@@ -167,6 +167,7 @@ class Router {
     String text,
     Session session, {
     int? preferredTier,
+    String? preferredProviderId,
   }) async {
     final trimmed = text.trim();
     final explain = <String>[];
@@ -234,7 +235,9 @@ class Router {
       explain.add('preferred tier=$tier (call parameter)');
     }
 
-    final prefer = tierProviders[tier] ?? defaultProviderId;
+    final prefer = preferredProviderId ??
+        tierProviders[tier] ??
+        defaultProviderId;
     final id = _pickPrimary(prefer: prefer, tier: tier);
     final score = _score(id, needTools: needTools);
     explain.add('selected $id score=${score.toStringAsFixed(2)}');

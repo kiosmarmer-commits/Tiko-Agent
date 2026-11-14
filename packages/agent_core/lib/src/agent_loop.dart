@@ -201,6 +201,7 @@ class AgentLoop {
     InboundMessage m,
     Session session, {
     CancellationToken? cancelToken,
+    String? preferredProviderId,
   }) async {
     _lastToolNames.clear();
     executedToolNames.clear();
@@ -218,6 +219,7 @@ class AgentLoop {
         m.text,
         session,
         preferredTier: config.preferredTier,
+        preferredProviderId: preferredProviderId,
       );
     } on NoHealthyProviderException {
       await reply(

@@ -27,9 +27,15 @@ class _SpyRouter extends Router {
     String text,
     Session session, {
     int? preferredTier,
+    String? preferredProviderId,
   }) {
     lastPreferredTier = preferredTier;
-    return super.route(text, session, preferredTier: preferredTier);
+    return super.route(
+      text,
+      session,
+      preferredTier: preferredTier,
+      preferredProviderId: preferredProviderId,
+    );
   }
 
   int? lastPreferredTier;
