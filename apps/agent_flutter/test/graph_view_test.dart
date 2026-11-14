@@ -121,6 +121,55 @@ void main() {
       expect(controller.graph, isNull);
       controller.dispose();
     });
+
+    test('GRA-I03: findNode dan jumpToNode mengatur kamera + seleksi',
+        () async {
+      final controller = GraphViewController(iterations: 20);
+      await controller.load(vault);
+      final id = controller.findNode('saraf');
+      expect(id, isNotNull);
+      expect(controller.findNode('tidak-ada-x'), isNull);
+      expect(controller.findNode('  '), isNull);
+      controller.jumpToNode(id!);
+      expect(controller.selected, id);
+      expect(controller.cameraRequest, isNotNull);
+      expect(controller.cameraRequest!.scale, 1.5);
+      expect(
+        controller.cameraRequest!.x,
+        controller.graph!.positionsX[id],
+      );
+      controller.dispose();
+    });
+
+    test('GRA-I01: communityCentroid dan zoomToCommunity', () async {
+      final controller = GraphViewController(iterations: 20);
+      await controller.load(vault);
+      final community = controller.communityOf[0];
+      final centroid = controller.communityCentroid(community);
+      expect(centroid, isNotNull);
+      controller.zoomToCommunity(community);
+      expect(controller.cameraRequest, isNotNull);
+      expect(controller.cameraRequest!.scale, 0.8);
+      expect(controller.cameraRequest!.x, closeTo(centroid!.x, 0.001));
+      expect(controller.communityCentroid(999999), isNull);
+      controller.dispose();
+    });
+
+    test('GRA-17: setPhysics, mtimes, dan graphVersion naik per load',
+        () async {
+      final controller = GraphViewController(iterations: 20);
+      final versionBefore = controller.graphVersion;
+      await controller.load(vault);
+      expect(controller.graphVersion, greaterThan(versionBefore));
+      expect(controller.mtimes.length, 3);
+      final newest = List<int>.of(controller.mtimes)
+        ..sort((a, b) => b.compareTo(a));
+      expect(newest.first, greaterThanOrEqualTo(newest.last));
+      controller.setPhysics(repulsion: 5000, springLength: 150);
+      expect(controller.repulsion, 5000);
+      expect(controller.springLength, 150);
+      controller.dispose();
+    });
   });
 
   group('widget GraphView', () {
@@ -167,6 +216,22 @@ void main() {
       expect(find.text('Graf Vault (Simpul)'), findsOneWidget);
       expect(find.text('Belum ada graf — isi path vault lalu Muat.'), findsOneWidget);
       expect(find.text('Muat'), findsOneWidget);
+    });
+
+    testWidgets('SimpulGraphPage menampilkan kontrol P13', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SimpulGraphPage()));
+      expect(find.text('Fisika Layout (GRA-17)'), findsOneWidget);
+      expect(find.byIcon(Icons.history), findsOneWidget);
+      expect(find.byIcon(Icons.list), findsOneWidget);
+      expect(find.text('Lompat'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.history));
+      await tester.pumpAndSettle();
+      expect(find.byType(ListView), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.list));
+      await tester.pumpAndSettle();
+      expect(find.byType(ListView), findsNothing);
     });
   });
 }
