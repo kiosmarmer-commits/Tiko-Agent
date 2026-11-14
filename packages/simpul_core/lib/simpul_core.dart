@@ -16,6 +16,7 @@ export 'src/graph_csr.dart';
 export 'src/hybrid_search.dart';
 export 'src/isolate_layout.dart';
 export 'src/ivf_index.dart';
+export 'src/layout_cache.dart';
 export 'src/link_suggester.dart';
 export 'src/multi_level_layout.dart';
 export 'src/quadtree.dart';
@@ -25,6 +26,8 @@ export 'src/semantic_index.dart';
 export 'src/tag_suggester.dart';
 export 'src/vault_generator.dart';
 export 'src/vault_index.dart';
+export 'src/vault_index_sqlite_stub.dart'
+    if (dart.library.ffi) 'src/vault_index_sqlite.dart';
 export 'src/vault_scanner.dart';
 export 'src/vault_sync.dart';
 export 'src/force_layout.dart';

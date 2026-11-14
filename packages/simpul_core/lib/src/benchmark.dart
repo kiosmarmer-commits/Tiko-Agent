@@ -5,6 +5,8 @@ import 'graph_csr.dart';
 import 'hybrid_search.dart';
 import 'semantic_index.dart';
 import 'vault_index.dart';
+import 'vault_index_sqlite_stub.dart'
+    if (dart.library.ffi) 'vault_index_sqlite.dart';
 import 'vault_scanner.dart';
 
 /// Benchmark runner for BM-02..BM-05 (PRD `03-performa-skala.md` §5).

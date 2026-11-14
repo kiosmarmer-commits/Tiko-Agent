@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'agent_api_client.dart';
 import 'daemon/desktop_daemon.dart';
 import 'ui/chat_controller.dart';
+import 'ui/graph_view.dart';
 import 'ui/status_view.dart';
 
 Future<void> main() async {
@@ -1125,6 +1126,15 @@ class _MorePage extends StatelessWidget {
                   },
                 ),
               ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.hub_outlined),
+          title: const Text('Graf Vault (Simpul)'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SimpulGraphPage(),
             ));
           },
         ),

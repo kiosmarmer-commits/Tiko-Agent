@@ -387,11 +387,10 @@ Future<void> _layout(List<String> args) async {
   final graph = GraphCsr.build(notes.map((n) => n.toIndexed()).toList());
   final config = ForceLayoutConfig(maxIterations: iterations);
   final multiLevel = opts['multi-level'] == 'true';
-  final kind = multiLevel ? 'layout-multi-level' : 'layout';
+  final kind = layoutCacheKind(multiLevel: multiLevel);
   final version =
-      '${multiLevel ? 'multi-level-v1' : 'barnes-hut-v1'}:$iterations'
-      ':${_graphFingerprint(graph)}';
-  final cache = _openCacheStore(vault, opts['out']);
+      layoutCacheVersion(graph, iterations: iterations, multiLevel: multiLevel);
+  final cache = openVaultCacheStore(vault, outDir: opts['out']);
   Map<String, Object?>? cached;
   if (cache != null && opts['no-cache'] != 'true') {
     try {
@@ -401,7 +400,7 @@ Future<void> _layout(List<String> args) async {
     }
   }
   if (cached != null) {
-    _applyWarmStart(graph, cached);
+    applyWarmStart(graph, cached);
   }
   final warm = cached != null && !multiLevel;
   final result = switch ((opts['isolate'], multiLevel)) {
@@ -437,54 +436,9 @@ Future<void> _layout(List<String> args) async {
   }));
 }
 
-/// Best-effort cache store: only an already-existing index file is opened so
-/// a bare vault never gets an index created just for caching.
-GraphCacheStore? _openCacheStore(String vault, String? outDir) {
-  final file = _resolveIndexFile(vault, outDir);
-  if (p.extension(file.path) == '.json') {
-    return file.existsSync() ? JsonVaultIndex(file.path) : null;
-  }
-  return SqliteVaultIndex.tryOpen(file.path);
-}
-
-/// Deterministic fingerprint of graph structure (nodes + edges); any change
-/// to the vault topology invalidates the cached layout (NFR-S09).
-String _graphFingerprint(GraphCsr graph) {
-  var hash = 0x811c9dc5;
-  void mix(String s) {
-    for (final code in utf8.encode(s)) {
-      hash ^= code;
-      hash = (hash * 0x01000193) & 0xFFFFFFFF;
-    }
-    hash ^= 0x0a;
-    hash = (hash * 0x01000193) & 0xFFFFFFFF;
-  }
-  for (final path in graph.paths) {
-    mix(path);
-  }
-  for (var i = 0; i < graph.nodeCount; i++) {
-    for (var off = graph.offsets[i]; off < graph.offsets[i + 1]; off++) {
-      mix('$i->${graph.targets[off]}');
-    }
-  }
-  return hash.toRadixString(16);
-}
-
-/// Pre-fills [graph] positions from a cached payload; a stale-shaped payload
-/// is ignored (cold start) instead of corrupting the simulation.
-void _applyWarmStart(GraphCsr graph, Map<String, Object?> payload) {
-  final xs = payload['x'];
-  final ys = payload['y'];
-  if (xs is! List || ys is! List) return;
-  if (xs.length != graph.nodeCount || ys.length != graph.nodeCount) return;
-  for (var i = 0; i < graph.nodeCount; i++) {
-    if (xs[i] is! num || ys[i] is! num) return;
-  }
-  for (var i = 0; i < graph.nodeCount; i++) {
-    graph.positionsX[i] = (xs[i] as num).toDouble();
-    graph.positionsY[i] = (ys[i] as num).toDouble();
-  }
-}
+/// Deterministic fingerprint, cache versioning, and warm-start helpers live
+/// in simpul_core (`layout_cache.dart`) so the Flutter graph view and the CLI
+/// share one implementation.
 
 Future<void> _viewport(List<String> args) async {
   final vault = _positional(args);
