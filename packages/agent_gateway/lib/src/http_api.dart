@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
@@ -56,6 +57,8 @@ class HttpApiServer {
   /// Inbound platform webhooks (WhatsApp/Slack) mounted on this server.
   final WebhookEndpoint? webhookEndpoint;
 
+  static final Random _rng = Random.secure();
+
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
 
@@ -102,9 +105,61 @@ class HttpApiServer {
 
   bool _auth(HttpRequest req) {
     final h = req.headers.value('authorization') ?? '';
-    if (h == 'Bearer $authToken') return true;
-    final q = req.uri.queryParameters['token'];
-    return q == authToken;
+    if (h.startsWith('Bearer ')) {
+      return _constantTimeEquals(h.substring(7), authToken);
+    }
+    return false;
+  }
+
+  /// Constant-time token comparison (B-08).
+  bool _constantTimeEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < b.length; i++) {
+      diff |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return diff == 0;
+  }
+
+  /// Short-lived one-time tickets for WebSocket auth (B-08): browsers cannot
+  /// set headers on WebSocket, so the UI exchanges its Bearer token for a
+  /// 30-second single-use ticket via POST /v1/auth/ticket.
+  static const _ticketTtl = Duration(seconds: 30);
+  final _tickets = <String, DateTime>{};
+
+  String _issueTicket() {
+    final ticket = base64UrlEncode(
+      List<int>.generate(32, (_) => _rng.nextInt(256)),
+    );
+    _tickets[ticket] = DateTime.now().add(_ticketTtl);
+    while (_tickets.length > 256) {
+      _tickets.remove(_tickets.keys.first);
+    }
+    return ticket;
+  }
+
+  bool _consumeTicket(String ticket) {
+    final exp = _tickets.remove(ticket);
+    if (exp == null) return false;
+    return DateTime.now().isBefore(exp);
+  }
+
+  void _pruneTickets() {
+    final now = DateTime.now();
+    _tickets.removeWhere((_, exp) => now.isAfter(exp));
+  }
+
+  /// Reject requests whose Host header does not match the local bind
+  /// (B-08: DNS-rebinding surface).
+  bool _hostAllowed(HttpRequest req) {
+    final host = (req.headers.value('host') ?? '').toLowerCase();
+    if (host.isEmpty) return false;
+    final hostname = host.contains(':') && !host.startsWith('[')
+        ? host.substring(0, host.lastIndexOf(':'))
+        : host;
+    const loopback = {'127.0.0.1', 'localhost', '::1', '[::1]'};
+    if (loopback.contains(hostname)) return true;
+    return hostname == this.host.toLowerCase();
   }
 
   /// Executes [run] once per [key]; duplicate requests replay the stored
@@ -129,7 +184,11 @@ class HttpApiServer {
   }
 
   Future<void> _handle(HttpRequest req) async {
-    req.response.headers.set('Access-Control-Allow-Origin', '*');
+    if (!_hostAllowed(req)) {
+      req.response.statusCode = 421;
+      await req.response.close();
+      return;
+    }
     req.response.headers.set(
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type, Idempotency-Key',
@@ -141,6 +200,17 @@ class HttpApiServer {
     }
 
     final path = req.uri.path;
+
+    if (path == '/v1/auth/ticket' && req.method == 'POST') {
+      if (!_auth(req)) {
+        req.response.statusCode = 401;
+        _json(req, {'error': 'unauthorized'});
+        return;
+      }
+      _pruneTickets();
+      _json(req, {'ticket': _issueTicket(), 'ttl_seconds': _ticketTtl.inSeconds});
+      return;
+    }
 
     // Static UI (no auth for assets — local bind only)
     if (req.method == 'GET' && _isStatic(path)) {
@@ -162,7 +232,10 @@ class HttpApiServer {
     }
 
     if (path == '/v1/stream' && WebSocketTransformer.isUpgradeRequest(req)) {
-      if (!_auth(req)) {
+      final ticket = req.uri.queryParameters['ticket'];
+      final authorized = (ticket != null && _consumeTicket(ticket)) ||
+          _auth(req);
+      if (!authorized) {
         req.response.statusCode = 401;
         await req.response.close();
         return;
