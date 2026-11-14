@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 
 import 'vault_crypto.dart';
 import 'vault_recovery.dart';
+import 'vault_index_sqlite_stub.dart'
+    if (dart.library.ffi) 'vault_index_sqlite.dart';
 
 /// Encryption modes from PRD `06-enkripsi.md` (SEC-01 staged migration
 /// M0→M1→M2→M3): M0 plaintext, M1 index artifacts only, M2 adds notes in
@@ -99,14 +101,16 @@ abstract final class VaultModes {
         resolvedFolders.add(_normalizeFolder(folder));
       }
     }
-    final indexDb = File(p.join(vault, '.simpul', 'index.db'));
-    if (indexDb.existsSync()) {
-      throw StateError(
-        'backend sqlite belum didukung enkripsi (SQLCipher belum tersedia) '
-        '\u2014 hapus index.db atau jalankan ulang dengan backend JSON',
-      );
-    }
     final dir = p.join(vault, '.simpul');
+    final indexDb = File(p.join(dir, 'index.db'));
+    if (indexDb.existsSync()) {
+      if (!SqliteVaultIndex.sqlcipherAvailable) {
+        throw StateError(
+          'backend sqlite terenkripsi butuh libsqlcipher (SQLCipher) '
+          '\u2014 hapus index.db atau jalankan ulang dengan backend JSON',
+        );
+      }
+    }
     final created = await VaultCrypto.create(password: password);
     final crypto = created.crypto;
     final encrypted = <String>[];
@@ -122,6 +126,16 @@ abstract final class VaultModes {
         await crypto.encryptFileInPlace(file.path);
         encrypted.add(p.relative(file.path, from: vault).replaceAll('\\', '/'));
       }
+    }
+    if (indexDb.existsSync()) {
+      final ok = SqliteVaultIndex.encryptFileInPlace(
+        indexDb.path,
+        crypto.vaultKeyBytes(),
+      );
+      if (!ok) {
+        throw StateError('SQLCipher tidak tersedia \u2014 index.db tidak dienkripsi');
+      }
+      encrypted.add('index.db');
     }
     final cratePath = p.join(dir, 'vault-key.crate');
     await Directory(dir).create(recursive: true);
@@ -182,6 +196,11 @@ abstract final class VaultModes {
       );
     }
     final decrypted = <String>[];
+    final indexDb = File(p.join(vault, '.simpul', 'index.db'));
+    if (indexDb.existsSync() && SqliteVaultIndex.isFileEncrypted(indexDb.path)) {
+      SqliteVaultIndex.decryptFileInPlace(indexDb.path, crypto.vaultKeyBytes());
+      decrypted.add('index.db');
+    }
     for (final name in indexFiles) {
       final file = File(p.join(vault, '.simpul', name));
       if (file.existsSync() && VaultCrypto.isFileEncrypted(file.path)) {
@@ -230,6 +249,7 @@ abstract final class VaultModes {
       indexFiles: {
         for (final name in indexFiles)
           name: VaultCrypto.isFileEncrypted(p.join(dir, name)),
+        'index.db': SqliteVaultIndex.isFileEncrypted(p.join(dir, 'index.db')),
       },
       encryptedNotes: encryptedNotes,
       totalNotes: totalNotes,
