@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:simpul_core/simpul_core.dart';
 
+import 'note_editor.dart';
+
 /// Level of detail for the graph canvas (GRA-R03): far zoom draws community
 /// aggregates, mid zoom draws individual nodes and edges, close zoom adds
 /// labels.
@@ -1006,20 +1008,6 @@ class _SimpulGraphPageState extends State<SimpulGraphPage> {
       );
       return;
     }
-    var content = File(file).readAsStringSync();
-    if (content.length > 20000) content = content.substring(0, 20000);
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(path),
-        content: SingleChildScrollView(child: Text(content)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
-    );
+    openNoteEditor(context, vault, path);
   }
 }

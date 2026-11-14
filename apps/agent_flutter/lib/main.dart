@@ -9,6 +9,7 @@ import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
 import 'ui/theme.dart';
 import 'ui/graph_view.dart';
+import 'ui/note_editor.dart';
 import 'ui/status_view.dart';
 
 Future<void> main() async {
@@ -1044,6 +1045,17 @@ class _MorePage extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => SimpulGraphPage(),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.edit_note_outlined),
+          title: const Text('Editor Catatan (Simpul)'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SimpulNoteEditorPage(
+                vault: settings.vaultPath,
+              ),
             ));
           },
         ),
