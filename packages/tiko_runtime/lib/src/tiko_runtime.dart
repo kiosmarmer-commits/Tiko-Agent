@@ -21,6 +21,7 @@ import 'offline_queue.dart';
 import 'reflection_loop.dart';
 import 'kanban_board.dart';
 import 'self_learning_engine.dart';
+import 'memory_nudge.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
@@ -112,6 +113,8 @@ class TikoRuntime {
     required this.anomalyDetector,
     required this.plugins,
     required this.layeredMemory,
+    required this.curatedMemory,
+    required this.memoryNudge,
     required this.ragPipeline,
     this.reflectionEngine,
     this.personaPrompt,
@@ -175,6 +178,12 @@ class TikoRuntime {
 
   /// Layered memory (episodic/semantic/procedural) with decay.
   final LayeredMemory layeredMemory;
+
+  /// Memori terkurasi lintas sesi (MEMORY.md/USER.md) di dataDir/memories.
+  final CuratedMemoryStore curatedMemory;
+
+  /// Nudge periodik + penerapan blok memory-ops dari balasan model.
+  final MemoryNudgeEngine memoryNudge;
 
   /// Hybrid RAG pipeline (dense + BM25 + RRF) shared with the vector index.
   final RagPipeline ragPipeline;
@@ -333,6 +342,21 @@ class TikoRuntime {
     // memory.external_providers.
     final layeredMemory = LayeredMemory();
     await layeredMemory.load(p.join(dataDir, 'layered_memory.json'));
+
+    // Memori terkurasi lintas sesi (MEMORY.md/USER.md) + nudge periodik.
+    final curatedMemory = CuratedMemoryStore(
+      dataDir: dataDir,
+      charBudget: cfg.memoryCuratedCharBudget,
+    );
+    await curatedMemory.load();
+    final memoryNudge = MemoryNudgeEngine(
+      store: curatedMemory,
+      config: MemoryNudgeConfig(
+        enabled: cfg.memoryNudgeIntervalTurns > 0,
+        intervalTurns: cfg.memoryNudgeIntervalTurns,
+      ),
+      guard: const PromptGuard(),
+    );
 
     final externalProviders = [
       for (final c in cfg.memoryProviders)
@@ -603,6 +627,8 @@ class TikoRuntime {
       anomalyDetector: anomalyDetector,
       plugins: plugins,
       layeredMemory: layeredMemory,
+      curatedMemory: curatedMemory,
+      memoryNudge: memoryNudge,
       ragPipeline: rag,
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
@@ -1201,8 +1227,12 @@ class TikoRuntime {
     AgentConfig? configOverride,
     Set<String>? toolFilter,
     void Function(String delta)? onTextDelta,
+    bool internalCommand = false,
   }) async {
-    if (!_lock.tryAcquire(sessionId)) {
+    // Turn internal (/learn authoring) berjalan di bawah lock panggilan
+    // luarnya — SessionLock tidak re-entrant.
+    final locked = !internalCommand;
+    if (locked && !_lock.tryAcquire(sessionId)) {
       return const ChatRunResult(
         text: 'Sesi masih memproses pesan sebelumnya.',
         success: false,
@@ -1210,6 +1240,21 @@ class TikoRuntime {
       );
     }
     try {
+      if (!internalCommand) {
+        final learnRequest = LearnCommand.parse(text);
+        if (learnRequest != null) {
+          return await _runLearnTurn(
+            learnRequest,
+            sessionId: sessionId,
+            channel: channel,
+            userKey: userKey,
+            confirm: confirm,
+          );
+        }
+        if (text.trim() == '/memory') {
+          return _curatedMemoryStatus();
+        }
+      }
       final session = await sessions.getOrCreate(
         sessionId,
         channel: channel,
@@ -1263,6 +1308,10 @@ class TikoRuntime {
           reflectionEngine: reflectionEngine,
           ragPipeline: ragPipeline,
           layeredMemory: layeredMemory,
+          curatedMemoryBlock: curatedMemory.snapshotPromptBlock(),
+          nudgeDirective: memoryNudge.shouldNudge(sessionId)
+              ? MemoryNudgeEngine.directive
+              : null,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
         ),
@@ -1417,7 +1466,19 @@ class TikoRuntime {
         session,
         cancelToken: cancelToken,
       );
-      final answer = replies.join('\n');
+      var answer = replies.join('\n');
+      final curatedReport = await memoryNudge.processReply(answer);
+      if (curatedReport.cleanedReply != null) {
+        answer = curatedReport.cleanedReply!;
+      }
+      if (curatedReport.applied.isNotEmpty ||
+          curatedReport.rejected.isNotEmpty) {
+        events.emit('memory.curated', {
+          'session': sessionId,
+          'applied': curatedReport.applied,
+          'rejected': curatedReport.rejected,
+        });
+      }
       final outbound = promptGuard.inspectOutput(answer);
       await _learnOnTurn(
         session: session,
@@ -1459,8 +1520,141 @@ class TikoRuntime {
       ));
       return result;
     } finally {
-      _lock.release(sessionId);
+      if (locked) _lock.release(sessionId);
     }
+  }
+
+  /// Tool yang boleh dipakai saat turn authoring /learn — hanya baca/ambil
+  /// materi; penulisan skill dilakukan runtime setelah validasi.
+  static const Set<String> _learnToolAllowlist = {
+    'read_file',
+    'list_dir',
+    'grep',
+    'web_fetch',
+    'http_request',
+    'session_search',
+  };
+
+  /// `/learn <sumber>` — jalankan turn authoring dengan toolset terbatas,
+  /// lalu validasi + simpan hasilnya sebagai draft skill.
+  Future<ChatRunResult> _runLearnTurn(
+    LearnRequest request, {
+    required String sessionId,
+    required String channel,
+    required String userKey,
+    Future<bool> Function(ToolCall call, Session session, String approvalId)?
+        confirm,
+  }) async {
+    final known = registry.specs.map((s) => s.name).toSet();
+    final toolFilter = _learnToolAllowlist.intersection(known);
+    final authored = await chatWithStatus(
+      LearnPrompt.userPrompt(request),
+      sessionId: sessionId,
+      channel: channel,
+      userKey: userKey,
+      confirm: confirm,
+      toolFilter: toolFilter,
+      internalCommand: true,
+    );
+    if (!authored.success) return authored;
+
+    final markdown = LearnOutput.extractSkillMarkdown(authored.text);
+    if (markdown == null) {
+      return ChatRunResult(
+        text: 'Tidak menemukan blok ```skill-markdown pada balasan model. '
+            'Coba ulang /learn dengan sumber lebih spesifik.\n\n${authored.text}',
+        success: false,
+        retryable: true,
+        tokensUsed: authored.tokensUsed,
+        toolCallCount: authored.toolCallCount,
+      );
+    }
+
+    final skill = SkillParser.parse(markdown);
+    if (skill == null) {
+      return const ChatRunResult(
+        text: 'SKILL.md hasil /learn tidak bisa diparse (frontmatter tidak '
+            'valid). Perbaiki format lalu ulangi.',
+        success: false,
+        retryable: true,
+      );
+    }
+    if (Directory(p.join(skillsRoot, skill.slug)).existsSync()) {
+      return ChatRunResult(
+        text: 'Skill `${skill.slug}` sudah ada di skills/. Hapus atau pilih '
+            'nama lain sebelum mengulang /learn.',
+        success: false,
+        retryable: true,
+      );
+    }
+    final validationError =
+        SkillValidator.validate(skill, knownTools: known);
+    if (validationError != null) {
+      return ChatRunResult(
+        text: 'Skill `${skill.slug}` ditolak validator: $validationError',
+        success: false,
+        retryable: true,
+      );
+    }
+    final scan = SkillScanner.scanContent(markdown);
+    if (!scan.ok) {
+      return ChatRunResult(
+        text: 'Skill `${skill.slug}` gagal static scan: '
+            '${scan.findings.join('; ')}',
+        success: false,
+        retryable: true,
+      );
+    }
+    final saved = await SkillDraftBuilder.saveDraft(
+      markdown,
+      skillsDir: skillsRoot,
+      knownTools: known,
+    );
+    if (saved == null) {
+      return ChatRunResult(
+        text: 'Skill `${skill.slug}` gagal disimpan (validasi akhir gagal).',
+        success: false,
+        retryable: true,
+      );
+    }
+    skills.register(saved);
+    events.emit('skill.learned', {
+      'session': sessionId,
+      'slug': saved.slug,
+      'sources': request.sources.map((s) => '${s.type}:${s.value}').toList(),
+      'focus': request.focus,
+    });
+    final descWarning = saved.description.length > 60
+        ? '\nCatatan: deskripsi ${saved.description.length} char — standar '
+            'house maksimal 60; pertimbangkan dipangkas saat approval.'
+        : '';
+    return ChatRunResult(
+      text: 'Skill draft tersimpan: ${saved.slug}\n'
+          'Nama: ${saved.name}\n'
+          'Deskripsi: ${saved.description}\n'
+          'Lokasi: ${p.join(skillsRoot, saved.slug, 'SKILL.md')}'
+          '$descWarning\n\n'
+          'Lanjutan: `tiko skills evaluate ${saved.slug} --promote` untuk '
+          'menguji, lalu `tiko skills approve ${saved.slug}`.',
+      success: true,
+      tokensUsed: authored.tokensUsed,
+      toolCallCount: authored.toolCallCount,
+      toolCallTraces: authored.toolCallTraces,
+    );
+  }
+
+  /// `/memory` — tampilkan isi memori terkurasi + pemakaian anggaran.
+  ChatRunResult _curatedMemoryStatus() {
+    final block = curatedMemory.snapshotPromptBlock();
+    final text = curatedMemory.isEmpty
+        ? 'Memori terkurasi kosong. Agent akan mengusulkan fakta durabel '
+            'lewat nudge periodik, atau tambahkan manual di '
+            '${curatedMemory.memoryPath}.'
+        : '$block\n\nAnggaran: ${curatedMemory.usedChars}/'
+            '${curatedMemory.charBudget} karakter\n'
+            'MEMORY.md: ${curatedMemory.memoryPath}\n'
+            'USER.md: ${curatedMemory.userPath}';
+    return ChatRunResult(text: text, success: true);
   }
 
   /// Closed learning loop (P1-8): after every turn, offer the trajectory to

@@ -278,6 +278,8 @@ class TikoConfig {
     this.enableVideoGeneration = false,
     this.enableVision = false,
     this.sandboxDockerPersistent = false,
+    this.memoryNudgeIntervalTurns = 10,
+    this.memoryCuratedCharBudget = 3575,
   });
 
   final String profile;
@@ -298,6 +300,13 @@ class TikoConfig {
   final List<McpServerConfig> mcpServers;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
+
+  /// Nudge memori terkurasi: jarak giliran antar refleksi (0/0 turn =
+  /// dinonaktifkan lewat features atau interval 0).
+  final int memoryNudgeIntervalTurns;
+
+  /// Anggaran karakter gabungan MEMORY.md + USER.md.
+  final int memoryCuratedCharBudget;
 
   /// External memory providers fanned out together with the built-in store.
   final List<ExternalMemoryProviderConfig> memoryProviders;
@@ -1043,6 +1052,10 @@ class TikoConfig {
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
+      memoryNudgeIntervalTurns:
+          intOf(memorySec['nudge_interval_turns'], 10),
+      memoryCuratedCharBudget:
+          intOf(memorySec['curated_char_budget'], 3575),
       searxngBaseUrl: str(search['searxng_base_url'], 'http://127.0.0.1:8080'),
       tavilyApiKeyRef:
           tavilyKeyValue is String && tavilyKeyValue.startsWith('env:')

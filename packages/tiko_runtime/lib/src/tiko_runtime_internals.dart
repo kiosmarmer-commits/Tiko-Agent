@@ -254,12 +254,16 @@ class RuntimeContext extends ContextBuilder {
     this.reflectionEngine,
     this.ragPipeline,
     this.layeredMemory,
+    this.curatedMemoryBlock,
+    this.nudgeDirective,
     this.toolSubsetThreshold = 24,
     this.toolSubsetK = 20,
   });
   final ToolRegistry registry;
   final Set<String>? toolFilter;
   final String? personaPrompt;
+  final String? curatedMemoryBlock;
+  final String? nudgeDirective;
   final ReflectionEngine? reflectionEngine;
   final RagPipeline? ragPipeline;
   final LayeredMemory? layeredMemory;
@@ -289,6 +293,14 @@ class RuntimeContext extends ContextBuilder {
     var system = (persona == null || persona.isEmpty)
         ? ctx.systemPrompt
         : '${ctx.systemPrompt}\n\nPersona (SOUL.md, immutable):\n$persona';
+    final curated = curatedMemoryBlock;
+    if (curated != null && curated.isNotEmpty) {
+      system = '$system\n\nMemori terkurasi lintas sesi:\n$curated';
+    }
+    final nudge = nudgeDirective;
+    if (nudge != null && nudge.isNotEmpty) {
+      ctx.messages.add(ChatMessage(role: 'system', content: nudge));
+    }
     final extras = await _retrievedContext(m.text);
     if (subsetActive) {
       system = '$system\n\nDaftar tool di atas adalah subset paling relevan '
