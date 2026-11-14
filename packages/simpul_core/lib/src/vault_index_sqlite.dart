@@ -1,11 +1,14 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/open.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'graph_cache.dart';
 import 'note_parser.dart';
+import 'vault_crypto.dart';
 import 'vault_index.dart';
 
 /// SQLite-backed index per PRD §3. Returns null when the native sqlite3
@@ -16,14 +19,149 @@ class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
 
   final Database db;
 
-  static SqliteVaultIndex? tryOpen(String dbPath) {
+  static bool _loaderConfigured = false;
+  static bool? _sqlcipherAvailable;
+
+  /// Loads the native library once per process. SQLCipher is preferred when
+  /// present (it opens plain databases identically and adds PRAGMA key);
+  /// Debian/Ubuntu runtime-only installs ship `libsqlite3.so.0` without the
+  /// dev symlink, so both names are tried (SEC: sqlite backend).
+  static void _ensureLoader() {
+    if (_loaderConfigured) return;
+    open.overrideFor(OperatingSystem.linux, _loadLinux);
+    _loaderConfigured = true;
+  }
+
+  static DynamicLibrary _loadLinux() {
+    final envPath = Platform.environment['SIMPUL_SQLCIPHER_PATH'];
+    final home = Platform.environment['HOME'];
+    final candidates = [
+      if (envPath != null && envPath.isNotEmpty) envPath,
+      if (home != null && home.isNotEmpty) '$home/.local/lib/libsqlcipher.so',
+      'libsqlcipher.so',
+      'libsqlite3.so',
+      'libsqlite3.so.0',
+    ];
+    Object? lastError;
+    for (final candidate in candidates) {
+      try {
+        return DynamicLibrary.open(candidate);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw StateError('tidak ada libsqlite3/libsqlcipher: $lastError');
+  }
+
+  /// True when the loaded native library is SQLCipher (PRAGMA cipher_version
+  /// answers), enabling encrypted sqlite backends for locked vaults.
+  static bool get sqlcipherAvailable {
+    final cached = _sqlcipherAvailable;
+    if (cached != null) return cached;
+    _ensureLoader();
+    try {
+      final db = sqlite3.openInMemory();
+      try {
+        _sqlcipherAvailable = db.select('PRAGMA cipher_version').isNotEmpty;
+      } finally {
+        db.dispose();
+      }
+    } catch (_) {
+      _sqlcipherAvailable = false;
+    }
+    return _sqlcipherAvailable!;
+  }
+
+  /// SQLCipher-encrypted databases start with a random salt, not the plain
+  /// SQLite magic string.
+  static bool isFileEncrypted(String path) {
+    final file = File(path);
+    if (!file.existsSync()) return false;
+    final raf = file.openSync();
+    try {
+      final header = raf.readSync(16);
+      return header.length < 16 ||
+          utf8.decode(header, allowMalformed: true) != 'SQLite format 3\u0000';
+    } finally {
+      raf.closeSync();
+    }
+  }
+
+  static String _hexKey(List<int> vaultKey) =>
+      vaultKey.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+  static Database _openWithKey(String dbPath, List<int> vaultKey) {
+    _ensureLoader();
+    final db = sqlite3.open(dbPath);
+    try {
+      db.execute("PRAGMA key = \"x'${_hexKey(vaultKey)}'\"");
+      db.select('SELECT count(*) FROM sqlite_master');
+      return db;
+    } on SqliteException catch (e) {
+      db.dispose();
+      throw VaultCryptoException(
+        'membuka sqlite terenkripsi gagal (kunci salah atau data rusak): '
+        '${e.message}',
+      );
+    }
+  }
+
+  /// Re-encrypts a plaintext sqlite database in place via
+  /// `sqlcipher_export` (atomic tmp+rename). Returns false when SQLCipher is
+  /// unavailable so callers can fail closed.
+  static bool encryptFileInPlace(String dbPath, List<int> vaultKey) {
+    if (!sqlcipherAvailable) return false;
+    _ensureLoader();
+    final tmp = '$dbPath.encrypting';
+    final plain = sqlite3.open(dbPath);
+    try {
+      plain.execute(
+        "ATTACH DATABASE '$tmp' AS enc KEY \"x'${_hexKey(vaultKey)}'\"");
+      plain.select("SELECT sqlcipher_export('enc')");
+      plain.execute('DETACH DATABASE enc');
+    } finally {
+      plain.dispose();
+    }
+    File(tmp).renameSync(dbPath);
+    return true;
+  }
+
+  /// Decrypts a SQLCipher database in place via `sqlcipher_export` to a
+  /// plaintext tmp file (atomic tmp+rename).
+  static void decryptFileInPlace(String dbPath, List<int> vaultKey) {
+    _ensureLoader();
+    final tmp = '$dbPath.decrypting';
+    final encrypted = _openWithKey(dbPath, vaultKey);
+    try {
+      encrypted.execute("ATTACH DATABASE '$tmp' AS plain KEY ''");
+      encrypted.select("SELECT sqlcipher_export('plain')");
+      encrypted.execute('DETACH DATABASE plain');
+    } finally {
+      encrypted.dispose();
+    }
+    File(tmp).renameSync(dbPath);
+  }
+
+  /// Opens the index; pass [vaultKey] (raw vault key bytes) for a
+  /// SQLCipher-encrypted database on a locked vault. Returns null when the
+  /// native sqlite3 library is unavailable (same graceful-degradation
+  /// contract as `SqliteMemoryStore.tryOpen` in agent_memory).
+  static SqliteVaultIndex? tryOpen(String dbPath, {List<int>? vaultKey}) {
     try {
       final file = File(dbPath);
       file.parent.createSync(recursive: true);
-      final db = sqlite3.open(dbPath);
+      final Database db;
+      if (vaultKey != null) {
+        db = _openWithKey(dbPath, vaultKey);
+      } else {
+        _ensureLoader();
+        db = sqlite3.open(dbPath);
+      }
       final index = SqliteVaultIndex._(db);
       index._migrate();
       return index;
+    } on VaultCryptoException {
+      rethrow;
     } catch (e) {
       stderr.writeln('SqliteVaultIndex unavailable: $e — use JsonVaultIndex');
       return null;

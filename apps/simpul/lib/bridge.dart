@@ -295,16 +295,19 @@ class SimpulBridge {
     final jsonFile = File(p.join(dir, 'index.json'));
     final crypto = await _vaultCrypto();
     if (dbFile.existsSync()) {
-      if (crypto != null) {
-        throw StateError(
-          'backend sqlite belum didukung pada vault terenkripsi '
-          '(SQLCipher belum tersedia) — pakai backend JSON',
-        );
-      }
-      final sqlite = SqliteVaultIndex.tryOpen(dbFile.path);
+      final sqlite = SqliteVaultIndex.tryOpen(
+        dbFile.path,
+        vaultKey: crypto?.vaultKeyBytes(),
+      );
       if (sqlite != null) {
         _index = sqlite;
         return sqlite;
+      }
+      if (crypto != null) {
+        throw StateError(
+          'backend sqlite tidak tersedia untuk vault terenkripsi — '
+          'pakai backend JSON',
+        );
       }
     }
     if (jsonFile.existsSync()) {

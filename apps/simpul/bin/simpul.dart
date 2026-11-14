@@ -123,8 +123,10 @@ Penggunaan:
   simpul suggest-tags <vault> [--limit N] [--min-score S]
       Saran tag per catatan dari centroid tag yang sudah ada (AI-26);
       saran saja — penerapan selalu butuh persetujuan manusia.
-  simpul bench <vault> [--iterations N]
+  simpul bench <vault> [--iterations N] [--backend auto|json]
       Benchmark scan/index/search/backlink/CSR/inkremental/vektor (BM-02..07).
+      Default auto memakai backend sqlite nyata (BM-07) bila libsqlite3/
+      libsqlcipher tersedia; --backend json memaksa fallback JSON.
   simpul eval [--embedder hashing|ollama] [--model M] [--base-url U]
               [--dim N] [--k K]
       Evaluasi retrieval korpus AI-E01: recall@k dan MRR (AI-E02). Default
@@ -242,14 +244,15 @@ Future<VaultIndex> _openIndexFile(String vault, File file) async {
   if (p.extension(file.path) == '.json') {
     return JsonVaultIndex(file.path, crypto: crypto);
   }
+  final sqlite =
+      SqliteVaultIndex.tryOpen(file.path, vaultKey: crypto?.vaultKeyBytes());
+  if (sqlite != null) return sqlite;
   if (crypto != null) {
     throw VaultCryptoException(
-      'backend sqlite belum didukung pada vault terenkripsi '
-      '(SQLCipher belum tersedia) \u2014 pakai backend JSON',
+      'vault terkunci dan backend sqlite tidak tersedia \u2014 '
+      'set SIMPUL_PASSWORD atau pakai backend JSON',
     );
   }
-  final sqlite = SqliteVaultIndex.tryOpen(file.path);
-  if (sqlite != null) return sqlite;
   return JsonVaultIndex(p.setExtension(file.path, '.json'));
 }
 
@@ -848,7 +851,10 @@ Future<void> _bench(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {});
   final iterations = int.parse(opts['iterations'] ?? '50');
-  final report = await BenchmarkRunner().run(
+  final backend = opts['backend'] ?? 'auto';
+  final report = await BenchmarkRunner(
+    indexFactory: backend == 'json' ? (path) => JsonVaultIndex(path) : null,
+  ).run(
     vault,
     searchIterations: iterations,
   );

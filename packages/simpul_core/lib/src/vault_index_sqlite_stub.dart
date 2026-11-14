@@ -7,7 +7,17 @@ import 'vault_index.dart';
 class SqliteVaultIndex implements VaultIndex, GraphCacheStore {
   SqliteVaultIndex._();
 
-  static SqliteVaultIndex? tryOpen(String dbPath) => null;
+  static SqliteVaultIndex? tryOpen(String dbPath, {List<int>? vaultKey}) => null;
+
+  static bool get sqlcipherAvailable => false;
+
+  static bool isFileEncrypted(String path) => false;
+
+  static bool encryptFileInPlace(String dbPath, List<int> vaultKey) => false;
+
+  static void decryptFileInPlace(String dbPath, List<int> vaultKey) {
+    throw UnsupportedError('SqliteVaultIndex tidak tersedia di platform ini');
+  }
 
   @override
   Future<void> replaceAll(List<IndexedNote> notes) => _unsupported();
