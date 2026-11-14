@@ -51,7 +51,12 @@ class SimpulBridge {
     if (policy.tags.isNotEmpty) {
       tags = (await index.tagsOf({path}))[path]?.toSet() ?? const {};
     }
-    return policy.decide(path, tags: tags);
+    final note = await index.noteByPath(path);
+    return policy.decide(
+      path,
+      tags: tags,
+      noteAiAccess: note?.aiAccess,
+    );
   }
 
   Future<String> handleLine(String line) async {

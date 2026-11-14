@@ -152,4 +152,44 @@ void main() {
       await sqlite.close();
     }
   });
+
+  group('per-note ai-access frontmatter rule (AI-42)', () {
+    test('note tolak denies even when every config layer allows', () {
+      final policy = AiAccessPolicy();
+      expect(
+        policy.decide('catatan/satu.md', noteAiAccess: 'deny'),
+        AiAccessDecision.deny,
+      );
+      expect(
+        policy.decide('catatan/satu.md', noteAiAccess: 'tolak'),
+        AiAccessDecision.deny,
+      );
+    });
+
+    test('note izin cannot override a stricter config layer', () {
+      final policy = AiAccessPolicy(
+        folders: {'rahasia': AiAccessDecision.deny},
+      );
+      expect(
+        policy.decide('rahasia/kunci.md', noteAiAccess: 'allow'),
+        AiAccessDecision.deny,
+      );
+    });
+
+    test('ask and unknown values contribute no rule', () {
+      final policy = AiAccessPolicy();
+      expect(
+        policy.decide('catatan/satu.md', noteAiAccess: 'ask'),
+        AiAccessDecision.allow,
+      );
+      expect(
+        policy.decide('catatan/satu.md', noteAiAccess: 'entahlah'),
+        AiAccessDecision.allow,
+      );
+      expect(
+        policy.decide('catatan/satu.md'),
+        AiAccessDecision.allow,
+      );
+    });
+  });
 }

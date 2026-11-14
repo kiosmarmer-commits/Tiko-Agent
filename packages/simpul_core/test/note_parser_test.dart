@@ -130,4 +130,40 @@ void main() {
       expect(note.chunks.single.headingPath, '');
     });
   });
+
+  group('ai-access frontmatter (AI-42)', () {
+    test('parses explicit izin and tolak rules', () {
+      final izin = NoteParser.parse(
+        'a.md',
+        '---\nai-access: izin\n---\nIsi.\n',
+      );
+      expect(izin.aiAccess, 'allow');
+
+      final tolak = NoteParser.parse(
+        'b.md',
+        '---\nai-access: tolak\n---\nIsi.\n',
+      );
+      expect(tolak.aiAccess, 'deny');
+    });
+
+    test('absent, tanya, and unknown values stay rule-free (ask)', () {
+      expect(NoteParser.parse('a.md', 'Isi.\n').aiAccess, 'ask');
+      expect(
+        NoteParser.parse('b.md', '---\nai-access: tanya\n---\nIsi.\n').aiAccess,
+        'ask',
+      );
+      expect(
+        NoteParser.parse('c.md', '---\nai-access: entahlah\n---\nIsi.\n').aiAccess,
+        'ask',
+      );
+    });
+
+    test('underscore alias ai_access is accepted', () {
+      final note = NoteParser.parse(
+        'd.md',
+        '---\nai_access: tolak\n---\nIsi.\n',
+      );
+      expect(note.aiAccess, 'deny');
+    });
+  });
 }

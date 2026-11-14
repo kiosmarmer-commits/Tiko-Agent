@@ -35,4 +35,5 @@ export 'src/vault_index_sqlite_stub.dart'
 export 'src/vault_modes.dart';
 export 'src/vault_scanner.dart';
 export 'src/vault_sync.dart';
+export 'src/vault_watcher.dart';
 export 'src/force_layout.dart';

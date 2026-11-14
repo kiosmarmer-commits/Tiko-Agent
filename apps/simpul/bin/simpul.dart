@@ -35,6 +35,8 @@ Future<void> main(List<String> args) async {
         await _semsearch(rest);
       case 'sync':
         await _sync(rest);
+      case 'watch':
+        await _watch(rest);
       case 'clusters':
         await _clusters(rest);
       case 'suggest-links':
@@ -124,6 +126,11 @@ Penggunaan:
       Evaluasi retrieval korpus AI-E01: recall@k dan MRR (AI-E02). Default
       embedder hashing (deterministik, tanpa jaringan); ollama butuh server
       lokal berjalan (AI-03).
+  simpul watch <vault> [--interval-ms N]
+      Pantau vault dan jalankan sinkron inkremental otomatis (NFR-S05)
+      setiap catatan .md berubah (satu baris JSON per sinkronisasi).
+      Folder tersembunyi diabaikan; vault terenkripsi membaca
+      SIMPUL_PASSWORD seperti perintah lain.
   simpul lock <vault> [--mode m1|m2|m3] [--folders a,b]
       Enkripsi vault bertahap (SEC-01): m1 (default) hanya artefak indeks
       (index.json, vectors.json, graph_cache.json); m2 menambahkan catatan
@@ -646,6 +653,33 @@ Future<void> _semsearch(List<String> args) async {
 Future<void> _sync(List<String> args) async {
   final vault = _positional(args);
   final opts = _options(args, {});
+  stdout.writeln(jsonEncode(await _syncOnce(vault, opts)));
+}
+
+/// Perintah `watch`: sinkron inkremental otomatis setiap ada perubahan
+/// catatan (NFR-S05) dengan debounce, sampai proses dihentikan.
+Future<void> _watch(List<String> args) async {
+  final vault = _positional(args);
+  final opts = _options(args, {});
+  final intervalMs = int.parse(opts['interval-ms'] ?? '1000');
+  stdout.writeln(jsonEncode({
+    'watching': vault,
+    'interval_ms': intervalMs,
+  }));
+  await stdout.flush();
+  final watcher = VaultWatcher(vault);
+  await for (final batch in watcher.batches(interval: Duration(milliseconds: intervalMs))) {
+    final payload = await _syncOnce(vault, opts);
+    stdout.writeln(jsonEncode({
+      'changed': batch.paths,
+      'at': batch.at.toUtc().toIso8601String(),
+      'sync': payload,
+    }));
+    await stdout.flush();
+  }
+}
+
+Future<Map<String, Object?>> _syncOnce(String vault, Map<String, String> opts) async {
   final file = _resolveIndexFile(vault, opts['out']);
   final VaultIndex index = await _openIndexFile(vault, file);
   final crypto = await _vaultCryptoFor(vault);
@@ -690,7 +724,7 @@ Future<void> _sync(List<String> args) async {
         );
       },
     );
-    stdout.writeln(jsonEncode({
+    return {
       'backend': index is SqliteVaultIndex ? 'sqlite' : 'json',
       ...result.toJson(),
       'vectors': vectorsState,
@@ -699,7 +733,7 @@ Future<void> _sync(List<String> args) async {
         'updated': result.updated,
         'removed': result.removed,
       },
-    }));
+    };
   } finally {
     await index.close();
   }

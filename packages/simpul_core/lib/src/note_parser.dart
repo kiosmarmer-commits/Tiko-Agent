@@ -70,6 +70,7 @@ class ParsedNote {
     required this.chunks,
     required this.wordCount,
     required this.body,
+    this.aiAccess = 'ask',
   });
 
   /// Vault-relative POSIX path, e.g. `catatan/ide.md`.
@@ -85,6 +86,10 @@ class ParsedNote {
 
   /// Body text without frontmatter (source for FTS and snippets).
   final String body;
+
+  /// Per-note AI access rule from the `ai-access` frontmatter property
+  /// (AI-42): `allow`, `ask` (default when absent), or `deny`.
+  final String aiAccess;
 }
 
 /// Parser for Obsidian-compatible Markdown notes.
@@ -127,7 +132,20 @@ abstract final class NoteParser {
       chunks: chunks,
       wordCount: wordCount,
       body: body,
+      aiAccess: noteAiAccess(props),
     );
+  }
+
+  /// Per-note AI access rule (AI-42) from the `ai-access` frontmatter
+  /// property. Absent or malformed values fall back to `ask` (fail-safe).
+  static String noteAiAccess(Map<String, Object?> props) {
+    final raw = props['ai-access'] ?? props['ai_access'];
+    if (raw == null) return 'ask';
+    return switch (raw.toString().trim().toLowerCase()) {
+      'izin' || 'izin penuh' || 'allow' => 'allow',
+      'tolak' || 'deny' => 'deny',
+      _ => 'ask',
+    };
   }
 
   static String _basename(String path) {

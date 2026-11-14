@@ -340,21 +340,7 @@ void main() {
   });
 
   test('read_note decrypts notes on a locked M3 vault with the password', () async {
-    final crate = await VaultCrypto.create(password: 's3cret');
-    await for (final file in VaultModes.noteFiles(vault)) {
-      await crate.crypto.encryptFileInPlace(file.path);
-    }
-    await Directory('$vault/.simpul').create(recursive: true);
-    await File('$vault/.simpul/vault-key.crate')
-        .writeAsBytes(crate.keyCrate, flush: true);
-    await VaultCrypto.writeBytesAtomically(
-      '$vault/.simpul/vault-mode.json',
-      utf8.encode(jsonEncode({
-        'mode': 'm3',
-        'kdf': crate.crypto.kdf.toJson(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      })),
-    );
+    await VaultModes.lock(vault, password: 's3cret', mode: 'm3');
 
     final locked = SimpulBridge(vaultDir: vault);
     final denied = await request(locked, 'tools/call', {
@@ -375,5 +361,31 @@ void main() {
 
     final clusters = await request(unlocked, 'tools/call', {'name': 'clusters'});
     expect((clusters['result'] as Map)['isError'], isNull);
+  });
+
+  test('per-note ai-access frontmatter rule gates read_note (AI-42)', () async {
+    await File('$vault/catatan/satu.md').writeAsString(
+      '---\ntitle: Satu\nai-access: tolak\n---\n# Satu\n\nisi tentang jaringan saraf tiruan\n',
+    );
+    final index = JsonVaultIndex('$vault/.simpul/index.json');
+    final notes = await VaultScanner.scan(vault);
+    await index.replaceAll(notes.map((n) => n.toIndexed()).toList());
+    await index.close();
+
+    final bridge = SimpulBridge(vaultDir: vault);
+    final denied = await request(bridge, 'tools/call', {
+      'name': 'read_note',
+      'arguments': {'path': 'catatan/satu.md'},
+    });
+    expect((denied['result'] as Map)['isError'], isTrue);
+
+    final search = await request(bridge, 'tools/call', {
+      'name': 'search',
+      'arguments': {'query': 'saraf'},
+    });
+    final searchText = jsonDecode(
+      ((search['result'] as Map)['content'] as List).first['text'] as String,
+    ) as Map<String, Object?>;
+    expect(searchText['hits'], isEmpty);
   });
 }
