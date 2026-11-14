@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:agent_core/agent_core.dart';
 
@@ -62,6 +63,9 @@ class CredentialManager {
               .toList();
           _currentIndices[provider] = 0;
           _rateLimitTrackers[provider] = RateLimitTracker();
+        }
+        if (!Platform.isWindows) {
+          await _tightenPermissions(file);
         }
       }
       _initialized = true;
@@ -349,33 +353,56 @@ class CredentialManager {
     return null;
   }
 
-  /// Save credentials to storage
-  Future<void> _save() async {
-    try {
-      final data = <String, List<Map<String, dynamic>>>{};
-      
-      for (final entry in _credentials.entries) {
-        data[entry.key] = entry.value.map((c) => c.toJson()).toList();
+  /// Tighten loose permissions on an existing storage file (B-02).
+  Future<void> _tightenPermissions(File file) async {
+    final stat = await file.stat();
+    if (stat.mode & 511 != 384) {
+      final result = await Process.run('chmod', ['600', file.path]);
+      if (result.exitCode != 0) {
+        throw StateError(
+          'Tidak dapat mengamankan permission file kredensial: ${result.stderr}',
+        );
       }
-      
-      final file = File(storagePath);
-      await file.create(recursive: true);
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      // Failed to save
     }
   }
 
-  /// Generate a unique ID
-  String _generateId() {
-    return '${DateTime.now().millisecondsSinceEpoch}_${_randomString(8)}';
+  /// Save credentials to storage (B-02): atomic write, strict file
+  /// permissions on POSIX, and honest failures propagated to the caller.
+  Future<void> _save() async {
+    final data = <String, List<Map<String, dynamic>>>{};
+    for (final entry in _credentials.entries) {
+      data[entry.key] = entry.value.map((c) => c.toJson()).toList();
+    }
+    final file = File(storagePath);
+    await file.parent.create(recursive: true);
+    final tmp = File('$storagePath.tmp');
+    await tmp.writeAsString(jsonEncode(data), flush: true);
+    if (!Platform.isWindows) {
+      final result = await Process.run('chmod', ['600', tmp.path]);
+      if (result.exitCode != 0) {
+        try {
+          await tmp.delete();
+        } catch (_) {}
+        throw StateError(
+          'Tidak dapat mengamankan permission file kredensial: ${result.stderr}',
+        );
+      }
+    }
+    try {
+      await tmp.rename(storagePath);
+    } on FileSystemException {
+      if (await file.exists()) await file.delete();
+      await tmp.rename(storagePath);
+    }
   }
 
-  /// Generate a random string
-  String _randomString(int length) {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final random = DateTime.now().microsecondsSinceEpoch;
-    return List.generate(length, (_) => chars[random % chars.length]).join();
+  /// Generate a unique ID (B-11): 16 bytes from a CSPRNG, hex-encoded.
+  String _generateId() {
+    final bytes = List<int>.generate(
+      16,
+      (_) => Random.secure().nextInt(256),
+    );
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
 
