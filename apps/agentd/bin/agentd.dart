@@ -135,6 +135,32 @@ Future<void> main(List<String> args) async {
   rt.registry.register(PlanTaskTool(PlanExecute(_primaryLlm(rt))));
 
   final rateLimiter = RateLimiter(maxPerMinute: 20);
+
+  // Bot Mode: optional group-chat routing. Bindings live in data/bots.json
+  // next to other runtime state. No file means Bot Mode is off and every
+  // channel keeps its current behaviour.
+  BotModeGate? botGate;
+  try {
+    final botsFile = File('${rt.config.dataDir}/bots.json');
+    if (botsFile.existsSync()) {
+      final raw =
+          jsonDecode(botsFile.readAsStringSync()) as Map<String, dynamic>;
+      final agents = AgentRegistry();
+      for (final e in (raw['agents'] as List<dynamic>? ?? [])) {
+        agents.register(AgentSpec.fromJson(Map<String, dynamic>.from(e as Map)));
+      }
+      final bots = BotRegistry(agents);
+      for (final e in (raw['bindings'] as List<dynamic>? ?? [])) {
+        bots.bind(BotBinding.fromJson(Map<String, dynamic>.from(e as Map)));
+      }
+      if (bots.length > 0) {
+        botGate = BotModeGate(BotRouter(registry: bots));
+        stdout.writeln('Bot Mode aktif: ${bots.length} bot');
+      }
+    }
+  } catch (e) {
+    stderr.writeln('bots.json diabaikan: $e');
+  }
   final gateways = <Gateway>[];
   TelegramGateway? tg;
   DiscordGateway? discord;
@@ -420,6 +446,13 @@ Future<void> main(List<String> args) async {
         sessionKey: m.sessionKey,
         text: 'Rate limit — coba lagi nanti.',
       ));
+      return;
+    }
+
+    // Bot Mode runs before any approval prompt or live message is created,
+    // so a dropped group message leaves no side effect on the platform.
+    final botDecision = botGate?.evaluate(m);
+    if (botDecision != null && botDecision.action == BotModeAction.drop) {
       return;
     }
 
