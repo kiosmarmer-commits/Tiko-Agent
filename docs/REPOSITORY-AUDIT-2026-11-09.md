@@ -1,5 +1,27 @@
 # Audit Repository dan Rekonsiliasi Dokumentasi — 9 November 2026
 
+> **ARSIP — sebagian temuan dokumen ini sudah ditutup di `main`.**
+>
+> Dokumen ini adalah snapshot audit commit `69b6da4` (9 Nov 2026), **bukan**
+> gambaran kondisi kode saat ini. Verifikasi ulang dengan membaca source `main`
+> (`99ff148`, 15 Nov 2026) memberi hasil:
+>
+> | Temuan §4 | Status | Bukti di source |
+> |---|---|---|
+> | Email gateway menerima sertifikat invalid | **Ditutup** | `email_gateway.dart` memakai `SecureSocket.secure(socket, host: host)` tanpa `onBadCertificate`, dan menolak downgrade plaintext |
+> | `onBadCertificate` pada IMAP | **Bukan temuan** | `imap_client.dart` memakai `(_) => false` — menolak sertifikat buruk |
+> | Flutter mengembalikan `{}`/`[]` saat HTTP error | **Ditutup** | `capabilities`, `doctor`, `listSessions`, `listApprovals`, `listEvents` memanggil `_throwIf(res, ...)` |
+> | `deleteMemory(id)` tanpa encoding | **Ditutup** | memakai `Uri.encodeComponent(id)` |
+> | `streamChat()` menaruh token di query | **Ditutup, lebih kuat** | ticket sekali pakai via `_requestStreamTicket` + `Uri.replace(queryParameters: ...)` |
+>
+> Temuan §4 lainnya (duplikasi `ProviderHealth`/`CircuitBreaker`, scheduler
+> at-least-once, vector brute-force, sandbox host, email inbound) **belum
+> diverifikasi ulang** pada snapshot ini — jangan asumsikan statusnya.
+>
+> Regresi untuk temuan yang sudah ditutup dijaga oleh
+> `packages/agent_security/test/regression_guard_test.dart`.
+> Batas cakupan verifikasi: `docs/VERIFICATION-STATUS-2026-11-16.md`.
+
 ## 1. Identitas snapshot
 
 | Item | Nilai |

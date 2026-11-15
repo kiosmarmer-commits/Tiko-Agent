@@ -1,5 +1,28 @@
 # Hermes Agent vs Tiko-Agent: Comprehensive Feature Comparison
 
+> **VERIFICATION NOTICE (2026-11-16).** The completion percentages below
+> (40% → 75% → 85% → 93% → 95%) are **self-reported planning estimates**, not
+> measured results. They were produced across six addenda and were never
+> validated against an end-to-end test matrix.
+>
+> Two concrete problems with the historical claims:
+>
+> 1. **"Implemented" did not mean "wired".** Addendum v6.0 states that 13 modules
+>    were only unit-tested until they were connected to the runtime/daemon/CLI.
+>    The v3.0–v5.0 percentages counted those unwired modules as delivered.
+> 2. **CI green is not production-verified.** `ci.yml` uses loopback mocks for
+>    MCP, gateways and the LLM API. A green run does not verify real Discord
+>    voice encryption, real gateway credentials, third-party MCP servers, or
+>    vector retrieval at scale.
+>
+> Some statements are also stale relative to `main`: `discord_voice.dart` now
+> defines `Xsalsa20Poly1305Encryptor` and `AeadXchacha20Poly1305Encryptor` with
+> key-length validation, so the v4.0 "passthrough" note no longer describes the
+> current tree. Cryptographic correctness against a live Discord gateway remains
+> unverified.
+>
+> For what is actually verified, see `docs/VERIFICATION-STATUS-2026-11-16.md`.
+
 **Date:** 2026-11-10  
 **Version:** 2.0 (Post-Implementation Review)  
 **Status:** After implementing Self-Improving Learning Loop and Hermes-like features
