@@ -165,6 +165,8 @@ class TelegramGateway implements Gateway {
           'chat_id': chatId,
           'message_id': msg['message_id'],
           'username': from['username'],
+          // Bot Mode needs to tell group traffic from private chat.
+          'chat_type': chat['type'],
         },
       ),
     );
