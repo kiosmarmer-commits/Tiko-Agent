@@ -119,6 +119,7 @@ class TikoRuntime {
     required this.memoryNudge,
     required this.turnRedirects,
     required this.botStore,
+    required this.pluginConsents,
     required this.ragPipeline,
     this.reflectionEngine,
     this.personaPrompt,
@@ -209,6 +210,13 @@ class TikoRuntime {
 
   /// Persona bot persisten per chat (`/bot use <id>`); null = tanpa bot.
   final BotStore botStore;
+
+  /// Capability consent plugin (rekomendasi #5): izin per plugin disetujui
+  /// eksplisit; default fail-closed.
+  final PluginConsentStore pluginConsents;
+
+  /// Plugin yang menunggu consent (`/plugin consent <nama> grant`).
+  final Map<String, _PendingPlugin> _pendingPlugins = {};
   late final TirithSecurityLayer tirith;
   late final CredentialManager credentialManager;
   late final FallbackManager fallbackManager;
@@ -375,6 +383,16 @@ class TikoRuntime {
     final botStore = BotStore(dataDir: dataDir);
     await botStore.load();
 
+    // Capability consent plugin (rekomendasi #5): fail-closed — permission
+    // yang belum disetujui administrator menahan registrasi plugin.
+    final pluginConsents = PluginConsentStore(
+      path: p.join(dataDir, 'plugins', 'consents.json'),
+    );
+    await pluginConsents.load();
+    final plugins = PluginRegistry()
+      ..consentGuard = (name, requested) =>
+          requested.isEmpty || pluginConsents.allGranted(name, requested);
+
     final externalProviders = [
       for (final c in cfg.memoryProviders)
         switch (c.kind) {
@@ -429,7 +447,6 @@ class TikoRuntime {
       maxEvents: 60,
       window: const Duration(minutes: 1),
     );
-    final plugins = PluginRegistry();
 
     // P1-06: immutable workspace persona (SOUL.md). Read once at startup;
     // the model sees it every turn but cannot rewrite it via tools.
@@ -648,6 +665,7 @@ class TikoRuntime {
       memoryNudge: memoryNudge,
       turnRedirects: TurnRedirectCoordinator(),
       botStore: botStore,
+      pluginConsents: pluginConsents,
       ragPipeline: rag,
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
@@ -655,6 +673,18 @@ class TikoRuntime {
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
+    // Plugin out-of-process dari config: di-spawn lalu tunduk pada consent
+    // (gagal consent → antrean pending, bukan error startup).
+    for (final pluginCfg in cfg.processPlugins) {
+      await rt._registerPluginWithConsent(
+        ProcessPlugin(
+          name: pluginCfg.name,
+          command: pluginCfg.command,
+          args: pluginCfg.args,
+        ),
+        pluginCfg.permissions,
+      );
+    }
     rt.skillLedger = SkillApprovalLedger(p.join(dataDir, 'skill_approvals.json'));
     await rt.skillLedger.load();
     // Status frontmatter YAML bukan record approval dan memang di-reset oleh
@@ -1319,6 +1349,10 @@ class TikoRuntime {
         if (botCmd != null) {
           return await _botCommand(botCmd, sessionId: sessionId);
         }
+        final pluginCmd = _parsePluginCommand(text);
+        if (pluginCmd != null) {
+          return await _pluginCommand(pluginCmd);
+        }
       }
       final session = await sessions.getOrCreate(
         sessionId,
@@ -1760,6 +1794,172 @@ class TikoRuntime {
       'provider': arg,
     });
     return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
+  }
+
+  /// Registrasi plugin dengan capability consent (rekomendasi #5).
+  /// Ditolak consent → masuk antrean pending + event `plugin.consent.required`.
+  Future<bool> _registerPluginWithConsent(
+    Plugin plugin,
+    List<String> permissions,
+  ) async {
+    final ok = await plugins.register(plugin, requestedPermissions: permissions);
+    if (ok) {
+      _pendingPlugins.remove(plugin.name);
+      events.emit('plugin.registered', {'plugin': plugin.name});
+      return true;
+    }
+    _pendingPlugins[plugin.name] = _PendingPlugin(
+      plugin: plugin,
+      permissions: List<String>.unmodifiable(permissions),
+    );
+    events.emit('plugin.consent.required', {
+      'plugin': plugin.name,
+      'permissions': permissions,
+    });
+    return false;
+  }
+
+  _PluginCommand? _parsePluginCommand(String text) {
+    final trimmed = text.trim();
+    if (!RegExp(r'^/plugin(?:\s|$)', caseSensitive: false).hasMatch(trimmed)) {
+      return null;
+    }
+    final rest = trimmed.substring('/plugin'.length).trim();
+    if (rest.isEmpty || rest == 'list') {
+      return const _PluginCommand(sub: 'list');
+    }
+    final parts = rest.split(RegExp(r'\s+'));
+    return _PluginCommand(
+      sub: parts.first.toLowerCase(),
+      id: parts.length > 1 ? parts[1].toLowerCase() : '',
+      rest: parts.length > 2 ? parts[2].toLowerCase() : '',
+    );
+  }
+
+  /// `/plugin` — status plugin + capability consent (rekomendasi #5).
+  Future<ChatRunResult> _pluginCommand(_PluginCommand cmd) async {
+    switch (cmd.sub) {
+      case 'list':
+        final registered = plugins.plugins.map((p) => p.name).toList()..sort();
+        final pending = _pendingPlugins.keys.toList()..sort();
+        final buf = StringBuffer(
+            '${registered.length} plugin terdaftar, '
+            '${pending.length} menunggu consent:\n');
+        for (final name in registered) {
+          buf.writeln('- $name [terdaftar, consent: '
+              '${pluginConsents.grantsOf(name).isEmpty ? '-' : pluginConsents.grantsOf(name).join("+")}]');
+        }
+        for (final name in pending) {
+          buf.writeln('- $name [menunggu consent: '
+              '${_pendingPlugins[name]!.permissions.join(", ")}]');
+        }
+        buf.write('\nSetujui: /plugin consent <nama> grant · '
+            'tarik: /plugin consent <nama> revoke');
+        return ChatRunResult(text: buf.toString(), success: true);
+
+      case 'info':
+        final pending = _pendingPlugins[cmd.id];
+        final registered = plugins.get(cmd.id);
+        if (registered == null && pending == null) {
+          return ChatRunResult(
+            text: 'Plugin "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        final buf = StringBuffer('Plugin ${cmd.id}:\n'
+            'status: ${registered != null ? 'terdaftar' : 'menunggu consent'}\n'
+            'consent: ${pluginConsents.grantsOf(cmd.id).isEmpty ? '(kosong)' : pluginConsents.grantsOf(cmd.id).join(", ")}');
+        if (pending != null) {
+          buf.write('\npermission diminta: ${pending.permissions.join(", ")}');
+        }
+        return ChatRunResult(text: buf.toString(), success: true);
+
+      case 'consent':
+        if (cmd.id.isEmpty || cmd.rest.isEmpty) {
+          return const ChatRunResult(
+            text: 'Pemakaian: /plugin consent <nama> grant|revoke',
+            success: false,
+            retryable: true,
+          );
+        }
+        if (cmd.rest == 'grant') {
+          final pending = _pendingPlugins[cmd.id];
+          final requested = pending?.permissions ?? const <String>[];
+          if (requested.isEmpty && !_pendingPlugins.containsKey(cmd.id)) {
+            return ChatRunResult(
+              text: 'Plugin "${cmd.id}" tidak menunggu consent. '
+                  'Plugin pending: '
+                  '${_pendingPlugins.keys.isEmpty ? "-" : _pendingPlugins.keys.join(", ")}.',
+              success: false,
+              retryable: true,
+            );
+          }
+          await pluginConsents.grant(cmd.id, requested);
+          events.emit('plugin.consent.granted', {
+            'plugin': cmd.id,
+            'permissions': requested.toList(),
+          });
+          if (pending != null) {
+            final ok = await plugins.register(
+              pending.plugin,
+              requestedPermissions: pending.permissions,
+            );
+            if (ok) {
+              _pendingPlugins.remove(cmd.id);
+              events.emit('plugin.registered', {'plugin': cmd.id});
+              return ChatRunResult(
+                text: 'Plugin "${cmd.id}" disetujui dan terdaftar '
+                    '(${requested.join(", ")}).',
+                success: true,
+              );
+            }
+            return ChatRunResult(
+              text: 'Consent "${cmd.id}" tersimpan, tetapi registrasi '
+                  'gagal (lihat log plugin).',
+              success: false,
+              retryable: true,
+            );
+          }
+          return ChatRunResult(
+            text: 'Consent "${cmd.id}" diperbarui.',
+            success: true,
+          );
+        }
+        if (cmd.rest == 'revoke') {
+          if (!pluginConsents.hasAnyGrant(cmd.id) &&
+              !_pendingPlugins.containsKey(cmd.id) &&
+              plugins.get(cmd.id) == null) {
+            return ChatRunResult(
+              text: 'Plugin "${cmd.id}" tidak dikenal.',
+              success: false,
+              retryable: true,
+            );
+          }
+          await pluginConsents.revoke(cmd.id);
+          await plugins.unregister(cmd.id);
+          events.emit('plugin.consent.revoked', {'plugin': cmd.id});
+          return ChatRunResult(
+            text: 'Consent plugin "${cmd.id}" dicabut; plugin '
+                'dibatalkan registrasinya.',
+            success: true,
+          );
+        }
+        return ChatRunResult(
+          text: 'Aksi consent tidak dikenal: ${cmd.rest}. '
+              'Gunakan grant atau revoke.',
+          success: false,
+          retryable: true,
+        );
+
+      default:
+        return ChatRunResult(
+          text: 'Sub-perintah /plugin tidak dikenal: ${cmd.sub}. '
+              'Gunakan: list, info, consent.',
+          success: false,
+          retryable: true,
+        );
+    }
   }
 
   _BotCommand? _parseBotCommand(String text) {
@@ -2459,4 +2659,17 @@ class _BotCommand {
   final String sub;
   final String id;
   final String rest;
+}
+
+class _PluginCommand {
+  const _PluginCommand({required this.sub, this.id = '', this.rest = ''});
+  final String sub;
+  final String id;
+  final String rest;
+}
+
+class _PendingPlugin {
+  const _PendingPlugin({required this.plugin, required this.permissions});
+  final Plugin plugin;
+  final List<String> permissions;
 }

@@ -148,6 +148,29 @@ class MemoryEmbedConfig {
 /// Administrator-declared external memory provider (Hermes-style memory
 /// providers). Credentials are references to env vars; raw secrets are
 /// never accepted in the YAML configuration.
+/// Plugin out-of-process yang di-spawn runtime saat startup (rekomendasi #5).
+/// Plugin berjalan sebagai proses OS terpisah dan tunduk pada capability
+/// consent sebelum hook-nya aktif.
+class ProcessPluginConfig {
+  const ProcessPluginConfig({
+    required this.name,
+    required this.command,
+    this.args = const [],
+    this.permissions = const [],
+  });
+
+  /// Id plugin (`^[a-z][a-z0-9-]{1,63}$`, sama dengan PluginManifest).
+  final String name;
+
+  /// Executable yang di-spawn (mis. `dart`, `python3`, binary bundle).
+  final String command;
+  final List<String> args;
+
+  /// Permission yang diminta (`tools.read`, `memory.write`, dst — kosakata
+  /// [PluginPermission]); tidak dikenal = gagal validasi (fail-closed).
+  final List<String> permissions;
+}
+
 class ExternalMemoryProviderConfig {
   const ExternalMemoryProviderConfig({
     required this.baseUrl,
@@ -263,6 +286,7 @@ class TikoConfig {
     this.decision = const DecisionConfig(),
     this.memoryEmbed = const MemoryEmbedConfig(),
     this.memoryProviders = const [],
+    this.processPlugins = const [],
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
     this.tavilyApiKeyRef,
     this.falApiKeyRef,
@@ -315,6 +339,9 @@ class TikoConfig {
 
   /// External memory providers fanned out together with the built-in store.
   final List<ExternalMemoryProviderConfig> memoryProviders;
+
+  /// Plugin out-of-process yang di-spawn saat startup (tunduk consent).
+  final List<ProcessPluginConfig> processPlugins;
   final String searxngBaseUrl;
 
   /// SecretRef `env:TAVILY_API_KEY` untuk cadangan Tavily (AGD-04 §7);
@@ -463,6 +490,9 @@ class TikoConfig {
 
     // ---- memory.external_providers ----
     final memoryProvidersCfg = _parseMemoryProviders(memorySec, issues);
+
+    // ---- plugins.process ----
+    final processPluginsCfg = _parseProcessPlugins(sec('plugins'), issues);
 
     if (providersSec['default_chat'] != null &&
         providersSec['default_chat'] is! String) {
@@ -1057,6 +1087,7 @@ class TikoConfig {
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
+      processPlugins: processPluginsCfg,
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -1186,6 +1217,89 @@ class TikoConfig {
           ? modelValue
           : 'nomic-embed-text',
     );
+  }
+
+  static List<ProcessPluginConfig> _parseProcessPlugins(
+    YamlMap sec,
+    List<ConfigIssue> issues,
+  ) {
+    final raw = sec['process'];
+    if (raw == null) return const [];
+    if (raw is! YamlList) {
+      issues.add(const ConfigIssue(
+        'plugins.process',
+        'harus berupa daftar mapping',
+      ));
+      return const [];
+    }
+    final knownPermissions = const {
+      'tools.read',
+      'tools.execute',
+      'memory.read',
+      'memory.write',
+      'network.fetch',
+      'sessions.read',
+    };
+    final namePattern = RegExp(r'^[a-z][a-z0-9-]{1,63}$');
+    final out = <ProcessPluginConfig>[];
+    for (var i = 0; i < raw.length; i++) {
+      final entry = raw[i];
+      if (entry is! YamlMap) {
+        issues.add(ConfigIssue('plugins.process[$i]', 'harus berupa mapping'));
+        continue;
+      }
+      final name = entry['name'];
+      if (name is! String || !namePattern.hasMatch(name)) {
+        issues.add(ConfigIssue(
+          'plugins.process[$i].name',
+          'harus cocok ^[a-z][a-z0-9-]{1,63}\$',
+        ));
+        continue;
+      }
+      final command = entry['command'];
+      if (command is! String || command.trim().isEmpty) {
+        issues.add(ConfigIssue(
+          'plugins.process[$i].command',
+          'harus berupa string yang tidak kosong',
+        ));
+        continue;
+      }
+      final args = <String>[
+        if (entry['args'] is YamlList)
+          for (final a in entry['args'] as YamlList) a.toString(),
+      ];
+      final permissions = <String>[];
+      final rawPerms = entry['permissions'];
+      var permsValid = true;
+      if (rawPerms is YamlList) {
+        for (final p in rawPerms) {
+          final perm = p.toString();
+          if (!knownPermissions.contains(perm)) {
+            issues.add(ConfigIssue(
+              'plugins.process[$i].permissions',
+              'permission tidak dikenal: "$perm"',
+            ));
+            permsValid = false;
+            continue;
+          }
+          permissions.add(perm);
+        }
+      } else if (rawPerms != null) {
+        issues.add(ConfigIssue(
+          'plugins.process[$i].permissions',
+          'harus berupa daftar string',
+        ));
+        permsValid = false;
+      }
+      if (!permsValid) continue;
+      out.add(ProcessPluginConfig(
+        name: name,
+        command: command.trim(),
+        args: args,
+        permissions: permissions,
+      ));
+    }
+    return out;
   }
 
   static List<ExternalMemoryProviderConfig> _parseMemoryProviders(

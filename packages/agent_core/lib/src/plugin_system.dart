@@ -162,6 +162,12 @@ class PluginRegistry {
   final List<Plugin> _plugins = [];
   final List<PluginEvent> events = [];
 
+  /// Capability consent gate (rekomendasi #5). Bila terpasang, [register]
+  /// menolak plugin yang permission-nya belum sepenuhnya disetujui
+  /// (fail-closed); penolakan dicatat sebagai [PluginEvent].
+  bool Function(String pluginName, Iterable<String> requestedPermissions)?
+      consentGuard;
+
   List<Plugin> get plugins => List<Plugin>.unmodifiable(_plugins);
 
   int get length => _plugins.length;
@@ -180,7 +186,20 @@ class PluginRegistry {
   ///
   /// The plugin becomes visible in the registry synchronously so cascaded
   /// registrations are immediately dispatchable.
-  Future<void> register(Plugin plugin) async {
+  ///
+  /// Returns false (and does not register) when a [consentGuard] is installed
+  /// and refuses the plugin's requested permissions.
+  Future<bool> register(Plugin plugin,
+      {Iterable<String> requestedPermissions = const []}) async {
+    final guard = consentGuard;
+    if (guard != null && !guard(plugin.name, requestedPermissions)) {
+      events.add(PluginEvent(
+        pluginName: plugin.name,
+        hook: PluginHook.onSessionStart,
+        detail: 'consent denied',
+      ));
+      return false;
+    }
     final existing = get(plugin.name);
     if (existing != null) {
       _plugins.remove(existing);
@@ -192,6 +211,7 @@ class PluginRegistry {
     }
     await _safe(plugin.init, plugin.name, PluginHook.onSessionStart,
         detail: 'init');
+    return true;
   }
 
   Future<void> unregister(String name) async {
