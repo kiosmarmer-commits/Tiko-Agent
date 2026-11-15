@@ -48,5 +48,6 @@ export 'src/image_providers.dart';
 export 'src/session_search_tool.dart';
 export 'src/tool_search.dart';
 export 'src/execute_code.dart';
+export 'src/code_execution.dart';
 export 'src/worktree.dart';
 export 'src/prediksi_tool.dart';

@@ -222,7 +222,24 @@ class LocalCodeExecutionProvider implements CodeExecutionProvider {
     Duration? timeout,
   }) async {
     final stopwatch = Stopwatch()..start();
-    
+
+    // P1 fail-closed: provider lokal menjalankan proses langsung di host,
+    // sehingga allowNetworkAccess/allowFileWrite/maxMemoryMb TIDAK dapat
+    // ditegakkan. Eksekusi lokal hanya diizinkan bila operator secara
+    // eksplisit membuka keduanya (opt-in penuh tanpa pembatasan).
+    if (!config.allowFileWrite || !config.allowNetworkAccess) {
+      return CodeExecutionResult(
+        success: false,
+        error:
+            'Eksekusi kode lokal (tanpa sandbox) ditolak (fail-closed): '
+            'flag allowFileWrite/allowNetworkAccess tidak dapat ditegakkan '
+            'di provider lokal. Set keduanya true pada CodeExecutionConfig '
+            'sebagai opt-in eksplisit, atau gunakan sandbox/docker.',
+        exitCode: -1,
+        executionTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+
     try {
       final env = <String, String>{};
       if (environment != null) {
@@ -472,8 +489,15 @@ class DockerCodeExecutionProvider implements CodeExecutionProvider {
           'run',
           '--rm',
           '-i',
-          '--network=none', // No network access by default
+          if (!config.allowNetworkAccess) '--network=none',
           '-m=${config.maxMemoryMb}m',
+          // P1: hardening setara sandbox docker modul lain.
+          '--pids-limit=64',
+          '--read-only',
+          '--tmpfs',
+          '/tmp',
+          '--cap-drop=ALL',
+          '--security-opt=no-new-privileges',
           '-v',
           '${tempDir.path}:/tmp/tiko_code',
           '-w',
@@ -578,7 +602,14 @@ class CodeExecutionTool implements Tool {
     if (s != null && s.kind != SandboxKind.none) {
       return SandboxedCodeExecutionProvider(s);
     }
-    return LocalCodeExecutionProvider();
+    // P1 fail-closed: tanpa sandbox nyata, eksekusi kode di host lokal
+    // ditolak. Jalur lokal hanya bisa lewat provider eksplisit
+    // (LocalCodeExecutionProvider) sebagai opt-in operator.
+    throw StateError(
+      'Eksekusi kode ditolak (fail-closed): tidak ada sandbox. '
+      'Konfigurasikan SandboxRunner (bubblewrap/docker) atau sediakan '
+      'CodeExecutionProvider eksplisit.',
+    );
   }
 
   String get name => 'code_execution';
@@ -754,7 +785,8 @@ class CodeExecutionToolFactory {
     if (effectiveSandbox != null && effectiveSandbox.kind != SandboxKind.none) {
       provider = SandboxedCodeExecutionProvider(effectiveSandbox);
     } else {
-      // Try docker
+      // P1: tanpa sandbox/docker, tool dibuat tanpa provider dan run()
+      // akan menolak eksekusi secara fail-closed.
       final dockerProvider = DockerCodeExecutionProvider();
       if (await dockerProvider.isAvailable()) {
         provider = dockerProvider;
