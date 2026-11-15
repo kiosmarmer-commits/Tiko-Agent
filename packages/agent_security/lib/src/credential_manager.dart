@@ -40,6 +40,7 @@ class CredentialManager {
   /// JSON, and an existing plaintext file is migrated once. When unset, the
   /// plaintext-JSON + chmod 600 behavior is preserved so existing
   /// deployments keep working.
+  final String? passphrase;
   final RotationStrategy rotationStrategy;
   final int maxRetries;
   final Duration retryDelay;
