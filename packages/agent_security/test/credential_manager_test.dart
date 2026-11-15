@@ -74,6 +74,62 @@ void main() {
     final a = await mgr.getCredential(provider: 'openai');
     final b = await mgr.getCredential(provider: 'openai');
     expect(a!.id, isNot(equals(b!.id)));
-    expect(RegExp(r'^[0-9a-f]{32}$').hasMatch(a.id), isTrue);
+    expect(RegExp(r'^[0-9a-f]{32}
+).hasMatch(a.id), isTrue);
+  });
+
+  test('enkripsi at-rest: payload disegel TSS2 tanpa plaintext', () async {
+    final mgr = CredentialManager(
+      storagePath: storagePath,
+      passphrase: 'passphrase-tes',
+    );
+    await mgr.initialize();
+    await mgr.addCredential(provider: 'openai', key: 'sk-rahasia');
+    final raw = await File(storagePath).readAsBytes();
+    expect(raw[0], 0x54); // 'T'
+    expect(raw[1], 0x53); // 'S'
+    expect(raw[2], 0x53); // 'S'
+    expect(raw[3], 0x32); // '2'
+    expect(String.fromCharCodes(raw), isNot(contains('sk-rahasia')));
+
+    final fresh = CredentialManager(
+      storagePath: storagePath,
+      passphrase: 'passphrase-tes',
+    );
+    await fresh.initialize();
+    final entry = await fresh.getCredential(provider: 'openai');
+    expect(entry, isNotNull);
+    expect(entry!.key, 'sk-rahasia');
+  });
+
+  test('file terenkripsi tanpa passphrase ditolak saat initialize', () async {
+    final mgr = CredentialManager(
+      storagePath: storagePath,
+      passphrase: 'passphrase-tes',
+    );
+    await mgr.initialize();
+    await mgr.addCredential(provider: 'openai', key: 'sk-rahasia');
+    final locked = CredentialManager(storagePath: storagePath);
+    await expectLater(locked.initialize(), throwsA(isA<StateError>()));
+  });
+
+  test('plaintext legacy dimigrasi ke terenkripsi saat passphrase diset',
+      () async {
+    await File(storagePath).writeAsString(
+      '{"openai":[{"id":"abc","provider":"openai","key":"sk-lama",'
+      '"name":"k1","metadata":{},"createdAt":"2026-11-15T00:00:00.000Z",'
+      '"lastUsed":null,"usageCount":0,"failures":0}]}',
+    );
+    final mgr = CredentialManager(
+      storagePath: storagePath,
+      passphrase: 'passphrase-tes',
+    );
+    await mgr.initialize();
+    final raw = await File(storagePath).readAsBytes();
+    expect(String.fromCharCodes(raw).startsWith('TSS2'), isTrue);
+    expect(String.fromCharCodes(raw), isNot(contains('sk-lama')));
+    final entry = await mgr.getCredential(provider: 'openai');
+    expect(entry, isNotNull);
+    expect(entry!.key, 'sk-lama');
   });
 }

@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:agent_core/agent_core.dart';
 
+import 'secret_store.dart';
+
 /// Result of a credential availability check.
 class CredentialCheckResult {
   const CredentialCheckResult({
@@ -22,17 +24,24 @@ class CredentialCheckResult {
 /// Credential pools allow distributing API calls across multiple keys
 /// for the same provider, with automatic rotation on rate limits or failures.
 class CredentialManager {
+  /// Passphrase enkripsi at-rest. Default dari environment
+  /// `TIKO_SECRET_PASSPHRASE`. Kosong berarti format plaintext legacy.
   CredentialManager({
     required this.storagePath,
     this.rotationStrategy = RotationStrategy.roundRobin,
     this.maxRetries = 3,
     this.retryDelay = const Duration(seconds: 1),
-  });
+    String? passphrase,
+  }) : passphrase =
+            passphrase ?? Platform.environment['TIKO_SECRET_PASSPHRASE'] ?? '';
 
   final String storagePath;
   final RotationStrategy rotationStrategy;
   final int maxRetries;
   final Duration retryDelay;
+
+  /// Kunci payload di dalam SecretStore terenkripsi (P1-A).
+  static const String _payloadKey = 'credentials';
 
   /// Map of provider -> list of credential entries
   final Map<String, List<CredentialEntry>> _credentials = {};
@@ -52,20 +61,23 @@ class CredentialManager {
     try {
       final file = File(storagePath);
       if (await file.exists()) {
-        final content = await file.readAsString();
-        final data = jsonDecode(content) as Map<String, dynamic>;
-        
-        for (final entry in data.entries) {
+        final loaded = await _loadData(file);
+
+        for (final entry in loaded.data.entries) {
           final provider = entry.key;
-          final creds = entry.value as List<dynamic>;
+          final creds = entry.value;
           _credentials[provider] = creds
-              .map((c) => CredentialEntry.fromJson(c as Map<String, dynamic>))
+              .map((c) => CredentialEntry.fromJson(c))
               .toList();
           _currentIndices[provider] = 0;
           _rateLimitTrackers[provider] = RateLimitTracker();
         }
         if (!Platform.isWindows) {
           await _tightenPermissions(file);
+        }
+        // Migrasi satu kali plaintext legacy -> terenkripsi (P1-A).
+        if (!loaded.sealed && passphrase.isNotEmpty) {
+          await _save();
         }
       }
       _initialized = true;
@@ -353,6 +365,57 @@ class CredentialManager {
     return null;
   }
 
+  /// Magic byte file terenkripsi SecretStore (TSS2).
+  static bool _hasSealedMagic(List<int> raw) =>
+      raw.length >= 4 &&
+      raw[0] == 0x54 &&
+      raw[1] == 0x53 &&
+      raw[2] == 0x53 &&
+      raw[3] == 0x32;
+
+  /// Muat data kredensial dari storage. Mendukung dua format (P1-A):
+  /// 1. Terenkripsi (TSS2, SecretStore Argon2id + XChaCha20-Poly1305).
+  /// 2. Plaintext JSON legacy — dibaca sekali; dimigrasi ke format
+  ///    terenkripsi oleh pemanggil bila passphrase tersedia.
+  Future<({Map<String, List<Map<String, dynamic>>> data, bool sealed})>
+  _loadData(File file) async {
+    final raw = await file.readAsBytes();
+    final sealed = _hasSealedMagic(raw);
+    if (sealed && passphrase.isEmpty) {
+      throw StateError(
+        'File kredensial terenkripsi (TSS2) ditemukan tetapi '
+        'TIKO_SECRET_PASSPHRASE tidak diset — set passphrase untuk membaca.',
+      );
+    }
+    if (sealed) {
+      final store = SecretStore(path: storagePath, passphrase: passphrase);
+      final payload = await store.read(_payloadKey);
+      if (payload == null) return (data: {}, sealed: true);
+      return (data: _decodePayload(payload), sealed: true);
+    }
+    final content = utf8.decode(raw);
+    final decoded = jsonDecode(content) as Map<String, dynamic>;
+    final data = <String, List<Map<String, dynamic>>>{};
+    for (final entry in decoded.entries) {
+      data[entry.key] = (entry.value as List<dynamic>)
+          .map((c) => (c as Map).cast<String, dynamic>())
+          .toList();
+    }
+    return (data: data, sealed: false);
+  }
+
+  Map<String, List<Map<String, dynamic>>> _decodePayload(String payload) {
+    final decoded = jsonDecode(payload) as Map<String, dynamic>;
+    return decoded.map(
+      (k, v) => MapEntry(
+        k,
+        (v as List<dynamic>)
+            .map((c) => (c as Map).cast<String, dynamic>())
+            .toList(),
+      ),
+    );
+  }
+
   /// Tighten loose permissions on an existing storage file (B-02).
   Future<void> _tightenPermissions(File file) async {
     final stat = await file.stat();
@@ -375,6 +438,23 @@ class CredentialManager {
     }
     final file = File(storagePath);
     await file.parent.create(recursive: true);
+    if (passphrase.isNotEmpty) {
+      // Enkripsi at-rest (P1-A): payload disegel SecretStore
+      // (Argon2id + XChaCha20-Poly1305) ke file tmp lalu direname atomik,
+      // sehingga plaintext tidak pernah berada di storagePath.
+      final tmpPath = '$storagePath.tmp';
+      final tmpFile = File(tmpPath);
+      if (await tmpFile.exists()) await tmpFile.delete();
+      final tmpStore = SecretStore(path: tmpPath, passphrase: passphrase);
+      await tmpStore.write(_payloadKey, jsonEncode(data));
+      try {
+        await tmpFile.rename(storagePath);
+      } on FileSystemException {
+        if (await file.exists()) await file.delete();
+        await tmpFile.rename(storagePath);
+      }
+      return;
+    }
     final tmp = File('$storagePath.tmp');
     await tmp.writeAsString(jsonEncode(data), flush: true);
     if (!Platform.isWindows) {
