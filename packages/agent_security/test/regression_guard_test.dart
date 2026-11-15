@@ -63,17 +63,23 @@ List<File> _productionSources(Directory root) {
   return files;
 }
 
-/// Body of a method, delimited by its closing brace at two-space indent.
+/// Body of a method, up to its closing brace at class-member indent.
+///
+/// Delimits on a line that is exactly `  }`. Matching the first `\n  }`
+/// substring instead stops at a multi-line parameter list (`  }) async* {`),
+/// which truncates the body and makes later assertions pass vacuously.
 String _methodBody(String source, String signature) {
   final start = source.indexOf(signature);
   if (start < 0) {
     throw StateError('signature not found: $signature');
   }
-  final end = source.indexOf('\n  }', start);
-  if (end < 0) {
-    throw StateError('closing brace not found for: $signature');
+  final lines = source.substring(start).split('\n');
+  for (var i = 1; i < lines.length; i++) {
+    if (lines[i] == '  }') {
+      return lines.sublist(0, i).join('\n');
+    }
   }
-  return source.substring(start, end);
+  throw StateError('closing brace not found for: $signature');
 }
 
 String _flutterClient() {
@@ -130,6 +136,18 @@ void main() {
     expect(body, contains('queryParameters'));
     expect(body, contains('ticket'));
     expect(source, contains('_requestStreamTicket'));
+  });
+
+  test('method extraction spans multi-line parameter lists', () {
+    const sample = 'class C {\n'
+        '  Stream<int> f(\n'
+        '    int a, {\n'
+        '    int b = 1,\n'
+        '  }) async* {\n'
+        '    yield a + b;\n'
+        '  }\n'
+        '}\n';
+    expect(_methodBody(sample, 'Stream<int> f('), contains('yield a + b;'));
   });
 
   test('Flutter read endpoints surface HTTP errors', () {
