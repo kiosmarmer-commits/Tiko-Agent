@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:agent_core/agent_core.dart';
 
+import 'secret_store.dart';
+
 /// Result of a credential availability check.
 class CredentialCheckResult {
   const CredentialCheckResult({
