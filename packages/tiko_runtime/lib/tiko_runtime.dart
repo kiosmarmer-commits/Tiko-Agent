@@ -15,6 +15,7 @@ export 'src/api_token_store.dart';
 export 'src/self_learning_engine.dart';
 export 'src/reflection_loop.dart';
 export 'src/memory_nudge.dart';
+export 'src/turn_redirect.dart';
 export 'src/team_tool.dart';
 export 'src/cross_process_lock.dart';
 export 'src/kanban_board.dart';

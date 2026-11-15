@@ -280,6 +280,7 @@ class TikoConfig {
     this.sandboxDockerPersistent = false,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
+    this.interruptRedirect = true,
   });
 
   final String profile;
@@ -307,6 +308,10 @@ class TikoConfig {
 
   /// Anggaran karakter gabungan MEMORY.md + USER.md.
   final int memoryCuratedCharBudget;
+
+  /// Interrupt-and-redirect: pesan baru saat sesi sibuk memotong turn
+  /// aktif secara kooperatif lalu diproses setelah lock lepas.
+  final bool interruptRedirect;
 
   /// External memory providers fanned out together with the built-in store.
   final List<ExternalMemoryProviderConfig> memoryProviders;
@@ -1056,6 +1061,9 @@ class TikoConfig {
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
           intOf(memorySec['curated_char_budget'], 3575),
+      interruptRedirect: agent['interrupt_redirect'] is! bool
+          ? true
+          : (agent['interrupt_redirect'] as bool),
       searxngBaseUrl: str(search['searxng_base_url'], 'http://127.0.0.1:8080'),
       tavilyApiKeyRef:
           tavilyKeyValue is String && tavilyKeyValue.startsWith('env:')

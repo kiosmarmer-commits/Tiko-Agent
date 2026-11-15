@@ -22,6 +22,7 @@ import 'reflection_loop.dart';
 import 'kanban_board.dart';
 import 'self_learning_engine.dart';
 import 'memory_nudge.dart';
+import 'turn_redirect.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
@@ -115,6 +116,7 @@ class TikoRuntime {
     required this.layeredMemory,
     required this.curatedMemory,
     required this.memoryNudge,
+    required this.turnRedirects,
     required this.ragPipeline,
     this.reflectionEngine,
     this.personaPrompt,
@@ -185,6 +187,9 @@ class TikoRuntime {
   /// Nudge periodik + penerapan blok memory-ops dari balasan model.
   final MemoryNudgeEngine memoryNudge;
 
+  /// Interrupt-and-redirect: pesan baru saat sesi sibuk memotong turn aktif.
+  final TurnRedirectCoordinator turnRedirects;
+
   /// Hybrid RAG pipeline (dense + BM25 + RRF) shared with the vector index.
   final RagPipeline ragPipeline;
 
@@ -196,6 +201,9 @@ class TikoRuntime {
 
   /// Per-session turns accumulated for the reflection stage.
   final Map<String, List<ConversationTurn>> _reflectionTurns = {};
+
+  /// Override provider chat per sesi (`/model <id>`); null = ikut router.
+  final Map<String, String> _sessionModel = {};
   late final TirithSecurityLayer tirith;
   late final CredentialManager credentialManager;
   late final FallbackManager fallbackManager;
@@ -629,6 +637,7 @@ class TikoRuntime {
       layeredMemory: layeredMemory,
       curatedMemory: curatedMemory,
       memoryNudge: memoryNudge,
+      turnRedirects: TurnRedirectCoordinator(),
       ragPipeline: rag,
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
@@ -1228,11 +1237,46 @@ class TikoRuntime {
     Set<String>? toolFilter,
     void Function(String delta)? onTextDelta,
     bool internalCommand = false,
+    String? interruptNote,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
     // luarnya — SessionLock tidak re-entrant.
     final locked = !internalCommand;
     if (locked && !_lock.tryAcquire(sessionId)) {
+      // Interrupt-and-redirect: alih-alih menolak, batalkan turn aktif
+      // secara kooperatif dan tunggu lock lepas (bounded).
+      if (!internalCommand && config.interruptRedirect) {
+        final hadLiveTurn = cancellations.tokenOf(sessionId) != null;
+        final ready = await turnRedirects.interruptAndWait(
+          cancelActive: () => cancellations.cancel(sessionId),
+          isBusy: () => _lock.isBusy(sessionId),
+        );
+        if (ready) {
+          if (hadLiveTurn) {
+            events.emit('turn.interrupted', {
+              'session': sessionId,
+              'channel': channel,
+            });
+          }
+          return chatWithStatus(
+            text,
+            sessionId: sessionId,
+            channel: channel,
+            userKey: userKey,
+            confirm: confirm,
+            gateOverride: gateOverride,
+            configOverride: configOverride,
+            toolFilter: toolFilter,
+            onTextDelta: onTextDelta,
+            internalCommand: internalCommand,
+            interruptNote: hadLiveTurn
+                ? 'Turn sebelumnya diinterupsi oleh pesan baru dari '
+                    'pengguna. Abaikan arah turn lama dan kerjakan '
+                    'permintaan terbaru ini.'
+                : null,
+          );
+        }
+      }
       return const ChatRunResult(
         text: 'Sesi masih memproses pesan sebelumnya.',
         success: false,
@@ -1253,6 +1297,13 @@ class TikoRuntime {
         }
         if (text.trim() == '/memory') {
           return _curatedMemoryStatus();
+        }
+        final modelCmd = _parseModelCommand(text);
+        if (modelCmd != null) {
+          return _modelCommand(modelCmd, sessionId: sessionId);
+        }
+        if (text.trim() == '/tools') {
+          return _toolsCommand();
         }
       }
       final session = await sessions.getOrCreate(
@@ -1312,6 +1363,7 @@ class TikoRuntime {
           nudgeDirective: memoryNudge.shouldNudge(sessionId)
               ? MemoryNudgeEngine.directive
               : null,
+          interruptNote: interruptNote,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
         ),
@@ -1465,6 +1517,7 @@ class TikoRuntime {
         ),
         session,
         cancelToken: cancelToken,
+        preferredProviderId: _sessionModel[sessionId],
       );
       var answer = replies.join('\n');
       final curatedReport = await memoryNudge.processReply(answer);
@@ -1641,6 +1694,67 @@ class TikoRuntime {
       toolCallCount: authored.toolCallCount,
       toolCallTraces: authored.toolCallTraces,
     );
+  }
+
+  /// Parse perintah `/model [id|default|list]`; null bila bukan /model.
+  _ModelCommand? _parseModelCommand(String text) {
+    final trimmed = text.trim();
+    if (!RegExp(r'^/model(?:\s|$)', caseSensitive: false).hasMatch(trimmed)) {
+      return null;
+    }
+    final arg = trimmed.substring('/model'.length).trim();
+    return _ModelCommand(arg: arg.isEmpty ? 'list' : arg);
+  }
+
+  /// `/model` — parity Hermes: lihat/switch provider chat runtime.
+  ChatRunResult _modelCommand(_ModelCommand cmd, {required String sessionId}) {
+    final ids = _router.providers.keys.toList()..sort();
+    final arg = cmd.arg.toLowerCase();
+    if (arg == 'list') {
+      final current = _sessionModel[sessionId] ??
+          _router.defaultProviderId ??
+          ids.first;
+      final buf = StringBuffer('Provider tersedia (sesi ini: $current):\n');
+      for (final id in ids) {
+        final health = _router.health[id];
+        final state = health?.state ?? 'unknown';
+        buf.writeln('- $id (health=$state)');
+      }
+      buf.write('\nGanti: /model <id> · kembali default: /model default');
+      return ChatRunResult(text: buf.toString(), success: true);
+    }
+    if (arg == 'default') {
+      _sessionModel.remove(sessionId);
+      return const ChatRunResult(
+        text: 'Sesi ini kembali memakai provider default dari router.',
+        success: true,
+      );
+    }
+    if (!_router.providers.containsKey(arg)) {
+      return ChatRunResult(
+        text: 'Provider "$arg" tidak dikenal. Provider tersedia: '
+            '${ids.join(", ")}.',
+        success: false,
+        retryable: true,
+      );
+    }
+    _sessionModel[sessionId] = arg;
+    events.emit('model.switched', {
+      'session': sessionId,
+      'provider': arg,
+    });
+    return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
+  }
+
+  /// `/tools` — daftar tool registry + tingkat risikonya.
+  ChatRunResult _toolsCommand() {
+    final specs = registry.specs.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final buf = StringBuffer('${specs.length} tool terdaftar:\n');
+    for (final s in specs) {
+      buf.writeln('- ${s.name} (risk=${s.risk})');
+    }
+    return ChatRunResult(text: buf.toString(), success: true);
   }
 
   /// `/memory` — tampilkan isi memori terkurasi + pemakaian anggaran.
@@ -2108,4 +2222,9 @@ Map<String, String> _parseOtelHeaders(String raw) {
     if (key.isNotEmpty && value.isNotEmpty) headers[key] = value;
   }
   return headers;
+}
+
+class _ModelCommand {
+  const _ModelCommand({required this.arg});
+  final String arg;
 }
