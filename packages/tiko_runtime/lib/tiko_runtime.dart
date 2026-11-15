@@ -19,3 +19,4 @@ export 'src/turn_redirect.dart';
 export 'src/team_tool.dart';
 export 'src/cross_process_lock.dart';
 export 'src/kanban_board.dart';
+export 'src/bot_mode.dart';

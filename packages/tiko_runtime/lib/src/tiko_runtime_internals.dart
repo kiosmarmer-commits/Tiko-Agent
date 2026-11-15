@@ -257,6 +257,7 @@ class RuntimeContext extends ContextBuilder {
     this.curatedMemoryBlock,
     this.nudgeDirective,
     this.interruptNote,
+    this.botPersona,
     this.toolSubsetThreshold = 24,
     this.toolSubsetK = 20,
   });
@@ -266,6 +267,9 @@ class RuntimeContext extends ContextBuilder {
   final String? curatedMemoryBlock;
   final String? nudgeDirective;
   final String? interruptNote;
+
+  /// Persona bot aktif untuk sesi ini (Bot Mode); null bila tanpa bot.
+  final String? botPersona;
   final ReflectionEngine? reflectionEngine;
   final RagPipeline? ragPipeline;
   final LayeredMemory? layeredMemory;
@@ -295,6 +299,10 @@ class RuntimeContext extends ContextBuilder {
     var system = (persona == null || persona.isEmpty)
         ? ctx.systemPrompt
         : '${ctx.systemPrompt}\n\nPersona (SOUL.md, immutable):\n$persona';
+    final bot = botPersona;
+    if (bot != null && bot.isNotEmpty) {
+      system = '$system\n\nBot persona (wajib diikuti untuk sesi ini):\n$bot';
+    }
     final curated = curatedMemoryBlock;
     if (curated != null && curated.isNotEmpty) {
       system = '$system\n\nMemori terkurasi lintas sesi:\n$curated';
