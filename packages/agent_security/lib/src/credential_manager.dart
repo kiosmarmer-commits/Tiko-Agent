@@ -27,9 +27,19 @@ class CredentialManager {
     this.rotationStrategy = RotationStrategy.roundRobin,
     this.maxRetries = 3,
     this.retryDelay = const Duration(seconds: 1),
-  });
+    String? passphrase,
+  }) : passphrase =
+          passphrase ?? Platform.environment['TIKO_SECRET_PASSPHRASE'];
 
   final String storagePath;
+
+  /// Passphrase for at-rest encryption (B-02). Defaults to the
+  /// TIKO_SECRET_PASSPHRASE environment variable. When set (non-empty),
+  /// the storage file is sealed with the audited [SecretStore]
+  /// (XChaCha20-Poly1305 under an Argon2id-derived key) instead of plaintext
+  /// JSON, and an existing plaintext file is migrated once. When unset, the
+  /// plaintext-JSON + chmod 600 behavior is preserved so existing
+  /// deployments keep working.
   final RotationStrategy rotationStrategy;
   final int maxRetries;
   final Duration retryDelay;
@@ -52,8 +62,7 @@ class CredentialManager {
     try {
       final file = File(storagePath);
       if (await file.exists()) {
-        final content = await file.readAsString();
-        final data = jsonDecode(content) as Map<String, dynamic>;
+        final data = await _readStorage(file);
         
         for (final entry in data.entries) {
           final provider = entry.key;
@@ -66,6 +75,11 @@ class CredentialManager {
         }
         if (!Platform.isWindows) {
           await _tightenPermissions(file);
+        }
+        // Migrate plaintext storage to the sealed format once at startup
+        // when a passphrase is configured (B-02).
+        if (_encryptionEnabled && !_hasStoreMagic(await file.readAsBytes())) {
+          await _save();
         }
       }
       _initialized = true;
@@ -353,6 +367,39 @@ class CredentialManager {
     return null;
   }
 
+  static const String _storageKey = 'credentials';
+  static const String _storeMagic = 'TSS2';
+
+  bool get _encryptionEnabled => passphrase != null && passphrase!.isNotEmpty;
+
+  bool _hasStoreMagic(List<int> raw) {
+    if (raw.length < _storeMagic.length) return false;
+    return utf8.decode(
+          raw.sublist(0, _storeMagic.length),
+          allowMalformed: true,
+        ) ==
+        _storeMagic;
+  }
+
+  /// Load the provider->entries JSON map from storage, transparently
+  /// decrypting the SecretStore v2 format when present.
+  Future<Map<String, dynamic>> _readStorage(File file) async {
+    final raw = await file.readAsBytes();
+    if (_hasStoreMagic(raw)) {
+      if (!_encryptionEnabled) {
+        throw StateError(
+          'File kredensial terenkripsi tetapi passphrase tidak tersedia '
+          '(setel TIKO_SECRET_PASSPHRASE atau teruskan passphrase).',
+        );
+      }
+      final store = SecretStore(path: storagePath, passphrase: passphrase!);
+      final payload = await store.read(_storageKey);
+      if (payload == null || payload.isEmpty) return {};
+      return jsonDecode(payload) as Map<String, dynamic>;
+    }
+    return jsonDecode(utf8.decode(raw)) as Map<String, dynamic>;
+  }
+
   /// Tighten loose permissions on an existing storage file (B-02).
   Future<void> _tightenPermissions(File file) async {
     final stat = await file.stat();
@@ -375,6 +422,18 @@ class CredentialManager {
     }
     final file = File(storagePath);
     await file.parent.create(recursive: true);
+    if (_encryptionEnabled) {
+      final store = SecretStore(path: storagePath, passphrase: passphrase!);
+      final raw =
+          await file.exists() ? await file.readAsBytes() : const <int>[];
+      if (raw.isNotEmpty && !_hasStoreMagic(raw)) {
+        // Legacy plaintext file: remove it so SecretStore does not mistake
+        // it for a legacy XOR store, then write the sealed payload.
+        await file.delete();
+      }
+      await store.write(_storageKey, jsonEncode(data));
+      return;
+    }
     final tmp = File('$storagePath.tmp');
     await tmp.writeAsString(jsonEncode(data), flush: true);
     if (!Platform.isWindows) {

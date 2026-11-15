@@ -39,6 +39,7 @@
 | 27 | `LEARN-CURATED-MEMORY-2026-11-15.md` | Hermes-parity: perintah `/learn` (authoring skill dari dir/URL/notes/percakapan, validasi berlapis) + memori terkurasi MEMORY.md/USER.md dengan nudge periodik, protokol memory-ops, PromptGuard fail-closed, anggaran karakter |
 | 28 | `INTERRUPT-REDIRECT-2026-11-15.md` | Hermes-parity: interrupt-and-redirect — pesan baru saat sesi sibuk memotong turn aktif secara kooperatif (bounded wait), system note pengarahan, event `turn.interrupted`, config `agent.interrupt_redirect` |
 | 29 | `SUPPLY-CHAIN-HARDENING-2026-11-15.md` | Audit supply-chain: pemindaian pubspec.lock, OSV batch scan, integritas sha256 pin vs registry, pemeriksaan usia rilis, attestation SLSA build provenance CI |
+| 30 | `CREDENTIAL-ENCRYPTION-2026-11-15.md` | B-02 lanjutan: enkripsi at-rest `credentials.json` via SecretStore (XChaCha20-Poly1305 + Argon2id) dengan `TIKO_SECRET_PASSPHRASE`, migrasi plaintext sekali saat startup, backward compatible tanpa passphrase |
 | 30 | `BOT-MODE-2026-11-15.md` | Hermes-parity: Bot Mode — persona bot persisten per chat (`/bot` list/new/persona/model/use/off/show/delete), BotStore JSON atomik, injeksi persona + model per bot, binding sesi persisten |
 | 31 | `PLUGIN-ISOLATION-2026-11-15.md` | Hermes-parity: plugin isolation — capability consent fail-closed (`PluginConsentStore`, guard di `PluginRegistry.register`), plugin out-of-process (`ProcessPlugin`, protokol JSON per baris, timeout + crash containment), config `plugins.process`, slash `/plugin` list/info/consent |
 
