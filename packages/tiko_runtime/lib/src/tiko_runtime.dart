@@ -23,6 +23,7 @@ import 'kanban_board.dart';
 import 'self_learning_engine.dart';
 import 'memory_nudge.dart';
 import 'turn_redirect.dart';
+import 'bot_mode.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
@@ -117,6 +118,7 @@ class TikoRuntime {
     required this.curatedMemory,
     required this.memoryNudge,
     required this.turnRedirects,
+    required this.botStore,
     required this.ragPipeline,
     this.reflectionEngine,
     this.personaPrompt,
@@ -204,6 +206,9 @@ class TikoRuntime {
 
   /// Override provider chat per sesi (`/model <id>`); null = ikut router.
   final Map<String, String> _sessionModel = {};
+
+  /// Persona bot persisten per chat (`/bot use <id>`); null = tanpa bot.
+  final BotStore botStore;
   late final TirithSecurityLayer tirith;
   late final CredentialManager credentialManager;
   late final FallbackManager fallbackManager;
@@ -365,6 +370,10 @@ class TikoRuntime {
       ),
       guard: const PromptGuard(),
     );
+
+    // Bot Mode: persona persisten per chat (Hermes-parity).
+    final botStore = BotStore(dataDir: dataDir);
+    await botStore.load();
 
     final externalProviders = [
       for (final c in cfg.memoryProviders)
@@ -638,6 +647,7 @@ class TikoRuntime {
       curatedMemory: curatedMemory,
       memoryNudge: memoryNudge,
       turnRedirects: TurnRedirectCoordinator(),
+      botStore: botStore,
       ragPipeline: rag,
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
@@ -1305,6 +1315,10 @@ class TikoRuntime {
         if (text.trim() == '/tools') {
           return _toolsCommand();
         }
+        final botCmd = _parseBotCommand(text);
+        if (botCmd != null) {
+          return await _botCommand(botCmd, sessionId: sessionId);
+        }
       }
       final session = await sessions.getOrCreate(
         sessionId,
@@ -1364,6 +1378,7 @@ class TikoRuntime {
               ? MemoryNudgeEngine.directive
               : null,
           interruptNote: interruptNote,
+          botPersona: botStore.botFor(sessionId)?.persona,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
         ),
@@ -1517,7 +1532,8 @@ class TikoRuntime {
         ),
         session,
         cancelToken: cancelToken,
-        preferredProviderId: _sessionModel[sessionId],
+        preferredProviderId:
+            _sessionModel[sessionId] ?? botStore.botFor(sessionId)?.model,
       );
       var answer = replies.join('\n');
       final curatedReport = await memoryNudge.processReply(answer);
@@ -1744,6 +1760,215 @@ class TikoRuntime {
       'provider': arg,
     });
     return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
+  }
+
+  _BotCommand? _parseBotCommand(String text) {
+    final trimmed = text.trim();
+    if (!RegExp(r'^/bot(?:\s|$)', caseSensitive: false).hasMatch(trimmed)) {
+      return null;
+    }
+    final rest = trimmed.substring('/bot'.length).trim();
+    if (rest.isEmpty || rest == 'list') {
+      return const _BotCommand(sub: 'list');
+    }
+    final parts = rest.split(RegExp(r'\s+'));
+    final sub = parts.first.toLowerCase();
+    final id = parts.length > 1 ? parts[1].toLowerCase() : '';
+    final tail = parts.length > 2
+        ? trimmed.substring(trimmed.indexOf(parts[1]) + parts[1].length).trim()
+        : '';
+    return _BotCommand(sub: sub, id: id, rest: tail);
+  }
+
+  /// `/bot` — Bot Mode: persona persisten per chat (Hermes-parity).
+  Future<ChatRunResult> _botCommand(
+    _BotCommand cmd, {
+    required String sessionId,
+  }) async {
+    switch (cmd.sub) {
+      case 'list':
+        final bots = botStore.list();
+        final active = botStore.boundBotId(sessionId);
+        if (bots.isEmpty) {
+          return const ChatRunResult(
+            text: 'Belum ada bot. Buat: /bot new <id> <nama>\n'
+                'Lalu atur persona: /bot persona <id> <deskripsi persona>\n'
+                'Aktifkan di sesi ini: /bot use <id>',
+            success: true,
+          );
+        }
+        final buf = StringBuffer('Bot terdaftar (sesi ini: '
+            '${active ?? 'tanpa bot'}):\n');
+        for (final b in bots) {
+          buf.writeln('- ${b.id} — "${b.name}"'
+              '${b.model != null ? ' (model=${b.model})' : ''}'
+              '${b.id == active ? ' [aktif]' : ''}');
+        }
+        buf.write('\nAktifkan: /bot use <id> · nonaktif: /bot off · '
+            'detail: /bot show <id>');
+        return ChatRunResult(text: buf.toString(), success: true);
+
+      case 'new':
+        if (cmd.id.isEmpty || cmd.rest.isEmpty) {
+          return const ChatRunResult(
+            text: 'Pemakaian: /bot new <id> <nama>. '
+                'id: huruf kecil, angka, "-" atau "_".',
+            success: false,
+            retryable: true,
+          );
+        }
+        if (!BotProfile.isValidId(cmd.id)) {
+          return ChatRunResult(
+            text: 'id bot "${cmd.id}" tidak valid — gunakan huruf kecil, '
+                'angka, "-" atau "_" (maks 64 karakter).',
+            success: false,
+            retryable: true,
+          );
+        }
+        if (botStore.get(cmd.id) != null) {
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" sudah ada. Lihat: /bot show ${cmd.id}',
+            success: false,
+            retryable: true,
+          );
+        }
+        final name = cmd.rest.replaceAll('"', '').trim();
+        await botStore.create(id: cmd.id, name: name);
+        events.emit('bot.created', {'bot': cmd.id, 'session': sessionId});
+        return ChatRunResult(
+          text: 'Bot "${cmd.id}" ($name) dibuat. Tetapkan persona: '
+              '/bot persona ${cmd.id} <deskripsi persona> · '
+              'opsional model: /bot model ${cmd.id} <provider|default> · '
+              'aktifkan: /bot use ${cmd.id}',
+          success: true,
+        );
+
+      case 'persona':
+        if (botStore.get(cmd.id) == null || cmd.rest.isEmpty) {
+          return ChatRunResult(
+            text: cmd.rest.isEmpty
+                ? 'Pemakaian: /bot persona <id> <deskripsi persona>'
+                : 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        await botStore.update(cmd.id, (b) => b.copyWith(persona: cmd.rest));
+        events.emit('bot.updated', {'bot': cmd.id, 'field': 'persona'});
+        return ChatRunResult(
+          text: 'Persona bot "${cmd.id}" diperbarui '
+              '(${cmd.rest.length} karakter).',
+          success: true,
+        );
+
+      case 'model':
+        final bot = botStore.get(cmd.id);
+        if (bot == null || cmd.rest.isEmpty) {
+          return ChatRunResult(
+            text: cmd.rest.isEmpty
+                ? 'Pemakaian: /bot model <id> <provider|default>\n'
+                    'Provider tersedia: ${_router.providers.keys.toList()..sort()} '
+                    '(default: ${_router.defaultProviderId ?? '-'})'
+                : 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        final provider = cmd.rest.toLowerCase();
+        if (provider == 'default') {
+          await botStore.update(cmd.id, (b) => b.copyWith(clearModel: true));
+          events.emit('bot.updated', {'bot': cmd.id, 'field': 'model'});
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" mengikuti provider default router.',
+            success: true,
+          );
+        }
+        if (!_router.providers.containsKey(provider)) {
+          return ChatRunResult(
+            text: 'Provider "$provider" tidak dikenal. Provider tersedia: '
+                '${_router.providers.keys.join(", ")}.',
+            success: false,
+            retryable: true,
+          );
+        }
+        await botStore.update(cmd.id, (b) => b.copyWith(model: provider));
+        events.emit('bot.updated', {'bot': cmd.id, 'field': 'model'});
+        return ChatRunResult(
+          text: 'Bot "${cmd.id}" memakai provider: $provider',
+          success: true,
+        );
+
+      case 'use':
+        if (botStore.get(cmd.id) == null) {
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" tidak dikenal. Bot terdaftar: '
+                '${botStore.list().map((b) => b.id).join(', ').isEmpty ? '-' : botStore.list().map((b) => b.id).join(', ')}.',
+            success: false,
+            retryable: true,
+          );
+        }
+        await botStore.bind(sessionId, cmd.id);
+        events.emit('bot.activated', {'bot': cmd.id, 'session': sessionId});
+        final bot = botStore.get(cmd.id)!;
+        return ChatRunResult(
+          text: 'Sesi ini memakai bot "${cmd.id}" (${bot.name}).'
+              '${bot.greeting.isNotEmpty ? '\n${bot.greeting}' : ''}',
+          success: true,
+        );
+
+      case 'off':
+        final previous = botStore.boundBotId(sessionId);
+        await botStore.unbind(sessionId);
+        if (previous == null) {
+          return const ChatRunResult(
+            text: 'Sesi ini tidak sedang memakai bot.',
+            success: true,
+          );
+        }
+        events.emit('bot.deactivated', {'bot': previous, 'session': sessionId});
+        return ChatRunResult(
+          text: 'Bot "$previous" dinonaktifkan untuk sesi ini.',
+          success: true,
+        );
+
+      case 'show':
+        final bot = botStore.get(cmd.id);
+        if (bot == null) {
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        final buf = StringBuffer('Bot ${bot.id} — "${bot.name}"\n'
+            'model: ${bot.model ?? 'default router'}\n'
+            'dibuat: ${bot.createdAt.toIso8601String()}\n'
+            'persona:\n${bot.persona.isEmpty ? '(kosong)' : bot.persona}');
+        return ChatRunResult(text: buf.toString(), success: true);
+
+      case 'delete':
+        if (botStore.get(cmd.id) == null) {
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        await botStore.delete(cmd.id);
+        events.emit('bot.deleted', {'bot': cmd.id});
+        return ChatRunResult(
+          text: 'Bot "${cmd.id}" dihapus beserta binding sesinya.',
+          success: true,
+        );
+
+      default:
+        return ChatRunResult(
+          text: 'Sub-perintah /bot tidak dikenal: ${cmd.sub}. '
+              'Gunakan: list, new, persona, model, use, off, show, delete.',
+          success: false,
+          retryable: true,
+        );
+    }
   }
 
   /// `/tools` — daftar tool registry + tingkat risikonya.
@@ -2227,4 +2452,11 @@ Map<String, String> _parseOtelHeaders(String raw) {
 class _ModelCommand {
   const _ModelCommand({required this.arg});
   final String arg;
+}
+
+class _BotCommand {
+  const _BotCommand({required this.sub, this.id = '', this.rest = ''});
+  final String sub;
+  final String id;
+  final String rest;
 }
