@@ -24,7 +24,7 @@ void main() {
     final empty = await rt.chat('/memory');
     expect(empty, contains('Memori terkurasi kosong'));
 
-    await rt.curatedMemory.apply(
+    rt.curatedMemory.apply(
       CuratedMemoryOps.extract('```memory-ops\nADD MEMORY: deploy port 5433\n```'),
     );
     await rt.curatedMemory.save();
