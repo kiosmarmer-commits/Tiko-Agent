@@ -110,3 +110,39 @@ Dua gap Hermes-parity telah diimplementasikan (detail lengkap di
 
 Bagian 2.2 laporan audit yang menyebut `/learn` ❌ dan "memory nudge ❌"
 kini sudah tertangani.
+
+## 9. Self-evolution engine (B4, 2026-11-16)
+
+`packages/tiko_runtime/lib/src/self_evolution.dart` menutup lingkaran
+evolusi diri: trajectory → reward → arbitrase → kurasi skill.
+
+- **Trajectory ledger** (`TrajectoryLedger`) — JSONL ter-capped (default
+  2000 record) di `<dataDir>/evolution/ledger.jsonl`. Setiap turn chat
+  dicatat via `SelfEvolutionEngine.recordTurn()` (best-effort, buffered di
+  memori; persist pada konsolidasi/stop agar hot path bebas I/O).
+- **Reward hibrida** — `computeDeterministicReward()` selalu tersedia:
+  0.6 × keberhasilan + 0.25 × kebersihan tool (1 − rasio error) + 0.15 ×
+  feedback user (netral 0.5 bila tidak ada).
+- **LLM-as-judge beranggaran** (`SelfRewardJudge`) — hanya trajectory
+  ambigu (sukses dikontradiksi feedback 👎, atau sebaliknya) dinilai LLM
+  dengan format ketat `SCORE:`/`REASON:`; maksimal
+  `maxJudgePerDay` (default 20) panggilan per hari UTC. Reward akhir =
+  blend 50/50 deterministik + judge.
+- **Bandit UCB1** (`SkillBanditStats`) — statistik reward per skill;
+  `selectSkill()` memakai UCB1 sehingga skill belum dicoba selalu
+  dieksplorasi.
+- **Quarantine konservatif** — skill dengan ≥ `collapseMinSamples`
+  (default 5) sampel dan mean reward < `collapseThreshold` (default 0.2)
+  didemosi ke `draft`, lesson korektif dicatat ke `ReflectionEngine` via
+  `recordCorrectiveLesson()`, event `evolution.quarantined` dipancarkan,
+  maksimal `maxQuarantinesPerDay` (default 3) per hari. Pemulihan lewat
+  alur approval skill yang sudah ada.
+- **Siklus** — `start()` menjalankan konsolidasi periodik (default 1 jam);
+  `consolidate()` men-judge record ambigu, menghitung ulang bandit,
+  meng-quarantine skill kolaps, flush ledger, simpan
+  `evolution/state.json` (atomik) dan memancarkan
+  `evolution.consolidated`.
+
+Batas yang jujur: ini bukan fine-tuning model dan bukan RL neural —
+sinyalnya terukur (hasil tool, feedback user, judge LLM beranggaran) dan
+semua gagalan bersifat best-effort sehingga tidak pernah merusak turn.

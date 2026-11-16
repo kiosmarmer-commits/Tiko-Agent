@@ -21,6 +21,7 @@ import 'offline_queue.dart';
 import 'reflection_loop.dart';
 import 'kanban_board.dart';
 import 'self_learning_engine.dart';
+import 'self_evolution.dart';
 import 'memory_nudge.dart';
 import 'turn_redirect.dart';
 import 'bot_mode.dart';
@@ -125,6 +126,7 @@ class TikoRuntime {
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
+    SelfEvolutionEngine? selfEvolution,
     SandboxRunner? sandbox,
   }) : _sandbox = sandbox {
     this.selfLearningEngine = selfLearningEngine ??
@@ -137,6 +139,16 @@ class TikoRuntime {
                 sessionStore: sessions,
                 skillsDir: skillsRoot,
                 config: const SelfLearningConfig(),
+              ));
+    this.selfEvolution = selfEvolution ??
+        (providers.isEmpty
+            ? null
+            : SelfEvolutionEngine(
+                dataDir: dataDir,
+                llmProvider: auxiliaryLlm(),
+                skills: skills,
+                reflectionEngine: reflectionEngine,
+                events: events,
               ));
   }
 
@@ -182,6 +194,10 @@ class TikoRuntime {
   /// T1 decision model (Jev/Laya). Null when disabled in config.
   final DecisionProvider? decision;
   late final SelfLearningEngine? selfLearningEngine;
+
+  /// Self-evolution loop (B4): trajectory ledger + blended reward + budgeted
+  /// LLM judge + UCB1 bandit + quarantine policy. Null when no provider exists.
+  late final SelfEvolutionEngine? selfEvolution;
 
   /// Content-plane guard (prompt injection + secret/PII output redaction).
   final PromptGuard promptGuard;
@@ -843,6 +859,7 @@ class TikoRuntime {
     
     // Start the self-learning engine for autonomous skill creation and improvement
     await rt.selfLearningEngine?.start();
+    rt.selfEvolution?.start();
     
     return rt;
   }
@@ -2412,6 +2429,17 @@ class TikoRuntime {
     required int tokensUsed,
   }) async {
     final engine = selfLearningEngine;
+    try {
+      selfEvolution?.recordTurn(
+        sessionId: session.id,
+        success: success,
+        toolNames: [for (final t in traces) t.name],
+        errorCount: traces.where((t) => t.isError).length,
+        task: userText,
+      );
+    } catch (_) {
+      // Evolution bookkeeping is best-effort; never fail the turn.
+    }
     if (engine == null || traces.isEmpty) return;
     try {
       final calls = [
@@ -2773,6 +2801,9 @@ class TikoRuntime {
     _scheduler = null;
     try {
       await selfLearningEngine?.stop();
+    } catch (_) {}
+    try {
+      await selfEvolution?.stop();
     } catch (_) {}
     try {
       await layeredMemory.save(p.join(dataDir, 'layered_memory.json'));

@@ -233,6 +233,34 @@ class ReflectionEngine {
     );
   }
 
+  /// Records a single corrective lesson directly (used by the self-evolution
+  /// quarantine policy, B4). Dedup/reinforcement behaves like [reflect] but
+  /// without the minimum-turns gate.
+  ReflectionResult recordCorrectiveLesson({
+    required String trigger,
+    required String insight,
+    required String action,
+    required String sessionId,
+    DateTime? now,
+  }) {
+    final at = (now ?? DateTime.now()).toUtc();
+    final outcome = _absorb(
+      trigger: _truncate(trigger),
+      insight: insight,
+      action: action,
+      sessionId: sessionId,
+      isSuccessful: false,
+      now: at,
+    );
+    return ReflectionResult(
+      newLessons: outcome.isNew ? [outcome.lesson] : [],
+      reinforcedIds: outcome.isNew ? [] : [outcome.lesson.id],
+      observations: [
+        outcome.isNew ? '1 pelajaran baru' : '1 pelajaran diperkuat',
+      ],
+    );
+  }
+
   /// Retrieves the most relevant lessons for [query], best first.
   List<Lesson> relevantLessons(String query, {int? k}) {
     final limit = k ?? config.maxLessonsInContext;
