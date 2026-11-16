@@ -377,6 +377,7 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
     super.headers,
     super.httpClient,
     super.protocolVersion = '2025-11-25',
+    super.preferredModernProtocolVersion = '2026-07-28',
     super.maxOutputChars = 100000,
     super.maxReadRetries = 2,
     super.maxEventChars = 262144,
