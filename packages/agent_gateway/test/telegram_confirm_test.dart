@@ -5,8 +5,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
-http.Response _ok(Object result) =>
-    http.Response(jsonEncode({'ok': true, 'result': result}), 200);
+/// Every mocked response passes through the event loop. Without this the
+/// long-poll loop spins on immediately-resolving futures and starves the
+/// timer queue, so requestConfirm's timeout never fires and the suite hangs.
+Future<http.Response> _ok(Object result) async {
+  await Future<void>.delayed(const Duration(milliseconds: 10));
+  return http.Response(jsonEncode({'ok': true, 'result': result}), 200);
+}
 
 void main() {
   test('confirmation ids are unique within the same millisecond', () async {
@@ -41,7 +46,7 @@ void main() {
         .toSet();
     expect(ids, hasLength(2));
     await gw.close();
-  });
+  }, timeout: const Timeout(Duration(seconds: 20)));
 
   Future<bool> press({
     required int presserUid,
@@ -91,9 +96,9 @@ void main() {
 
   test('requester can approve their own tool call', () async {
     expect(await press(presserUid: 42, requester: '42'), isTrue);
-  });
+  }, timeout: const Timeout(Duration(seconds: 20)));
 
   test('another allowlisted user cannot approve it', () async {
     expect(await press(presserUid: 999, requester: '42'), isFalse);
-  });
+  }, timeout: const Timeout(Duration(seconds: 20)));
 }
