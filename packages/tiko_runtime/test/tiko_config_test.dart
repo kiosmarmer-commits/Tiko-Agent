@@ -187,6 +187,32 @@ mcp:
       expect(cfg.mcpServers.single.environmentRefs['API_KEY'], 'env:MCP_API_KEY');
     });
 
+    test('mcp.answer_server_requests: default false, override boolean (C2)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.mcpAnswerServerRequests, isFalse);
+
+      final (cfg, issues) = TikoConfig.parse('''
+mcp:
+  answer_server_requests: true
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.mcpAnswerServerRequests, isTrue);
+
+      final (bad, badIssues) = TikoConfig.parse('''
+mcp:
+  answer_server_requests: "yes"
+  servers: []
+''');
+      expect(bad.mcpAnswerServerRequests, isFalse,
+          reason: 'nilai tidak valid jatuh ke default');
+      expect(badIssues.map((i) => i.path), contains('mcp.answer_server_requests'));
+    });
+
     test('MCP HTTP protocol version has a default and accepts an override', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:
