@@ -76,7 +76,7 @@ Implementasi memiliki dua lapisan, tidak boleh disatukan dalam dokumentasi:
 - `ProviderHealth` pada `agent_core.Router`: closed/open/half-open, health/latency scoring, satu probe half-open melalui `tryAcquire`, fallback selection dan event.
 - `CircuitBreaker` pada `agent_providers`: default 3 kegagalan beruntun membuka breaker 60 detik, lalu satu probe half-open. `BreakerLlmProvider` mencatat verdict ketika stream sukses/gagal dan melepas slot bila stream dibatalkan tanpa verdict. `FallbackLlmProvider` membedakan `all_breakers_open` dari kegagalan eksekusi gabungan.
 
-Breaker wrapper ini tidak otomatis membungkus `embed()`; Router health dan provider wrapper juga belum memakai satu state object bersama.
+Satu state machine: `CircuitBreaker` adalah adapter tipis di atas `ProviderHealth` — bila `health` disuntik, keduanya berbagi state yang sama (dijamin test `unified_health_test.dart`). Di `TikoRuntime`, `breakerFor(id)` memberikan breaker yang berbagi health Router, dan jalur auxiliar di luar AgentLoop (skill synthesis, self-learning) memakai `auxiliaryLlm()` yang dibungkus `BreakerLlmProvider` dengan health yang sama, sehingga kegagalan refleksi terlihat Router dan provider mati di-gate. Chat utama tetap dicatat tepat sekali via AgentLoop; jangan membungkus provider chat utama dengan breaker ber-health sama (double-count). Breaker wrapper ini tidak otomatis membungkus `embed()`.
 
 ## 5. Embedding
 

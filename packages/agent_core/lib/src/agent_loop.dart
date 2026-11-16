@@ -268,6 +268,9 @@ class AgentLoop {
         }
         if (cancel.isCancelled) {
           success = false;
+          try {
+            await reply(m, 'Turn dibatalkan atas permintaan.');
+          } catch (_) {}
           break agentLoop;
         }
         if (_budget.exceeded) {

@@ -125,18 +125,19 @@ class TikoRuntime {
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
     SandboxRunner? sandbox,
-  })  : _sandbox = sandbox,
-        selfLearningEngine = selfLearningEngine ??
-          (providers.isEmpty
-              ? null
-              : SelfLearningEngine(
-                  llmProvider: providers.values.first,
-                  skillRegistry: skills,
-                  memoryStore: memory,
-                  sessionStore: sessions,
-                  skillsDir: skillsRoot,
-                  config: const SelfLearningConfig(),
-                ));
+  }) : _sandbox = sandbox {
+    this.selfLearningEngine = selfLearningEngine ??
+        (providers.isEmpty
+            ? null
+            : SelfLearningEngine(
+                llmProvider: auxiliaryLlm()!,
+                skillRegistry: skills,
+                memoryStore: memory,
+                sessionStore: sessions,
+                skillsDir: skillsRoot,
+                config: const SelfLearningConfig(),
+              ));
+  }
 
   final TikoConfig config;
   final List<ConfigIssue> issues;
@@ -169,7 +170,7 @@ class TikoRuntime {
 
   /// T1 decision model (Jev/Laya). Null when disabled in config.
   final DecisionProvider? decision;
-  final SelfLearningEngine? selfLearningEngine;
+  late final SelfLearningEngine? selfLearningEngine;
 
   /// Content-plane guard (prompt injection + secret/PII output redaction).
   final PromptGuard promptGuard;
@@ -1156,6 +1157,21 @@ class TikoRuntime {
     return CircuitBreaker(health: h);
   }
 
+  /// Provider pertama untuk jalur auxiliar (skill synthesis, self-learning)
+  /// yang memanggil LLM di luar AgentLoop: dibungkus [BreakerLlmProvider]
+  /// dengan [ProviderHealth] yang SAMA dengan Router, sehingga kegagalan
+  /// jalur ini terlihat Router dan provider mati di-gate breaker, bukan
+  /// dicoba terus. Chat utama tetap dicatat sekali via AgentLoop.
+  LlmProvider? auxiliaryLlm() {
+    if (_router.providers.isEmpty) return null;
+    final inner = _router.providers.values.first;
+    final health = _router.health.putIfAbsent(
+      inner.id,
+      () => ProviderHealth(clock: _router.clock),
+    );
+    return BreakerLlmProvider(inner, health: health);
+  }
+
   /// Record a provider failure from any direct-use surface; lands in the
   /// same [ProviderHealth] the Router and [breakerFor] share.
   void recordProviderFailure(String providerId, String error) =>
@@ -1433,7 +1449,7 @@ class TikoRuntime {
         taintMark: _taint.mark,
         // FR-01: reuse the first configured provider for skill-synthesis
         // reflection; AgentLoop falls back to the naive draft when absent.
-        synthLlm: _router.providers.isEmpty ? null : _router.providers.values.first,
+        synthLlm: auxiliaryLlm(),
         shouldStop: () => safety.stopRequested,
         config: configOverride ?? defaultConfig,
         // P1-4: sanitize each delta before it reaches a live chat message;
