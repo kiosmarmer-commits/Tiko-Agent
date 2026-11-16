@@ -296,4 +296,66 @@ void main() {
       await gateway.close();
     }
   });
+
+  test('email: idempotencyKey → Message-ID deterministik (dedup retry)',
+      () async {
+    final smtp = await _FakeSmtpServer.start(advertiseStartTls: false);
+    final gateway = EmailGateway(
+      from: 'agent@example.com',
+      host: '127.0.0.1',
+      port: smtp.port,
+      defaultTo: 'user@example.com',
+    );
+
+    try {
+      const msg = OutboundMessage(
+        sessionKey: 'email:test',
+        text: 'isi pesan',
+        meta: {'subject': 's'},
+        idempotencyKey: 'tik-job1_run9',
+      );
+      await gateway.send(msg).timeout(const Duration(seconds: 3));
+      await gateway.send(msg).timeout(const Duration(seconds: 3));
+      await smtp.dataReceived.future.timeout(const Duration(seconds: 2));
+
+      final messageIds = smtp.dataLines
+          .where((l) => l.startsWith('Message-ID:'))
+          .toList();
+      expect(messageIds, hasLength(2));
+      expect(messageIds.first, 'Message-ID: <tik-job1_run9@tiko-agent>');
+      expect(messageIds.last, messageIds.first,
+          reason: 'kirim ulang run yang sama menghasilkan Message-ID '
+              'identik — infrastruktur SMTP dapat mendedup');
+    } finally {
+      await gateway.close();
+      await smtp.close();
+    }
+  });
+
+  test('email: tanpa idempotencyKey → tanpa header Message-ID (perilaku lama)',
+      () async {
+    final smtp = await _FakeSmtpServer.start(advertiseStartTls: false);
+    final gateway = EmailGateway(
+      from: 'agent@example.com',
+      host: '127.0.0.1',
+      port: smtp.port,
+      defaultTo: 'user@example.com',
+    );
+
+    try {
+      await gateway.send(const OutboundMessage(
+        sessionKey: 'email:test',
+        text: 'isi',
+        meta: {'subject': 's'},
+      )).timeout(const Duration(seconds: 3));
+      await smtp.dataReceived.future.timeout(const Duration(seconds: 2));
+      expect(
+        smtp.dataLines.where((l) => l.startsWith('Message-ID')),
+        isEmpty,
+      );
+    } finally {
+      await gateway.close();
+      await smtp.close();
+    }
+  });
 }

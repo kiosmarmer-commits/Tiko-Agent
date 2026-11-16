@@ -136,4 +136,23 @@ void main() {
     expect(sends, 1);
     expect(job.deliveryState, 'delivered');
   });
+
+  test('deliveryIdempotencyKey deterministik: run sama → key sama, run '
+      'beda → key beda', () {
+    expect(deliveryIdempotencyKey('job-1', 'run-9'), 'tik-job-1_run-9');
+    expect(
+      deliveryIdempotencyKey('job-1', 'run-9'),
+      deliveryIdempotencyKey('job-1', 'run-9'),
+      reason: 'retry/crash recovery dari run yang sama harus menghasilkan '
+          'kunci identik agar dedup server-side bekerja',
+    );
+    expect(
+      deliveryIdempotencyKey('job-1', 'run-9'),
+      isNot(deliveryIdempotencyKey('job-1', 'run-10')),
+    );
+    expect(
+      deliveryIdempotencyKey('job-1', 'run-9'),
+      isNot(deliveryIdempotencyKey('job-2', 'run-9')),
+    );
+  });
 }

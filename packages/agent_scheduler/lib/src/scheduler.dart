@@ -7,6 +7,14 @@ import 'job_store.dart';
 
 typedef JobHandler = Future<void> Function(InboundMessage message, Job job);
 
+/// Kunci idempotensi deterministik untuk satu delivery output job: pasangan
+/// (jobId, runId) stabil lintas retry dan crash, sehingga sink/gateway yang
+/// mendukung dedup (Matrix txnId, SMTP Message-ID) dapat mengenali kirim
+/// ulang dari pengiriman baru. Kirim ulang run yang sama menghasilkan kunci
+/// yang sama; run berbeda dari job yang sama menghasilkan kunci berbeda.
+String deliveryIdempotencyKey(String jobId, String runId) =>
+    'tik-${jobId}_$runId';
+
 /// Mengirim satu output job yang diantre ke channel tujuannya. Melempar
 /// (atau melewati batas delivery timeout) berarti gateway menolak atau
 /// tidak pernah meng-ack pesan; scheduler me-retry dengan backoff.

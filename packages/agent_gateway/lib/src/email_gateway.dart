@@ -80,7 +80,19 @@ class EmailGateway implements Gateway {
         'Invalid SMTP header value',
       );
     }
-    await _smtpSend(to: to, subject: subject, body: body);
+    await _smtpSend(
+      to: to,
+      subject: subject,
+      body: body,
+      idempotencyKey: m.idempotencyKey,
+    );
+  }
+
+  /// Sanitasi idempotencyKey menjadi local-part Message-ID yang aman:
+  /// header SMTP tidak boleh memuat karakter kontrol/spasi.
+  static String _safeMessageIdKey(String key) {
+    final cleaned = key.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return cleaned.length > 128 ? cleaned.substring(0, 128) : cleaned;
   }
 
   static void _validateMailbox(String value, String field) {
@@ -101,6 +113,7 @@ class EmailGateway implements Gateway {
     required String to,
     required String subject,
     required String body,
+    String idempotencyKey = '',
   }) async {
     final hasUsername = username != null;
     final hasPassword = password != null;
@@ -258,10 +271,17 @@ class EmailGateway implements Gateway {
         RegExp(r'(^|\n)\.'),
         (match) => '${match.group(1)}..',
       );
+      // Idempotensi: bila pesan membawa idempotencyKey (mis. dari
+      // scheduler), Message-ID dibuat deterministik — infrastruktur SMTP
+      // yang melakukan dedup berbasis Message-ID dapat mengenali kirim
+      // ulang run yang sama. Tanpa key, tanpa header Message-ID (perilaku
+      // lama dipertahankan).
+      final safeKey = _safeMessageIdKey(idempotencyKey);
       final payload = <String>[
         'From: $from',
         'To: $to',
         'Subject: $subject',
+        if (safeKey.isNotEmpty) 'Message-ID: <$safeKey@tiko-agent>',
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=utf-8',
         '',
@@ -271,6 +291,15 @@ class EmailGateway implements Gateway {
       await write(payload);
       await expectResponse('message body', {'250'});
       await write('QUIT');
+      // Graceful close: baca respons 221 sebelum destroy. Destroy tanpa
+      // membaca sisa respons membuat kernel mengirim RST (data belum dibaca)
+      // — server melihat Broken pipe dan koneksi berikutnya dapat terganggu.
+      try {
+        await readLine().timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // best-effort: 221 hilang/terlambat tetap dianggap sukses — pesan
+        // sudah di-ack 250 di atas.
+      }
     } finally {
       // A failed/stalled relay must not keep a socket or response subscription
       // alive. destroy() is intentional here: QUIT was flushed on success,

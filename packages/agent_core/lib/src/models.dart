@@ -38,6 +38,7 @@ class OutboundMessage {
     this.markdown = true,
     this.buttons = const [],
     this.meta = const {},
+    this.idempotencyKey = '',
   });
 
   final String sessionKey;
@@ -45,6 +46,15 @@ class OutboundMessage {
   final bool markdown;
   final List<ConfirmButton> buttons;
   final Map<String, Object?> meta;
+
+  /// Kunci idempotensi opsional (mis. `tik-<jobId>-<runId>` dari scheduler).
+  /// Gateway yang platformnya mendukung dedup memakai ini agar kirim ulang
+  /// (retry/crash at-least-once) tidak menghasilkan pesan duplikat:
+  /// - Matrix: txnId deterministik (homeserver dedup per room+txnId).
+  /// - Email: header `Message-ID` deterministik.
+  /// Platform tanpa API idempotensi (Telegram/Discord/Slack/WhatsApp)
+  /// mengabaikannya — kosong berarti tanpa jaminan dedup.
+  final String idempotencyKey;
 }
 
 class ConfirmButton {
