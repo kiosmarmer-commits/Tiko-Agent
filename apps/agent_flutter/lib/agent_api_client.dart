@@ -156,7 +156,17 @@ class AgentApiClient {
         }
       }
     } finally {
-      await channel.sink.close();
+      // Teardown tidak boleh menggantung: bila upgrade gagal atau koneksi
+      // putus mendadak, sink.close() bisa menunggu close frame yang tidak
+      // pernah datang. Batasi dengan timeout dan abaikan kegagalannya —
+      // error asli tetap diangkat ke pemanggil.
+      try {
+        await channel.sink
+            .close()
+            .timeout(const Duration(seconds: 5), onTimeout: () {});
+      } catch (_) {
+        // best-effort
+      }
     }
   }
 
