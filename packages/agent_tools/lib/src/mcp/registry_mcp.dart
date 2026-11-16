@@ -7,6 +7,7 @@ import '../sandbox.dart';
 import 'http_client.dart';
 import 'http_server_handler.dart';
 import 'oauth.dart';
+import 'oauth_authcode.dart';
 import 'stdio_client.dart';
 
 /// Loads only explicitly allowlisted MCP tools. No configuration means no
@@ -247,35 +248,130 @@ class McpToolLoader {
       _statuses.add({'id': id, 'status': 'invalid', 'detail': 'max_read_retries must be an integer from 0 to 3'});
       return null;
     }
-    McpOAuthClientCredentials? oauth;
+    McpOAuthTokenSource? oauth;
     final rawOauth = cfg['oauth'];
     if (rawOauth != null) {
       if (rawOauth is! Map) {
         _statuses.add({'id': id, 'status': 'invalid', 'detail': 'oauth must be a mapping'});
         return null;
       }
-      final tokenUrl = rawOauth['token_url'];
-      final clientId = rawOauth['client_id'];
-      final clientSecret = rawOauth['client_secret'];
-      final scopes = rawOauth['scopes'] ?? const <String>[];
-      if (tokenUrl is! String ||
-          clientId is! String ||
-          clientSecret is! String ||
-          (scopes is! List || scopes.any((s) => s is! String))) {
+      final grantType = rawOauth['grant_type'] ?? 'client_credentials';
+      if (grantType is! String ||
+          !const {'client_credentials', 'authorization_code'}.contains(grantType)) {
         _statuses.add({
           'id': id,
           'status': 'invalid',
-          'detail': 'oauth requires token_url, client_id, client_secret (resolved), scopes[]',
+          'detail': 'oauth.grant_type must be client_credentials or authorization_code',
+        });
+        return null;
+      }
+      final scopes = rawOauth['scopes'] ?? const <String>[];
+      if (scopes is! List || scopes.any((s) => s is! String)) {
+        _statuses.add({
+          'id': id,
+          'status': 'invalid',
+          'detail': 'oauth.scopes must be a list of strings',
         });
         return null;
       }
       try {
-        oauth = McpOAuthClientCredentials(McpOAuthConfig(
-          tokenUrl: tokenUrl,
-          clientId: clientId,
-          clientSecret: clientSecret,
-          scopes: scopes.cast<String>(),
-        ));
+        if (grantType == 'client_credentials') {
+          final tokenUrl = rawOauth['token_url'];
+          final clientId = rawOauth['client_id'];
+          final clientSecret = rawOauth['client_secret'];
+          if (tokenUrl is! String ||
+              clientId is! String ||
+              clientSecret is! String) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth (client_credentials) requires token_url, client_id, client_secret (resolved)',
+            });
+            return null;
+          }
+          oauth = McpOAuthClientCredentials(McpOAuthConfig(
+            tokenUrl: tokenUrl,
+            clientId: clientId,
+            clientSecret: clientSecret,
+            scopes: scopes.cast<String>(),
+          ));
+        } else {
+          // authorization_code: login browser + PKCE. client_id/secret
+          // opsional (public client + DCR). Secret tetap lewat SecretRef.
+          final serverUrl = rawOauth['server_url'] ?? url;
+          if (serverUrl is! String || serverUrl.isEmpty) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth (authorization_code) requires server_url (default: server url)',
+            });
+            return null;
+          }
+          final clientId = rawOauth['client_id'] ?? '';
+          final clientSecret = rawOauth['client_secret'] ?? '';
+          if (clientId is! String || clientSecret is! String) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth client_id/client_secret must be strings (resolved)',
+            });
+            return null;
+          }
+          final redirectPort = rawOauth['redirect_port'] ?? 0;
+          if (redirectPort is! int || redirectPort < 0 || redirectPort > 65535) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth.redirect_port must be an integer 0-65535',
+            });
+            return null;
+          }
+          final authMethod = rawOauth['auth_method'] ?? 'auto';
+          if (authMethod is! String ||
+              !const {'auto', 'basic', 'post', 'none'}.contains(authMethod)) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth.auth_method must be auto|basic|post|none',
+            });
+            return null;
+          }
+          final useDiscovery = rawOauth['use_discovery'] ?? true;
+          final usePkce = rawOauth['use_pkce'] ?? true;
+          if (useDiscovery is! bool || usePkce is! bool) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth.use_discovery / use_pkce must be booleans',
+            });
+            return null;
+          }
+          final tokenStorePath = rawOauth['token_store'];
+          if (tokenStorePath != null && tokenStorePath is! String) {
+            _statuses.add({
+              'id': id,
+              'status': 'invalid',
+              'detail': 'oauth.token_store must be a file path string',
+            });
+            return null;
+          }
+          oauth = McpOAuthAuthorizationCode(
+            McpOAuthAuthorizationCodeConfig(
+              serverUrl: serverUrl,
+              authorizationUrl: rawOauth['authorization_url'] as String?,
+              tokenUrl: rawOauth['token_url'] as String?,
+              registrationUrl: rawOauth['registration_url'] as String?,
+              clientId: clientId,
+              clientSecret: clientSecret,
+              scopes: scopes.cast<String>(),
+              redirectPort: redirectPort,
+              authMethod: authMethod,
+              useDiscovery: useDiscovery,
+              usePkce: usePkce,
+              tokenStorePath: tokenStorePath as String?,
+            ),
+          );
+        }
       } catch (error) {
         _statuses.add({'id': id, 'status': 'invalid', 'detail': 'oauth config invalid: $error'});
         return null;

@@ -2,10 +2,27 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+/// Sumber token OAuth untuk klien MCP HTTP.
+///
+/// Kontrak minimal yang dipakai [HttpMcpClient]: minta bearer token dan
+/// invalidasi setelah 401. Implementasi yang tersedia:
+/// - [McpOAuthClientCredentials]: grant `client_credentials` (machine-to-machine).
+/// - [McpOAuthAuthorizationCode]: grant `authorization_code` + PKCE (login
+///   browser, kompatibel dengan penyedia OAuth umum seperti GitHub/Notion/Google).
+abstract class McpOAuthTokenSource {
+  /// Returns a valid bearer token, fetching/refreshing when needed.
+  Future<String> token();
+
+  /// Drops the cached token so the next [token] call refreshes it.
+  void invalidate();
+}
+
 /// OAuth 2.0 client-credentials configuration for an MCP HTTP server.
 ///
-/// Only the `client_credentials` grant is supported: MCP servers are machine
-/// endpoints, not user-facing apps. The client secret must come from a
+/// Only the `client_credentials` grant is supported here: this mode is for
+/// machine-to-machine endpoints. For OAuth providers that require an end-user
+/// browser login (GitHub, Notion, Google, dan lainnya), gunakan
+/// [McpOAuthAuthorizationCode]. The client secret must come from a
 /// SecretRef (`env:VAR`) resolved by the runtime — never hard-coded.
 class McpOAuthConfig {
   McpOAuthConfig({
@@ -45,7 +62,7 @@ class McpOAuthConfig {
 ///
 /// Tokens are cached until [expiresAt] (minus a 60s safety margin) and can be
 /// force-invalidated after a 401 so the next [token] call refreshes them.
-class McpOAuthClientCredentials {
+class McpOAuthClientCredentials implements McpOAuthTokenSource {
   McpOAuthClientCredentials(
     this.config, {
     http.Client? client,
@@ -68,7 +85,7 @@ class McpOAuthClientCredentials {
   bool get _hasFreshToken =>
       _cachedToken != null && _clock().isBefore(_expiresAt);
 
-  /// Returns a valid bearer token, fetching/refreshing when needed.
+  @override
   Future<String> token() async {
     if (_hasFreshToken) return _cachedToken!;
     fetchCount += 1;
@@ -111,7 +128,7 @@ class McpOAuthClientCredentials {
     return _cachedToken!;
   }
 
-  /// Drops the cached token so the next [token] call refreshes it.
+  @override
   void invalidate() {
     _cachedToken = null;
     _expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
