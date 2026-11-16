@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_gateway/agent_gateway.dart';
+import 'package:agent_scheduler/agent_scheduler.dart';
 import 'package:agent_tools/agent_tools.dart';
 import 'package:tiko_runtime/tiko_runtime.dart';
 
@@ -581,7 +582,14 @@ Future<void> main(List<String> args) async {
         );
         return;
       }
-      await target.send(OutboundMessage(sessionKey: sessionKey, text: text));
+      // Idempotency key deterministik (jobId+runId): gateway yang platformnya
+      // mendukung dedup (Matrix txnId, SMTP Message-ID) dapat mengenali
+      // kirim ulang at-least-once dan tidak menggandakan pesan.
+      await target.send(OutboundMessage(
+        sessionKey: sessionKey,
+        text: text,
+        idempotencyKey: deliveryIdempotencyKey(job.id, runId),
+      ));
     },
   );
   stdout.writeln('Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)');

@@ -134,6 +134,13 @@ class MatrixGateway implements Gateway {
     ));
   }
 
+  /// Sanitasi idempotencyKey menjadi suffix txnId yang aman: Matrix txnId
+  /// adalah segmen path, jadi hanya [A-Za-z0-9._-] yang dipertahankan.
+  static String _safeTxnSuffix(String key) {
+    final cleaned = key.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return cleaned.length > 128 ? cleaned.substring(0, 128) : cleaned;
+  }
+
   String? _roomFromSession(String sessionKey) {
     if (!sessionKey.startsWith('matrix:')) return null;
     final room = sessionKey.substring('matrix:'.length);
@@ -146,10 +153,21 @@ class MatrixGateway implements Gateway {
     if (roomId == null) {
       throw ArgumentError('sessionKey matrix tidak valid: ${m.sessionKey}');
     }
+    // Idempotensi: bila pesan membawa idempotencyKey (mis. dari scheduler),
+    // txnId dibuat deterministik — homeserver Matrix menolak event duplikat
+    // untuk pasangan (room, txnId) yang sama, sehingga kirim ulang run yang
+    // sama tidak menghasilkan pesan ganda. Tanpa key, txn acak seperti
+    // biasa (perilaku lama).
+    final safeKey = _safeTxnSuffix(m.idempotencyKey);
+    var partIndex = 0;
     for (final part in splitMessage(m.text)) {
       _txnCounter += 1;
-      final txn =
-          'tiko-${DateTime.now().millisecondsSinceEpoch}-$_txnCounter-${_rng.nextInt(1 << 32)}';
+      final txn = safeKey.isEmpty
+          ? 'tiko-${DateTime.now().millisecondsSinceEpoch}-$_txnCounter-${_rng.nextInt(1 << 32)}'
+          : (partIndex == 0 && splitMessage(m.text).length == 1
+              ? 'tiko-$safeKey'
+              : 'tiko-$safeKey-p$partIndex');
+      partIndex += 1;
       final encoded = Uri.encodeComponent(roomId);
       final res = await _client
           .put(

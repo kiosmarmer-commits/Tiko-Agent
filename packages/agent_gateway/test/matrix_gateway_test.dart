@@ -124,4 +124,64 @@ void main() {
     );
     await gw.close();
   });
+
+  test('matrix: idempotencyKey → txnId deterministik (dedup server-side)',
+      () async {
+    final sendTxns = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      await utf8.decoder.bind(req).join();
+      if (req.uri.path.contains('/send/m.room.message/')) {
+        sendTxns.add(req.uri.pathSegments.last);
+      }
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({'event_id': '\$e1'}));
+      await req.response.close();
+    });
+    addTearDown(() => server.close(force: true));
+
+    final gw = MatrixGateway(
+      homeserverUrl: 'http://127.0.0.1:${server.port}',
+      accessToken: 'syt_test',
+      allowedRooms: {'!room1:example.org'},
+    );
+
+    const msg = OutboundMessage(
+      sessionKey: 'matrix:!room1:example.org',
+      text: 'satu',
+      idempotencyKey: 'tik-job1_run9',
+    );
+    await gw.send(msg);
+    await gw.send(msg); // kirim ulang run yang sama — key identik
+    expect(sendTxns, hasLength(2));
+    expect(sendTxns.first, 'tiko-tik-job1_run9');
+    expect(sendTxns.last, sendTxns.first,
+        reason: 'txnId deterministik: homeserver menolak duplikat untuk '
+            'pasangan (room, txnId) yang sama');
+
+    // Run berbeda → key berbeda → txn berbeda.
+    await gw.send(const OutboundMessage(
+      sessionKey: 'matrix:!room1:example.org',
+      text: 'satu',
+      idempotencyKey: 'tik-job1_run10',
+    ));
+    expect(sendTxns.last, 'tiko-tik-job1_run10');
+
+    // Tanpa key → txn acak seperti biasa (perilaku lama).
+    await gw.send(const OutboundMessage(
+      sessionKey: 'matrix:!room1:example.org',
+      text: 'satu',
+    ));
+    expect(sendTxns.last, isNot(contains('tik-')));
+
+    // Karakter tidak aman disanitasi, bukan merusak URL.
+    await gw.send(const OutboundMessage(
+      sessionKey: 'matrix:!room1:example.org',
+      text: 'satu',
+      idempotencyKey: 'tik-job/2 run',
+    ));
+    expect(sendTxns.last, 'tiko-tik-job_2_run');
+
+    await gw.close();
+  });
 }
