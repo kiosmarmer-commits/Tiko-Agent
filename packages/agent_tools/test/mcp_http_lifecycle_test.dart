@@ -186,7 +186,7 @@ void main() {
     final res = await c.request('ping');
     expect(res['ok'], isTrue);
     expect(lastSessionHeader, 'sess-123');
-    expect(lastProtocolVersionHeader, '2025-11-25');
+    expect(lastProtocolVersionHeader, '2026-07-28');
   });
 
 
@@ -226,7 +226,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(getSeen, isTrue);
     expect(lastSessionHeader, 'sess-123');
-    expect(lastProtocolVersionHeader, '2025-11-25');
+    expect(lastProtocolVersionHeader, '2026-07-28');
     expect(event['method'], 'notifications/from-server');
     expect(c.notifications, contains(event));
     expect(c.serverRequests.single['id'], 'server-initiated-1');
@@ -309,6 +309,6 @@ void main() {
     await c.close();
     expect(deleteSeen, isTrue);
     expect(lastSessionHeader, 'sess-123');
-    expect(lastProtocolVersionHeader, '2025-11-25');
+    expect(lastProtocolVersionHeader, '2026-07-28');
   });
 }

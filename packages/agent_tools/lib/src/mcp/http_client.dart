@@ -22,6 +22,7 @@ class HttpMcpClient implements McpTransport, McpToolServer {
     this.headers = const {},
     this.httpClient,
     this.protocolVersion = '2025-11-25',
+    this.preferredModernProtocolVersion = '2026-07-28',
     this.maxOutputChars = 100000,
     this.maxReadRetries = 2,
     this.maxEventChars = 262144,
@@ -39,6 +40,14 @@ class HttpMcpClient implements McpTransport, McpToolServer {
     }
     if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(protocolVersion)) {
       throw ArgumentError.value(protocolVersion, 'protocolVersion', 'Expected YYYY-MM-DD');
+    }
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$')
+        .hasMatch(preferredModernProtocolVersion)) {
+      throw ArgumentError.value(
+        preferredModernProtocolVersion,
+        'preferredModernProtocolVersion',
+        'Expected YYYY-MM-DD',
+      );
     }
     if (maxOutputChars <= 0 || maxEventChars <= 0 || maxObservedEvents <= 0) {
       throw RangeError('MCP output/event/observation limits must be positive');
@@ -72,6 +81,11 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   final Map<String, String> headers;
   final http.Client? httpClient;
   final String protocolVersion;
+
+  /// Versi protokol terbaru yang dicoba lebih dulu saat initialize, selaras
+  /// dengan stdio client. Bila server menolaknya, negosiasi jatuh kembali ke
+  /// [protocolVersion] sebelum gagal total.
+  final String preferredModernProtocolVersion;
 
   /// Optional OAuth 2.0 client-credentials token source (P2-14). When set,
   /// a `Authorization: Bearer` header is attached to every request and a 401
@@ -116,6 +130,9 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   /// Session id yang diberikan server saat initialize, bila ada.
   String? get sessionId => _sessionId;
 
+  /// Versi protokol akhir hasil negosiasi initialize.
+  String get negotiatedProtocolVersion => _negotiatedProtocolVersion;
+
   /// Notifikasi dari server yang diterima sejak start.
   final List<Map<String, dynamic>> notifications = [];
 
@@ -145,11 +162,14 @@ class HttpMcpClient implements McpTransport, McpToolServer {
 
   Future<void> _start() async {
     try {
-      final init = await _send('initialize', {
-        'protocolVersion': protocolVersion,
-        'capabilities': {'tools': {}},
-        'clientInfo': {'name': 'tiko', 'version': '0.1.0'},
-      });
+      Map<String, dynamic> init;
+      try {
+        init = await _initializeHandshake(preferredModernProtocolVersion);
+      } catch (_) {
+        if (preferredModernProtocolVersion == protocolVersion) rethrow;
+        _sessionId = null;
+        init = await _initializeHandshake(protocolVersion);
+      }
       final selectedVersion = init['protocolVersion'];
       if (selectedVersion != null) {
         if (selectedVersion is! String ||
@@ -180,6 +200,17 @@ class HttpMcpClient implements McpTransport, McpToolServer {
       _started = false;
       rethrow;
     }
+  }
+
+  /// Satu percobaan handshake initialize untuk satu versi protokol. Aman
+  /// dipanggil ulang setelah kegagalan: initialize yang ditolak server tidak
+  /// meninggalkan session.
+  Future<Map<String, dynamic>> _initializeHandshake(String version) {
+    return _send('initialize', {
+      'protocolVersion': version,
+      'capabilities': {'tools': {}},
+      'clientInfo': {'name': 'tiko', 'version': '0.1.0'},
+    });
   }
 
   /// Opens the optional server-to-client event stream defined by Streamable
