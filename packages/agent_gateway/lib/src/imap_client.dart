@@ -10,12 +10,17 @@ class ImapEmail {
     required this.from,
     required this.subject,
     required this.body,
+    this.messageId = '',
   });
 
   final int sequence;
   final String from;
   final String subject;
   final String body;
+
+  /// Nilai header `Message-ID` (tanpa normalize); kosong bila tidak ada.
+  /// Dipakai untuk dedup anti-replay di [ImapPoller].
+  final String messageId;
 }
 
 /// Byte-accurate transport channel for [ImapPoller]. Production wraps a
@@ -126,7 +131,9 @@ class _FetchedBody {
 
 /// Minimal IMAP4rev1 poll client for inbound email. Each poll opens a fresh
 /// TLS connection, LOGIN, SELECT, SEARCH UNSEEN, FETCH (BODY.PEEK[]), emits
-/// allowed senders, then marks messages `\Seen` so nothing is re-emitted.
+/// messages from allowed senders, then marks messages `\Seen` so nothing is
+/// re-emitted. Allowlist pengirim wajib (fail-closed: allowlist kosong tidak
+/// memancarkan apa pun) dan dedup `Message-ID` melindungi dari replay.
 ///
 /// Deliberately minimal by design: no MIME multipart tree walking (the raw
 /// text part is used as-is after transfer-encoding decode), no IDLE, no
@@ -143,6 +150,7 @@ class ImapPoller {
     this.responseTimeout = const Duration(seconds: 20),
     this.maxMessageBytes = 524288,
     this.maxPerPoll = 10,
+    this.replayCacheSize = 512,
     ImapChannel Function()? channelFactory,
     void Function(String detail)? onError,
   })  : assert(maxMessageBytes > 0),
@@ -160,11 +168,18 @@ class ImapPoller {
   final Duration responseTimeout;
   final int maxMessageBytes;
   final int maxPerPoll;
+
+  /// Kapasitas cache `Message-ID` anti-replay: ID yang sudah pernah diemisi
+  /// tidak akan diemisi lagi walau server menyajikannya kembali sebagai
+  /// UNSEEN (mis. perubahan UIDVALIDITY atau klien lain membuka flag).
+  final int replayCacheSize;
   final ImapChannel Function()? _channelFactory;
   final void Function(String detail)? _onError;
 
   final _emails = StreamController<ImapEmail>.broadcast();
   final _done = Completer<void>();
+  final _seenMessageIds = <String>{};
+  final _seenMessageIdOrder = <String>[];
   bool _running = false;
 
   /// Emitted for every unseen message from an allowed sender.
@@ -244,9 +259,18 @@ class ImapPoller {
           'STORE',
         );
         if (email == null || email.from.isEmpty) continue;
-        final allowed = allowSenders.isEmpty ||
-            allowSenders.contains(email.from.toLowerCase().trim());
+        // Fail-closed: allowlist kosong berarti tidak ada pengirim yang
+        // diizinkan — bukan "izinkan semua".
+        final allowed = allowSenders.contains(email.from.toLowerCase().trim());
         if (!allowed) continue;
+        // Anti-replay: pesan dengan Message-ID yang sudah pernah diemisi
+        // dilewati (tetap ditandai \Seen di atas) walau muncul lagi sebagai
+        // UNSEEN. Pesan tanpa Message-ID tidak dapat didedup.
+        final mid = email.messageId.trim();
+        if (mid.isNotEmpty) {
+          if (_seenMessageIds.contains(mid)) continue;
+          _rememberMessageId(mid);
+        }
         _emails.add(email);
         emitted++;
       }
@@ -255,6 +279,15 @@ class ImapPoller {
       channel.destroy();
     }
     return emitted;
+  }
+
+  void _rememberMessageId(String mid) {
+    _seenMessageIds.add(mid);
+    _seenMessageIdOrder.add(mid);
+    while (_seenMessageIdOrder.length > replayCacheSize) {
+      final evicted = _seenMessageIdOrder.removeAt(0);
+      _seenMessageIds.remove(evicted);
+    }
   }
 
   Future<void> _expectOk(
@@ -331,6 +364,7 @@ class ImapPoller {
       from: from,
       subject: subject,
       body: body,
+      messageId: headers['message-id'] ?? '',
     );
   }
 
