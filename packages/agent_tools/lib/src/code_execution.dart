@@ -56,6 +56,7 @@ class CodeExecutionConfig {
     this.allowFileWrite = false,
     this.allowNetworkAccess = false,
     this.maxMemoryMb = 512,
+    this.allowUnsafeLocalExecution = false,
   });
 
   final bool enabled;
@@ -70,6 +71,11 @@ class CodeExecutionConfig {
   final bool allowNetworkAccess;
   final int maxMemoryMb;
 
+  /// Fail-closed escape hatch: when no OS sandbox is available, code
+  /// execution is refused unless the operator explicitly opts in to running
+  /// code directly on the host via [LocalCodeExecutionProvider].
+  final bool allowUnsafeLocalExecution;
+
   CodeExecutionConfig copyWith({
     bool? enabled,
     int? timeoutSeconds,
@@ -82,6 +88,7 @@ class CodeExecutionConfig {
     bool? allowFileWrite,
     bool? allowNetworkAccess,
     int? maxMemoryMb,
+    bool? allowUnsafeLocalExecution,
   }) {
     return CodeExecutionConfig(
       enabled: enabled ?? this.enabled,
@@ -95,6 +102,8 @@ class CodeExecutionConfig {
       allowFileWrite: allowFileWrite ?? this.allowFileWrite,
       allowNetworkAccess: allowNetworkAccess ?? this.allowNetworkAccess,
       maxMemoryMb: maxMemoryMb ?? this.maxMemoryMb,
+      allowUnsafeLocalExecution:
+          allowUnsafeLocalExecution ?? this.allowUnsafeLocalExecution,
     );
   }
 }
@@ -578,7 +587,10 @@ class CodeExecutionTool implements Tool {
     if (s != null && s.kind != SandboxKind.none) {
       return SandboxedCodeExecutionProvider(s);
     }
-    return LocalCodeExecutionProvider();
+    if (config.allowUnsafeLocalExecution) {
+      return LocalCodeExecutionProvider();
+    }
+    return _DisabledCodeExecutionProvider();
   }
 
   String get name => 'code_execution';
@@ -632,6 +644,18 @@ class CodeExecutionTool implements Tool {
           content: jsonEncode({
             'success': false,
             'error': 'code is required',
+          }),
+          isError: true,
+        );
+      }
+
+      final effectiveProvider = _effectiveProvider;
+      if (effectiveProvider is _DisabledCodeExecutionProvider) {
+        return ToolResult(
+          callId: '',
+          content: jsonEncode({
+            'success': false,
+            'error': effectiveProvider.disabledReason,
           }),
           isError: true,
         );
@@ -723,6 +747,40 @@ class CodeExecutionTool implements Tool {
         isError: true,
       );
     }
+  }
+}
+
+/// Fail-closed provider: refuses to execute when no OS sandbox backend is
+/// available. Prevents silent fallback to unsandboxed host execution.
+class _DisabledCodeExecutionProvider implements CodeExecutionProvider {
+  String get disabledReason =>
+      'Eksekusi kode dinonaktifkan: OS sandbox tidak tersedia (fail-closed). '
+      'Sediakan SandboxRunner dengan backend bwrap/docker, atau set '
+      'allowUnsafeLocalExecution=true untuk eksekusi host secara eksplisit.';
+
+  @override
+  String get name => 'disabled';
+
+  @override
+  List<ExecutionLanguage> get supportedLanguages => const [];
+
+  @override
+  Future<bool> isAvailable() async => false;
+
+  @override
+  Future<CodeExecutionResult> execute({
+    required String code,
+    required ExecutionLanguage language,
+    required CodeExecutionConfig config,
+    String? workingDirectory,
+    Map<String, String>? environment,
+    Duration? timeout,
+  }) async {
+    return CodeExecutionResult(
+      success: false,
+      error: disabledReason,
+      exitCode: -1,
+    );
   }
 }
 
