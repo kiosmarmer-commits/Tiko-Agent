@@ -6,6 +6,9 @@ import 'package:agent_core/agent_core.dart';
 import 'http_client.dart';
 import '../registry.dart';
 
+/// Disambiguates MCP session ids created in the same millisecond.
+int _mcpSessionSeq = 0;
+
 /// Handler for server-initiated JSON-RPC requests received via MCP SSE.
 ///
 /// When an MCP server sends a request with an 'id' field on the event stream,
@@ -228,7 +231,7 @@ class McpServerRequestHandler {
     // Execute the tool
     final ctx = ToolContext(
       session: Session(
-        id: 'mcp_${DateTime.now().millisecondsSinceEpoch}',
+        id: 'mcp_${DateTime.now().millisecondsSinceEpoch}_${_mcpSessionSeq++}',
         channel: 'mcp',
         userKey: 'mcp-server',
       ),
