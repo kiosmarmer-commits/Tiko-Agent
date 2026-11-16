@@ -35,7 +35,9 @@ class FtsIndex {
         _docs[k] = v as String;
         _index(k, v);
       });
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('fts_index: load index gagal, mulai kosong: $e');
+    }
   }
 
   Future<void> save() async {

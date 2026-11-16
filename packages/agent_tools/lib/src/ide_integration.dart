@@ -414,7 +414,7 @@ class IdeIntegrationManager {
           try {
             request.response.statusCode = HttpStatus.internalServerError;
             await request.response.close();
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }
       });
     } catch (e) {

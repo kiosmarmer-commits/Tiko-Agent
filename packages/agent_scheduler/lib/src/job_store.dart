@@ -233,7 +233,7 @@ class JobStore {
     _saveTail = gate.future;
     try {
       // A previous failed write must not permanently poison the save queue.
-      try { await previous; } catch (_) {}
+      try { await previous; } catch (_) {} // best-effort
       if (persistPath != null) {
         final file = File(persistPath!);
         await file.parent.create(recursive: true);

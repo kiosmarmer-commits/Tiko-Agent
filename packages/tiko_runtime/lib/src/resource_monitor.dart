@@ -55,7 +55,7 @@ class ResourceMonitor {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     int? diskFree;
     try {
@@ -71,7 +71,7 @@ class ResourceMonitor {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     var hasSqlite = false;
     try {
@@ -91,7 +91,7 @@ class ResourceMonitor {
         final r = Process.runSync('ldconfig', ['-p']);
         if ((r.stdout as String).contains('libsqlite3.so')) hasSqlite = true;
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     var network = true;
     try {
@@ -100,7 +100,7 @@ class ResourceMonitor {
       if (r.exitCode == 0 && (r.stdout as String).trim().isEmpty) {
         network = false;
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     var profile = 'standard';
     if (memAvail != null && memAvail < ecoRamMb) {

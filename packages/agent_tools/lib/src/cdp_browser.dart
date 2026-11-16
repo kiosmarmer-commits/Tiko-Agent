@@ -270,12 +270,12 @@ class CdpSession {
     _failPending('closed');
     try {
       await ws?.close();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     final proc = _process;
     _process = null;
     try {
       proc?.kill(ProcessSignal.sigkill);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   void _guardUrl(String url) {

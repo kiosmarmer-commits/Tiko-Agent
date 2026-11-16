@@ -131,7 +131,9 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
         'INSERT INTO facts_fts(rowid, text) SELECT rowid, text FROM facts WHERE id = ?',
         [id],
       );
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('sqlite_store: backfill facts_fts gagal: $e');
+    }
 
     if (vectorIndex != null && embedder != null) {
       final v = await embedder!(f.text);
@@ -178,7 +180,7 @@ class SqliteMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
         if (metaJson is String && metaJson.isNotEmpty) {
           try {
             meta = jsonDecode(metaJson) as Map<String, Object?>;
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }
         await vectorIndex!.upsert(r['id'] as String, values.toList(), meta);
       }

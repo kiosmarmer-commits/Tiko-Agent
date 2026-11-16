@@ -120,7 +120,7 @@ class DaemonManager {
     if (info != null && !RuntimeLock.isAlive(info.pid)) {
       try {
         await File(lock.path).delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
 
     await Directory(dataDir).create(recursive: true);
@@ -192,7 +192,7 @@ class DaemonManager {
     if (!RuntimeLock.isAlive(info.pid)) {
       try {
         await File(lock.path).delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
       return {'stopped': true, 'detail': 'stale lock dibersihkan', 'pid': info.pid};
     }
 

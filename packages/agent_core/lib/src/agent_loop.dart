@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'cancellation.dart';
 import 'interfaces.dart';
@@ -270,7 +271,7 @@ class AgentLoop {
           success = false;
           try {
             await reply(m, 'Turn dibatalkan atas permintaan.');
-          } catch (_) {}
+          } catch (_) {} // best-effort
           break agentLoop;
         }
         if (_budget.exceeded) {
@@ -336,7 +337,7 @@ class AgentLoop {
               );
               final voted = await sc.answer(messages: ctx.messages);
               if (voted.trim().isNotEmpty) ans = voted.trim();
-            } catch (_) {}
+            } catch (_) {} // best-effort
           }
           ans = sanitizer?.output(ans) ?? ans;
           _lastAnswer = ans;
@@ -464,7 +465,7 @@ class AgentLoop {
       _lastAnswer = null;
       try {
         await reply(m, 'Turn dibatalkan atas permintaan.');
-      } catch (_) {}
+      } catch (_) {} // best-effort
     } finally {
       // A route can reserve a half-open probe before execution begins. If the
       // loop exits before the first provider call (including an exception in
@@ -495,7 +496,9 @@ class AgentLoop {
           await reply(m, r.revision!);
           _lastAnswer = r.revision;
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('agent_loop: refleksi/revision gagal: $e');
+      }
     }
 
     final answer = _lastAnswer;

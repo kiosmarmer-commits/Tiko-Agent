@@ -119,7 +119,9 @@ class SkillsHubClient {
           files: const {},
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('skills_hub: installed.json korup, daftar direset: $e');
+    }
   }
 
   Future<void> _saveInstalled() async {

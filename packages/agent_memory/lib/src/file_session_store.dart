@@ -97,7 +97,7 @@ class FileSessionStore implements SessionStore {
       // Corrupt file: keep a copy for forensics and start clean.
       try {
         await f.rename('$path.corrupt-${DateTime.now().millisecondsSinceEpoch}');
-      } catch (_) {}
+      } catch (_) {} // best-effort
       _sessions.clear();
       _messages.clear();
       _turns.clear();

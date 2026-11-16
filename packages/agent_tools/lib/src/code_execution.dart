@@ -312,7 +312,7 @@ class LocalCodeExecutionProvider implements CodeExecutionProvider {
         try {
           await tempFile.delete();
           await tempDir.delete(recursive: true);
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     } catch (e) {
       return CodeExecutionResult(
@@ -415,7 +415,7 @@ class SandboxedCodeExecutionProvider implements CodeExecutionProvider {
         // Clean up temp file
         try {
           await tempFile.delete();
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     } catch (e) {
       return CodeExecutionResult(
@@ -553,7 +553,7 @@ class DockerCodeExecutionProvider implements CodeExecutionProvider {
         // Clean up temp directory
         try {
           await tempDir.delete(recursive: true);
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     } catch (e) {
       return CodeExecutionResult(

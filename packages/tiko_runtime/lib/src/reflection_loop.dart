@@ -135,7 +135,9 @@ class ReflectionEngine {
         if (raw is! Map<String, dynamic>) continue;
         _lessons.add(Lesson.fromJson(raw));
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('reflection_loop: load lessons gagal, mulai kosong: $e');
+    }
   }
 
   Future<void> save() async {

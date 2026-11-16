@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Schema versioning equivalent to Drift migrations (AGD-04).
 /// Run on any sqlite3 Database.
 class DriftStyleMigrations {
@@ -48,7 +50,9 @@ class DriftStyleMigrations {
         db.execute(
           "CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(text, content='facts', content_rowid='rowid');",
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('drift_schema: migrasi facts_fts gagal (FTS tidak aktif): $e');
+      }
       db.execute('PRAGMA user_version = 2');
     }
     if (v < 3) {
@@ -134,7 +138,9 @@ class DriftStyleMigrations {
         db.execute(
           "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(text, content='memories', content_rowid='rowid');",
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('drift_schema: migrasi memories_fts gagal (FTS tidak aktif): $e');
+      }
       db.execute('PRAGMA user_version = 4');
     }
     if (v < 5) {

@@ -226,7 +226,7 @@ class CommandTtsProvider implements TtsProvider {
       final bytes = await file.readAsBytes();
       try {
         await file.delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
       if (bytes.isEmpty) {
         throw StateError('TTS $id tidak menghasilkan audio');
       }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
 
@@ -117,7 +118,9 @@ class Scheduler {
               '(jendela at-least-once); duplicate_policy=review — '
               'tinjau manual sebelum kirim ulang',
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('scheduler: audit event pemulihan gagal: $e');
+      }
       try {
         onDeliveryFailed?.call(
           job,
@@ -125,7 +128,9 @@ class Scheduler {
           job.deliveryAttempts,
           StateError('delivery in-flight dipulihkan dengan policy review'),
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('scheduler: audit event review gagal: $e');
+      }
     }
   }
 
@@ -190,8 +195,12 @@ class Scheduler {
         // else: runtime sudah mengantre output secara durabel; loop delivery
         // di bawah menuntaskan run saat gateway meng-ack.
       } catch (error) {
-        try { await store.releaseRun(job.id); } catch (_) {}
-        try { onError?.call(job, error); } catch (_) {}
+        try {
+          await store.releaseRun(job.id);
+        } catch (e) {
+          stderr.writeln('scheduler: releaseRun gagal: $e');
+        }
+        try { onError?.call(job, error); } catch (_) {} // best-effort
       } finally {
         _runningIds.remove(job.id);
       }
@@ -221,15 +230,17 @@ class Scheduler {
       try {
         await sink(job, runId, _sessionKey(job), text).timeout(deliveryTimeout);
         await store.completeDelivery(job.id, runId);
-        try { onDelivered?.call(job, runId, attempt); } catch (_) {}
+        try { onDelivered?.call(job, runId, attempt); } catch (_) {} // best-effort
       } catch (error) {
         if (attempt >= maxDeliveryAttempts) {
           try {
             await store.failDeliveryPermanently(job.id, runId, '$error');
-          } catch (_) {}
+          } catch (e) {
+            stderr.writeln('scheduler: failDeliveryPermanently gagal: $e');
+          }
           try {
             onDeliveryFailed?.call(job, runId, attempt, error);
-          } catch (_) {}
+          } catch (_) {} // best-effort
         } else {
           final delay =
               deliveryBackoff[attempt.clamp(1, deliveryBackoff.length) - 1];
@@ -240,10 +251,12 @@ class Scheduler {
               delay,
               error: '$error',
             );
-          } catch (_) {}
+          } catch (e) {
+            stderr.writeln('scheduler: persist jadwal retry gagal: $e');
+          }
           try {
             onDeliveryRetry?.call(job, runId, attempt, error);
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }
       } finally {
         _runningIds.remove('delivery:${job.id}');

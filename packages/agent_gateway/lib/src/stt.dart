@@ -32,7 +32,9 @@ class SttClient {
           if (await out.exists()) return (await out.readAsString()).trim();
           return (r.stdout as String).trim();
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('stt: whisper lokal gagal, fallback ke API: $e');
+      }
     }
     if (apiBaseUrl != null && apiKey != null) {
       final client = _http ?? http.Client();

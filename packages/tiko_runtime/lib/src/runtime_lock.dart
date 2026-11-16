@@ -116,7 +116,7 @@ class RuntimeLock {
         // A valid lock owned by a dead process is safe to reclaim once.
         try {
           await File(path).delete();
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
     throw StateError('Gagal mengambil lock: $path');
@@ -129,6 +129,6 @@ class RuntimeLock {
     if (held == null || held.pid != pid) return;
     try {
       await File(path).delete();
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 }

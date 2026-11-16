@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -44,7 +45,9 @@ class SqliteVecIndex implements VectorIndex {
           'INSERT OR REPLACE INTO vec_facts(id, embedding) VALUES (?, ?)',
           [id, '[$lit]'],
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('sqlite_vec_index: upsert vec_facts gagal: $e');
+      }
     }
   }
 
@@ -67,7 +70,9 @@ class SqliteVecIndex implements VectorIndex {
               ),
             )
             .toList();
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('sqlite_vec_index: query vec_facts gagal, fallback brute-force: $e');
+      }
     }
     // brute-force from embeddings table
     final rows = db.select('SELECT id, dim, vector, meta_json FROM embeddings');
@@ -82,7 +87,9 @@ class SqliteVecIndex implements VectorIndex {
         meta = Map<String, Object?>.from(
           jsonDecode(r['meta_json'] as String? ?? '{}') as Map,
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('sqlite_vec_index: meta_json korup dilewati: $e');
+      }
       hits.add(VectorHit(id: r['id'] as String, score: score, meta: meta));
     }
     hits.sort((a, b) => b.score.compareTo(a.score));

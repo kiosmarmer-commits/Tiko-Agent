@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
@@ -93,7 +94,9 @@ class OllamaNativeProvider implements LlmProvider {
           final json = jsonDecode(line) as Map<String, dynamic>;
           yield* _emitMessage(json);
           if (json['done'] == true) break;
-        } catch (_) {}
+        } catch (e) {
+          stderr.writeln('ollama_native: baris stream tidak valid dilewati: $e');
+        }
       }
     } catch (e) {
       yield LlmError(e.toString());
@@ -118,7 +121,9 @@ class OllamaNativeProvider implements LlmProvider {
         if (a is String) {
           try {
             args = jsonDecode(a) as Map<String, dynamic>;
-          } catch (_) {}
+          } catch (e) {
+            stderr.writeln('ollama_native: arguments tool bukan JSON valid: $e');
+          }
         } else if (a is Map) {
           args = Map<String, dynamic>.from(a);
         }

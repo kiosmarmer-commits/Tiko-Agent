@@ -477,7 +477,7 @@ class SandboxRunner {
       await Process.run('docker', ['rm', '--force', name]).timeout(
         const Duration(seconds: 10),
       );
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   /// FR-02 remote execution: runs argv on the configured ssh host inside a
@@ -673,11 +673,11 @@ class SandboxRunner {
     if (name != null) {
       try {
         await Process.run('docker', ['rm', '--force', name]).timeout(const Duration(seconds: 5));
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
     try {
       await process.exitCode.timeout(const Duration(seconds: 2));
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   ({String executable, List<String> arguments}) _sandboxCommand(

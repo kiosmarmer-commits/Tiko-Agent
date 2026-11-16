@@ -442,7 +442,7 @@ class CredentialManager {
       if (result.exitCode != 0) {
         try {
           await tmp.delete();
-        } catch (_) {}
+        } catch (_) {} // best-effort
         throw StateError(
           'Tidak dapat mengamankan permission file kredensial: ${result.stderr}',
         );

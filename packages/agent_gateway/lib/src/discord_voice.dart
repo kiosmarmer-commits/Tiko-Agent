@@ -336,7 +336,9 @@ class DiscordVoiceClient {
         case 3: // Heartbeat ACK
           break;
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('discord_voice: loop voice UDP gagal: $e');
+    }
   }
 
   void _startHeartbeat(int intervalMs) {
@@ -481,11 +483,11 @@ class DiscordVoiceClient {
     _heartbeat = null;
     try {
       await _ws?.close();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     _ws = null;
     try {
       await _udp?.close();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     _udp = null;
     _running = false;
   }
