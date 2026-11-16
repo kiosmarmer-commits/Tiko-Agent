@@ -24,6 +24,7 @@ import 'self_learning_engine.dart';
 import 'memory_nudge.dart';
 import 'turn_redirect.dart';
 import 'bot_mode.dart';
+import 'character_card.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
@@ -2012,7 +2013,10 @@ class TikoRuntime {
     final tail = parts.length > 2
         ? trimmed.substring(trimmed.indexOf(parts[1]) + parts[1].length).trim()
         : '';
-    return _BotCommand(sub: sub, id: id, rest: tail);
+    final afterSub =
+        trimmed.substring(trimmed.indexOf(parts.first) + parts.first.length)
+            .trim();
+    return _BotCommand(sub: sub, id: id, rest: tail, tail: afterSub);
   }
 
   /// Gate sesi bot: tool di luar allowlist bot ditolak langsung pada level
@@ -2049,7 +2053,8 @@ class TikoRuntime {
               '${b.id == active ? ' [aktif]' : ''}');
         }
         buf.write('\nAktifkan: /bot use <id> · nonaktif: /bot off · '
-            'detail: /bot show <id> · allowlist tool: /bot allow <id> <tool>');
+            'detail: /bot show <id> · allowlist tool: /bot allow <id> <tool> '
+            '· impor card: /bot import <path>');
         return ChatRunResult(text: buf.toString(), success: true);
 
       case 'new':
@@ -2194,6 +2199,55 @@ class TikoRuntime {
           success: true,
         );
 
+      case 'import':
+        if (cmd.tail.isEmpty) {
+          return const ChatRunResult(
+            text: 'Pemakaian: /bot import <path-card.json|png>. '
+                'Card harus berada di dalam workspace.',
+            success: false,
+            retryable: true,
+          );
+        }
+        try {
+          final card = await CharacterCardImporter.fromFile(
+            cmd.tail,
+            workspaceRoot: workspace,
+          );
+          final id = CharacterCardImporter.uniqueId(botStore, card.id);
+          await botStore.create(
+            id: id,
+            name: card.name,
+            persona: card.persona,
+            greeting: card.greeting,
+          );
+          events.emit('bot.imported', {'bot': id, 'source': cmd.tail});
+          return ChatRunResult(
+            text: 'Bot "$id" diimpor dari character card "${card.name}". '
+                'Allowlist tool masih kosong (fail-closed): izinkan tool '
+                'dengan /bot allow $id <tool1,tool2> lalu aktifkan dengan '
+                '/bot use $id.',
+            success: true,
+          );
+        } on FormatException catch (e) {
+          return ChatRunResult(
+            text: 'Impor card gagal: ${e.message}',
+            success: false,
+            retryable: true,
+          );
+        } on ArgumentError catch (e) {
+          return ChatRunResult(
+            text: 'Impor card gagal: ${e.message}',
+            success: false,
+            retryable: true,
+          );
+        } on FileSystemException catch (e) {
+          return ChatRunResult(
+            text: 'Impor card gagal: ${e.message}',
+            success: false,
+            retryable: true,
+          );
+        }
+
       case 'use':
         if (botStore.get(cmd.id) == null) {
           return ChatRunResult(
@@ -2262,7 +2316,7 @@ class TikoRuntime {
       default:
         return ChatRunResult(
           text: 'Sub-perintah /bot tidak dikenal: ${cmd.sub}. '
-              'Gunakan: list, new, persona, model, allow, use, off, show, '
+              'Gunakan: list, new, persona, model, allow, import, use, off, show, '
               'delete.',
           success: false,
           retryable: true,
@@ -2775,10 +2829,19 @@ class _BotToolGate implements PermissionGate {
 }
 
 class _BotCommand {
-  const _BotCommand({required this.sub, this.id = '', this.rest = ''});
+  const _BotCommand({
+    required this.sub,
+    this.id = '',
+    this.rest = '',
+    this.tail = '',
+  });
   final String sub;
   final String id;
   final String rest;
+
+  /// Teks asli (tanpa lowercase) setelah sub — dipakai sub-perintah yang
+  /// argumennya bukan id bot, mis. path file pada `/bot import`.
+  final String tail;
 }
 
 class _PluginCommand {
