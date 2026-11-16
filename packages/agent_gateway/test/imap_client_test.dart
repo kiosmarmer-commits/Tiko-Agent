@@ -20,6 +20,10 @@ class FakeImapChannel implements ImapChannel {
     _waiter.clear();
   }
 
+  /// Akses massal ke antrean baris server (sama dengan queue per baris
+  /// sebelum koneksi dibaca).
+  List<String> get script => _pending;
+
   @override
   Future<void> writeLine(String line) async => commands.add(line);
 
@@ -190,5 +194,138 @@ void main() {
     );
     expect(emails, isEmpty);
     expect(channel.commands.where((c) => c.contains('FETCH')), isEmpty);
+  });
+
+  test('Message-ID header diparse ke ImapEmail.messageId', () {
+    final raw = 'From: a@b.c\r\n'
+        'Message-ID: <abc-123@x.test>\r\n'
+        'Subject: s\r\n'
+        '\r\n'
+        'badan\r\n';
+    final msg = ImapPoller.parseMessage(1, raw);
+    expect(msg.messageId, '<abc-123@x.test>');
+  });
+
+  test('allowlist kosong fail-closed: tidak ada yang diemisi', () async {
+    final raw = 'From: andi@kirim.test\r\n'
+        'Subject: hi\r\n'
+        '\r\n'
+        'isi\r\n';
+    final (channel, emails) = await _runPoll(
+      allowSenders: const {},
+      script: [
+        'a1 OK logged in',
+        'a2 OK selected',
+        '* SEARCH 1',
+        'a3 OK done',
+        '* 1 FETCH (BODY[] {${raw.length}}',
+        raw,
+        ')',
+        'a4 OK stored',
+        'a5 OK bye',
+        'a6 OK bye',
+      ],
+    );
+    expect(emails, isEmpty,
+        reason: 'allowlist kosong berarti tidak ada pengirim diizinkan '
+            '(fail-closed), bukan izinkan semua');
+    // Pesan tetap ditandai \Seen agar tidak diproses ulang.
+    expect(channel.commands.where((c) => c.contains('STORE')), hasLength(1));
+  });
+
+  test('anti-replay: Message-ID sama yang muncul lagi sebagai UNSEEN '
+      'hanya diemisi sekali', () async {
+    final raw = 'From: andi@kirim.test\r\n'
+        'Message-ID: <replay-1@kirim.test>\r\n'
+        'Subject: penting\r\n'
+        '\r\n'
+        'isi pesan\r\n';
+    List<String> script() => [
+          'a1 OK logged in',
+          'a2 OK selected',
+          '* SEARCH 1',
+          'a3 OK done',
+          '* 1 FETCH (BODY[] {${raw.length}}',
+          raw,
+          ')',
+          'a4 OK stored',
+          'a5 OK bye',
+          'a6 OK bye',
+        ];
+    // Dua poll berbeda menyajikan pesan yang sama sebagai UNSEEN —
+    // mensimulasikan replay / flag yang dibuka ulang klien lain.
+    final c1 = FakeImapChannel()..script.addAll(script());
+    final c2 = FakeImapChannel()..script.addAll(script());
+    final channels = [c1, c2].iterator;
+    final poller = ImapPoller(
+      host: 'imap.test',
+      username: 'bot@test.id',
+      password: 'secret',
+      allowSenders: const {'andi@kirim.test'},
+      channelFactory: () {
+        channels.moveNext();
+        return channels.current;
+      },
+    );
+    final got = <ImapEmail>[];
+    final sub = poller.emails.listen(got.add);
+    expect(await poller.pollOnce(), 1);
+    expect(await poller.pollOnce(), 0,
+        reason: 'Message-ID yang sudah pernah diemisi tidak boleh '
+            'diemisi ulang (anti-replay)');
+    await sub.cancel();
+    await poller.stop();
+    expect(got, hasLength(1));
+    expect(got.single.messageId, '<replay-1@kirim.test>');
+  });
+
+  test('lifecycle: poll gagal tidak mematikan loop, stop() menyelesaikan done',
+      () async {
+    final raw = 'From: andi@kirim.test\r\n'
+        'Subject: sukses\r\n'
+        '\r\n'
+        'isi\r\n';
+    final bad = FakeImapChannel()..queue('a1 NO login failed');
+    final good = FakeImapChannel()
+      ..script.addAll([
+        'a1 OK logged in',
+        'a2 OK selected',
+        '* SEARCH 1',
+        'a3 OK done',
+        '* 1 FETCH (BODY[] {${raw.length}}',
+        raw,
+        ')',
+        'a4 OK stored',
+        'a5 OK bye',
+        'a6 OK bye',
+      ]);
+    final channels = [bad, good].iterator;
+    final errors = <String>[];
+    final poller = ImapPoller(
+      host: 'imap.test',
+      username: 'bot@test.id',
+      password: 'secret',
+      allowSenders: const {'andi@kirim.test'},
+      pollInterval: const Duration(milliseconds: 10),
+      channelFactory: () {
+        channels.moveNext();
+        return channels.current;
+      },
+      onError: errors.add,
+    );
+    final firstEmail = poller.emails.first
+        .timeout(const Duration(seconds: 5), onTimeout: () => throw TimeoutException('tidak ada email dari poll kedua'));
+    poller.start();
+    final email = await firstEmail;
+    expect(email.subject, 'sukses');
+
+    await poller.stop();
+    await poller.done;
+    expect(errors, hasLength(1),
+        reason: 'kegagalan poll pertama dilaporkan via onError');
+    expect(errors.single, contains('imap poll gagal'));
+
+    // stop() idempotent.
+    await poller.stop();
   });
 }
