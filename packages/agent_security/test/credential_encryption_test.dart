@@ -85,4 +85,51 @@ void main() {
     final noPass = CredentialManager(storagePath: storagePath);
     await expectLater(noPass.initialize(), throwsA(isA<StateError>()));
   });
+
+  test('migrasi gagal (dir read-only): plaintext lama tetap utuh', () async {
+    const plaintext = '{"openai":[{"id":"aabbccdd","provider":"openai",'
+        '"key":"sk-lama","name":"lama","metadata":{},'
+        '"createdAt":"2026-11-15T00:00:00.000Z","lastUsed":null,'
+        '"usageCount":0,"failures":0}]}';
+    await File(storagePath).writeAsString(plaintext);
+
+    await Process.run('chmod', ['500', dir.path]);
+    final mgr = CredentialManager(
+      storagePath: storagePath,
+      passphrase: passphrase,
+    );
+    try {
+      await expectLater(mgr.initialize(), throwsA(anything));
+
+      final raw = await File(storagePath).readAsString();
+      expect(raw, plaintext);
+    } finally {
+      await Process.run('chmod', ['700', dir.path]);
+    }
+  });
+
+  test('simpan sukses tidak meninggalkan file .tmp', () async {
+    final mgr = CredentialManager(
+      storagePath: storagePath,
+      passphrase: passphrase,
+    );
+    await mgr.initialize();
+    await mgr.addCredential(provider: 'openai', key: 'sk-rahasia');
+    await mgr.addCredential(provider: 'anthropic', key: 'ak-lain');
+
+    final leftovers = dir
+        .listSync()
+        .map((e) => e.path)
+        .where((path) => path.endsWith('.tmp'))
+        .toList();
+    expect(leftovers, isEmpty);
+
+    final fresh = CredentialManager(
+      storagePath: storagePath,
+      passphrase: passphrase,
+    );
+    await fresh.initialize();
+    expect((await fresh.getCredential(provider: 'openai'))!.key, 'sk-rahasia');
+    expect((await fresh.getCredential(provider: 'anthropic'))!.key, 'ak-lain');
+  });
 }
