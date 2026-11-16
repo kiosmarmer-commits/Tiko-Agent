@@ -426,15 +426,13 @@ class CredentialManager {
     final file = File(storagePath);
     await file.parent.create(recursive: true);
     if (_encryptionEnabled) {
-      final store = SecretStore(path: storagePath, passphrase: passphrase!);
-      final raw =
-          await file.exists() ? await file.readAsBytes() : const <int>[];
-      if (raw.isNotEmpty && !_hasStoreMagic(raw)) {
-        // Legacy plaintext file: remove it so SecretStore does not mistake
-        // it for a legacy XOR store, then write the sealed payload.
-        await file.delete();
-      }
-      await store.write(_storageKey, jsonEncode(data));
+      // Seal ke file sementara lalu rename atomik. Plaintext lama tidak
+      // pernah dihapus sebelum salinan tersegel utuh ada — bila penulisan
+      // gagal, data lama tetap utuh (tanpa jendela kehilangan data).
+      final tmpPath = '$storagePath.seal.tmp';
+      final tmpStore = SecretStore(path: tmpPath, passphrase: passphrase!);
+      await tmpStore.write(_storageKey, jsonEncode(data));
+      await File(tmpPath).rename(storagePath);
       return;
     }
     final tmp = File('$storagePath.tmp');
