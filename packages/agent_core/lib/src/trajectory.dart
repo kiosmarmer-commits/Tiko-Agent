@@ -158,7 +158,16 @@ class TrajectoryLogger {
       }
     }
     turns.sort((a, b) {
-      final byTs = a.$1.compareTo(b.$1);
+      // Compare instants, not text. DateTime.toIso8601String() emits a
+      // variable-length fraction ('.mmmZ' when microsecond == 0, otherwise
+      // '.mmmuuuZ'), and 'Z' (0x5A) sorts after any digit, so a raw string
+      // compare can place a later turn before an earlier one within the
+      // same millisecond.
+      final ta = DateTime.tryParse(a.$1);
+      final tb = DateTime.tryParse(b.$1);
+      final byTs = (ta != null && tb != null)
+          ? ta.compareTo(tb)
+          : a.$1.compareTo(b.$1);
       if (byTs != 0) return byTs;
       return a.$2.compareTo(b.$2);
     });

@@ -206,4 +206,32 @@ void main() {
     final convo = (row['conversations'] as List).cast<Map>();
     expect(convo.first['value'], 'tugas e1');
   });
+
+  test('export orders same-millisecond turns chronologically', () async {
+    final dir = Directory('${tempDir.path}/trajectories');
+    await dir.create(recursive: true);
+    // The earlier turn lands exactly on a millisecond, so its ISO string
+    // omits microsecond digits and ends with 'Z'. The later turn carries
+    // six fractional digits. A string sort puts the later one first.
+    const earlier = '2026-01-01T00:00:05.123Z';
+    const later = '2026-01-01T00:00:05.123456Z';
+    Map<String, Object?> row(String ts, String session, String input) => {
+          'ts': ts,
+          'session': session,
+          'input': input,
+          'output': 'o',
+          'tools': <String>[],
+          'success': true,
+        };
+    // Write the later turn first so file order cannot mask the bug.
+    await File('${dir.path}/traj-2026-01-01.jsonl').writeAsString(
+      '${jsonEncode(row(later, 'rollout-e2', 'tugas e2'))}\n'
+      '${jsonEncode(row(earlier, 'rollout-e1', 'tugas e1'))}\n',
+    );
+    final out = '${tempDir.path}/sg-order.jsonl';
+    expect(await logger.exportShareGpt(outputPath: out), 2);
+    final lines = (await File(out).readAsString()).trim().split('\n');
+    final first = jsonDecode(lines.first) as Map<String, dynamic>;
+    expect((first['conversations'] as List).first['value'], 'tugas e1');
+  });
 }
