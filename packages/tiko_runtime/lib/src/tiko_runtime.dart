@@ -1375,6 +1375,21 @@ class TikoRuntime {
         channel: channel,
         userKey: userKey,
       );
+      final boundBot = botStore.botFor(sessionId);
+      if (!internalCommand && boundBot != null) {
+        if (boundBot.toolAllowlist.isEmpty) {
+          return ChatRunResult(
+            text: 'Bot "${boundBot.id}" belum memiliki tool allowlist — '
+                'turn ditolak fail-closed. Atur: /bot allow ${boundBot.id} '
+                '<tool1,tool2> atau nonaktifkan: /bot off.',
+            success: false,
+          );
+        }
+        final botFilter = Set.of(boundBot.toolAllowlist);
+        toolFilter = toolFilter == null
+            ? botFilter
+            : toolFilter.intersection(botFilter);
+      }
       // Content-plane guard: block injection attempts and sanitize the rest.
       final now = DateTime.now().toUtc();
       final guardVerdict = promptGuard.inspectInput(
@@ -1436,7 +1451,11 @@ class TikoRuntime {
         // P0-3: the gate never prompts directly. It returns needsConfirm and
         // the loop's broker-backed confirm below becomes the single path, so
         // every surface settles the same durable apr_* request ID.
-        gate: _TirithPreGate(gateOverride ?? buildGate(), tirith, channel),
+        gate: _TirithPreGate(
+          gateOverride ?? _botGate(boundBot),
+          tirith,
+          channel,
+        ),
         executor: RegistryToolExecutor(registry),
         memory: memory,
         skillRegistry: skills,
@@ -1996,6 +2015,15 @@ class TikoRuntime {
     return _BotCommand(sub: sub, id: id, rest: tail);
   }
 
+  /// Gate sesi bot: tool di luar allowlist bot ditolak langsung pada level
+  /// eksekusi (bukan hanya disembunyikan dari prompt), sisanya diteruskan ke
+  /// gate matriks biasa. Sesi tanpa bot memakai gate biasa.
+  PermissionGate _botGate(BotProfile? bot) {
+    final base = buildGate();
+    if (bot == null || bot.toolAllowlist.isEmpty) return base;
+    return _BotToolGate(base, Set.of(bot.toolAllowlist));
+  }
+
   /// `/bot` — Bot Mode: persona persisten per chat (Hermes-parity).
   Future<ChatRunResult> _botCommand(
     _BotCommand cmd, {
@@ -2021,7 +2049,7 @@ class TikoRuntime {
               '${b.id == active ? ' [aktif]' : ''}');
         }
         buf.write('\nAktifkan: /bot use <id> · nonaktif: /bot off · '
-            'detail: /bot show <id>');
+            'detail: /bot show <id> · allowlist tool: /bot allow <id> <tool>');
         return ChatRunResult(text: buf.toString(), success: true);
 
       case 'new':
@@ -2114,6 +2142,58 @@ class TikoRuntime {
           success: true,
         );
 
+      case 'allow':
+        final botAllow = botStore.get(cmd.id);
+        if (botAllow == null || cmd.rest.isEmpty) {
+          return ChatRunResult(
+            text: cmd.rest.isEmpty
+                ? 'Pemakaian: /bot allow <id> <tool1,tool2,...> | clear\n'
+                    'Tool terdaftar: '
+                    '${registry.specs.map((s) => s.name).toList()..sort()}'
+                : 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        if (cmd.rest.trim().toLowerCase() == 'clear') {
+          await botStore.update(
+            cmd.id,
+            (b) => b.copyWith(clearToolAllowlist: true),
+          );
+          events.emit('bot.updated', {'bot': cmd.id, 'field': 'tool_allowlist'});
+          return ChatRunResult(
+            text: 'Allowlist bot "${cmd.id}" dikosongkan — sesi dengan bot '
+                'ini ditolak fail-closed hingga allowlist diatur lagi.',
+            success: true,
+          );
+        }
+        final requested = cmd.rest
+            .split(RegExp(r'[,\s]+'))
+            .map((t) => t.trim())
+            .where((t) => t.isNotEmpty)
+            .toSet();
+        final knownTools = registry.specs.map((s) => s.name).toSet();
+        final unknown = requested.where((t) => !knownTools.contains(t)).toList();
+        if (unknown.isNotEmpty) {
+          return ChatRunResult(
+            text: 'Tool tidak dikenal: ${unknown.join(', ')}. Tool terdaftar: '
+                '${knownTools.toList()..sort()}.',
+            success: false,
+            retryable: true,
+          );
+        }
+        final tools = requested.toList()..sort();
+        await botStore.update(
+          cmd.id,
+          (b) => b.copyWith(toolAllowlist: tools),
+        );
+        events.emit('bot.updated', {'bot': cmd.id, 'field': 'tool_allowlist'});
+        return ChatRunResult(
+          text: 'Bot "${cmd.id}" hanya boleh memakai ${tools.length} tool: '
+              '${tools.join(', ')}.',
+          success: true,
+        );
+
       case 'use':
         if (botStore.get(cmd.id) == null) {
           return ChatRunResult(
@@ -2159,6 +2239,8 @@ class TikoRuntime {
         final buf = StringBuffer('Bot ${bot.id} — "${bot.name}"\n'
             'model: ${bot.model ?? 'default router'}\n'
             'dibuat: ${bot.createdAt.toIso8601String()}\n'
+            'tool allowlist: '
+            '${bot.toolAllowlist.isEmpty ? '(kosong — turn ditolak fail-closed)' : bot.toolAllowlist.join(', ')}\n'
             'persona:\n${bot.persona.isEmpty ? '(kosong)' : bot.persona}');
         return ChatRunResult(text: buf.toString(), success: true);
 
@@ -2180,7 +2262,8 @@ class TikoRuntime {
       default:
         return ChatRunResult(
           text: 'Sub-perintah /bot tidak dikenal: ${cmd.sub}. '
-              'Gunakan: list, new, persona, model, use, off, show, delete.',
+              'Gunakan: list, new, persona, model, allow, use, off, show, '
+              'delete.',
           success: false,
           retryable: true,
         );
@@ -2671,6 +2754,24 @@ Map<String, String> _parseOtelHeaders(String raw) {
 class _ModelCommand {
   const _ModelCommand({required this.arg});
   final String arg;
+}
+
+class _BotToolGate implements PermissionGate {
+  _BotToolGate(this.inner, this.allowlist);
+
+  final PermissionGate inner;
+  final Set<String> allowlist;
+
+  @override
+  Future<PermissionResult> check(ToolCall call, Session session) async {
+    if (!allowlist.contains(call.name)) {
+      return PermissionResult(
+        PermissionVerdict.denied,
+        reason: 'tool "${call.name}" di luar allowlist bot',
+      );
+    }
+    return inner.check(call, session);
+  }
 }
 
 class _BotCommand {

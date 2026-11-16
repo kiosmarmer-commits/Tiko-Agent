@@ -131,6 +131,7 @@ void main() {
       '/bot persona kucing Kamu adalah Kucing Ninja yang menjawab singkat.',
     );
     await rt.chat('/bot model kucing fake');
+    await rt.chat('/bot allow kucing read_file');
     final activated = await rt.chat('/bot use kucing');
     expect(activated, contains('memakai bot "kucing"'));
 
