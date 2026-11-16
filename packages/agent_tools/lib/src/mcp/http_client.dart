@@ -125,6 +125,13 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   final _pendingSseData = StringBuffer();
   bool _discardingSseEvent = false;
 
+  /// Id event SSE terakhir yang diterima (C2). Dikirim ulang sebagai header
+  /// `Last-Event-ID` pada (re)connect GET sehingga server dapat me-resume
+  /// event yang terlewat.
+  String? _lastEventId;
+
+  String? get lastEventId => _lastEventId;
+
   http.Client get _client => httpClient ?? (_ownedClient ??= http.Client());
 
   /// Session id yang diberikan server saat initialize, bila ada.
@@ -219,6 +226,9 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   Future<void> _startEventStream() async {
     final request = http.Request('GET', Uri.parse(baseUrl));
     request.headers.addAll(_sessionHeaders(accept: 'text/event-stream'));
+    if (_lastEventId != null) {
+      request.headers['Last-Event-ID'] = _lastEventId!;
+    }
     final response = await _client
         .send(request)
         .timeout(const Duration(seconds: 10));
@@ -305,7 +315,16 @@ class HttpMcpClient implements McpTransport, McpToolServer {
       }
       return;
     }
-    if (_discardingSseEvent || line.startsWith(':') || !line.startsWith('data:')) {
+    if (_discardingSseEvent || line.startsWith(':')) {
+      return;
+    }
+    if (line.startsWith('id:')) {
+      var value = line.substring(3);
+      if (value.startsWith(' ')) value = value.substring(1);
+      if (value.isNotEmpty) _lastEventId = value;
+      return;
+    }
+    if (!line.startsWith('data:')) {
       return;
     }
     var value = line.substring(5);

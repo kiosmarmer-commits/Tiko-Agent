@@ -382,6 +382,7 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
     super.maxReadRetries = 2,
     super.maxEventChars = 262144,
     super.maxObservedEvents = 100,
+    super.oauth,
     this.toolRegistry,
     this.onServerRequest,
     this.onSampling,

@@ -638,7 +638,11 @@ class TikoRuntime {
     }
 
     // MCP child processes start only after agentd acquires its instance lock.
-    final mcpLoader = McpToolLoader(registry, sandbox: sandbox);
+    final mcpLoader = McpToolLoader(
+      registry,
+      sandbox: sandbox,
+      answerServerRequests: cfg.mcpAnswerServerRequests,
+    );
 
     final safety = SafetyState();
     if (safe) safety.enableSafeMode();
