@@ -136,30 +136,12 @@ Future<void> main(List<String> args) async {
 
   final rateLimiter = RateLimiter(maxPerMinute: 20);
 
-  // Bot Mode: optional group-chat routing. Bindings live in data/bots.json
-  // next to other runtime state. No file means Bot Mode is off and every
-  // channel keeps its current behaviour.
-  BotModeGate? botGate;
-  try {
-    final botsFile = File('${rt.config.dataDir}/bots.json');
-    if (botsFile.existsSync()) {
-      final raw =
-          jsonDecode(botsFile.readAsStringSync()) as Map<String, dynamic>;
-      final agents = AgentRegistry();
-      for (final e in (raw['agents'] as List<dynamic>? ?? [])) {
-        agents.register(AgentSpec.fromJson(Map<String, dynamic>.from(e as Map)));
-      }
-      final bots = BotRegistry(agents);
-      for (final e in (raw['bindings'] as List<dynamic>? ?? [])) {
-        bots.bind(BotBinding.fromJson(Map<String, dynamic>.from(e as Map)));
-      }
-      if (bots.length > 0) {
-        botGate = BotModeGate(BotRouter(registry: bots));
-        stdout.writeln('Bot Mode aktif: ${bots.length} bot');
-      }
-    }
-  } catch (e) {
-    stderr.writeln('bots.json diabaikan: $e');
+  // Bot Mode: routing grup memakai BotStore yang sama dengan slash `/bot`
+  // (satu sumber kebenaran). Tanpa profil bot, semua channel berperilaku
+  // seperti biasa.
+  final botRouter = BotGroupRouter(rt.botStore);
+  if (rt.botStore.list().isNotEmpty) {
+    stdout.writeln('Bot Mode aktif: ${rt.botStore.list().length} bot');
   }
   final gateways = <Gateway>[];
   TelegramGateway? tg;
@@ -451,9 +433,17 @@ Future<void> main(List<String> args) async {
 
     // Bot Mode runs before any approval prompt or live message is created,
     // so a dropped group message leaves no side effect on the platform.
-    final botDecision = botGate?.evaluate(m);
-    if (botDecision != null && botDecision.action == BotModeAction.drop) {
+    // Dispatch = ikat sesi ke bot yang di-mention (semantik `/bot use`);
+    // persona + model bot kemudian disuntik otomatis oleh funnel chat.
+    final botRoute = botRouter.route(
+      text: m.text,
+      isGroup: BotModeGate.isGroup(m),
+    );
+    if (botRoute.drops) {
       return;
+    }
+    if (botRoute.dispatches) {
+      await rt.botStore.bind(m.sessionKey, botRoute.target!.id);
     }
 
     Future<bool> Function(ToolCall call, Session session, String approvalId)?
