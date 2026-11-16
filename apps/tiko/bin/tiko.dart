@@ -7,6 +7,7 @@ import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:tiko_tui/tiko_tui.dart';
+import 'package:tiko/tiko_cli.dart';
 
 const _usage = '''
 tiko — Pasitiko local-first agent (control plane)
@@ -64,31 +65,17 @@ Opsi: --config PATH  --json  --no-safe  --mode auto|embedded
 ''';
 
 Future<void> main(List<String> argv) async {
-  var configPath = 'config/agent.yaml';
-  var jsonOut = false;
-  var safe = true;
-  var probe = false;
-  var mode = 'auto';
-  final rest = <String>[];
-  for (var i = 0; i < argv.length; i++) {
-    final a = argv[i];
-    if (a == '--config' && i + 1 < argv.length) {
-      configPath = argv[++i];
-    } else if (a == '--json') {
-      jsonOut = true;
-    } else if (a == '--no-safe') {
-      safe = false;
-    } else if (a == '--probe') {
-      probe = true;
-    } else if (a == '--mode' && i + 1 < argv.length) {
-      mode = argv[++i];
-    } else if (a == '-h' || a == '--help') {
-      stdout.write(_usage);
-      return;
-    } else {
-      rest.add(a);
-    }
+  final parsed = parseTikoArgs(argv);
+  final configPath = parsed.configPath;
+  final jsonOut = parsed.jsonOut;
+  final safe = parsed.safe;
+  final probe = parsed.probe;
+  final mode = parsed.mode;
+  if (parsed.help) {
+    stdout.write(_usage);
+    return;
   }
+  final rest = parsed.rest;
   if (rest.isEmpty) {
     stdout.write(_usage);
     exitCode = 2;
@@ -674,7 +661,7 @@ Future<void> main(List<String> argv) async {
                     return TuiOutcome(['error: $e']);
                   }
                 },
-                completer: _chatCompleter,
+                completer: chatCompleter,
                 historyStore: TuiHistoryStore(
                   p.join(rt.dataDir, 'tui-history.txt'),
                 ),
@@ -716,7 +703,7 @@ Future<void> main(List<String> argv) async {
           final answer = await rt.chat(input, confirm: askUser);
           return TuiOutcome(['tiko> $answer']);
         },
-        completer: _chatCompleter,
+        completer: chatCompleter,
         historyStore: TuiHistoryStore(
           p.join(rt.dataDir, 'tui-history.txt'),
         ),
@@ -778,7 +765,7 @@ Future<void> _configCmd(
         return;
       }
       final (cfg, _) = TikoConfig.load(store.configPath);
-      stdout.writeln(_getCfg(cfg, args[1]));
+      stdout.writeln(getCfg(cfg, args[1]));
     case 'set':
       if (args.length < 3) {
         stderr.writeln('config set <path> <value>');
@@ -815,22 +802,6 @@ Future<void> _configCmd(
       emit({'revision': r.revision}, 'rollback -> r${r.revision}');
     default:
       exitCode = 2;
-  }
-}
-
-String _getCfg(TikoConfig c, String path) {
-  switch (path) {
-    case 'default_provider':
-    case 'providers.default':
-      return c.defaultProvider;
-    case 'workspace':
-      return c.workspace;
-    case 'api.port':
-      return '${c.apiPort}';
-    case 'data_dir':
-      return c.dataDir;
-    default:
-      return '(gunakan config show; path $path)';
   }
 }
 
@@ -934,25 +905,18 @@ Future<void> _handleRemoteApprovals(
 }
 
 Future<void> _setup(String configPath, List<String> args) async {
-  var provider = 'mock';
-  var workspace = '.';
-  var force = false;
-  var interactive = false;
-  for (var i = 0; i < args.length; i++) {
-    if (args[i] == '--provider' && i + 1 < args.length) {
-      provider = args[++i];
-    } else if (args[i] == '--workspace' && i + 1 < args.length) {
-      workspace = args[++i];
-    } else if (args[i] == '--force') {
-      force = true;
-    } else if (args[i] == '--interactive') {
-      interactive = true;
-    } else {
-      stderr.writeln('Opsi setup tidak dikenal: ${args[i]}');
-      exitCode = 2;
-      return;
-    }
+  final setup = parseSetupArgs(
+    args,
+    onUnknown: (message) => stderr.writeln(message),
+  );
+  if (setup == null) {
+    exitCode = 2;
+    return;
   }
+  final provider = setup.provider;
+  final workspace = setup.workspace;
+  final force = setup.force;
+  final interactive = setup.interactive;
 
   if (interactive) {
     try {
@@ -1164,10 +1128,3 @@ Future<void> _setupInteractive(String configPath, bool force) async {
     exitCode = 2;
   }
 }
-
-const _chatCommands = ['/quit', '/exit', '/doctor', '/status'];
-
-List<String> _chatCompleter(String prefix, String token) => [
-      for (final command in _chatCommands)
-        if (command.startsWith(token)) command,
-    ];

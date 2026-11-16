@@ -4,6 +4,7 @@ import 'package:agent_core/agent_core.dart';
 import 'package:agent_providers/agent_providers.dart';
 import 'package:agent_tools/agent_tools.dart';
 import 'package:agent_security/agent_security.dart';
+import 'package:agent_cli/cli_context_builder.dart';
 
 /// CLI interaktif M1 — mock atau Ollama lokal.
 ///
@@ -74,7 +75,7 @@ Future<void> main(List<String> args) async {
 
   final loop = AgentLoop(
     router: router,
-    contextBuilder: _CliContextBuilder(
+    contextBuilder: CliContextBuilder(
       registry: registry,
       inner: contextBuilder,
     ),
@@ -144,26 +145,4 @@ Future<void> main(List<String> args) async {
 
   await scriptRunner.close();
   stdout.writeln('Sampai jumpa.');
-}
-
-class _CliContextBuilder extends ContextBuilder {
-  _CliContextBuilder({required this.registry, required ContextBuilder inner})
-    : super(systemPrompt: inner.systemPrompt, memory: inner.memory);
-
-  final ToolRegistry registry;
-
-  @override
-  Future<AgentContext> build(
-    Session session,
-    InboundMessage m,
-    RouteDecision route,
-  ) async {
-    final ctx = await super.build(session, m, route);
-    return AgentContext(
-      messages: ctx.messages,
-      tools: registry.specs,
-      session: ctx.session,
-      systemPrompt: ctx.systemPrompt,
-    );
-  }
 }
