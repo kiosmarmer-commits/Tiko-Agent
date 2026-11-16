@@ -23,6 +23,50 @@
 >
 > For what is actually verified, see `docs/VERIFICATION-STATUS-2026-11-16.md`.
 
+---
+
+## 🔄 MATRIX REFRESH — 2026-11-16 (mengesankan matriks di bawah)
+
+Re-audit seluruh Priority Matrix (22 item) terhadap pohon kode `main` saat ini.
+**Hampir semua baris "❌ Missing" di bawah sudah stale** — fiturnya kini ada dan
+sebagian besar sudah *wired* ke runtime/daemon. Status memakai skema tiga level
+(`unit-tested` / `wired` / `verified-e2e`, lihat `docs/VERIFICATION-STATUS-2026-11-16.md`).
+Tabel dan persentase di bawah notice ini **tidak lagi akurat**; gunakan tabel berikut.
+
+| # | Fitur | Status kini | Bukti di pohon kode |
+|---|-------|-------------|---------------------|
+| 1 | Tirith Security Layer | ✅ **wired** | `agent_security` (prompt_guard PI-rules, SecretStore XChaCha20-Poly1305+Argon2id, SafetyPermissionGate, ApprovalBroker, SSRF-pinned client, audit log); hardening B-01..B-14 + regression guard test |
+| 2 | Approval Workflows | ✅ **wired** | `ApprovalBroker` + confirm inline Telegram (terikat requester, PR #46) + `/v1/approvals` web/Flutter + `tiko approve` |
+| 3 | Credential Pools | ✅ **wired** | `CredentialManager`: rotasi round-robin, rate-limit tracker per provider, retry; kini terenkripsi at-rest (PR #39, seal atomik) |
+| 4 | Fallback Providers | ✅ **wired** | `Router` bertingkat: `tierProviders`, `fallbackOrder`, circuit breaker + health (ALG-06); override per sesi via `/model` |
+| 5 | Image Generation | ✅ **wired** | `agent_tools/src/image_generation.dart` + `image_providers.dart`; config `features.image_generation` → tool terdaftar di runtime |
+| 6 | Vision & Image Paste | ✅ **wired** | `agent_tools/src/vision.dart`; config `features.vision` → runtime; attachment `image` di gateway |
+| 7 | Context Files | ✅ **wired** | `agent_core/src/context_files.dart`: AGENTS.md, SOUL.md, CLAUDE.md, `.cursorrules`, `.hermes.md` (6 tipe) |
+| 8 | Context References | ✅ **wired** | `context_expander.dart` (FR-03): `@file:`, `@dir:`, `@git:`, `@url:` — resolusi dibatasi workspace, `@url:` blokir localhost/private (SSRF) |
+| 9 | Code Execution Tool | ✅ **wired** | tool `shell` builtin dengan jail workspace (B-09) + approval gate; `agent_calc` untuk evaluasi numerik |
+| 10 | Batch Processing | ✅ **wired** | `agent_tools/src/batch_processing.dart` (`BatchProcessingTool`, `enableBatchProcessing`) |
+| 11 | API Server (OpenAI-compatible) | ✅ **wired** | `agent_tools/src/api_server.dart` (SSE streaming, ticket auth, body cap, CORS allowlist); `agentd --api` |
+| 12 | IDE Integration (ACP) | ✅ **wired** | `agent_tools/src/acp_agent.dart` (`AcpAgent`, `AcpDispatcher`, `enableAcp`) |
+| 13 | Plugins System | ✅ **wired** | `plugin_system.dart` (hooks + HookVerdict) + capability consent fail-closed (`plugin_consent.dart`) + isolasi proses out-of-process (`plugin_process.dart`, PR #38); config `plugins.process`, slash `/plugin` |
+| 14 | Memory Providers | ✅ **wired** | `agent_memory`: `memory_providers.dart`, `cloud_memory_providers.dart`, memory layers, RAG pipeline + FTS + vector (sqlite-vec), curated memory (`/learn`) |
+| 15 | Skins & Themes | ✅ **wired** | `apps/agent_flutter`: ThemeMode light/dark/system + settings store/view |
+| 16 | Personality System | ✅ **wired** | SOUL.md (immutable persona) + Bot persona per chat (`/bot`, PR #37) |
+| 17 | Event Hooks | ✅ **wired** | `EventBus` runtime (`turn.interrupted`, `bot.*`, `plugin.*`, `model.switched`, …) + plugin hooks (beforeToolCall/afterToolCall/session/message) |
+| 18 | Multi-Agent Orchestration | ✅ **wired** | `agent_team.dart` (AgentRegistry/AgentSpec) + `spawn_subagent` + isolation gate + `BotRouter`/`BotModeGate` routing grup (PR #42–44, #48) |
+| 19 | Reinforcement Learning (Atropos-style) | ⚠️ **unit-tested** | `agent_core/src/rl_pipeline.dart`: rollout batch, reward, trajectory → ShareGPT export; belum terhubung ke trainer eksternal |
+| 20 | Skill Marketplace | ⚠️ **wired (lokal)** | `agentskills_io.dart`: SKILL.md standar agentskills.io (install/ekspor "Skills Hub"), skill ledger + metrics + synthesis; **belum ada registry remote/publik** |
+| 21 | Migration from Other Agents | ✅ **wired** | `agent_memory/src/agent_migration.dart`: parser Claude Code JSONL, ChatGPT `conversations.json`, generik `{role, content}` → diimpor ke MemoryStore |
+| 22 | Prompt Caching | ✅ **wired** | `agent_providers/src/prompt_cache.dart` + hint `prompt_cache_key` (openai_compat) + cache handling anthropic_compat |
+
+**Sisa gap nyata (per 2026-11-16):**
+
+1. `verified-e2e` terhadap layanan eksternal nyata (Telegram/Discord/Slack/WhatsApp/Email live, MCP vendor, Discord voice crypto) — lihat §3 `VERIFICATION-STATUS`.
+2. RL pipeline belum terhubung ke trainer eksternal (unit-tested saja).
+3. Skill marketplace belum punya registry remote/publik (install lokal + ekspor saja).
+4. Benchmark kualitas/latensi vector retrieval belum ada.
+
+---
+
 **Date:** 2026-11-10  
 **Version:** 2.0 (Post-Implementation Review)  
 **Status:** After implementing Self-Improving Learning Loop and Hermes-like features
