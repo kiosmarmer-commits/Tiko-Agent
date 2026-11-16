@@ -283,6 +283,7 @@ class TikoConfig {
     ],
     this.httpDomainAllowlist = const [],
     this.mcpServers = const [],
+    this.mcpAnswerServerRequests = false,
     this.decision = const DecisionConfig(),
     this.memoryEmbed = const MemoryEmbedConfig(),
     this.memoryProviders = const [],
@@ -324,6 +325,10 @@ class TikoConfig {
   final List<String> requireConfirm;
   final List<String> httpDomainAllowlist;
   final List<McpServerConfig> mcpServers;
+
+  /// Opt-in (C2): jawab request JSON-RPC ber-ID yang diinisiasi server MCP
+  /// HTTP via GET SSE. Default false — request hanya dicatat (fail-closed).
+  final bool mcpAnswerServerRequests;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -772,6 +777,17 @@ class TikoConfig {
       providers['mock'] = const ProviderConfig(id: 'mock', type: 'mock');
     }
 
+    final rawAnswerServerRequests = mcp['answer_server_requests'];
+    if (rawAnswerServerRequests != null && rawAnswerServerRequests is! bool) {
+      issues.add(const ConfigIssue(
+        'mcp.answer_server_requests',
+        'harus boolean',
+      ));
+    }
+    final mcpAnswerServerRequests = rawAnswerServerRequests is bool
+        ? rawAnswerServerRequests
+        : false;
+
     final mcpServers = <McpServerConfig>[];
     final rawMcpServers = mcp['servers'];
     if (rawMcpServers != null && rawMcpServers is! YamlList) {
@@ -1106,6 +1122,7 @@ class TikoConfig {
       ]),
       httpDomainAllowlist: strList(http['domain_allowlist'], const []),
       mcpServers: mcpServers,
+      mcpAnswerServerRequests: mcpAnswerServerRequests,
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../registry.dart';
 import '../sandbox.dart';
 import 'http_client.dart';
+import 'http_server_handler.dart';
 import 'oauth.dart';
 import 'stdio_client.dart';
 
@@ -18,10 +19,38 @@ import 'stdio_client.dart';
 /// guard is intentionally not applied here; the tool allowlist and risk
 ///   floor remain mandatory.
 class McpToolLoader {
-  McpToolLoader(this.registry, {required this.sandbox});
+  McpToolLoader(
+    this.registry, {
+    required this.sandbox,
+    this.answerServerRequests = false,
+  });
 
   final ToolRegistry registry;
   final SandboxRunner sandbox;
+
+  /// Opt-in (C2): saat aktif, klien HTTP MCP memakai [EnhancedHttpMcpClient]
+  /// sehingga request ber-ID yang diinisiasi server dijawab (tools/list,
+  /// tools/call, sampling, dsb.) lewat [McpServerRequestHandler] dengan batas
+  /// ketat: hanya tool berisiko `low` yang terekspos, plus concurrency,
+  /// timeout, dan rate-limit bawaan handler. Default `false`: request server
+  /// hanya dicatat (fail-closed).
+  final bool answerServerRequests;
+
+  ToolRegistry? _cachedServerRequestTools;
+
+  /// Registry terfilter berisi hanya tool berisiko `low` yang boleh
+  /// dipanggil oleh server MCP. Dibangun sekali per loader.
+  ToolRegistry _serverRequestTools() {
+    return _cachedServerRequestTools ??= () {
+      final filtered = ToolRegistry();
+      for (final spec in registry.specs) {
+        if (spec.risk != 'low') continue;
+        final tool = registry.get(spec.name);
+        if (tool != null) filtered.register(tool);
+      }
+      return filtered;
+    }();
+  }
   final List<McpToolServer> _clients = [];
   final List<Map<String, dynamic>> _statuses = [];
 
@@ -251,6 +280,16 @@ class McpToolLoader {
         _statuses.add({'id': id, 'status': 'invalid', 'detail': 'oauth config invalid: $error'});
         return null;
       }
+    }
+    if (answerServerRequests) {
+      return EnhancedHttpMcpClient(
+        baseUrl: url,
+        headers: Map<String, String>.from(rawHeaders),
+        protocolVersion: protocolVersion,
+        maxReadRetries: maxReadRetries,
+        oauth: oauth,
+        toolRegistry: _serverRequestTools(),
+      );
     }
     return HttpMcpClient(
       baseUrl: url,

@@ -162,5 +162,72 @@ void main() {
           .length;
       expect(reconnected, greaterThanOrEqualTo(1));
     });
+
+    test('SSE reconnect mengirim Last-Event-ID dari event terakhir (C2)',
+        () async {
+      final lastEventIds = <String?>[];
+      var streamCount = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+      server.listen((req) async {
+        if (req.method == 'GET') {
+          lastEventIds.add(req.headers.value('last-event-id'));
+          streamCount++;
+          req.response.bufferOutput = false;
+          req.response.headers.contentType =
+              ContentType('text', 'event-stream');
+          if (streamCount == 1) {
+            req.response.write(
+              'id: 7\ndata: ${jsonEncode({
+                'jsonrpc': '2.0',
+                'method': 'notifications/first',
+              })}\n\n',
+            );
+            await req.response.flush();
+            await req.response.close();
+            return;
+          }
+          await Future<void>.delayed(const Duration(seconds: 5));
+          await req.response.close();
+          return;
+        }
+        final body = await utf8.decoder.bind(req).join();
+        final msg = body.isEmpty
+            ? <String, dynamic>{}
+            : jsonDecode(body) as Map<String, dynamic>;
+        final method = msg['method'] as String?;
+        if (method == 'initialize') {
+          req.response.headers.set('mcp-session-id', 'sess-resume');
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'jsonrpc': '2.0',
+            'id': msg['id'],
+            'result': {
+              'protocolVersion': msg['params']['protocolVersion'],
+              'serverInfo': {'name': 'mock-resume'},
+            },
+          }));
+        } else {
+          req.response.statusCode = 202;
+        }
+        await req.response.close();
+      });
+
+      final c = HttpMcpClient(baseUrl: 'http://127.0.0.1:${server.port}/mcp');
+      addTearDown(c.close);
+      await c.start();
+
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (streamCount < 2 && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+      expect(c.lastEventId, '7');
+      expect(lastEventIds.first, isNull,
+          reason: 'koneksi pertama belum punya event id');
+      expect(lastEventIds[1], '7',
+          reason: 'reconnect harus membawa Last-Event-ID: 7');
+    });
   });
 }
