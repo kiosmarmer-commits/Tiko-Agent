@@ -101,6 +101,37 @@ class RuntimeSkillApi implements SkillApi {
   }
 
   @override
+  Future<Map<String, dynamic>> recordSessionFeedback(
+    HttpRequest req,
+    String sessionId,
+  ) async {
+    Map<String, dynamic> body;
+    try {
+      final raw = await utf8.decoder.bind(req).join();
+      body = raw.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return {'error': 'invalid JSON body'};
+    }
+    final positive = body['positive'];
+    if (positive is! bool) {
+      return {'error': "field 'positive' (bool) is required"};
+    }
+    final skills = await _rt.applyTurnFeedback(
+      sessionId: sessionId,
+      positive: positive,
+      actor: 'api',
+    );
+    return {
+      'session': sessionId,
+      'recorded': true,
+      'positive': positive,
+      'skills': skills,
+    };
+  }
+
+  @override
   Future<Map<String, dynamic>> evaluateSkill(HttpRequest req, String slug) async {
     try {
       final result = await _rt.evaluateSkill(slug, actor: 'api');

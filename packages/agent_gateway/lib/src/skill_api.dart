@@ -20,6 +20,14 @@ abstract class SkillApi {
   /// Record feedback for a skill.
   Future<Map<String, dynamic>> recordFeedback(HttpRequest req, String slug);
 
+  /// Record turn-level feedback for a session (C1): routes 👍/👎 to the
+  /// skills used in the session's last turn and to the self-evolution
+  /// trajectory ledger.
+  Future<Map<String, dynamic>> recordSessionFeedback(
+    HttpRequest req,
+    String sessionId,
+  );
+
   /// Evaluate a skill.
   Future<Map<String, dynamic>> evaluateSkill(HttpRequest req, String slug);
 

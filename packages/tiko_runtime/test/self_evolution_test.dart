@@ -318,4 +318,63 @@ void main() {
       await dir.delete(recursive: true);
     });
   });
+
+  group('feedback loop (C1)', () {
+    test('applyFeedback re-blends deterministic reward', () {
+      final r = TrajectoryRecord(
+        id: 'a',
+        createdAt: DateTime.utc(2026),
+        sessionId: 's',
+        success: true,
+        toolCalls: const ['shell'],
+      );
+      expect(r.deterministicReward, closeTo(0.6 + 0.25 + 0.075, 0.001));
+      r.applyFeedback(false);
+      expect(r.feedback, isFalse);
+      expect(r.deterministicReward, closeTo(0.85, 0.001));
+      expect(r.isAmbiguous, isTrue);
+    });
+
+    test('ledger.attachFeedback persists across reload', () async {
+      final dir = await Directory.systemTemp.createTemp('tiko_evo');
+      final path = '${dir.path}/ledger.jsonl';
+      final l1 = TrajectoryLedger(path: path);
+      await l1.add(
+        TrajectoryRecord(
+          id: 'a',
+          createdAt: DateTime.utc(2026),
+          sessionId: 'sess-1',
+          success: true,
+        ),
+      );
+      final updated = await l1.attachFeedback('sess-1', false);
+      expect(updated, isNotNull);
+      expect(updated!.feedback, isFalse);
+      final l2 = TrajectoryLedger(path: path);
+      expect(l2.records.first.feedback, isFalse);
+      expect(await l2.attachFeedback('unknown', true), isNull);
+      await dir.delete(recursive: true);
+    });
+
+    test('engine.recordFeedback updates reward and emits event', () async {
+      final dir = await Directory.systemTemp.createTemp('tiko_evo');
+      final events = EventBus();
+      final engine = SelfEvolutionEngine(dataDir: dir.path, events: events);
+      expect(
+        await engine.recordFeedback(sessionId: 'nope', positive: true),
+        isFalse,
+      );
+      await engine.recordTurn(sessionId: 'sess-1', success: true);
+      expect(
+        await engine.recordFeedback(sessionId: 'sess-1', positive: false),
+        isTrue,
+      );
+      final rec = engine.ledger.records.first;
+      expect(rec.feedback, isFalse);
+      expect(rec.deterministicReward, closeTo(0.6 + 0.25 + 0.0, 0.001));
+      final kinds = [for (final e in events.recent(limit: 10)) e['type']];
+      expect(kinds, contains('evolution.feedback'));
+      await dir.delete(recursive: true);
+    });
+  });
 }

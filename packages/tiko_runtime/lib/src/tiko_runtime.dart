@@ -170,6 +170,63 @@ class TikoRuntime {
   final String dataDir;
   final SkillRegistry skills;
 
+  /// Skill yang dipakai turn terakhir per sesi (C1) — agar 👍/👎 tingkat
+  /// turn bisa diarahkan ke skill yang tepat. In-memory, cap 500 sesi.
+  final Map<String, List<String>> _sessionSkillsUsed = {};
+
+  void _rememberSessionSkills(String sessionId, List<String> slugs) {
+    _sessionSkillsUsed[sessionId] = List.of(slugs);
+    while (_sessionSkillsUsed.length > 500) {
+      _sessionSkillsUsed.remove(_sessionSkillsUsed.keys.first);
+    }
+  }
+
+  /// Feedback tingkat turn (C1): mengarahkan 👍/👎 ke skill yang dipakai
+  /// turn terakhir [sessionId] (metrik durabel via registry) dan ke ledger
+  /// trajectory self-evolution. Mengembalikan slug skill yang dinilai
+  /// (kosong bila sesi belum punya turn/skill aktif).
+  Future<List<String>> applyTurnFeedback({
+    required String sessionId,
+    required bool positive,
+    String actor = 'api',
+  }) async {
+    final slugs = _sessionSkillsUsed[sessionId] ?? const <String>[];
+    for (final slug in slugs) {
+      final s = skills.get(slug);
+      if (s == null) continue;
+      if (s.status == SkillStatus.draft || s.status == SkillStatus.retired) {
+        continue;
+      }
+      skills.applyFeedback(slug, positive: positive);
+    }
+    await skills.flushPendingSinks();
+    try {
+      await selfEvolution?.recordFeedback(
+        sessionId: sessionId,
+        positive: positive,
+      );
+    } catch (_) {
+      // Evolution feedback is best-effort; skill metrics above are durable.
+    }
+    try {
+      await audit.log(
+        sessionId: sessionId,
+        tool: 'feedback',
+        args: {'positive': positive, 'skills': slugs},
+        risk: 'low',
+        verdict: 'applied',
+        resultSummary: 'actor=$actor skills=${slugs.join(',')}',
+      );
+    } catch (_) {}
+    events.emit('feedback.turn', {
+      'session': sessionId,
+      'positive': positive,
+      'skills': slugs,
+      'actor': actor,
+    });
+    return List.of(slugs);
+  }
+
   /// Muat ulang skill dari workspace `skills/` lalu pulihkan status approval
   /// (ledger) dan metrik (uses/successes) dari penyimpanan durabel. Dipakai
   /// setelah install/uninstall Skills Hub agar tanpa restart (B3).
@@ -1674,6 +1731,7 @@ class TikoRuntime {
         toolCallTraces: loop.lastToolCalls,
         skillsUsed: loop.lastSkillsUsed,
       );
+      _rememberSessionSkills(session.id, result.skillsUsed);
       unawaited(spans.recordTurn(
         traceId: session.id,
         attributes: {
