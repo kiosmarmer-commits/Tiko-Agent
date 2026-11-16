@@ -461,6 +461,7 @@ Future<void> main(List<String> args) async {
     if (tg != null && m.channel == 'telegram') {
       confirm = (call, sess, approvalId) => tg!.requestConfirm(
             sessionKey: m.sessionKey,
+            requesterKey: m.userKey,
             prompt: 'Izinkan *${call.name}*?\n`${call.args}`\n'
                 'ID approval: `$approvalId` '
                 '(bisa juga disetujui dari web/Flutter atau `tiko approve`)',
