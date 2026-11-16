@@ -24,6 +24,7 @@ Rujukan riset: defense-in-depth untuk tool/plugin tidak terpercaya (tool poisoni
 - **Timeout per hook** (default 10s) — child yang hang melempar `StateError`, tidak menggantung agent loop.
 - **Crash containment** — child yang keluar menandai plugin dead; hook berikutnya melempar `StateError` yang dicatat registry sebagai `PluginEvent` (loop tetap jalan). `dispose()` meng-kill child.
 - Mendukung semua hook lifecycle: `beforeToolCall`, `afterToolCall`, `onSessionStart`, `onSessionEnd`, `onMessage`.
+- **Tool baru dari plugin (B2, 2026-11-16):** host menarik deklarasi via `{"op":"listTools"}` setelah handshake; child menjawab `{"ok":true,"tools":[{"name","description","input_schema","risk"}]}`. Eksekusi tool diteruskan via `{"op":"toolCall","tool":...,"args":...,"session":...}`; child menjawab `{"ok":true,"result":...,"is_error":...}`. Tool host dibungkus `PluginTool` dengan nama bridge `plugin_<plugin>_<tool>` (bebas collision); plugin mati/timeout menghasilkan `ToolResult` error (containment sama dengan hook).
 
 ### Consent gate di `PluginRegistry` (`packages/agent_core/lib/src/plugin_system.dart`)
 
@@ -42,7 +43,9 @@ plugins:
       permissions: [tools.read]
 ```
 
-Validasi fail-closed: nama wajib `^[a-z][a-z0-9-]{1,63}$`, command non-kosong, permission harus salah satu dari `tools.read | tools.execute | memory.read | memory.write | network.fetch | sessions.read` — pelanggaran menjadi `ConfigIssue`, entri dilewati.
+Validasi fail-closed: nama wajib `^[a-z][a-z0-9-]{1,63}$`, command non-kosong, permission harus salah satu dari `tools.read | tools.execute | tools.register | memory.read | memory.write | network.fetch | sessions.read` — pelanggaran menjadi `ConfigIssue`, entri dilewati.
+
+Permission `tools.register` (B2) mengizinkan plugin mendefinisikan tool baru: setelah plugin terdaftar (consent grant), host menarik deklarasi tool dan mendaftarkannya ke registry host. Validasi deklarasi fail-closed: nama tool wajib `^[a-z][a-z0-9_]{0,62}$` (tidak valid dilewati), risk hanya `low|medium|high` dengan default `high` (plugin = kode pihak ketiga). Tanpa permission ini plugin tetap murni observator/veto hook.
 
 ### Slash command `/plugin` (intercepted di funnel `chatWithStatus`)
 
@@ -75,5 +78,6 @@ Plugin dari config yang belum disetujui **tidak error saat startup** — masuk a
 
 ## Batasan
 
-- Protokol line-plugin belum mendukung streaming tool result atau tool baru yang didefinisikan plugin (plugin hanya observator/veto hook yang ada).
+- Protokol line-plugin belum mendukung streaming tool result (tool plugin menjawab sekali, seperti hook).
+- Tool plugin yang sudah terdaftar tetap ada di registry setelah revoke consent; plugin mati membuat setiap panggilan mengembalikan `ToolResult` error (fail-closed), bukan menghapus tool.
 - Belum ada sandbox OS tambahan (seccomp/containers) di atas isolasi proses; containment saat ini adalah crash/hang containment + consent capability.

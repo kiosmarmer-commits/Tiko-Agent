@@ -18,6 +18,38 @@ Future<void> main(List<String> args) async {
     final op = msg['op'] as String?;
     if (op == 'hello') {
       stdout.writeln(jsonEncode({'ok': true}));
+    } else if (op == 'listTools') {
+      if (mode == 'tools') {
+        stdout.writeln(jsonEncode({
+          'ok': true,
+          'tools': [
+            {
+              'name': 'echo_tool',
+              'description': 'tool contoh dari plugin',
+              'input_schema': {
+                'type': 'object',
+                'properties': {'input': {'type': 'string'}},
+              },
+              'risk': 'medium',
+            },
+            {'name': 'Invalid-Name'},
+          ],
+        }));
+      } else {
+        stdout.writeln(jsonEncode({'ok': true, 'tools': []}));
+      }
+    } else if (op == 'toolCall') {
+      final tool = msg['tool'] as String?;
+      final args = msg['args'] as Map<String, dynamic>? ?? {};
+      if (tool == 'echo_tool') {
+        stdout.writeln(jsonEncode({
+          'ok': true,
+          'result': 'echo: ${args['input']}',
+          'is_error': false,
+        }));
+      } else {
+        stdout.writeln(jsonEncode({'ok': false, 'error': 'tool tidak dikenal'}));
+      }
     } else if (op == 'hook') {
       final hook = msg['hook'] as String?;
       if (mode == 'crash' && hook == 'afterToolCall') {

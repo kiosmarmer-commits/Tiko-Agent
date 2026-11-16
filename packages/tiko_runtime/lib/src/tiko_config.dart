@@ -1258,6 +1258,7 @@ class TikoConfig {
     final knownPermissions = const {
       'tools.read',
       'tools.execute',
+      'tools.register',
       'memory.read',
       'memory.write',
       'network.fetch',
