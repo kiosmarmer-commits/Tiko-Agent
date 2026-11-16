@@ -392,23 +392,47 @@ Future<void> main(List<String> args) async {
   }
 
   /// Parses `/feedback <slug> up|down` (also 👍/👎, +1/-1) and applies it to
-  /// the skill registry. In-memory reliability updates immediately; the
-  /// durable SkillMetricsLedger sink persists the event. Returns the reply
-  /// text, or null when [m] is not a feedback command.
-  String? maybeHandleFeedbackCommand(InboundMessage m) {
+  /// the skill registry. `/feedback up|down` without a slug rates the whole
+  /// last turn (C1): skills of that turn get durable metrics and the
+  /// self-evolution trajectory ledger re-blends its reward. Returns the
+  /// reply text, or null when [m] is not a feedback command.
+  Future<String?> maybeHandleFeedbackCommand(InboundMessage m) async {
     final text = m.text.trim();
     if (!text.toLowerCase().startsWith('/feedback')) return null;
     final parts = text.split(RegExp(r'\s+'));
+    bool? parseVote(String raw) {
+      final up = raw == 'up' || raw == '👍' || raw == '+1' || raw == 'yes';
+      final down = raw == 'down' || raw == '👎' || raw == '-1' || raw == 'no';
+      if (up) return true;
+      if (down) return false;
+      return null;
+    }
+
+    if (parts.length == 2) {
+      final vote = parseVote(parts[1].toLowerCase());
+      if (vote == null) {
+        return 'Format: /feedback <slug> up|down (atau 👍/👎), '
+            'atau /feedback up|down untuk turn terakhir.';
+      }
+      final skills = await rt.applyTurnFeedback(
+        sessionId: m.sessionKey,
+        positive: vote,
+        actor: 'chat:${m.channel}',
+      );
+      final skillNote = skills.isEmpty
+          ? 'tidak ada skill pada turn terakhir'
+          : 'skill: ${skills.join(", ")}';
+      return 'Feedback ${vote ? '👍' : '👎'} untuk turn terakhir dicatat '
+          '($skillNote).';
+    }
     if (parts.length < 3) {
       return 'Format: /feedback <slug> up|down (atau 👍/👎)';
     }
     final slug = parts[1];
     final raw = parts[2].toLowerCase();
-    final positive =
-        raw == 'up' || raw == '👍' || raw == '+1' || raw == 'yes';
-    final negative =
-        raw == 'down' || raw == '👎' || raw == '-1' || raw == 'no';
-    if (!positive && !negative) {
+    final positive = parseVote(raw);
+    final negative = positive != null;
+    if (!negative) {
       return 'Nilai feedback tidak dikenal: "$raw". Gunakan up|down.';
     }
     final skill = rt.skills.get(slug);
@@ -474,7 +498,7 @@ Future<void> main(List<String> args) async {
 
     // Closed feedback loop: chat users on any channel can rate the skill(s)
     // of the previous turn with `/feedback <slug> up|down` (or 👍/👎).
-    final feedbackReply = maybeHandleFeedbackCommand(m);
+    final feedbackReply = await maybeHandleFeedbackCommand(m);
     if (feedbackReply != null) {
       await (gw?.send(OutboundMessage(sessionKey: m.sessionKey, text: feedbackReply)) ??
           Future.value());

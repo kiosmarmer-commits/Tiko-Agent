@@ -458,6 +458,25 @@ class HttpApiServer {
             _json(req, {'error': 'not found'});
           }
         }
+      } else if (path.startsWith('/v1/sessions/') &&
+          req.method == 'POST' &&
+          path.endsWith('/feedback')) {
+        final api = skillApi;
+        if (api == null) {
+          _json(req, {'error': 'skill API not configured'});
+        } else {
+          final sessionId = path
+              .substring('/v1/sessions/'.length,
+                  path.length - '/feedback'.length)
+              .trim();
+          if (sessionId.isEmpty || sessionId.contains('/')) {
+            req.response.statusCode = 400;
+            _json(req, {'error': 'invalid session id'});
+          } else {
+            final result = await api.recordSessionFeedback(req, sessionId);
+            _json(req, result);
+          }
+        }
       } else {
         req.response.statusCode = 404;
         _json(req, {'error': 'not found'});

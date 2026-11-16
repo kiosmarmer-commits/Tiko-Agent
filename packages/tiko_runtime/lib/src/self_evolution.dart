@@ -44,7 +44,13 @@ class TrajectoryRecord {
     double? deterministicReward,
     this.judgeScore,
     this.judgeReason,
-  }) : deterministicReward = deterministicReward ?? 0.0;
+  }) : deterministicReward = deterministicReward ??
+            computeDeterministicReward(
+              success: success,
+              errorCount: errorCount,
+              toolCalls: toolCalls.length,
+              feedback: feedback,
+            );
 
   final String id;
   final DateTime createdAt;
@@ -58,8 +64,8 @@ class TrajectoryRecord {
   final int errorCount;
 
   /// Explicit user feedback (👍/👎) when the host routed it back.
-  final bool? feedback;
-  final double deterministicReward;
+  bool? feedback;
+  double deterministicReward;
   double? judgeScore;
   String? judgeReason;
 
@@ -72,6 +78,18 @@ class TrajectoryRecord {
   double get reward => judgeScore == null
       ? deterministicReward
       : 0.5 * deterministicReward + 0.5 * judgeScore!;
+
+  /// Applies late user feedback (C1): re-blends the deterministic reward so
+  /// bandit statistics and quarantine see the human signal.
+  void applyFeedback(bool positive) {
+    feedback = positive;
+    deterministicReward = computeDeterministicReward(
+      success: success,
+      errorCount: errorCount,
+      toolCalls: toolCalls.length,
+      feedback: positive,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -198,6 +216,26 @@ class TrajectoryLedger {
     );
     await tmp.rename(path);
     _pending.clear();
+  }
+
+  /// Applies user feedback to the most recent record of [sessionId] and
+  /// rewrites the file so the updated reward survives restart (C1). Returns
+  /// the updated record, or null when the session has no trajectory.
+  Future<TrajectoryRecord?> attachFeedback(
+    String sessionId,
+    bool positive,
+  ) async {
+    TrajectoryRecord? target;
+    for (final r in _records.reversed) {
+      if (r.sessionId == sessionId) {
+        target = r;
+        break;
+      }
+    }
+    if (target == null) return null;
+    target.applyFeedback(positive);
+    await _rewrite();
+    return target;
   }
 }
 
@@ -458,6 +496,25 @@ class SelfEvolutionEngine {
   /// Persists buffered trajectory records. Called by [consolidate] and
   /// [stop]; exposed for hosts that want durability on demand.
   Future<void> flush() => _ledger.flush();
+
+  /// Routes turn-level user feedback into the ledger (C1): updates the
+  /// latest trajectory of [sessionId], re-blends its reward, and emits
+  /// `evolution.feedback`. Returns false when the session has no record.
+  Future<bool> recordFeedback({
+    required String sessionId,
+    required bool positive,
+  }) async {
+    if (!config.enabled) return false;
+    final record = await _ledger.attachFeedback(sessionId, positive);
+    if (record == null) return false;
+    _events?.emit('evolution.feedback', {
+      'session': sessionId,
+      'positive': positive,
+      'skill': record.skillSlug,
+      'reward': record.reward,
+    });
+    return true;
+  }
 
   /// Records one finished task trajectory. Buffered in memory and persisted
   /// on the next consolidation/stop, so the per-turn hot path does no disk

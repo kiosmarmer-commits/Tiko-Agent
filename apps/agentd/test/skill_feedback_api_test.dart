@@ -118,6 +118,33 @@ providers:
     expect(bad['error'], contains('positive'));
   });
 
+  test('POST /v1/sessions/<id>/feedback mencapai ledger evolusi (C1)', () async {
+    await rt.chat('halo', sessionId: 'sess-fb', channel: 'cli', userKey: 'u');
+    final res = await post('/v1/sessions/sess-fb/feedback', {
+      'positive': false,
+    });
+    expect(res['status'], 200);
+    expect(res['recorded'], isTrue);
+    expect(res['positive'], isFalse);
+    expect(res['skills'], isA<List>());
+
+    final ledger = rt.selfEvolution!.ledger.records
+        .where((r) => r.sessionId == 'sess-fb')
+        .toList();
+    expect(ledger, isNotEmpty);
+    expect(ledger.last.feedback, isFalse);
+    expect(ledger.last.deterministicReward, closeTo(0.85, 0.001));
+  });
+
+  test('POST /v1/sessions/<id>/feedback tanpa turn tetap tercatat', () async {
+    final res = await post('/v1/sessions/never-chatted/feedback', {
+      'positive': true,
+    });
+    expect(res['status'], 200);
+    expect(res['recorded'], isTrue);
+    expect(res['skills'], isEmpty);
+  });
+
   test('GET /v1/skills menyertakan metrik feedback', () async {
     await post('/v1/skills/deploy-helper/feedback', {'positive': true});
     final client = HttpClient();

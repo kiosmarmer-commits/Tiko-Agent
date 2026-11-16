@@ -45,9 +45,17 @@ class _FakeSmtpServer {
     );
   }
 
+  void _write(Socket socket, String data) {
+    try {
+      socket.write(data);
+    } catch (_) {
+      // Socket already destroyed by the client; nothing to answer.
+    }
+  }
+
   void _accept(Socket socket) {
     _sockets.add(socket);
-    if (!stallGreeting) socket.write('220 fake-smtp ESMTP\r\n');
+    if (!stallGreeting) _write(socket, '220 fake-smtp ESMTP\r\n');
     var inData = false;
     var buffer = '';
 
@@ -57,7 +65,7 @@ class _FakeSmtpServer {
         if (line == '.') {
           inData = false;
           if (!dataReceived.isCompleted) dataReceived.complete();
-          socket.write('250 2.0.0 queued\r\n');
+          _write(socket, '250 2.0.0 queued\r\n');
         }
         return;
       }
@@ -66,19 +74,19 @@ class _FakeSmtpServer {
       if (line == stallOnCommand) return;
       if (line.startsWith('EHLO ')) {
         if (advertiseStartTls) {
-          socket.write('250-fake-smtp\r\n250-STARTTLS\r\n250 AUTH LOGIN\r\n');
+          _write(socket, '250-fake-smtp\r\n250-STARTTLS\r\n250 AUTH LOGIN\r\n');
         } else {
-          socket.write('250-fake-smtp\r\n250 AUTH LOGIN\r\n');
+          _write(socket, '250-fake-smtp\r\n250 AUTH LOGIN\r\n');
         }
       } else if (line == 'DATA') {
         inData = true;
-        socket.write('354 end with dot\r\n');
+        _write(socket, '354 end with dot\r\n');
       } else if (line == 'QUIT') {
-        socket.write('221 2.0.0 bye\r\n');
+        _write(socket, '221 2.0.0 bye\r\n');
       } else if (line.startsWith('MAIL FROM:')) {
-        socket.write('250 sender ok\r\n');
+        _write(socket, '250 sender ok\r\n');
       } else if (line.startsWith('RCPT TO:')) {
-        socket.write('250 recipient ok\r\n');
+        _write(socket, '250 recipient ok\r\n');
       }
     }
 
@@ -93,6 +101,10 @@ class _FakeSmtpServer {
         handleLine(line);
         boundary = buffer.indexOf('\r\n');
       }
+    }, onError: (Object _, StackTrace __) {
+      // Connection reset mid-transaction is expected when the client goes
+      // away; without this handler the error leaks into the test zone after
+      // the test has completed (CI flake).
     }));
   }
 
