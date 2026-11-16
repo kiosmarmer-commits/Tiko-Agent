@@ -2468,6 +2468,9 @@ class TikoRuntime {
     _scheduler = Scheduler(
       store: jobs,
       tickInterval: tickInterval,
+      duplicatePolicy: config.schedulerDuplicatePolicy == 'review'
+          ? DeliveryDuplicatePolicy.review
+          : DeliveryDuplicatePolicy.resend,
       onJob: (message, job) async {
         events.emit('job.started', {
           'job_id': job.id,

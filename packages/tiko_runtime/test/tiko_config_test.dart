@@ -585,4 +585,47 @@ providers:
       expect(RuntimeLock.isAlive(other.pid), isTrue);
     }, skip: Platform.isWindows);
   });
+
+  group('scheduler.duplicate_policy', () {
+    test('default resend; nilai valid diterima', () {
+      final (cfg, issues) = TikoConfig.parse('''
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+''');
+      expect(issues, isEmpty);
+      expect(cfg.schedulerDuplicatePolicy, 'resend');
+
+      final (review, reviewIssues) = TikoConfig.parse('''
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+scheduler:
+  duplicate_policy: review
+''');
+      expect(reviewIssues, isEmpty);
+      expect(review.schedulerDuplicatePolicy, 'review');
+    });
+
+    test('nilai tidak dikenal ditolak fail-closed', () {
+      final (_, issues) = TikoConfig.parse('''
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+scheduler:
+  duplicate_policy: haram
+''');
+      expect(issues, isNotEmpty);
+      expect(
+        issues.any((i) => i.path == 'scheduler.duplicate_policy'),
+        isTrue,
+      );
+    });
+  });
 }
