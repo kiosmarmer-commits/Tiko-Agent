@@ -96,7 +96,11 @@ void main() {
       'pertanyaan pertama yang lambat',
       sessionId: 'cli:default',
     );
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (rt.cancellations.tokenOf('cli:default') == null &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
     expect(rt.cancellations.tokenOf('cli:default'), isNotNull);
 
     final second = await rt.chatWithStatus(
