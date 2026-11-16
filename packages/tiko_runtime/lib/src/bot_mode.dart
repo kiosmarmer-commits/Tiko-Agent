@@ -14,6 +14,7 @@ class BotProfile {
     this.persona = '',
     this.model,
     this.greeting = '',
+    this.toolAllowlist = const [],
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now().toUtc(),
@@ -24,6 +25,11 @@ class BotProfile {
   final String persona;
   final String? model;
   final String greeting;
+
+  /// Tool yang boleh dipakai sesi yang ter-bind ke bot ini (B1). Kosong
+  /// berarti belum diatur: turn ditolak fail-closed, bukan mewarisi semua
+  /// tool host (sama dengan semantik BotRouter di agent_core).
+  final List<String> toolAllowlist;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -33,6 +39,7 @@ class BotProfile {
         'persona': persona,
         'model': model,
         'greeting': greeting,
+        'tool_allowlist': toolAllowlist,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -43,6 +50,7 @@ class BotProfile {
         persona: json['persona'] as String? ?? '',
         model: json['model'] as String?,
         greeting: json['greeting'] as String? ?? '',
+        toolAllowlist: _parseAllowlist(json['tool_allowlist']),
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
         updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
       );
@@ -53,6 +61,8 @@ class BotProfile {
     String? model,
     bool clearModel = false,
     String? greeting,
+    List<String>? toolAllowlist,
+    bool clearToolAllowlist = false,
   }) =>
       BotProfile(
         id: id,
@@ -60,9 +70,24 @@ class BotProfile {
         persona: persona ?? this.persona,
         model: clearModel ? null : (model ?? this.model),
         greeting: greeting ?? this.greeting,
+        toolAllowlist: clearToolAllowlist
+            ? const []
+            : (toolAllowlist ?? this.toolAllowlist),
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
+
+  static List<String> _parseAllowlist(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <String>[];
+    for (final item in raw) {
+      if (item is String) {
+        final t = item.trim();
+        if (t.isNotEmpty && !out.contains(t)) out.add(t);
+      }
+    }
+    return List.unmodifiable(out);
+  }
 
   static final RegExp idPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
 
