@@ -189,7 +189,9 @@ class MemoryProviderRouter implements MemoryProvider {
       try {
         await provider.upsert(record);
         externalOk++;
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('memory_providers: upsert provider eksternal gagal: $e');
+      }
     }
     if (localError != null && (external.isEmpty || externalOk == 0)) {
       throw localError;
@@ -235,13 +237,13 @@ class MemoryProviderRouter implements MemoryProvider {
         () async {
           try {
             await fn(local);
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }(),
         for (final provider in external)
           () async {
             try {
               await fn(provider);
-            } catch (_) {}
+            } catch (_) {} // best-effort
           }(),
       ]);
 

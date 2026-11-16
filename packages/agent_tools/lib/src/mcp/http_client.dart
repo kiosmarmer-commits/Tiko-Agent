@@ -453,7 +453,7 @@ class HttpMcpClient implements McpTransport, McpToolServer {
     _eventStreamSubscription = null;
     try {
       await subscription?.cancel();
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     final sid = _sessionId;
     _sessionId = null;
@@ -595,7 +595,7 @@ class HttpMcpClient implements McpTransport, McpToolServer {
         _eventStreamSubscription = null;
         try {
           await staleEvents?.cancel();
-        } catch (_) {}
+        } catch (_) {} // best-effort
         _sessionId = null;
         _protocolNegotiated = false;
         _started = false;

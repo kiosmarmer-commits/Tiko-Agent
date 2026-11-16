@@ -278,7 +278,7 @@ class EmailGateway implements Gateway {
       socket.destroy();
       try {
         await responseStream.cancel().timeout(responseTimeout);
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
   }
 

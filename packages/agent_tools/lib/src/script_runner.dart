@@ -81,7 +81,7 @@ class ScriptToolRunner {
         if (privateDir != null) {
           try {
             if (await privateDir.exists()) await privateDir.delete(recursive: true);
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }
       }
     }

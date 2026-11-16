@@ -174,7 +174,9 @@ class PersistentMemoryStore implements MemoryStore, OwnerScopedMemoryStore {
             toolName: m['tool_name'] as String?,
           ),
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('persistent_store: baris pesan korup dilewati: $e');
+      }
     }
     _msgCache[sessionId] = out;
     return out.length <= limit ? out : out.sublist(out.length - limit);

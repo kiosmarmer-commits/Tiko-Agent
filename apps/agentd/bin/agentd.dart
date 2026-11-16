@@ -80,7 +80,7 @@ Future<void> main(List<String> args) async {
     ProcessSignal.sigint.watch().listen((_) => acp.stop());
     try {
       ProcessSignal.sigterm.watch().listen((_) => acp.stop());
-    } catch (_) {}
+    } catch (_) {} // best-effort
     await acpServe;
     await rt.close();
     await lock.release();
@@ -728,7 +728,7 @@ Future<void> main(List<String> args) async {
       await api?.stop();
       await rt.close();
       for (final gateway in gateways) {
-        try { await gateway.close(); } catch (_) {}
+        try { await gateway.close(); } catch (_) {} // best-effort
       }
       await lock.release();
       exit(1);
@@ -737,7 +737,7 @@ Future<void> main(List<String> args) async {
       await api?.stop();
       await rt.close();
       for (final gateway in gateways) {
-        try { await gateway.close(); } catch (_) {}
+        try { await gateway.close(); } catch (_) {} // best-effort
       }
       await lock.release();
       exit(1);
@@ -830,7 +830,7 @@ Future<void> main(List<String> args) async {
       ProcessSignal.sigterm.watch().listen((_) {
         if (!shutdownSignal.isCompleted) shutdownSignal.complete();
       });
-    } catch (_) {}
+    } catch (_) {} // best-effort
     await shutdownSignal.future;
   }
 
@@ -862,7 +862,7 @@ Future<void> main(List<String> args) async {
   }
   try {
     await lock.release();
-  } catch (_) {}
+  } catch (_) {} // best-effort
   // Exit explicitly: lingering signal watchers, timers, or sockets can keep
   // the VM alive after main returns even though shutdown already completed.
   exit(clean ? 0 : 1);

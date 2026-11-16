@@ -104,7 +104,9 @@ class DiscordGateway implements Gateway {
           Future.delayed(const Duration(seconds: 3), _identify);
           break;
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('discord: dispatch pesan gateway gagal: $e');
+    }
   }
 
   void _identify() {
@@ -309,6 +311,7 @@ class DiscordGateway implements Gateway {
         headers: {'Authorization': 'Bot $botToken'},
       );
     } catch (_) {
+      // best-effort
     } finally {
       if (_client == null) client.close();
     }

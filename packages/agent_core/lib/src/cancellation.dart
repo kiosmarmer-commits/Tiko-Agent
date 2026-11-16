@@ -52,7 +52,7 @@ class CancellationToken {
     unawaited(() async {
       try {
         await whenCancelled;
-      } catch (_) {}
+      } catch (_) {} // best-effort
       if (!done.isCompleted) {
         done.completeError(const OperationCancelledException());
       }

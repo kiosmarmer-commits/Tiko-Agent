@@ -133,7 +133,7 @@ class SecretStore {
       if (result.exitCode != 0) {
         try {
           await tmp.delete();
-        } catch (_) {}
+        } catch (_) {} // best-effort
         throw SecretStoreException(
           'Tidak dapat mengamankan permission file secret: ${result.stderr}',
         );

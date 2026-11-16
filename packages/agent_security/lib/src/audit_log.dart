@@ -73,7 +73,7 @@ class AuditLog {
           int.parse(stamp.substring(6, 8)),
         );
         if (dt.isBefore(cutoff)) await f.delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
   }
 }

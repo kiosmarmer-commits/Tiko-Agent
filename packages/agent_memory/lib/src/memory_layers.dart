@@ -335,7 +335,9 @@ class LayeredMemory {
         final entry = MemoryEntry.fromJson(raw);
         _entries[entry.id] = entry;
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('memory_layers: load layered_memory gagal, mulai kosong: $e');
+    }
   }
 
   static Set<String> _tokens(String text) => text

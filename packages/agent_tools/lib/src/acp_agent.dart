@@ -321,7 +321,7 @@ class AcpAgent {
     try {
       final decoded = jsonDecode(trimmed);
       if (decoded is Map<String, dynamic>) message = decoded;
-    } catch (_) {}
+    } catch (_) {} // best-effort
     if (message == null) {
       _output(jsonEncode({
         'jsonrpc': '2.0',

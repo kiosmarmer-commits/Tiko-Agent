@@ -221,7 +221,7 @@ class CloudBrowserHandle {
       if (backendId != null && backendSessionId != null) {
         try {
           await router._backend(backendId).closeSession(backendSessionId);
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
   }
@@ -275,7 +275,7 @@ class CloudBrowserRouter {
           await session.close();
           try {
             await backend.closeSession(cloud.id);
-          } catch (_) {}
+          } catch (_) {} // best-effort
           errors.add('${backend.id}: open gagal ($e)');
           continue;
         }

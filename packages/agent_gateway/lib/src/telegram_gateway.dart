@@ -127,7 +127,9 @@ class TelegramGateway implements Gateway {
               'callback_query_id': deniedCq,
               'text': 'Approval ini bukan milik Anda.',
             });
-          } catch (_) {}
+          } catch (e) {
+            stderr.writeln('telegram: answerCallbackQuery (ditolak) gagal: $e');
+          }
         }
         return;
       }
@@ -140,7 +142,9 @@ class TelegramGateway implements Gateway {
       if (cqId != null) {
         try {
           await _post('answerCallbackQuery', {'callback_query_id': cqId});
-        } catch (_) {}
+        } catch (e) {
+          stderr.writeln('telegram: answerCallbackQuery gagal: $e');
+        }
       }
       return;
     }
@@ -224,7 +228,7 @@ class TelegramGateway implements Gateway {
       if (tempDir != null) {
         try {
           await tempDir.delete(recursive: true);
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
   }
@@ -263,7 +267,7 @@ class TelegramGateway implements Gateway {
         : sessionKey;
     try {
       await _post('sendChatAction', {'chat_id': chatId, 'action': 'typing'});
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   /// Request confirmation via inline buttons; returns false on timeout (120s).

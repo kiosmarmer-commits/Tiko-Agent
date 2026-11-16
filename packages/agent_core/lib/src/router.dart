@@ -321,7 +321,7 @@ class Router {
     };
     _fallbackEvents.add(event);
     if (_fallbackEvents.length > 100) _fallbackEvents.removeAt(0);
-    try { onFallback?.call(event); } catch (_) {}
+    try { onFallback?.call(event); } catch (_) {} // best-effort
     return selected;
   }
 

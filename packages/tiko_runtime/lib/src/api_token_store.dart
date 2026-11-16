@@ -27,7 +27,7 @@ class ApiTokenStore {
       if (result.exitCode != 0) {
         try {
           await temporary.delete();
-        } catch (_) {}
+        } catch (_) {} // best-effort
         throw StateError(
           'Tidak dapat mengamankan permission file token: ${result.stderr}',
         );

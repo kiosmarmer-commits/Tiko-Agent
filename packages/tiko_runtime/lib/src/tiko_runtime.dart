@@ -2471,7 +2471,9 @@ class TikoRuntime {
     turns.clear();
     try {
       await reflection.save();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: reflection.save gagal: $e');
+    }
     if (result.newLessons.isNotEmpty) {
       events.emit('reflection.lessons', {
         'session': sessionId,
@@ -2773,45 +2775,57 @@ class TikoRuntime {
     _scheduler = null;
     try {
       await selfLearningEngine?.stop();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await layeredMemory.save(p.join(dataDir, 'layered_memory.json'));
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown layeredMemory.save gagal: $e');
+    }
     try {
       await ragPipeline.lexical.save();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown lexical.save gagal: $e');
+    }
     try {
       await reflectionEngine?.save();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown reflectionEngine.save gagal: $e');
+    }
     try {
       await plugins.disposeAll();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       // Feedback/metric sink writes are tracked, not fire-and-forget, so the
       // last 👍/👎 and use events survive a graceful shutdown.
       await skills.flushPendingSinks();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown skills.flushPendingSinks gagal: $e');
+    }
     try {
       cancellations.cancelAll();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await spans.close();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown spans.close gagal: $e');
+    }
     try {
       await approvals.close();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('runtime: shutdown approvals.close gagal: $e');
+    }
     try {
       await scheduler?.shutdown();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await mcpLoader.closeAll();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await scriptRunner.close();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await _sandbox?.dispose();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       if (_baseMemory is SafeMemoryStore) {
         final inner = (_baseMemory as SafeMemoryStore).inner;
@@ -2819,7 +2833,7 @@ class TikoRuntime {
       } else if (_baseMemory is SqliteMemoryStore) {
         (_baseMemory as SqliteMemoryStore).close();
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
     await events.close();
   }
 

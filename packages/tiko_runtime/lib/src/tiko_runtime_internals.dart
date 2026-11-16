@@ -368,7 +368,9 @@ class RuntimeContext extends ContextBuilder {
             'Sumber: ${result.citations.join(', ')}',
           );
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('context_builder: retrieve RAG gagal: $e');
+      }
     }
     final layered = layeredMemory;
     if (layered != null) {
@@ -380,7 +382,9 @@ class RuntimeContext extends ContextBuilder {
             '${hits.map((e) => '- ${e.text}').join('\n')}',
           );
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('context_builder: retrieve layered memory gagal: $e');
+      }
     }
     return blocks.join('\n\n');
   }
@@ -527,7 +531,9 @@ class _FanoutMemoryStore implements MemoryStore {
             createdAt: record.createdAt,
           ));
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('memory: search provider eksternal gagal: $e');
+      }
     }
     if (externalHits.isEmpty) return localHits;
     // Rank-based fusion: local and external scores live on incompatible
@@ -587,5 +593,5 @@ bool _withinApprovedBytes(ToolCall call, int maxBytes) {
 void stdoutWrite(String m) {
   try {
     stdout.writeln(m);
-  } catch (_) {}
+  } catch (_) {} // best-effort
 }

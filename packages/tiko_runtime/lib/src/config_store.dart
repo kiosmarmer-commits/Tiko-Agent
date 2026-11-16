@@ -32,7 +32,7 @@ class ConfigStore {
       if (e is File && e.path.endsWith('.meta.json')) {
         try {
           metas.add(jsonDecode(await e.readAsString()) as Map<String, dynamic>);
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
     metas.sort((a, b) => ((b['revision'] as num?) ?? 0).compareTo((a['revision'] as num?) ?? 0));
@@ -80,7 +80,7 @@ class ConfigStore {
     if (issues.any((i) => i.fatal)) {
       try {
         await tmp.delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
       return (revision: await currentRevision(), issues: issues);
     }
     final rev = (await currentRevision()) + 1;
