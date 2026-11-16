@@ -384,9 +384,11 @@ Future<void> main(List<String> argv) async {
             }
           } else if (sub == 'install' && args.length > 2) {
             stdout.writeln('terpasang: ${await hub.installFromHub(args[2])}');
+            await rt.reloadSkills();
           } else if (sub == 'uninstall' && args.length > 2) {
             final ok = await hub.uninstall(args[2]);
             stdout.writeln(ok ? 'dihapus ${args[2]}' : 'tidak ditemukan ${args[2]}');
+            if (ok) await rt.reloadSkills();
             if (!ok) exitCode = 1;
           } else if (sub == 'list') {
             await hub.refreshInstalled();

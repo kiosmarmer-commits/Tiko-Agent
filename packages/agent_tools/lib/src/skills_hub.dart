@@ -29,12 +29,22 @@ class SkillsHubConfig {
     required this.skillsDirectory,
     this.apiKey,
     this.timeout = const Duration(seconds: 20),
+    this.maxResponseBytes = 8 * 1024 * 1024,
+    this.onChanged,
   });
 
   final String apiBaseUrl;
   final String skillsDirectory;
   final String? apiKey;
   final Duration timeout;
+
+  /// Batas ukuran body response hub — response lebih besar ditolak
+  /// (skill valid maksimal `SkillValidator.maxBytes`, jadi 8 MB longgar).
+  final int maxResponseBytes;
+
+  /// Dipanggil setelah install/uninstall berhasil (slug terlibat) — host
+  /// memakai ini untuk hot-reload SkillRegistry tanpa restart.
+  final Future<void> Function(String slug)? onChanged;
 }
 
 /// One skill listing returned by the hub.
@@ -136,7 +146,15 @@ class SkillsHubClient {
       req.headers.set('Authorization', 'Bearer ${config.apiKey}');
     }
     final res = await req.close().timeout(config.timeout);
-    final body = await res.transform(utf8.decoder).join();
+    final bytes = <int>[];
+    await for (final chunk in res) {
+      bytes.addAll(chunk);
+      if (bytes.length > config.maxResponseBytes) {
+        throw SkillsHubException(
+            'response hub melebihi ${config.maxResponseBytes} byte');
+      }
+    }
+    final body = utf8.decode(bytes);
     if (res.statusCode >= 400) {
       throw SkillsHubException('hub HTTP ${res.statusCode}: $body');
     }
@@ -153,9 +171,22 @@ class SkillsHubClient {
     ];
   }
 
+  /// Id skill hub valid: `[a-z0-9][a-z0-9-]{0,63}` — mencegah injeksi
+  /// path/query pada URL `GET /skills/{id}`.
+  static bool isValidId(String id) =>
+      RegExp(r'^[a-z0-9][a-z0-9-]{0,63}$').hasMatch(id);
+
+  void _ensureValidId(String id) {
+    if (!isValidId(id)) {
+      throw SkillsHubException('id skill hub tidak valid: "$id"');
+    }
+  }
+
   /// Fetches a single skill record from the hub.
-  Future<HubSkill> fetch(String id) async =>
-      HubSkill.fromJson(await _get('/skills/$id'));
+  Future<HubSkill> fetch(String id) async {
+    _ensureValidId(id);
+    return HubSkill.fromJson(await _get('/skills/$id'));
+  }
 
   /// Verifies the checksum of [skill] against its declared checksum.
   /// Returns true when both are absent (hub without checksums) or equal.
@@ -216,11 +247,22 @@ class SkillsHubClient {
   }
 
   /// Convenience: fetch from the hub then install.
-  Future<String> installFromHub(String id) async => install(await fetch(id));
+  Future<String> installFromHub(String id) async {
+    final skill = await fetch(id);
+    final dir = await install(skill);
+    try {
+      await config.onChanged?.call(skill.id);
+    } catch (_) {
+      // Hot-reload gagal tidak boleh menggagalkan install (file sudah aman
+      // tertulis; registry akan memuat saat restart).
+    }
+    return dir;
+  }
 
   /// Removes an installed skill's files and record. Returns true when the
   /// skill existed.
   Future<bool> uninstall(String slug) async {
+    _ensureValidId(slug);
     await _loadInstalled();
     final record = _installed.remove(slug);
     final dir = Directory(p.join(config.skillsDirectory, slug));
@@ -229,6 +271,11 @@ class SkillsHubClient {
     }
     if (record == null && !await dir.exists()) return false;
     await _saveInstalled();
+    try {
+      await config.onChanged?.call(slug);
+    } catch (_) {
+      // Hot-reload gagal tidak boleh menggagalkan uninstall.
+    }
     return true;
   }
 
