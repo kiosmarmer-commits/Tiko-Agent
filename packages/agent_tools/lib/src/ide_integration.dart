@@ -67,6 +67,7 @@ class IdeIntegrationConfig {
     this.enableAcp = true,
     this.acpPort = 3000,
     this.acpHost = '127.0.0.1',
+    this.acpAuthToken,
     this.supportedSchemas = const [
       'tiko',
       'tiko-agent',
@@ -84,6 +85,12 @@ class IdeIntegrationConfig {
   final bool enableAcp;
   final int acpPort;
   final String acpHost;
+
+  /// Auth parity with api_server/http_api: when set, the ACP HTTP endpoint
+  /// requires `Authorization: Bearer <token>` (constant-time compared).
+  /// Default null keeps loopback-only local IDE usage without a token.
+  final String? acpAuthToken;
+
   final List<String> supportedSchemas;
   final bool registerCommands;
   final bool showNotifications;
@@ -98,6 +105,7 @@ class IdeIntegrationConfig {
     bool? enableAcp,
     int? acpPort,
     String? acpHost,
+    String? acpAuthToken,
     List<String>? supportedSchemas,
     bool? registerCommands,
     bool? showNotifications,
@@ -110,6 +118,7 @@ class IdeIntegrationConfig {
       enableAcp: enableAcp ?? this.enableAcp,
       acpPort: acpPort ?? this.acpPort,
       acpHost: acpHost ?? this.acpHost,
+      acpAuthToken: acpAuthToken ?? this.acpAuthToken,
       supportedSchemas: supportedSchemas ?? this.supportedSchemas,
       registerCommands: registerCommands ?? this.registerCommands,
       showNotifications: showNotifications ?? this.showNotifications,
@@ -314,6 +323,9 @@ class IdeIntegrationManager {
   HttpServer? _acpServer;
   final List<Map<String, dynamic>> _acpOutbound = [];
 
+  /// Actual bound ACP HTTP port (ephemeral when configured as 0).
+  int? get acpPort => _acpServer?.port;
+
   /// Start IDE integration
   Future<void> start() async {
     if (_isRunning) return;
@@ -369,8 +381,20 @@ class IdeIntegrationManager {
             await request.response.close();
             return;
           }
+          if (!_acpAuthorized(request)) {
+            request.response.statusCode = HttpStatus.unauthorized;
+            await request.response.close();
+            return;
+          }
           final body = await utf8.decoder.bind(request).join();
-          final decoded = jsonDecode(body);
+          final Object? decoded;
+          try {
+            decoded = jsonDecode(body);
+          } on FormatException {
+            request.response.statusCode = HttpStatus.badRequest;
+            await request.response.close();
+            return;
+          }
           if (decoded is! Map<String, dynamic>) {
             request.response.statusCode = HttpStatus.badRequest;
             await request.response.close();
@@ -397,6 +421,24 @@ class IdeIntegrationManager {
       stderr.writeln('ACP HTTP server gagal berjalan pada '
           '${config.acpHost}:${config.acpPort}: $e');
     }
+  }
+
+  /// Auth parity (A6): bearer-token gate for the ACP HTTP endpoint,
+  /// constant-time compared like api_server and the gateway http_api.
+  /// No token configured -> allow (loopback bind only by default).
+  bool _acpAuthorized(HttpRequest request) {
+    final expected = config.acpAuthToken;
+    if (expected == null || expected.isEmpty) return true;
+    final header = request.headers.value('authorization') ?? '';
+    const prefix = 'Bearer ';
+    if (!header.startsWith(prefix)) return false;
+    final token = header.substring(prefix.length);
+    if (token.length != expected.length) return false;
+    var diff = 0;
+    for (var i = 0; i < expected.length; i++) {
+      diff |= token.codeUnitAt(i) ^ expected.codeUnitAt(i);
+    }
+    return diff == 0;
   }
 
   /// Stop ACP server

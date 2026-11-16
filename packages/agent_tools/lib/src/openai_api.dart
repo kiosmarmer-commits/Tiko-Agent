@@ -137,8 +137,22 @@ class OpenAiCompatServer {
   }
 
   bool _authorized(HttpRequest req) {
+    final expected = config.apiKey;
+    if (expected.isEmpty) return false; // No key configured -> deny (fail-closed)
     final header = req.headers.value('Authorization') ?? '';
-    return header == 'Bearer ${config.apiKey}';
+    const prefix = 'Bearer ';
+    if (!header.startsWith(prefix)) return false;
+    return _constantTimeEquals(header.substring(prefix.length), expected);
+  }
+
+  /// Constant-time token comparison (auth parity with api_server/http_api).
+  static bool _constantTimeEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < b.length; i++) {
+      diff |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return diff == 0;
   }
 
   Future<void> _chatCompletions(HttpRequest req) async {

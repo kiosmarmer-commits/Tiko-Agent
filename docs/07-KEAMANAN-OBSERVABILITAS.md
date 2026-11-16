@@ -51,6 +51,15 @@ Token capability dikonsumsi oleh gate dan `_capability_id` dibuang sebelum args 
 
 Klasifikasi ini mengurangi over-confirmation tanpa menganggap isi file lokal sebagai instruksi tepercaya. Tool berisiko seperti shell/write/patch tetap memiliki risk level dan confirmation policy sendiri. Perubahan pada daftar klasifikasi harus disertai regression test di `agent_core` dan `agent_security`.
 
+### Paritas auth HTTP server (A6, 2026-11-16)
+
+Semua server HTTP internal kini memakai pola auth yang setara:
+
+- `agent_gateway/http_api.dart` — bearer + constant-time compare, ticket WebSocket sekali pakai, webhook HMAC.
+- `agent_tools/api_server.dart` — bearer + constant-time compare, token auto-generated bila tidak dikonfigurasi (fail-closed).
+- `agent_tools/openai_api.dart` — bearer + **constant-time compare** (sebelumnya `==` biasa) dan **fail-closed** saat `apiKey` kosong.
+- `agent_tools/ide_integration.dart` (ACP HTTP) — **bearer opsional `IdeIntegrationConfig.acpAuthToken`** dengan constant-time compare; tanpa token tetap loopback-only. Invalid JSON kini 400 (sebelumnya 500).
+
 ## 5. Sandbox host
 
 `SandboxRunner.detect()` mengenali `bubblewrap`, Docker, SSH atau none. Script tool loading dan MCP child process bergantung sandbox yang dapat digunakan. Keberadaan `SandboxRunner` tidak dengan sendirinya membuktikan isolasi OS aktif. Pada `none`, host tidak memiliki batas OS tambahan dari runner. Termux/proot tidak boleh dianggap isolasi kuat. Untuk tool berisiko, pilih host dengan sandbox, jalankan sebagai user terbatas, dan tetap wajibkan permission/confirmation.
