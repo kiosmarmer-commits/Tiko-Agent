@@ -158,6 +158,16 @@ class TikoRuntime {
   final String dataDir;
   final SkillRegistry skills;
 
+  /// Muat ulang skill dari workspace `skills/` lalu pulihkan status approval
+  /// (ledger) dan metrik (uses/successes) dari penyimpanan durabel. Dipakai
+  /// setelah install/uninstall Skills Hub agar tanpa restart (B3).
+  Future<int> reloadSkills() async {
+    final n = await skills.resyncFromDirectory(p.join(workspace, 'skills'));
+    skillLedger.applyTo(skills);
+    skillMetrics.applyTo(skills);
+    return n;
+  }
+
   /// Akar direktori skills/ absolut untuk gerbang promosi skill.
   final String skillsRoot;
 
@@ -768,6 +778,7 @@ class TikoRuntime {
           apiKey: envMap['TIKO_SKILLS_HUB_TOKEN']?.trim().isNotEmpty == true
               ? envMap['TIKO_SKILLS_HUB_TOKEN']!.trim()
               : null,
+          onChanged: (slug) => rt.reloadSkills(),
         ),
       )));
     }

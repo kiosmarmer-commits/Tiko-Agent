@@ -177,6 +177,55 @@ void main() {
     expect(await client.uninstall('hub-demo'), isFalse);
   });
 
+  test('id skill hub tidak valid ditolak sebelum menyentuh URL', () async {
+    for (final bad in ['../etc', 'Bad_Id', 'a b', "x?y=1", '/abs']) {
+      await expectLater(
+        client.fetch(bad),
+        throwsA(predicate((e) =>
+            e is SkillsHubException && e.message.contains('tidak valid'))),
+      );
+      await expectLater(
+        client.uninstall(bad),
+        throwsA(predicate((e) =>
+            e is SkillsHubException && e.message.contains('tidak valid'))),
+      );
+    }
+  });
+
+  test('response hub yang melebihi batas ditolak', () async {
+    final capped = SkillsHubClient(
+      config: SkillsHubConfig(
+        apiBaseUrl: 'http://127.0.0.1:${hub.port}/api',
+        skillsDirectory: tmp.path,
+        maxResponseBytes: 64,
+      ),
+    );
+    addTearDown(capped.close);
+    await expectLater(
+      capped.search('demo'),
+      throwsA(predicate((e) =>
+          e is SkillsHubException && e.message.contains('melebihi'))),
+    );
+  });
+
+  test('onChanged dipanggil pada installFromHub dan uninstall', () async {
+    final changed = <String>[];
+    final hooked = SkillsHubClient(
+      config: SkillsHubConfig(
+        apiBaseUrl: 'http://127.0.0.1:${hub.port}/api',
+        skillsDirectory: tmp.path,
+        onChanged: (slug) async => changed.add(slug),
+      ),
+    );
+    addTearDown(hooked.close);
+
+    await hooked.installFromHub('hub-demo');
+    expect(changed, ['hub-demo']);
+
+    await hooked.uninstall('hub-demo');
+    expect(changed, ['hub-demo', 'hub-demo']);
+  });
+
   test('refreshInstalled restores records from disk', () async {
     final skill = await client.fetch('hub-demo');
     await client.install(skill);

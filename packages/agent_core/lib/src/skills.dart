@@ -208,6 +208,26 @@ class SkillRegistry {
     return n;
   }
 
+  /// Seperti [loadFromDirectory], tetapi skill yang sebelumnya dimuat dari
+  /// [dirPath] dan kini hilang dari disk (mis. di-uninstall dari Skills Hub)
+  /// dibuang dari registry. Skill dari sumber lain tidak tersentuh.
+  Future<int> resyncFromDirectory(String dirPath) async {
+    final n = await loadFromDirectory(dirPath);
+    final root = p.normalize(p.absolute(dirPath));
+    final stale = <String>[];
+    for (final skill in _skills.values) {
+      final path = skill.path;
+      if (path == null || !p.isWithin(root, p.normalize(p.absolute(path)))) {
+        continue;
+      }
+      if (!File(path).existsSync()) stale.add(skill.slug);
+    }
+    for (final slug in stale) {
+      _skills.remove(slug);
+    }
+    return n;
+  }
+
   /// Skills whose triggers match [text] (substring, case-insensitive).
   List<Skill> match(String text) {
     final lower = text.toLowerCase();
