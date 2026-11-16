@@ -26,6 +26,9 @@ class TelegramGateway implements Gateway {
 
   final _inbound = StreamController<InboundMessage>.broadcast();
   final _pendingConfirm = <String, Completer<bool>>{};
+  /// Button id -> userKey of whoever triggered the tool call.
+  final _confirmOwner = <String, String>{};
+  int _confirmSeq = 0;
   int _offset = 0;
   bool _running = false;
   Timer? _pollTimer;
@@ -114,6 +117,21 @@ class TelegramGateway implements Gateway {
       final uid = from['id'] as int? ?? 0;
       if (!_allowed(uid)) return;
       final data = cb['data'] as String? ?? '';
+      // An allowlisted user must not approve someone else's tool call.
+      final owner = _confirmOwner[data];
+      if (owner != null && owner != '$uid') {
+        final deniedCq = cb['id'] as String?;
+        if (deniedCq != null) {
+          try {
+            await _post('answerCallbackQuery', {
+              'callback_query_id': deniedCq,
+              'text': 'Approval ini bukan milik Anda.',
+            });
+          } catch (_) {}
+        }
+        return;
+      }
+      _confirmOwner.remove(data);
       final completer = _pendingConfirm.remove(data);
       if (completer != null && !completer.isCompleted) {
         completer.complete(data.endsWith(':yes'));
@@ -252,14 +270,21 @@ class TelegramGateway implements Gateway {
   Future<bool> requestConfirm({
     required String sessionKey,
     required String prompt,
+    String? requesterKey,
     Duration timeout = const Duration(seconds: 120),
   }) async {
-    final id = 'c${DateTime.now().millisecondsSinceEpoch}';
+    // Millisecond alone collides when two confirmations are requested in
+    // the same tick, which would let one button resolve another call.
+    final id = 'c${DateTime.now().millisecondsSinceEpoch}-${_confirmSeq++}';
     final completer = Completer<bool>();
     _pendingConfirm['$id:yes'] = completer;
     // also track no as same completer path
     final noCompleter = Completer<bool>();
     _pendingConfirm['$id:no'] = noCompleter;
+    if (requesterKey != null) {
+      _confirmOwner['$id:yes'] = requesterKey;
+      _confirmOwner['$id:no'] = requesterKey;
+    }
 
     await send(
       OutboundMessage(
@@ -279,6 +304,8 @@ class TelegramGateway implements Gateway {
     ]);
     _pendingConfirm.remove('$id:yes');
     _pendingConfirm.remove('$id:no');
+    _confirmOwner.remove('$id:yes');
+    _confirmOwner.remove('$id:no');
     return result;
   }
 
