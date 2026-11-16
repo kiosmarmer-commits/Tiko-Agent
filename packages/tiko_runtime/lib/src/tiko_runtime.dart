@@ -678,14 +678,18 @@ class TikoRuntime {
     // Plugin out-of-process dari config: di-spawn lalu tunduk pada consent
     // (gagal consent → antrean pending, bukan error startup).
     for (final pluginCfg in cfg.processPlugins) {
-      await rt._registerPluginWithConsent(
-        ProcessPlugin(
-          name: pluginCfg.name,
-          command: pluginCfg.command,
-          args: pluginCfg.args,
-        ),
+      final plugin = ProcessPlugin(
+        name: pluginCfg.name,
+        command: pluginCfg.command,
+        args: pluginCfg.args,
+      );
+      final ok = await rt._registerPluginWithConsent(
+        plugin,
         pluginCfg.permissions,
       );
+      if (ok) {
+        await rt._registerPluginTools(plugin, pluginCfg.permissions);
+      }
     }
     rt.skillLedger = SkillApprovalLedger(p.join(dataDir, 'skill_approvals.json'));
     await rt.skillLedger.load();
@@ -1855,6 +1859,36 @@ class TikoRuntime {
     return false;
   }
 
+  /// B2: daftarkan tool yang dideklarasikan plugin out-of-process ke registry
+  /// host. Hanya plugin dengan permission `tools.register` yang dijadwalkan
+  /// (fail-closed); deklarasi tidak valid dilewati; kegagalan registrasi
+  /// (mis. collision nama) dicatat sebagai event tanpa menggagalkan startup.
+  Future<void> _registerPluginTools(
+    ProcessPlugin plugin,
+    List<String> permissions,
+  ) async {
+    final granted = permissions
+        .map(PluginPermission.tryParse)
+        .contains(PluginPermission.toolsRegister);
+    if (!granted) return;
+    try {
+      final declared = await plugin.listTools();
+      if (declared.isEmpty) return;
+      registry.registerAll([
+        for (final spec in declared) PluginTool(plugin: plugin, declared: spec),
+      ]);
+      events.emit('plugin.tools.registered', {
+        'plugin': plugin.name,
+        'tools': [for (final spec in declared) spec.name],
+      });
+    } catch (error) {
+      events.emit('plugin.tools.register_failed', {
+        'plugin': plugin.name,
+        'error': error.toString(),
+      });
+    }
+  }
+
   _PluginCommand? _parsePluginCommand(String text) {
     final trimmed = text.trim();
     if (!RegExp(r'^/plugin(?:\s|$)', caseSensitive: false).hasMatch(trimmed)) {
@@ -1944,6 +1978,12 @@ class TikoRuntime {
             if (ok) {
               _pendingPlugins.remove(cmd.id);
               events.emit('plugin.registered', {'plugin': cmd.id});
+              if (pending.plugin is ProcessPlugin) {
+                await _registerPluginTools(
+                  pending.plugin as ProcessPlugin,
+                  pending.permissions,
+                );
+              }
               return ChatRunResult(
                 text: 'Plugin "${cmd.id}" disetujui dan terdaftar '
                     '(${requested.join(", ")}).',

@@ -321,6 +321,7 @@ class PluginRegistry {
 enum PluginPermission {
   toolsRead,
   toolsExecute,
+  toolsRegister,
   memoryRead,
   memoryWrite,
   networkFetch,
@@ -329,6 +330,7 @@ enum PluginPermission {
   String get name => switch (this) {
         toolsRead => 'tools.read',
         toolsExecute => 'tools.execute',
+        toolsRegister => 'tools.register',
         memoryRead => 'memory.read',
         memoryWrite => 'memory.write',
         networkFetch => 'network.fetch',
@@ -338,6 +340,7 @@ enum PluginPermission {
   static PluginPermission? tryParse(String value) => switch (value) {
         'tools.read' => toolsRead,
         'tools.execute' => toolsExecute,
+        'tools.register' => toolsRegister,
         'memory.read' => memoryRead,
         'memory.write' => memoryWrite,
         'network.fetch' => networkFetch,
