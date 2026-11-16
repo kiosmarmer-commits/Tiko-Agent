@@ -16,6 +16,16 @@ typedef DeliveryHandler = Future<void> Function(
   String text,
 );
 
+/// Kebijakan untuk delivery yang tertangkap di tengah pengiriman saat
+/// proses daemon mati (pesan platform **mungkin** sudah terkirim):
+///
+/// - [resend] (default, at-least-once): kirim ulang di tick berikutnya.
+///   Penerima bisa melihat pesan duplikat, tapi output tidak pernah hilang.
+/// - [review]: JANGAN kirim ulang otomatis — tandai gagal permanen dengan
+///   penjelasan agar operator meninjau dan memutuskan (mencegah duplikat,
+///   dengan risiko output hilang bila tidak ditinjau).
+enum DeliveryDuplicatePolicy { resend, review }
+
 /// Tick-loop scheduler (TASK-05-03). Source of truth = JobStore.
 ///
 /// Tanpa [deliver] kontrak tidak berubah: run selesai begitu giliran agent
@@ -40,6 +50,7 @@ class Scheduler {
       Duration(hours: 1),
     ],
     this.deliveryTimeout = const Duration(seconds: 30),
+    this.duplicatePolicy = DeliveryDuplicatePolicy.resend,
     this.onDelivered,
     this.onDeliveryRetry,
     this.onDeliveryFailed,
@@ -55,6 +66,10 @@ class Scheduler {
   final int maxDeliveryAttempts;
   final List<Duration> deliveryBackoff;
   final Duration deliveryTimeout;
+
+  /// Kebijakan delivery in-flight yang dipulihkan saat startup (lihat
+  /// [DeliveryDuplicatePolicy]).
+  final DeliveryDuplicatePolicy duplicatePolicy;
   final void Function(Job job, String runId, int attempts)? onDelivered;
   final void Function(Job job, String runId, int attempt, Object error)?
       onDeliveryRetry;
@@ -71,6 +86,7 @@ class Scheduler {
   void start() {
     if (_timer != null) return;
     _stopped = false;
+    _recoverInFlightDeliveries();
     _timer = Timer.periodic(tickInterval, (_) {
       unawaited(tick().catchError((Object _) {
         // Timer callback must not leak an unhandled asynchronous error.
@@ -83,6 +99,34 @@ class Scheduler {
     _stopped = true;
     _timer?.cancel();
     _timer = null;
+  }
+
+  /// Pulihkan delivery yang tertangkap di tengah pengiriman saat proses
+  /// sebelumnya mati. Policy `resend` membiarkannya jatuh tempo lagi
+  /// (perilaku at-least-once); policy `review` menandainya gagal permanen
+  /// dengan penjelasan — tanpa kirim ulang otomatis.
+  void _recoverInFlightDeliveries() {
+    if (duplicatePolicy != DeliveryDuplicatePolicy.review) return;
+    for (final job in store.inFlightDeliveries()) {
+      final runId = job.deliveryRunId!;
+      try {
+        store.failDeliveryPermanently(
+          job.id,
+          runId,
+          'delivery mungkin sudah terkirim sebelum daemon mati '
+              '(jendela at-least-once); duplicate_policy=review — '
+              'tinjau manual sebelum kirim ulang',
+        );
+      } catch (_) {}
+      try {
+        onDeliveryFailed?.call(
+          job,
+          runId,
+          job.deliveryAttempts,
+          StateError('delivery in-flight dipulihkan dengan policy review'),
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> tick() {

@@ -305,6 +305,7 @@ class TikoConfig {
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
+    this.schedulerDuplicatePolicy = 'resend',
   });
 
   final String profile;
@@ -336,6 +337,12 @@ class TikoConfig {
   /// Interrupt-and-redirect: pesan baru saat sesi sibuk memotong turn
   /// aktif secara kooperatif lalu diproses setelah lock lepas.
   final bool interruptRedirect;
+
+  /// Kebijakan delivery scheduler yang tertangkap di tengah pengiriman saat
+  /// proses mati (pesan platform mungkin sudah terkirim): `resend` = kirim
+  /// ulang (at-least-once, bisa duplikat); `review` = tandai gagal permanen
+  /// untuk ditinjau operator (tanpa duplikat, risiko output tertahan).
+  final String schedulerDuplicatePolicy;
 
   /// External memory providers fanned out together with the built-in store.
   final List<ExternalMemoryProviderConfig> memoryProviders;
@@ -493,6 +500,21 @@ class TikoConfig {
 
     // ---- plugins.process ----
     final processPluginsCfg = _parseProcessPlugins(sec('plugins'), issues);
+
+    // ---- scheduler.duplicate_policy ----
+    var schedulerDuplicatePolicy = 'resend';
+    final dupPolicyRaw = sec('scheduler')['duplicate_policy'];
+    if (dupPolicyRaw != null) {
+      final value = dupPolicyRaw.toString();
+      if (value == 'resend' || value == 'review') {
+        schedulerDuplicatePolicy = value;
+      } else {
+        issues.add(const ConfigIssue(
+          'scheduler.duplicate_policy',
+          'harus resend atau review',
+        ));
+      }
+    }
 
     if (providersSec['default_chat'] != null &&
         providersSec['default_chat'] is! String) {
@@ -1095,6 +1117,7 @@ class TikoConfig {
       interruptRedirect: agent['interrupt_redirect'] is! bool
           ? true
           : (agent['interrupt_redirect'] as bool),
+      schedulerDuplicatePolicy: schedulerDuplicatePolicy,
       searxngBaseUrl: str(search['searxng_base_url'], 'http://127.0.0.1:8080'),
       tavilyApiKeyRef:
           tavilyKeyValue is String && tavilyKeyValue.startsWith('env:')

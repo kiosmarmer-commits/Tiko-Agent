@@ -450,6 +450,19 @@ class JobStore {
 
   bool deliveryPending(String id) => _jobs[id]?.deliveryRunId != null;
 
+  /// Delivery yang tertangkap di tengah pengiriman saat proses mati:
+  /// sudah diklaim (attempts >= 1, next_at null) tapi belum di-ack
+  /// maupun dijadwalkan ulang. Pesan platform **mungkin** sudah terkirim —
+  /// inilah jendela duplikasi at-least-once.
+  List<Job> inFlightDeliveries() => [
+        for (final job in _jobs.values)
+          if (job.deliveryRunId != null &&
+              job.deliveryState == 'pending' &&
+              job.deliveryNextAt == null &&
+              job.deliveryAttempts >= 1)
+            job,
+      ];
+
   /// Klaim output yang retry-nya sudah jatuh tempo. Penghitung upaya
   /// dipersist SEBELUM pengiriman dilakukan, sehingga crash di tengah
   /// pengiriman tetap dihitung sebagai satu upaya (at-least-once).
