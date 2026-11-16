@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'cancellation.dart';
 
+/// Disambiguates fallback tool-call ids created in the same millisecond.
+int _fallbackCallSeq = 0;
+
 /// Normalized inbound message from any gateway.
 class InboundMessage {
   const InboundMessage({
@@ -177,7 +180,7 @@ class ToolCall {
     return ToolCall(
       id:
           json['id'] as String? ??
-          'call_${DateTime.now().millisecondsSinceEpoch}',
+          'call_${DateTime.now().millisecondsSinceEpoch}_${_fallbackCallSeq++}',
       name: fn['name'] as String? ?? '',
       args: args,
     );
