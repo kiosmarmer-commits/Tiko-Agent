@@ -449,6 +449,10 @@ class TikoRuntime {
     final layeredMemory = LayeredMemory();
     await layeredMemory.load(p.join(dataDir, 'layered_memory.json'));
 
+    // Memori asosiatif HDC (D2, eksperimental, in-memory) — pelengkap
+    // pencarian asosiatif ringan, bukan pengganti memori semantik.
+    final hdcMemory = HdcMemory();
+
     // Memori terkurasi lintas sesi (MEMORY.md/USER.md) + nudge periodik.
     final curatedMemory = CuratedMemoryStore(
       dataDir: dataDir,
@@ -624,6 +628,7 @@ class TikoRuntime {
       ..register(RagQueryTool(rag))
       ..register(LayeredMemoryTool(layeredMemory))
       ..register(SessionSearchTool(sessionStore))
+      ..register(HdcMemoryTool(hdcMemory))
       ..register(KanbanTool(KanbanBoard(p.join(dataDir, 'kanban.json'))))
       ..register(WorktreeTool(WorktreeManager(repoRoot: workspace)));
 
