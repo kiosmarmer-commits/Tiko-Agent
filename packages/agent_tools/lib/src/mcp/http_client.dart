@@ -87,10 +87,11 @@ class HttpMcpClient implements McpTransport, McpToolServer {
   /// [protocolVersion] sebelum gagal total.
   final String preferredModernProtocolVersion;
 
-  /// Optional OAuth 2.0 client-credentials token source (P2-14). When set,
-  /// a `Authorization: Bearer` header is attached to every request and a 401
-  /// triggers exactly one token refresh + replay.
-  final McpOAuthClientCredentials? oauth;
+  /// Optional OAuth 2.0 token source (P2-14). Bisa [McpOAuthClientCredentials]
+  /// (grant client_credentials) atau [McpOAuthAuthorizationCode] (login
+  /// browser + PKCE). When set, a `Authorization: Bearer` header is attached
+  /// to every request and a 401 triggers exactly one token refresh + replay.
+  final McpOAuthTokenSource? oauth;
 
   /// Batas total karakter keluaran tool sebelum ditolak.
   final int maxOutputChars;

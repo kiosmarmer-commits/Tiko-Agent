@@ -28,6 +28,7 @@ export 'src/plan_tool.dart';
 export 'src/mcp/http_client.dart';
 export 'src/mcp/http_server_handler.dart';
 export 'src/mcp/oauth.dart';
+export 'src/mcp/oauth_authcode.dart';
 export 'src/sandbox.dart';
 export 'src/patch_file.dart';
 export 'src/readability.dart';
