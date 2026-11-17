@@ -130,6 +130,15 @@ class TikoRuntime {
     SelfEvolutionEngine? selfEvolution,
     SandboxRunner? sandbox,
   }) : _sandbox = sandbox {
+    _tokenAnomaly = config.tokenAnomaly.enabled
+        ? TokenAnomalyDetector(
+            minSamples: config.tokenAnomaly.minSamples,
+            windowSize: config.tokenAnomaly.windowSize,
+            zMultiplier: config.tokenAnomaly.zMultiplier,
+            minSpikeRatio: config.tokenAnomaly.minSpikeRatio,
+            cooldown: Duration(minutes: config.tokenAnomaly.cooldownMinutes),
+          )
+        : null;
     this.selfLearningEngine = selfLearningEngine ??
         (providers.isEmpty
             ? null
@@ -174,6 +183,12 @@ class TikoRuntime {
   /// Skill yang dipakai turn terakhir per sesi (C1) — agar 👍/👎 tingkat
   /// turn bisa diarahkan ke skill yang tepat. In-memory, cap 500 sesi.
   final Map<String, List<String>> _sessionSkillsUsed = {};
+
+  /// E1 (opt-in): detektor anomali token per skill. Null = nonaktif.
+  TokenAnomalyDetector? _tokenAnomaly;
+
+  /// E1: hitung karantina per UTC day (cap anti-spam penindakan).
+  final Map<String, int> _tokenQuarantinesByDay = {};
 
   void _rememberSessionSkills(String sessionId, List<String> slugs) {
     _sessionSkillsUsed[sessionId] = List.of(slugs);
@@ -1773,6 +1788,7 @@ class TikoRuntime {
         skillsUsed: loop.lastSkillsUsed,
       );
       _rememberSessionSkills(session.id, result.skillsUsed);
+      unawaited(_checkTokenAnomaly(session, result));
       unawaited(spans.recordTurn(
         traceId: session.id,
         attributes: {
@@ -2515,6 +2531,95 @@ class TikoRuntime {
             'USER.md: ${curatedMemory.userPath}';
     return ChatRunResult(text: text, success: true);
   }
+
+  /// E1 (opt-in): deteksi lonjakan token per skill. Total token giliran
+  /// diatribusikan ke setiap skill yang dipakai giliran itu (bisa dobel
+  /// hitung antar skill — pendekatan konservatif). Saat anomali terdeteksi:
+  /// audit log + event `security.token_anomaly` + karantina skill ke draft
+  /// (cap harian, skill draft/retired dilewati). Best-effort: tidak pernah
+  /// menggagalkan giliran chat.
+  Future<void> _checkTokenAnomaly(
+    Session session,
+    ChatRunResult result,
+  ) async {
+    final detector = _tokenAnomaly;
+    if (detector == null || result.skillsUsed.isEmpty) return;
+    if (result.tokensUsed <= 0) return;
+    final now = DateTime.now().toUtc();
+    final day = now.toIso8601String().substring(0, 10);
+    for (final slug in result.skillsUsed) {
+      final TokenAnomaly? anomaly;
+      try {
+        anomaly = detector.observe(slug, result.tokensUsed, now);
+      } catch (_) {
+        continue; // best-effort
+      }
+      if (anomaly == null) continue;
+
+      final quarantined = _quarantineOnTokenAnomaly(slug, day);
+      final detail = 'lonjakan token: ${anomaly.tokens} '
+          '(baseline ${anomaly.baselineMean.toStringAsFixed(0)}, '
+          'ambang ${anomaly.threshold.toStringAsFixed(0)}, '
+          'sampel ${anomaly.samples})';
+      events.emit('security.token_anomaly', {
+        ...anomaly.toJson(),
+        'session': session.id,
+        'quarantined': quarantined,
+      });
+      try {
+        await audit.log(
+          sessionId: session.id,
+          tool: 'token_anomaly',
+          args: {'slug': slug},
+          risk: 'medium',
+          verdict: quarantined ? 'anomali-karantina' : 'anomali',
+          resultSummary: detail,
+        );
+      } catch (_) {
+        // Audit best-effort; jangan gagalkan giliran.
+      }
+    }
+  }
+
+  /// E1: karantina skill ke status draft bila anomali token terdeteksi.
+  /// Konservatif: cap harian, skill draft/retired dilewati, dan skill
+  /// harus ada di registry. Return true bila karantina dilakukan.
+  bool _quarantineOnTokenAnomaly(String slug, String day) {
+    final maxPerDay = config.tokenAnomaly.maxQuarantinesPerDay;
+    if ((_tokenQuarantinesByDay[day] ?? 0) >= maxPerDay) return false;
+    final skill = skills.get(slug);
+    if (skill == null) return false;
+    if (skill.status == SkillStatus.draft ||
+        skill.status == SkillStatus.retired) {
+      return false;
+    }
+    skill.status = SkillStatus.draft;
+    skill.approvedBy = null;
+    _tokenQuarantinesByDay[day] = (_tokenQuarantinesByDay[day] ?? 0) + 1;
+    try {
+      reflectionEngine?.recordCorrectiveLesson(
+        trigger: 'skill $slug lonjakan token anomali',
+        insight: 'skill $slug memakai token jauh di atas baseline '
+            'historisnya — periksa apakah prompt/argumennya membengkak',
+        action: 'tinjau skill sebelum dipromosikan ulang',
+        sessionId: 'token-anomaly',
+      );
+    } catch (_) {
+      // best-effort
+    }
+    return true;
+  }
+
+  /// E1 (khusus test): akses detektor untuk verifikasi wiring.
+  // ignore: avoid_public_member_api_docs
+  TokenAnomalyDetector? get tokenAnomalyDetectorForTest => _tokenAnomaly;
+
+  /// E1 (khusus test): jalankan pemeriksaan anomali token secara langsung
+  /// tanpa harus melewati giliran chat penuh.
+  Future<void> checkTokenAnomalyForTest(
+    Session session,
+    ChatRunResult result,
+  ) => _checkTokenAnomaly(session, result);
 
   /// Closed learning loop (P1-8): after every turn, offer the trajectory to
   /// the [SelfLearningEngine] so a successful multi-tool workflow can be

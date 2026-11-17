@@ -262,6 +262,40 @@ class McpServerConfig {
 
 /// Typed, validated configuration (PRD P0: typed config schema).
 /// Reads the existing `config/agent.yaml` layout so old files keep working.
+/// Opt-in (E1): deteksi anomali token per skill. Default false.
+class TokenAnomalyConfig {
+  const TokenAnomalyConfig({
+    this.enabled = false,
+    this.minSamples = 5,
+    this.windowSize = 50,
+    this.zMultiplier = 3.0,
+    this.minSpikeRatio = 3.0,
+    this.cooldownMinutes = 60,
+    this.maxQuarantinesPerDay = 3,
+  });
+
+  final bool enabled;
+
+  /// Sampel minimum sebelum baseline dipercaya.
+  final int minSamples;
+
+  /// Ukuran jendela rolling per skill.
+  final int windowSize;
+
+  /// Ambang z-score: tokens > mean + z * stddev.
+  final double zMultiplier;
+
+  /// Lantai rasio: tokens >= mean * rasio (anti false-positive baseline
+  /// datar).
+  final double minSpikeRatio;
+
+  /// Jeda minimum antar alarm untuk skill yang sama.
+  final int cooldownMinutes;
+
+  /// Cap karantina skill per UTC day (anti-spam penindakan).
+  final int maxQuarantinesPerDay;
+}
+
 class TikoConfig {
   TikoConfig({
     this.profile = 'default',
@@ -308,6 +342,7 @@ class TikoConfig {
     this.interruptRedirect = true,
     this.schedulerDuplicatePolicy = 'resend',
     this.scriptSelfRepair = false,
+    this.tokenAnomaly = const TokenAnomalyConfig(),
   });
 
   final String profile;
@@ -335,6 +370,9 @@ class TikoConfig {
   /// gagal, error dikirim ke LLM auxiliar untuk patch, retry ≤3. Default
   /// false karena membakar token LLM dan mengeksekusi kode hasil LLM.
   final bool scriptSelfRepair;
+
+  /// Opt-in (E1): deteksi anomali token per skill. Default false.
+  final TokenAnomalyConfig tokenAnomaly;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -806,6 +844,10 @@ class TikoConfig {
         ? rawScriptSelfRepair
         : false;
 
+    // E1 (opt-in): security.token_anomaly
+    final tokenAnomalyCfg = _parseTokenAnomaly(security['token_anomaly'],
+        issues);
+
     final mcpServers = <McpServerConfig>[];
     final rawMcpServers = mcp['servers'];
     if (rawMcpServers != null && rawMcpServers is! YamlList) {
@@ -1142,6 +1184,7 @@ class TikoConfig {
       mcpServers: mcpServers,
       mcpAnswerServerRequests: mcpAnswerServerRequests,
       scriptSelfRepair: scriptSelfRepair,
+      tokenAnomaly: tokenAnomalyCfg,
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
@@ -1185,6 +1228,60 @@ class TikoConfig {
               : null,
     );
     return (cfg, issues);
+  }
+
+  /// E1: parse blok `security.token_anomaly` (opt-in, default false).
+  /// Nilai tidak valid -> ConfigIssue + fallback default (fail-closed).
+  static TokenAnomalyConfig _parseTokenAnomaly(
+    Object? raw,
+    List<ConfigIssue> issues,
+  ) {
+    if (raw == null) return const TokenAnomalyConfig();
+    if (raw is bool) {
+      // Bentuk ringkas: security.token_anomaly: true
+      return TokenAnomalyConfig(enabled: raw);
+    }
+    if (raw is! YamlMap) {
+      issues.add(const ConfigIssue(
+        'security.token_anomaly',
+        'harus boolean atau mapping',
+      ));
+      return const TokenAnomalyConfig();
+    }
+    int intOf(Object? v, int fallback, String key, int min) {
+      if (v == null) return fallback;
+      if (v is int && v >= min) return v;
+      issues.add(ConfigIssue('security.token_anomaly.$key',
+          'harus integer >= $min'));
+      return fallback;
+    }
+
+    double doubleOf(Object? v, double fallback, String key, double min) {
+      if (v == null) return fallback;
+      if (v is num && v >= min) return v.toDouble();
+      issues.add(ConfigIssue('security.token_anomaly.$key',
+          'harus angka >= $min'));
+      return fallback;
+    }
+
+    final rawEnabled = raw['enabled'];
+    if (rawEnabled != null && rawEnabled is! bool) {
+      issues.add(const ConfigIssue('security.token_anomaly.enabled',
+          'harus boolean'));
+    }
+    return TokenAnomalyConfig(
+      enabled: rawEnabled is bool ? rawEnabled : false,
+      minSamples: intOf(raw['min_samples'], 5, 'min_samples', 2),
+      windowSize: intOf(raw['window_size'], 50, 'window_size', 5),
+      zMultiplier:
+          doubleOf(raw['z_multiplier'], 3.0, 'z_multiplier', 0.1),
+      minSpikeRatio:
+          doubleOf(raw['min_spike_ratio'], 3.0, 'min_spike_ratio', 1.0),
+      cooldownMinutes:
+          intOf(raw['cooldown_minutes'], 60, 'cooldown_minutes', 0),
+      maxQuarantinesPerDay: intOf(
+          raw['max_quarantines_per_day'], 3, 'max_quarantines_per_day', 0),
+    );
   }
 
   static DecisionConfig _parseDecision(YamlMap sec, List<ConfigIssue> issues) {
