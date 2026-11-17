@@ -630,6 +630,12 @@ class TikoRuntime {
       ..register(LayeredMemoryTool(layeredMemory))
       ..register(SessionSearchTool(sessionStore))
       ..register(HdcMemoryTool(hdcMemory))
+      // D5 federated-lite: export/import skill antar instance (manual,
+      // paket JSON tervalidasi, metrik merge LWW; skill impor selalu draft).
+      ..register(SkillShareTool(
+        registry: skillRegistry,
+        skillsRoot: abs('skills'),
+      ))
       ..register(KanbanTool(KanbanBoard(p.join(dataDir, 'kanban.json'))))
       ..register(WorktreeTool(WorktreeManager(repoRoot: workspace)));
 
