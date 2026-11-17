@@ -24,6 +24,7 @@ class HttpApiServer {
     this.webRoot,
     this.listSessions,
     this.sessionMessages,
+    this.uiActionHandler,
     this.deleteSession,
     this.renameSession,
     this.doctorProvider,
@@ -59,6 +60,15 @@ class HttpApiServer {
   })? sessionMessages;
   final Future<bool> Function(String sessionId)? deleteSession;
   final Future<bool> Function(String sessionId, String title)? renameSession;
+
+  /// Typed GenUI action (GUI-P0-04): memvalidasi action id terhadap registry
+  /// per sesi (ownership + expiry + single-use + nilai form), lalu meneruskan
+  /// aksi ke agent loop. Melempar GenUiActionRejected bila tidak valid.
+  final Future<Map<String, dynamic>> Function(
+    String sessionKey,
+    String actionId,
+    Map<String, dynamic> values,
+  )? uiActionHandler;
   final Future<List<Map<String, dynamic>>> Function()? doctorProvider;
   final Map<String, Object?> Function()? capabilitiesProvider;
   final List<Map<String, dynamic>> Function()? eventsProvider;
@@ -71,6 +81,9 @@ class HttpApiServer {
   final WebhookEndpoint? webhookEndpoint;
 
   static final Random _rng = Random.secure();
+
+  /// Format action id GenUI (sama dengan parser D1: [A-Za-z0-9_.-], 1-64).
+  static final RegExp _safeActionId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
 
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
@@ -453,6 +466,36 @@ class HttpApiServer {
           req.response.write(jsonEncode({'ok': true}));
           await req.response.close();
           await onShutdown!.call();
+        }
+      } else if (path == '/v1/ui/actions' && req.method == 'POST') {
+        final handler = uiActionHandler;
+        if (handler == null) {
+          req.response.statusCode = 501;
+          _json(req, {'error': 'ui actions not configured'});
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final sessionKey = body['session_key'] as String? ?? '';
+        final actionId = body['action_id'] as String? ?? '';
+        final rawValues = body['values'];
+        final values = rawValues is Map
+            ? rawValues.map((k, v) => MapEntry(k.toString(), v))
+            : <String, dynamic>{};
+        if (sessionKey.isEmpty ||
+            sessionKey.length > 128 ||
+            !_safeActionId.hasMatch(actionId)) {
+          req.response.statusCode = 400;
+          _json(req, {'error': 'invalid ui action request'});
+          return;
+        }
+        try {
+          final result = await handler(sessionKey, actionId, values);
+          _json(req, result);
+        } on GenUiActionRejected catch (e) {
+          req.response.statusCode = 400;
+          _json(req, {'ok': false, 'error': e.message});
         }
       } else if (path == '/v1/confirm' && req.method == 'POST') {
         final body =
