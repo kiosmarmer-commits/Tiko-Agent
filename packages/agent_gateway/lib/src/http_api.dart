@@ -229,8 +229,7 @@ class HttpApiServer {
 
     if (path == '/v1/auth/ticket' && req.method == 'POST') {
       if (!_auth(req)) {
-        req.response.statusCode = 401;
-        _json(req, {'error': 'unauthorized'});
+        _error(req, 401, 'unauthorized', 'unauthorized');
         return;
       }
       _pruneTickets();
@@ -249,8 +248,7 @@ class HttpApiServer {
     if (path == '/webhooks/whatsapp' || path == '/webhooks/slack') {
       final endpoint = webhookEndpoint;
       if (endpoint == null) {
-        req.response.statusCode = 403;
-        _json(req, {'error': 'webhook endpoint not configured'});
+        _error(req, 403, 'forbidden', 'webhook endpoint not configured');
       } else {
         await endpoint.handle(req, path);
       }
@@ -309,7 +307,8 @@ class HttpApiServer {
 
     if (!_auth(req) && path != '/health') {
       req.response.statusCode = 401;
-      req.response.write(jsonEncode({'error': 'unauthorized'}));
+      req.response.write(jsonEncode(
+          {'ok': false, 'code': 'unauthorized', 'error': 'unauthorized', 'retryable': false}));
       await req.response.close();
       return;
     }
@@ -328,14 +327,12 @@ class HttpApiServer {
         final id = Uri.decodeComponent(path
             .substring('/v1/sessions/'.length, path.length - '/messages'.length));
         if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
-          req.response.statusCode = 400;
-          _json(req, {'error': 'invalid session id'});
+          _error(req, 400, 'invalid_request', 'invalid session id');
           return;
         }
         final api = sessionMessages;
         if (api == null) {
-          req.response.statusCode = 501;
-          _json(req, {'error': 'session history not configured'});
+          _error(req, 501, 'not_implemented', 'session history not configured');
           return;
         }
         final q = req.uri.queryParameters;
@@ -353,8 +350,7 @@ class HttpApiServer {
       } else if (path.startsWith('/v1/sessions/') && req.method == 'DELETE') {
         final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
         if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
-          req.response.statusCode = 400;
-          _json(req, {'error': 'invalid session id'});
+          _error(req, 400, 'invalid_request', 'invalid session id');
         } else {
           final ok = await (deleteSession?.call(id) ?? Future.value(false));
           _json(req, {'deleted': ok});
@@ -362,8 +358,7 @@ class HttpApiServer {
       } else if (path.startsWith('/v1/sessions/') && req.method == 'PATCH') {
         final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
         if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
-          req.response.statusCode = 400;
-          _json(req, {'error': 'invalid session id'});
+          _error(req, 400, 'invalid_request', 'invalid session id');
           return;
         }
         final body =
@@ -371,8 +366,7 @@ class HttpApiServer {
         final title = body['title'] as String? ?? '';
         final ok = await (renameSession?.call(id, title) ?? Future.value(false));
         if (!ok) {
-          req.response.statusCode = 404;
-          _json(req, {'ok': false, 'error': 'session not found or rename unsupported'});
+          _error(req, 404, 'not_found', 'session not found or rename unsupported');
         } else {
           _json(req, {'ok': true, 'id': id, 'title': title});
         }
@@ -394,14 +388,12 @@ class HttpApiServer {
       } else if (path.startsWith('/v1/logs/') && req.method == 'GET') {
         final name = Uri.decodeComponent(path.substring('/v1/logs/'.length));
         if (name.isEmpty || name.contains('/') || name.contains('\\') || name.contains('..')) {
-          req.response.statusCode = 400;
-          _json(req, {'error': 'invalid log name'});
+          _error(req, 400, 'invalid_request', 'invalid log name');
         } else {
           final content = await (logContentProvider?.call(name) ??
               Future<Map<String, dynamic>?>.value(null));
           if (content == null) {
-            req.response.statusCode = 404;
-            _json(req, {'error': 'log not found'});
+            _error(req, 404, 'not_found', 'log not found');
           } else {
             _json(req, content);
           }
@@ -457,8 +449,7 @@ class HttpApiServer {
         }
       } else if (path == '/v1/shutdown' && req.method == 'POST') {
         if (onShutdown == null) {
-          req.response.statusCode = 409;
-          _json(req, {'ok': false, 'error': 'shutdown is unavailable'});
+          _error(req, 409, 'conflict', 'shutdown is unavailable');
         } else {
           // Flush the acknowledgement before signaling agentd to close its
           // HttpServer; otherwise the response can be cut off during teardown.
@@ -470,8 +461,7 @@ class HttpApiServer {
       } else if (path == '/v1/ui/actions' && req.method == 'POST') {
         final handler = uiActionHandler;
         if (handler == null) {
-          req.response.statusCode = 501;
-          _json(req, {'error': 'ui actions not configured'});
+          _error(req, 501, 'not_implemented', 'ui actions not configured');
           return;
         }
         final body =
@@ -486,16 +476,14 @@ class HttpApiServer {
         if (sessionKey.isEmpty ||
             sessionKey.length > 128 ||
             !_safeActionId.hasMatch(actionId)) {
-          req.response.statusCode = 400;
-          _json(req, {'error': 'invalid ui action request'});
+          _error(req, 400, 'invalid_request', 'invalid ui action request');
           return;
         }
         try {
           final result = await handler(sessionKey, actionId, values);
           _json(req, result);
         } on GenUiActionRejected catch (e) {
-          req.response.statusCode = 400;
-          _json(req, {'ok': false, 'error': e.message});
+          _error(req, 400, 'invalid_request', e.message);
         }
       } else if (path == '/v1/confirm' && req.method == 'POST') {
         final body =
@@ -588,13 +576,26 @@ class HttpApiServer {
           }
         }
       } else {
-        req.response.statusCode = 404;
-        _json(req, {'error': 'not found'});
+        _error(req, 404, 'not_found', 'not found');
       }
     } catch (e) {
-      req.response.statusCode = 500;
-      _json(req, {'error': e.toString()});
+      _error(req, 500, 'server', e.toString(), retryable: true);
     }
+  }
+
+  /// Error model typed (GUI-P0-03): setiap error membawa `code` standar
+  /// (unauthorized/forbidden/not_found/invalid_request/not_implemented/
+  /// conflict/rate_limited/server) dan `retryable`. Kunci `error` dengan pesan
+  /// yang sama dipertahankan agar klien lama tetap kompatibel.
+  void _error(
+    HttpRequest req,
+    int status,
+    String code,
+    String message, {
+    bool retryable = false,
+  }) {
+    req.response.statusCode = status;
+    _json(req, {'ok': false, 'code': code, 'error': message, 'retryable': retryable});
   }
 
   bool _isStatic(String path) {
