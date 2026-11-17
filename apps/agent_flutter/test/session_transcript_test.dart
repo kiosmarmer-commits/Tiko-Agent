@@ -22,7 +22,7 @@ class _ApiServer {
         final path = req.uri.path;
         final method = req.method;
         final body = await utf8.decoder.bind(req).join();
-        requests.add(path);
+        requests.add(req.uri.toString());
         methods.add(method);
         bodies.add(body);
         req.response.headers.contentType = ContentType.json;
