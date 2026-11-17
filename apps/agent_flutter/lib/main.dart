@@ -322,12 +322,42 @@ class _AgentAppState extends State<AgentApp> {
           current: sessionKey,
           online: chat.online,
           loading: loadingAdmin,
+          error: adminError,
           onRefresh: refreshAdmin,
-          onSelect: (id) => setState(() {
-            sessionKey = id;
-            chat.clearChat();
-            tab = 0;
-          }),
+          onSelect: (id) {
+            setState(() {
+              sessionKey = id;
+              adminError = null;
+              tab = 0;
+            });
+            unawaited(chat.openSession(id));
+          },
+          onRename: (id, title) async {
+            try {
+              final ok = await client.renameSession(id, title);
+              if (!ok) throw StateError('Sesi tidak ditemukan atau gagal diubah.');
+              await refreshAdmin(force: true);
+            } catch (error) {
+              if (mounted) {
+                setState(() => adminError = 'Gagal mengubah nama sesi: $error');
+              }
+            }
+          },
+          onDelete: (id) async {
+            try {
+              final deleted = await client.deleteSession(id);
+              if (!deleted) throw StateError('Sesi tidak ditemukan atau gagal dihapus.');
+              if (id == sessionKey) {
+                setState(() => sessionKey = 'flutter:default');
+                chat.clearChat();
+              }
+              await refreshAdmin(force: true);
+            } catch (error) {
+              if (mounted) {
+                setState(() => adminError = 'Gagal menghapus sesi: $error');
+              }
+            }
+          },
         );
       case 4:
         return _MemoryPage(
@@ -830,16 +860,63 @@ class _SessionsPage extends StatelessWidget {
     required this.current,
     required this.online,
     required this.loading,
+    required this.error,
     required this.onRefresh,
     required this.onSelect,
+    required this.onRename,
+    required this.onDelete,
   });
 
   final List<Map<String, dynamic>> sessions;
   final String current;
   final bool online;
   final bool loading;
+  final String? error;
   final Future<void> Function() onRefresh;
   final void Function(String id) onSelect;
+  final Future<void> Function(String id, String title) onRename;
+  final Future<void> Function(String id) onDelete;
+
+  Future<void> _confirmRename(BuildContext context, Map<String, dynamic> session) async {
+    final id = '${session['id']}';
+    final controller = TextEditingController(text: '${session['title'] ?? id}');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ganti nama sesi'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Judul sesi'),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    final trimmed = title?.trim() ?? '';
+    if (trimmed.isNotEmpty) await onRename(id, trimmed);
+  }
+
+  Future<void> _confirmDelete(BuildContext context, String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hapus sesi?'),
+        content: Text('Transcript "$id" akan dihapus permanen dari daemon.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Hapus')),
+        ],
+      ),
+    );
+    if (confirmed == true) await onDelete(id);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -852,6 +929,11 @@ class _SessionsPage extends StatelessWidget {
           trailing: IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
         if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
+          ),
         Expanded(
           child: sessions.isEmpty
               ? Center(child: Text('Belum ada sesi.', style: TextStyle(color: context.simpulMuted)))
@@ -860,14 +942,41 @@ class _SessionsPage extends StatelessWidget {
                   itemBuilder: (context, i) {
                     final session = sessions[i];
                     final id = '${session['id']}';
+                    final title = '${session['title'] ?? id}';
                     return ListTile(
                       selected: id == current,
                       leading: const Icon(Icons.forum_outlined),
-                      title: Text(id, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
-                        '${session['channel'] ?? ''} · ${session['updated_at'] ?? ''} · turns=${session['turns'] ?? ''}',
+                        '$id · ${session['channel'] ?? ''} · ${session['updated_at'] ?? ''} · turns=${session['turns'] ?? ''}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'Aksi sesi',
+                        onSelected: (action) {
+                          if (action == 'rename') {
+                            unawaited(_confirmRename(context, session));
+                          } else if (action == 'delete') {
+                            unawaited(_confirmDelete(context, id));
+                          }
+                        },
+                        itemBuilder: (menuContext) => const [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: ListTile(
+                              leading: Icon(Icons.edit_outlined),
+                              title: Text('Ganti nama'),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: ListTile(
+                              leading: Icon(Icons.delete_outline),
+                              title: Text('Hapus'),
+                            ),
+                          ),
+                        ],
                       ),
                       onTap: () => onSelect(id),
                     );

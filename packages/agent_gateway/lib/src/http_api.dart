@@ -23,6 +23,9 @@ class HttpApiServer {
     this.deleteMemory,
     this.webRoot,
     this.listSessions,
+    this.sessionMessages,
+    this.deleteSession,
+    this.renameSession,
     this.doctorProvider,
     this.capabilitiesProvider,
     this.eventsProvider,
@@ -46,6 +49,16 @@ class HttpApiServer {
   final Future<bool> Function(String id)? deleteMemory;
   final String? webRoot;
   final Future<List<Map<String, dynamic>>> Function()? listSessions;
+
+  /// Transcript of one session, oldest first. [offset] skips that many most
+  /// recent messages so clients can page backwards (load-earlier).
+  final Future<List<Map<String, dynamic>>> Function(
+    String sessionId, {
+    required int limit,
+    required int offset,
+  })? sessionMessages;
+  final Future<bool> Function(String sessionId)? deleteSession;
+  final Future<bool> Function(String sessionId, String title)? renameSession;
   final Future<List<Map<String, dynamic>>> Function()? doctorProvider;
   final Map<String, Object?> Function()? capabilitiesProvider;
   final List<Map<String, dynamic>> Function()? eventsProvider;
@@ -296,6 +309,60 @@ class HttpApiServer {
       } else if (path == '/v1/sessions' && req.method == 'GET') {
         final sessions = await (listSessions?.call() ?? Future.value(<Map<String, dynamic>>[]));
         _json(req, {'sessions': sessions});
+      } else if (path.startsWith('/v1/sessions/') &&
+          path.endsWith('/messages') &&
+          req.method == 'GET') {
+        final id = Uri.decodeComponent(path
+            .substring('/v1/sessions/'.length, path.length - '/messages'.length));
+        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+          req.response.statusCode = 400;
+          _json(req, {'error': 'invalid session id'});
+          return;
+        }
+        final api = sessionMessages;
+        if (api == null) {
+          req.response.statusCode = 501;
+          _json(req, {'error': 'session history not configured'});
+          return;
+        }
+        final q = req.uri.queryParameters;
+        final limit =
+            ((int.tryParse(q['limit'] ?? '') ?? 50).clamp(1, 200)).toInt();
+        final offset =
+            ((int.tryParse(q['offset'] ?? '') ?? 0).clamp(0, 200)).toInt();
+        final messages = await api(id, limit: limit, offset: offset);
+        _json(req, {
+          'session_id': id,
+          'messages': messages,
+          'limit': limit,
+          'offset': offset,
+        });
+      } else if (path.startsWith('/v1/sessions/') && req.method == 'DELETE') {
+        final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
+        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+          req.response.statusCode = 400;
+          _json(req, {'error': 'invalid session id'});
+        } else {
+          final ok = await (deleteSession?.call(id) ?? Future.value(false));
+          _json(req, {'deleted': ok});
+        }
+      } else if (path.startsWith('/v1/sessions/') && req.method == 'PATCH') {
+        final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
+        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+          req.response.statusCode = 400;
+          _json(req, {'error': 'invalid session id'});
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final title = body['title'] as String? ?? '';
+        final ok = await (renameSession?.call(id, title) ?? Future.value(false));
+        if (!ok) {
+          req.response.statusCode = 404;
+          _json(req, {'ok': false, 'error': 'session not found or rename unsupported'});
+        } else {
+          _json(req, {'ok': true, 'id': id, 'title': title});
+        }
       } else if (path == '/v1/doctor' && req.method == 'GET') {
         final d = await (doctorProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
         _json(req, {'checks': d});

@@ -58,6 +58,45 @@ class AgentApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Transcript satu sesi, oldest first. [offset] melewati sebanyak itu
+  /// pesan terbaru sehingga klien dapat memuat riwayat lebih lama.
+  Future<List<Map<String, dynamic>>> fetchSessionMessages(
+    String sessionId, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .get(_u('/v1/sessions/$safeId/messages?limit=$limit&offset=$offset'),
+            headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'session messages');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['messages'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<bool> deleteSession(String sessionId) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .delete(_u('/v1/sessions/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['deleted'] == true;
+  }
+
+  Future<bool> renameSession(String sessionId, String title) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .patch(_u('/v1/sessions/$safeId'),
+            headers: _headers, body: jsonEncode({'title': title}))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
   Future<List<Map<String, dynamic>>> listApprovals() async {
     final res = await _http.get(_u('/v1/approvals'), headers: _headers);
     _throwIf(res, 'approvals');

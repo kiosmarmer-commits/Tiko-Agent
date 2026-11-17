@@ -87,4 +87,20 @@ void main() {
     expect((await c.recent('x', limit: 10)).length, 4);
     expect((await c.list()).single.turns, 2);
   });
+
+  test('rename updates the title and persists across restart', () async {
+    final s = open();
+    await s.getOrCreate('r', channel: 'cli', userKey: 'u');
+    await s.appendTurn('r', user: 'halo', assistant: 'hai');
+    expect(await s.rename('r', '  Rencana liburan  '), isTrue);
+    final fresh = open();
+    expect((await fresh.list()).single.title, 'Rencana liburan');
+  });
+
+  test('rename fails for unknown session or empty title', () async {
+    final s = open();
+    await s.getOrCreate('r', channel: 'cli', userKey: 'u');
+    expect(await s.rename('ghost', 'x'), isFalse);
+    expect(await s.rename('r', '   '), isFalse);
+  });
 }

@@ -660,6 +660,22 @@ Future<void> main(List<String> args) async {
                   })
               .toList();
         },
+        sessionMessages: (id, {required int limit, required int offset}) async {
+          // recent(limit + offset) returns the most recent window oldest
+          // first; dropping the last `offset` messages yields the page that
+          // ends `offset` messages before the newest one.
+          final window = await rt.sessions
+              .recent(id, limit: ((limit + offset).clamp(1, 400)).toInt());
+          if (offset >= window.length) return <Map<String, dynamic>>[];
+          final ending = window.sublist(0, window.length - offset);
+          final start = ending.length > limit ? ending.length - limit : 0;
+          return [
+            for (final m in ending.sublist(start))
+              {'role': m.role, 'content': m.content},
+          ];
+        },
+        deleteSession: (id) => rt.sessions.delete(id),
+        renameSession: (id, title) => rt.sessions.rename(id, title),
         listMemories: () => rt.listMemories(),
         deleteMemory: (id) => rt.deleteMemory(id),
         doctorProvider: () async {

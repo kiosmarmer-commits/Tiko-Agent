@@ -220,6 +220,19 @@ class FileSessionStore implements SessionStore {
   }
 
   @override
+  Future<bool> rename(String sessionId, String title) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final s = _sessions[sessionId];
+      final t = title.trim();
+      if (s == null || t.isEmpty) return false;
+      s.title = _redactor.redact(t);
+      await _persist();
+      return true;
+    }));
+  }
+
+  @override
   Future<List<SessionSearchHit>> searchSessions(
     String query, {
     int limit = 8,
