@@ -35,6 +35,17 @@ class _ApiServer {
           }));
         } else if (path.startsWith('/v1/sessions/') &&
             path.endsWith('/messages')) {
+          if (path.contains('flutter:tidak-ada')) {
+            req.response.statusCode = 404;
+            req.response.write(jsonEncode(<String, dynamic>{
+              'ok': false,
+              'code': 'not_found',
+              'error': 'session not found',
+              'retryable': false,
+            }));
+            await req.response.close();
+            continue;
+          }
           req.response.write(jsonEncode(<String, dynamic>{
             'session_id': 'flutter:default',
             'messages': [
