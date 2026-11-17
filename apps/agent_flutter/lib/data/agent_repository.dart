@@ -1,0 +1,140 @@
+import 'dart:async';
+
+import 'package:http/http.dart' as http;
+
+import '../agent_api_client.dart';
+import 'api_error.dart';
+import 'models.dart';
+
+/// Lapisan repository typed (GUI-P0-03): halaman UI memakai DTO, bukan
+/// Map mentah. Test dapat mengganti implementasi ini dengan fake.
+abstract class AgentRepository {
+  Future<bool> health();
+  Future<Map<String, dynamic>> status();
+  Future<Map<String, dynamic>> capabilities();
+
+  /// Baris doctor tetap Map karena payload per-check heterogen.
+  Future<List<Map<String, dynamic>>> doctor();
+  Future<List<SessionSummary>> sessions();
+  Future<List<SessionMessage>> sessionMessages(
+    String sessionId, {
+    int limit,
+    int offset,
+  });
+  Future<bool> deleteSession(String sessionId);
+  Future<bool> renameSession(String sessionId, String title);
+  Future<List<ApprovalSummary>> approvals();
+  Future<bool> decideApproval(String id, bool approve);
+  Future<List<RuntimeEvent>> events();
+  Future<List<MemoryFact>> memories();
+  Future<bool> deleteMemory(String id);
+  Future<String> sendMessage(String text, {String sessionKey});
+  Future<String> submitUiAction(
+    String sessionKey,
+    String actionId,
+    Map<String, dynamic> values,
+  );
+  Stream<Map<String, dynamic>> streamChat(String text, {String sessionKey});
+}
+
+/// Implementasi HTTP di atas [AgentApiClient]; menerjemahkan kegagalan
+/// transport menjadi [ApiError] (network/timeout) tanpa mengubah error lain.
+class HttpAgentRepository implements AgentRepository {
+  HttpAgentRepository(this._client);
+
+  final AgentApiClient _client;
+
+  Future<T> _guard<T>(Future<T> Function() run) async {
+    try {
+      return await run();
+    } on ApiError {
+      rethrow;
+    } on TimeoutException catch (e) {
+      throw ApiError.timeout(e.message ?? 'koneksi timeout');
+    } on http.ClientException catch (e) {
+      throw ApiError.network(e.message);
+    }
+  }
+
+  @override
+  Future<bool> health() => _guard(_client.health);
+
+  @override
+  Future<Map<String, dynamic>> status() => _guard(_client.status);
+
+  @override
+  Future<Map<String, dynamic>> capabilities() => _guard(_client.capabilities);
+
+  @override
+  Future<List<Map<String, dynamic>>> doctor() => _guard(_client.doctor);
+
+  @override
+  Future<List<SessionSummary>> sessions() async =>
+      (await _guard(_client.listSessions))
+          .map(SessionSummary.fromMap)
+          .toList();
+
+  @override
+  Future<List<SessionMessage>> sessionMessages(
+    String sessionId, {
+    int limit = 50,
+    int offset = 0,
+  }) async =>
+      (await _guard(() => _client.fetchSessionMessages(
+            sessionId,
+            limit: limit,
+            offset: offset,
+          )))
+          .map(SessionMessage.fromMap)
+          .toList();
+
+  @override
+  Future<bool> deleteSession(String sessionId) =>
+      _guard(() => _client.deleteSession(sessionId));
+
+  @override
+  Future<bool> renameSession(String sessionId, String title) =>
+      _guard(() => _client.renameSession(sessionId, title));
+
+  @override
+  Future<List<ApprovalSummary>> approvals() async =>
+      (await _guard(_client.listApprovals))
+          .map(ApprovalSummary.fromMap)
+          .toList();
+
+  @override
+  Future<bool> decideApproval(String id, bool approve) =>
+      _guard(() => _client.decideApproval(id, approve));
+
+  @override
+  Future<List<RuntimeEvent>> events() async => (await _guard(_client.listEvents))
+      .map(RuntimeEvent.fromMap)
+      .toList();
+
+  @override
+  Future<List<MemoryFact>> memories() async => (await _guard(_client.listMemories))
+      .map(MemoryFact.fromMap)
+      .toList();
+
+  @override
+  Future<bool> deleteMemory(String id) => _guard(() => _client.deleteMemory(id));
+
+  @override
+  Future<String> sendMessage(String text, {String sessionKey = 'flutter:default'}) =>
+      _guard(() => _client.sendMessage(text, sessionKey: sessionKey));
+
+  @override
+  Future<String> submitUiAction(
+    String sessionKey,
+    String actionId,
+    Map<String, dynamic> values,
+  ) =>
+      _guard(() => _client.submitUiAction(sessionKey, actionId, values));
+
+  @override
+  Stream<Map<String, dynamic>> streamChat(
+    String text, {
+    String sessionKey = 'flutter:default',
+  }) =>
+      _client.streamChat(text, sessionKey: sessionKey);
+}

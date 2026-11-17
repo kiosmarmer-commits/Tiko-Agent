@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'data/api_error.dart';
+
 /// HTTP/WS client for Tiko control plane API.
 class AgentApiClient {
   AgentApiClient({required this.baseUrl, required this.token});
@@ -235,7 +237,7 @@ class AgentApiClient {
 
   void _throwIf(http.Response res, String what) {
     if (res.statusCode >= 400) {
-      throw Exception('$what ${res.statusCode}: ${res.body}');
+      throw ApiError.fromResponse(res.statusCode, res.body);
     }
   }
 

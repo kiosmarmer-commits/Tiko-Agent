@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_flutter/agent_api_client.dart';
+import 'package:agent_flutter/data/agent_repository.dart';
 import 'package:agent_flutter/ui/chat_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,7 +71,8 @@ void main() {
 
   test('sendUiAction sukses: bubble user+assistant terisi balasan typed',
       () async {
-    final chat = ChatController(client, sessionKey: 'flutter:default');
+    final chat = ChatController(HttpAgentRepository(client),
+        sessionKey: 'flutter:default');
     await chat.sendUiAction('submit_form', {'kota': 'Bandung'},
         sessionKey: 'flutter:default');
 
@@ -84,7 +86,8 @@ void main() {
 
   test('sendUiAction 501: fallback ke jalur teks /ui lama', () async {
     fake.uiActionStatus = 501;
-    final chat = ChatController(client, sessionKey: 'flutter:default');
+    final chat = ChatController(HttpAgentRepository(client),
+        sessionKey: 'flutter:default');
     chat.useStreaming = false;
     await chat.sendUiAction('submit_form', {'kota': 'Bandung'},
         sessionKey: 'flutter:default');
@@ -99,7 +102,8 @@ void main() {
   test('sendUiAction ditolak 400: pesan system, tanpa pengiriman ulang',
       () async {
     fake.uiActionStatus = 400;
-    final chat = ChatController(client, sessionKey: 'flutter:default');
+    final chat = ChatController(HttpAgentRepository(client),
+        sessionKey: 'flutter:default');
     await chat.sendUiAction('submit_form', const {}, sessionKey: 'flutter:default');
 
     expect(fake.paths, ['/v1/ui/actions']);

@@ -2,7 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import '../agent_api_client.dart';
+import '../data/agent_repository.dart';
+import '../data/api_error.dart';
 
 class ChatMessageVm {
   ChatMessageVm({required this.role, required this.text, DateTime? at})
@@ -20,9 +21,9 @@ class ConfirmRequest {
 }
 
 class ChatController extends ChangeNotifier {
-  ChatController(this.client, {this.sessionKey = 'flutter:default'});
+  ChatController(this.repo, {this.sessionKey = 'flutter:default'});
 
-  AgentApiClient client;
+  AgentRepository repo;
   String sessionKey;
 
   final messages = <Map<String, String>>[];
@@ -33,10 +34,10 @@ class ChatController extends ChangeNotifier {
   bool useStreaming = true;
 
   Future<void> checkOnline() async {
-    online = await client.health();
+    online = await repo.health();
     if (online) {
       try {
-        final s = await client.status();
+        final s = await repo.status();
         final p = s['provider'];
         statusLabel = p != null ? 'online · $p' : 'online';
       } catch (_) {
@@ -60,7 +61,7 @@ class ChatController extends ChangeNotifier {
 
     try {
       if (useStreaming) {
-        await for (final ev in client.streamChat(t, sessionKey: sk)) {
+        await for (final ev in repo.streamChat(t, sessionKey: sk)) {
           final type = ev['type'] as String? ?? '';
           if (type == 'typing') {
             messages[aiIndex]['text'] = 'Menulis…';
@@ -107,7 +108,7 @@ class ChatController extends ChangeNotifier {
           }
         }
       } else {
-        final reply = await client.sendMessage(t, sessionKey: sk);
+        final reply = await repo.sendMessage(t, sessionKey: sk);
         messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
         notifyListeners();
       }
@@ -128,7 +129,7 @@ class ChatController extends ChangeNotifier {
     if (request == null) return;
     var settled = false;
     try {
-      final decided = await client.decideApproval(request.id, allow);
+      final decided = await repo.decideApproval(request.id, allow);
       settled = true;
       if (!decided) {
         messages.add({
@@ -169,13 +170,13 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     final aiIndex = messages.length - 1;
     try {
-      final reply = await client.submitUiAction(sk, actionId, values);
+      final reply = await repo.submitUiAction(sk, actionId, values);
       messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
     } catch (e) {
       messages.removeRange(messages.length - 2, messages.length);
       busy = false;
       notifyListeners();
-      if ('$e'.contains('ui actions 501')) {
+      if (e is ApiError && e.statusCode == 501) {
         await send('/ui $echo', sessionKey: sk);
       } else {
         messages.add({'role': 'system', 'text': 'Gagal mengirim aksi UI: $e'});
@@ -192,15 +193,12 @@ class ChatController extends ChangeNotifier {
   /// percakapan terlihat kembali, bukan sekadar chat kosong.
   Future<void> openSession(String sessionKey, {int limit = 200}) async {
     try {
-      final list = await client.fetchSessionMessages(sessionKey, limit: limit);
+      final list = await repo.sessionMessages(sessionKey, limit: limit);
       messages
         ..clear()
         ..addAll([
           for (final m in list)
-            {
-              'role': m['role'] as String? ?? 'user',
-              'text': m['content'] as String? ?? '',
-            },
+            {'role': m.role, 'text': m.content},
         ]);
     } catch (e) {
       messages

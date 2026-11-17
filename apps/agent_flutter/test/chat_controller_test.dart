@@ -1,4 +1,5 @@
 import 'package:agent_flutter/agent_api_client.dart';
+import 'package:agent_flutter/data/agent_repository.dart';
 import 'package:agent_flutter/ui/chat_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,7 +40,7 @@ void main() {
       ..streamHandler = (_) async* {
         throw StateError('connection dropped after send');
       };
-    final controller = ChatController(client);
+    final controller = ChatController(HttpAgentRepository(client));
     addTearDown(controller.dispose);
 
     await controller.send('buat file');
@@ -58,7 +59,7 @@ void main() {
         };
         yield {'type': 'done'};
       };
-    final controller = ChatController(client);
+    final controller = ChatController(HttpAgentRepository(client));
     addTearDown(controller.dispose);
 
     await controller.send('buat file');
@@ -73,7 +74,7 @@ void main() {
       ..streamHandler = (_) async* {
         yield {'type': 'confirm', 'id': 'apr_retry', 'prompt': 'Izinkan write_file?'};
       };
-    final controller = ChatController(client);
+    final controller = ChatController(HttpAgentRepository(client));
     addTearDown(controller.dispose);
 
     await controller.send('buat file');
@@ -87,7 +88,7 @@ void main() {
       ..streamHandler = (_) async* {
         yield {'type': 'confirm', 'id': 'apr_456', 'prompt': 'Izinkan write_file?'};
       };
-    final controller = ChatController(client);
+    final controller = ChatController(HttpAgentRepository(client));
     addTearDown(controller.dispose);
 
     await controller.send('buat file');
