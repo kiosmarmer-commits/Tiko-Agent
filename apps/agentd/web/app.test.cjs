@@ -118,6 +118,7 @@ function createHarness() {
     createElement(tag) { const element = new FakeElement(); element.tagName = tag; return element; },
   };
   const storage = new Map([['agent_base', 'http://127.0.0.1:8787'], ['agent_token', 's3cr+et & token']]);
+  const session = new Map();
   const calls = [];
   const context = {
     document,
@@ -125,6 +126,12 @@ function createHarness() {
     localStorage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, String(value)),
+      removeItem: (key) => storage.delete(key),
+    },
+    sessionStorage: {
+      getItem: (key) => session.get(key) ?? null,
+      setItem: (key, value) => session.set(key, String(value)),
+      removeItem: (key) => session.delete(key),
     },
     URL,
     WebSocket: FakeWebSocket,
@@ -149,7 +156,7 @@ function createHarness() {
     },
   };
   vm.runInNewContext(source, context, { filename: 'app.js' });
-  return { elements, tabs, sections, calls, storage };
+  return { elements, tabs, sections, calls, storage, session };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -167,6 +174,24 @@ test('Approvals and Sessions tabs load their API data and are not left hidden', 
   assert.equal(h.sections.find((section) => section.id === 'tab-sessions').hidden, false);
   assert.ok(h.calls.some((call) => call.url.endsWith('/v1/sessions')));
   assert.equal(h.elements['session-list'].children[0].children[0].textContent, 'web:default');
+});
+
+test('GUI-P0-05: token dimigrasi dari localStorage ke sessionStorage dan tidak bertahan permanen', async () => {
+  const h = createHarness();
+  assert.equal(h.storage.has('agent_token'), false);
+  assert.equal(h.session.get('agent_token'), 's3cr+et & token');
+
+  // Simpan token baru lewat form konfigurasi: masuk ke sessionStorage,
+  // bukan localStorage; token kosong menghapus sesi.
+  h.elements.cfgBase.value = 'http://127.0.0.1:8787';
+  h.elements.cfgToken.value = 'token-baru';
+  h.elements.saveCfg.dispatch('click');
+  assert.equal(h.session.get('agent_token'), 'token-baru');
+  assert.equal(h.storage.has('agent_token'), false);
+
+  h.elements.cfgToken.value = '';
+  h.elements.saveCfg.dispatch('click');
+  assert.equal(h.session.has('agent_token'), false);
 });
 
 test('Memory content is rendered as text, never interpolated as HTML', async () => {
