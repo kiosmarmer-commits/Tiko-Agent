@@ -169,6 +169,7 @@ jobs:
           fi
       - name: Compile executables via one-command installer (smoke)
         shell: bash
+        timeout-minutes: 20
         run: |
           set -uo pipefail
           set +e

@@ -11,6 +11,12 @@ import 'package:agent_cli/cli_context_builder.dart';
 ///   dart run apps/agent_cli/bin/agent_cli.dart
 ///   AGENT_PROVIDER=ollama dart run apps/agent_cli/bin/agent_cli.dart
 Future<void> main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.writeln('agent_cli — CLI interaktif M1 (legacy).');
+    stdout.writeln('Pemakaian: agent_cli [--ollama]');
+    stdout.writeln('Perintah REPL: /new  /status  /tools  /quit');
+    return;
+  }
   final useOllama =
       Platform.environment['AGENT_PROVIDER'] == 'ollama' ||
       args.contains('--ollama');

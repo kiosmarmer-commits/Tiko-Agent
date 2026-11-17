@@ -163,10 +163,27 @@ done
 # ---------------------------------------------------------------------------
 # 5. Smoke test.
 # ---------------------------------------------------------------------------
-say "Smoke test --help..."
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  else
+    "$@" &
+    local pid=$!
+    ( sleep "$secs" && kill "$pid" 2>/dev/null ) &
+    local watcher=$!
+    wait "$pid"
+    local rc=$?
+    kill "$watcher" 2>/dev/null
+    wait "$watcher" 2>/dev/null
+    return "$rc"
+  fi
+}
+
+say "Smoke test --help (timeout 30s per biner)..."
 for b in tiko agentd agent_cli; do
-  "${PREFIX}/$b" --help >/dev/null 2>&1 || "${PREFIX}/$b" --help 2>&1 | head -1 >/dev/null ||
-    die "biner $b tidak bisa dijalankan"
+  run_with_timeout 30 "${PREFIX}/$b" --help >/dev/null 2>&1 ||
+    die "biner $b gagal smoke --help (exit non-zero atau timeout)"
   ok "$b --help ok"
 done
 
