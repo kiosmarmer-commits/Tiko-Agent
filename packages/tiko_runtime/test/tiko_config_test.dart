@@ -213,6 +213,34 @@ mcp:
       expect(badIssues.map((i) => i.path), contains('mcp.answer_server_requests'));
     });
 
+    test('script.self_repair: default false, override boolean (D3)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.scriptSelfRepair, isFalse);
+
+      final (cfg, issues) = TikoConfig.parse('''
+script:
+  self_repair: true
+mcp:
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.scriptSelfRepair, isTrue);
+
+      final (bad, badIssues) = TikoConfig.parse('''
+script:
+  self_repair: "on"
+mcp:
+  servers: []
+''');
+      expect(bad.scriptSelfRepair, isFalse,
+          reason: 'nilai tidak valid jatuh ke default');
+      expect(badIssues.map((i) => i.path), contains('script.self_repair'));
+    });
+
     test('MCP HTTP protocol version has a default and accepts an override', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:

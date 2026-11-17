@@ -51,3 +51,4 @@ export 'src/execute_code.dart';
 export 'src/worktree.dart';
 export 'src/prediksi_tool.dart';
 export 'src/render_ui_tool.dart';
+export 'src/script_repair.dart';

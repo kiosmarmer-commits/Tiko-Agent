@@ -307,6 +307,7 @@ class TikoConfig {
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
     this.schedulerDuplicatePolicy = 'resend',
+    this.scriptSelfRepair = false,
   });
 
   final String profile;
@@ -329,6 +330,11 @@ class TikoConfig {
   /// Opt-in (C2): jawab request JSON-RPC ber-ID yang diinisiasi server MCP
   /// HTTP via GET SSE. Default false — request hanya dicatat (fail-closed).
   final bool mcpAnswerServerRequests;
+
+  /// Opt-in (D3): loop koreksi-diri script (`script_selfheal`) — saat script
+  /// gagal, error dikirim ke LLM auxiliar untuk patch, retry ≤3. Default
+  /// false karena membakar token LLM dan mengeksekusi kode hasil LLM.
+  final bool scriptSelfRepair;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -490,6 +496,7 @@ class TikoConfig {
     final search = sec('search');
     final api = sec('api');
     final mcp = sec('mcp');
+    final scriptSec = sec('script');
     final decisionSec = sec('decision');
     final memorySec = sec('memory');
     final featuresSec = sec('features');
@@ -786,6 +793,17 @@ class TikoConfig {
     }
     final mcpAnswerServerRequests = rawAnswerServerRequests is bool
         ? rawAnswerServerRequests
+        : false;
+
+    final rawScriptSelfRepair = scriptSec['self_repair'];
+    if (rawScriptSelfRepair != null && rawScriptSelfRepair is! bool) {
+      issues.add(const ConfigIssue(
+        'script.self_repair',
+        'harus boolean',
+      ));
+    }
+    final scriptSelfRepair = rawScriptSelfRepair is bool
+        ? rawScriptSelfRepair
         : false;
 
     final mcpServers = <McpServerConfig>[];
@@ -1123,6 +1141,7 @@ class TikoConfig {
       httpDomainAllowlist: strList(http['domain_allowlist'], const []),
       mcpServers: mcpServers,
       mcpAnswerServerRequests: mcpAnswerServerRequests,
+      scriptSelfRepair: scriptSelfRepair,
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
