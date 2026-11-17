@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 
 import 'provider_factory.dart';
 import 'runtime_lock.dart';
+import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
 import 'event_bus.dart';
@@ -888,6 +889,30 @@ class TikoRuntime {
         hasTool: (name) => rt.registry.get(name) != null,
         registerTool: rt.registry.register,
       ));
+    }
+    // D3: loop koreksi-diri script — opt-in (script.self_repair). Tanpa
+    // advisor LLM (provider kosong) tool tidak terdaftar (fail-closed);
+    // eksekusi tetap di OS sandbox yang sama dengan script tools.
+    if (cfg.scriptSelfRepair && rt.registry.get('script_selfheal') == null) {
+      final advisorLlm = rt.auxiliaryLlm();
+      if (advisorLlm != null) {
+        rt.registry.register(ScriptSelfHealTool(
+          runner: SelfCorrectingScriptRunner(
+            sandbox: sandbox,
+            advisor: LlmScriptRepairAdvisor(advisorLlm),
+          ),
+          onReport: (report) {
+            unawaited(rt.audit.log(
+              sessionId: 'selfheal',
+              tool: 'script_selfheal',
+              args: const {},
+              risk: 'high',
+              verdict: report.success ? 'allow' : 'deny',
+              resultSummary: report.auditSummary(),
+            ));
+          },
+        ));
+      }
     }
     // ALG-04: the agent-team tool only works with a runner that executes a
     // nested runtime turn per team member.
