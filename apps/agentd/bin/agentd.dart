@@ -11,8 +11,28 @@ import 'package:tiko_runtime/tiko_runtime.dart';
 
 import 'runtime_skill_api.dart';
 
+const _usage = '''
+agentd — daemon host TikoAgent (gateways + scheduler + HTTP)
+
+  agentd [opsi]
+
+Opsi:
+  --cli         mode CLI interaktif (default bila tanpa --api/--telegram)
+  --api, --ui   aktifkan HTTP API/UI (atau env API_TOKEN / AGENT_UI=1)
+  --telegram    aktifkan gateway Telegram (atau env TG_TOKEN)
+  --acp         sajikan agent via ACP (JSON-RPC 2.0 stdio, atau TIKO_ACP=1)
+  --no-safe     matikan mode safe
+  --help, -h    tampilkan bantuan ini
+
+Config: env TIKO_CONFIG (default config/agent.yaml)
+''';
+
 /// agentd — thin host around [TikoRuntime] (gateways + scheduler + HTTP).
 Future<void> main(List<String> args) async {
+  if (args.contains('--help') || args.contains('-h')) {
+    stdout.write(_usage);
+    return;
+  }
   final useTelegram =
       args.contains('--telegram') || Platform.environment['TG_TOKEN'] != null;
   final useApi = args.contains('--api') ||
