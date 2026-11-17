@@ -47,4 +47,5 @@ export 'src/context_files.dart';
 export 'src/cancellation.dart';
 export 'src/otel.dart';
 export 'src/genui.dart';
+export 'src/genui_actions.dart';
 export 'src/skill_share.dart';
