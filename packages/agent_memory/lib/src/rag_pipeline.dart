@@ -243,6 +243,14 @@ class HybridRetriever {
 }
 
 /// End-to-end retrieval-augmented generation pipeline.
+///
+/// D4 (audit isolate-swarm): fan-out paralel terbatas — embedding
+/// multi-variant saat retrieve dan embedding multi-chunk saat ingest
+/// dijalankan konkuren (I/O-bound ke provider embed) dengan batas
+/// [maxConcurrency]; urutan hasil dipertahankan agar ranking deterministik.
+/// Eksekusi tool batch paralel sudah ditangani `ParallelToolRunner`
+/// (agent_loop), dan beban CPU murni sudah ditangani `CalcSandbox` —
+/// pipeline ini melengkapi celah I/O fan-out.
 class RagPipeline {
   RagPipeline({
     required this.dense,
@@ -250,13 +258,17 @@ class RagPipeline {
     this.embedder,
     this.chunker = const RagChunker(),
     this.expander = const QueryExpander(),
-  });
+    this.maxConcurrency = 4,
+  }) : assert(maxConcurrency >= 1 && maxConcurrency <= 16);
 
   final VectorIndex dense;
   final FtsIndex lexical;
   final RagEmbedder? embedder;
   final RagChunker chunker;
   final QueryExpander expander;
+
+  /// Batas konkurensi fan-out (embed/variant). 1 = sekuensial.
+  final int maxConcurrency;
 
   final Map<String, RagChunk> _chunks = {};
 
@@ -270,25 +282,33 @@ class RagPipeline {
 
   /// Chunks [text], indexes each chunk in both the vector index (when an
   /// embedder is available) and the lexical index. Returns the chunks.
+  ///
+  /// Embedding chunk dijalankan konkuren terbatas ([maxConcurrency]) dengan
+  /// urutan hasil dipertahankan — upsert dense tetap berurutan sesuai chunk.
   Future<List<RagChunk>> ingest(
     String docId,
     String text, {
     Map<String, Object?> meta = const {},
   }) async {
     final chunks = chunker.chunk(docId, text, meta: meta);
-    for (final chunk in chunks) {
+    final embed = embedder;
+    final vectors = embed == null
+        ? List<List<double>?>.filled(chunks.length, null)
+        : await _mapBounded<RagChunk, List<double>>(
+            chunks,
+            (RagChunk c) => embed(c.text),
+          );
+    for (var i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
       _chunks[chunk.id] = chunk;
       lexical.upsert(chunk.id, chunk.text);
-      final embed = embedder;
-      if (embed != null) {
-        final vector = await embed(chunk.text);
-        if (vector.isNotEmpty) {
-          _chunkVectors[chunk.id] = vector;
-          await dense.upsert(chunk.id, vector, {
-            'doc_id': chunk.docId,
-            'index': chunk.index,
-          });
-        }
+      final vector = vectors[i];
+      if (vector != null && vector.isNotEmpty) {
+        _chunkVectors[chunk.id] = vector;
+        await dense.upsert(chunk.id, vector, {
+          'doc_id': chunk.docId,
+          'index': chunk.index,
+        });
       }
     }
     return chunks;
@@ -323,12 +343,16 @@ class RagPipeline {
     }
     final variants = expander.expand(query);
     final fused = <String, double>{};
-    for (final variant in variants) {
+    // Fan-out variant konkuren terbatas; hasil dipertahankan urut agar
+    // akumulasi skor (dan ranking) deterministik sama dengan sekuensial.
+    final partials = await _mapBounded(variants, (String variant) async {
       final embedding = await _safeEmbed(variant);
-      final partial = await HybridRetriever(
+      return HybridRetriever(
         dense: dense,
         lexical: lexical,
       ).fuse(variant, embedding, k: candidatesPerVariant);
+    });
+    for (final partial in partials) {
       for (final hit in partial) {
         fused[hit.id] = (fused[hit.id] ?? 0) + hit.score;
       }
@@ -421,6 +445,37 @@ class RagPipeline {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// Map konkuren terbatas (maks [maxConcurrency] task berjalan bersamaan)
+  /// dengan urutan hasil SAMA dengan urutan input — prasyarat determinisme
+  /// ranking. Pola worker-queue sederhana di atas Future (single isolate,
+  /// kooperatif di titik await).
+  Future<List<T>> _mapBounded<S, T>(
+    List<S> items,
+    Future<T> Function(S) fn,
+  ) async {
+    if (items.isEmpty) return const [];
+    final results = List<T?>.filled(items.length, null);
+    var next = 0;
+    final workers = <Future<void>>[];
+
+    Future<void> worker() async {
+      while (true) {
+        final i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]);
+      }
+    }
+
+    final target = maxConcurrency < items.length
+        ? maxConcurrency
+        : items.length;
+    for (var w = 0; w < target; w++) {
+      workers.add(worker());
+    }
+    await Future.wait(workers);
+    return results.cast<T>();
   }
 
   static double _lexicalOverlap(String query, String text) {
