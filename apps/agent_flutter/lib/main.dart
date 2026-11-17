@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
+import 'app/app_routes.dart';
 import 'daemon/desktop_daemon.dart';
 import 'data/agent_repository.dart';
 import 'data/models.dart';
+import 'shell/desktop_shell.dart';
+import 'shell/mobile_shell.dart';
 import 'ui/chat_controller.dart';
 import 'ui/gen_ui_view.dart';
 import 'ui/settings_store.dart';
@@ -70,7 +73,7 @@ class _AgentAppState extends State<AgentApp> {
   late AgentRepository repo;
   late ChatController chat;
   Timer? statusTimer;
-  int tab = 0;
+  AppRoute route = AppRoute.chat;
   String sessionKey = 'flutter:default';
 
   Map<String, dynamic>? status;
@@ -96,7 +99,9 @@ class _AgentAppState extends State<AgentApp> {
     chat.checkOnline();
     statusTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       chat.checkOnline();
-      if (tab >= 1 && tab <= 4) unawaited(refreshAdmin());
+      if (route != AppRoute.chat && route != AppRoute.settings) {
+        unawaited(refreshAdmin());
+      }
     });
     unawaited(refreshAdmin());
   }
@@ -178,98 +183,42 @@ class _AgentAppState extends State<AgentApp> {
       themeMode: settings.themeMode,
       home: Scaffold(
         body: wide
-            ? Row(
-                children: [
-                  NavigationRail(
-                    backgroundColor: context.simpulPanel,
-                    selectedIndex: tab.clamp(0, 5),
-                    onDestinationSelected: (i) {
-                      setState(() => tab = i);
-                      if (i != 0) unawaited(refreshAdmin());
-                    },
-                    labelType: NavigationRailLabelType.all,
-                    destinations: const [
-                      NavigationRailDestination(
-                        icon: Icon(Icons.chat_bubble_outline),
-                        label: Text('Chat'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        label: Text('Dashboard'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.verified_user_outlined),
-                        label: Text('Approvals'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.forum_outlined),
-                        label: Text('Sessions'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.memory_outlined),
-                        label: Text('Memory'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.settings_outlined),
-                        label: Text('Settings'),
-                      ),
-                    ],
-                  ),
-                  VerticalDivider(width: 1, color: context.simpulBorder),
-                  Expanded(
-                    child: AnimatedBuilder(
-                      animation: chat,
-                      builder: (context, _) => _body(wide: true),
-                    ),
-                  ),
-                ],
+            ? DesktopShell(
+                selected: route,
+                onSelect: _selectRoute,
+                child: AnimatedBuilder(
+                  animation: chat,
+                  builder: (context, _) => _body(wide: true),
+                ),
               )
-            : Column(
-                children: [
-                  Expanded(
-                    child: AnimatedBuilder(
-                      animation: chat,
-                      builder: (context, _) => _body(wide: false),
-                    ),
-                  ),
-                  NavigationBar(
-                    backgroundColor: context.simpulPanel,
-                    selectedIndex: tab.clamp(0, 4),
-                    onDestinationSelected: (i) {
-                      setState(() => tab = i);
-                      if (i != 0) unawaited(refreshAdmin());
-                    },
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.chat_bubble_outline),
-                        label: 'Chat',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        label: 'Home',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.verified_user_outlined),
-                        label: 'Approve',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.forum_outlined),
-                        label: 'Sessions',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.more_horiz),
-                        label: 'More',
-                      ),
-                    ],
-                  ),
-                ],
+            : MobileShell(
+                selected: route.primaryOnMobile ? route : null,
+                onSelect: _selectMobileRoute,
+                child: AnimatedBuilder(
+                  animation: chat,
+                  builder: (context, _) => _body(wide: false),
+                ),
               ),
       ),
     );
   }
 
+  void _selectRoute(AppRoute next) {
+    setState(() => route = next);
+    if (next != AppRoute.chat) unawaited(refreshAdmin());
+  }
+
+  void _selectMobileRoute(AppRoute? next) {
+    if (next == null) {
+      setState(() => route = AppRoute.memory);
+      unawaited(refreshAdmin());
+      return;
+    }
+    _selectRoute(next);
+  }
+
   Widget _body({required bool wide}) {
-    if (!wide && tab == 4) {
+    if (!wide && !route.primaryOnMobile) {
       return _MorePage(
         repo: repo,
         baseUrl: baseUrl,
@@ -282,10 +231,10 @@ class _AgentAppState extends State<AgentApp> {
         onSettingsChanged: _applySettings,
       );
     }
-    switch (tab) {
-      case 0:
+    switch (route) {
+      case AppRoute.chat:
         return _ChatPage(chat: chat, sessionKey: sessionKey);
-      case 1:
+      case AppRoute.dashboard:
         return _DashboardPage(
           status: status,
           caps: caps,
@@ -297,7 +246,7 @@ class _AgentAppState extends State<AgentApp> {
           online: chat.online,
           onRefresh: refreshAdmin,
         );
-      case 2:
+      case AppRoute.approvals:
         return _ApprovalsPage(
           approvals: approvals,
           online: chat.online,
@@ -318,7 +267,7 @@ class _AgentAppState extends State<AgentApp> {
             }
           },
         );
-      case 3:
+      case AppRoute.sessions:
         return _SessionsPage(
           sessions: sessions,
           current: sessionKey,
@@ -330,7 +279,7 @@ class _AgentAppState extends State<AgentApp> {
             setState(() {
               sessionKey = id;
               adminError = null;
-              tab = 0;
+              route = AppRoute.chat;
             });
             unawaited(chat.openSession(id));
           },
@@ -361,7 +310,7 @@ class _AgentAppState extends State<AgentApp> {
             }
           },
         );
-      case 4:
+      case AppRoute.memory:
         return _MemoryPage(
           memories: memories,
           online: chat.online,
@@ -378,7 +327,7 @@ class _AgentAppState extends State<AgentApp> {
             }
           },
         );
-      case 5:
+      case AppRoute.settings:
         return SettingsView(
           settings: settings,
           baseUrl: baseUrl,

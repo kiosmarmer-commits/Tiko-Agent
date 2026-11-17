@@ -15,6 +15,17 @@ abstract final class SimpulTheme {
   static const warn = Color(0xFFE9C46A);
   static const danger = Color(0xFFE76F51);
 
+  // Extended surface states (GUI-P0-01): raised cards, hover/selected rows
+  // and the modal scrim.
+  static const surfaceRaised = Color(0xFF1C2028);
+  static const surfaceHover = Color(0xFF232833);
+  static const surfaceSelected = Color(0xFF2A3140);
+  static const surfaceOverlay = Color(0x99000000);
+
+  // Status colours beyond warning/danger.
+  static const success = Color(0xFF57B48A);
+  static const info = Color(0xFF5B9BD5);
+
   // Light palette.
   static const bgLight = Color(0xFFF5F6F8);
   static const panelLight = Color(0xFFFFFFFF);
@@ -25,14 +36,28 @@ abstract final class SimpulTheme {
   static const warnLight = Color(0xFF9C6F08);
   static const dangerLight = Color(0xFFB23A24);
 
+  // Extended surface states, light variant.
+  static const surfaceRaisedLight = Color(0xFFFAFBFC);
+  static const surfaceHoverLight = Color(0xFFEDF0F3);
+  static const surfaceSelectedLight = Color(0xFFDCE7F0);
+  static const surfaceOverlayLight = Color(0x66000000);
+
+  // Status colours, light variant.
+  static const successLight = Color(0xFF1E7A4F);
+  static const infoLight = Color(0xFF2264A5);
+
   // Spacing scale.
   static const s = 4.0;
   static const m = 8.0;
   static const l = 12.0;
   static const xl = 16.0;
   static const xxl = 24.0;
+  static const xxxl = 32.0;
 
+  // Radius scale.
+  static const radiusSmall = 8.0;
   static const radius = 12.0;
+  static const radiusLarge = 16.0;
 
   static Color surface(Brightness brightness) =>
       brightness == Brightness.dark ? panel : panelLight;
@@ -57,6 +82,24 @@ abstract final class SimpulTheme {
   static Color dangerColor(Brightness brightness) =>
       brightness == Brightness.dark ? danger : dangerLight;
 
+  static Color raised(Brightness brightness) =>
+      brightness == Brightness.dark ? surfaceRaised : surfaceRaisedLight;
+
+  static Color hover(Brightness brightness) =>
+      brightness == Brightness.dark ? surfaceHover : surfaceHoverLight;
+
+  static Color selected(Brightness brightness) =>
+      brightness == Brightness.dark ? surfaceSelected : surfaceSelectedLight;
+
+  static Color overlay(Brightness brightness) =>
+      brightness == Brightness.dark ? surfaceOverlay : surfaceOverlayLight;
+
+  static Color successColor(Brightness brightness) =>
+      brightness == Brightness.dark ? success : successLight;
+
+  static Color infoColor(Brightness brightness) =>
+      brightness == Brightness.dark ? info : infoLight;
+
   static ThemeData theme(Brightness brightness, Color accentColor) {
     final scheme = ColorScheme.fromSeed(
       seedColor: accentColor,
@@ -79,6 +122,26 @@ abstract final class SimpulTheme {
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: outline(brightness)),
       );
+
+  // Typography scale (GUI-P0-01): colour inherits from the ambient
+  // DefaultTextStyle so light/dark stay consistent.
+  static const TextStyle display = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
+  );
+  static const TextStyle pageTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
+  );
+  static const TextStyle sectionTitle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+  static const TextStyle body = TextStyle(fontSize: 14, height: 1.4);
+  static const TextStyle caption = TextStyle(fontSize: 12, height: 1.3);
 }
 
 /// Brightness-aware colour access for widgets: `context.panel` etc. resolve
@@ -95,4 +158,15 @@ extension SimpulThemeContext on BuildContext {
   Color get simpulMuted => SimpulTheme.mutedText(Theme.of(this).brightness);
   Color get simpulWarn => SimpulTheme.warning(Theme.of(this).brightness);
   Color get simpulDanger => SimpulTheme.dangerColor(Theme.of(this).brightness);
+  Color get simpulSurfaceRaised =>
+      SimpulTheme.raised(Theme.of(this).brightness);
+  Color get simpulSurfaceHover =>
+      SimpulTheme.hover(Theme.of(this).brightness);
+  Color get simpulSurfaceSelected =>
+      SimpulTheme.selected(Theme.of(this).brightness);
+  Color get simpulSurfaceOverlay =>
+      SimpulTheme.overlay(Theme.of(this).brightness);
+  Color get simpulSuccess =>
+      SimpulTheme.successColor(Theme.of(this).brightness);
+  Color get simpulInfo => SimpulTheme.infoColor(Theme.of(this).brightness);
 }
