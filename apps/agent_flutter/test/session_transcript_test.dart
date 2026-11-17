@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_flutter/agent_api_client.dart';
+import 'package:agent_flutter/data/agent_repository.dart';
 import 'package:agent_flutter/ui/chat_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -102,7 +103,7 @@ void main() {
 
   test('ChatController.openSession mengganti isi chat dengan transcript',
       () async {
-    final chat = ChatController(client);
+    final chat = ChatController(HttpAgentRepository(client));
     chat.messages.add({'role': 'user', 'text': 'pesan lama yang harus hilang'});
     await chat.openSession('flutter:old');
     expect(chat.messages.map((m) => '${m['role']}:${m['text']}').toList(),
@@ -111,7 +112,7 @@ void main() {
 
   test('ChatController.openSession menampilkan error tanpa melempar',
       () async {
-    final chat = ChatController(client);
+    final chat = ChatController(HttpAgentRepository(client));
     await chat.openSession('flutter:tidak-ada');
     expect(chat.messages, hasLength(1));
     expect(chat.messages.single['role'], 'system');

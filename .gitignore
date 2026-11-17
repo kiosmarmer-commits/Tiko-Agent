@@ -18,8 +18,10 @@ coverage/
 .simpul_bench/
 
 # Python bytecode and local database artifacts (B-12)
+# Root-scoped: `data/` tanpa anchor juga mengabaikan folder source seperti
+# apps/agent_flutter/lib/data/ (lapisan DTO/repository GUI-P0-03).
 __pycache__/
 *.pyc
-data/*.db
-data/*.db-journal
-data/
+/data/*.db
+/data/*.db-journal
+/data/

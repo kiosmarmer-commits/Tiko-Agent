@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
 import 'daemon/desktop_daemon.dart';
+import 'data/agent_repository.dart';
+import 'data/models.dart';
 import 'ui/chat_controller.dart';
 import 'ui/gen_ui_view.dart';
 import 'ui/settings_store.dart';
@@ -65,6 +67,7 @@ class _AgentAppState extends State<AgentApp> {
   late String token;
   late AppSettings settings = widget.initialSettings;
   late AgentApiClient client;
+  late AgentRepository repo;
   late ChatController chat;
   Timer? statusTimer;
   int tab = 0;
@@ -73,10 +76,10 @@ class _AgentAppState extends State<AgentApp> {
   Map<String, dynamic>? status;
   Map<String, dynamic>? caps;
   List<Map<String, dynamic>> doctor = [];
-  List<Map<String, dynamic>> sessions = [];
-  List<Map<String, dynamic>> approvals = [];
-  List<Map<String, dynamic>> events = [];
-  List<Map<String, dynamic>> memories = [];
+  List<SessionSummary> sessions = [];
+  List<ApprovalSummary> approvals = [];
+  List<RuntimeEvent> events = [];
+  List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
   int adminRefreshGeneration = 0;
@@ -88,7 +91,8 @@ class _AgentAppState extends State<AgentApp> {
     baseUrl = widget.initialBaseUrl;
     token = widget.initialToken;
     client = AgentApiClient(baseUrl: baseUrl, token: token);
-    chat = ChatController(client);
+    repo = HttpAgentRepository(client);
+    chat = ChatController(repo);
     chat.checkOnline();
     statusTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       chat.checkOnline();
@@ -109,23 +113,23 @@ class _AgentAppState extends State<AgentApp> {
       // These independent GET requests run concurrently to reduce dashboard
       // latency. The in-flight guard prevents timer/manual refresh overlap.
       final results = await Future.wait<Object?>([
-        client.status(),
-        client.capabilities(),
-        client.doctor(),
-        client.listSessions(),
-        client.listApprovals(),
-        client.listEvents(),
-        client.listMemories(),
+        repo.status(),
+        repo.capabilities(),
+        repo.doctor(),
+        repo.sessions(),
+        repo.approvals(),
+        repo.events(),
+        repo.memories(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
         status = results[0] as Map<String, dynamic>;
         caps = results[1] as Map<String, dynamic>;
         doctor = results[2] as List<Map<String, dynamic>>;
-        sessions = results[3] as List<Map<String, dynamic>>;
-        approvals = results[4] as List<Map<String, dynamic>>;
-        events = results[5] as List<Map<String, dynamic>>;
-        memories = results[6] as List<Map<String, dynamic>>;
+        sessions = results[3] as List<SessionSummary>;
+        approvals = results[4] as List<ApprovalSummary>;
+        events = results[5] as List<RuntimeEvent>;
+        memories = results[6] as List<MemoryFact>;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -145,7 +149,6 @@ class _AgentAppState extends State<AgentApp> {
       token = tok;
       client.baseUrl = base;
       client.token = tok;
-      chat.client = client;
       chat.checkOnline();
     });
     unawaited(refreshAdmin(force: true));
@@ -268,7 +271,7 @@ class _AgentAppState extends State<AgentApp> {
   Widget _body({required bool wide}) {
     if (!wide && tab == 4) {
       return _MorePage(
-        client: client,
+        repo: repo,
         baseUrl: baseUrl,
         token: token,
         memories: memories,
@@ -302,7 +305,7 @@ class _AgentAppState extends State<AgentApp> {
           onRefresh: refreshAdmin,
           onDecide: (id, ok) async {
             try {
-              final decided = await client.decideApproval(id, ok);
+              final decided = await repo.decideApproval(id, ok);
               await refreshAdmin();
               if (!decided && mounted) {
                 setState(() => adminError =
@@ -333,7 +336,7 @@ class _AgentAppState extends State<AgentApp> {
           },
           onRename: (id, title) async {
             try {
-              final ok = await client.renameSession(id, title);
+              final ok = await repo.renameSession(id, title);
               if (!ok) throw StateError('Sesi tidak ditemukan atau gagal diubah.');
               await refreshAdmin(force: true);
             } catch (error) {
@@ -344,7 +347,7 @@ class _AgentAppState extends State<AgentApp> {
           },
           onDelete: (id) async {
             try {
-              final deleted = await client.deleteSession(id);
+              final deleted = await repo.deleteSession(id);
               if (!deleted) throw StateError('Sesi tidak ditemukan atau gagal dihapus.');
               if (id == sessionKey) {
                 setState(() => sessionKey = 'flutter:default');
@@ -367,7 +370,7 @@ class _AgentAppState extends State<AgentApp> {
           onRefresh: refreshAdmin,
           onDelete: (id) async {
             try {
-              final deleted = await client.deleteMemory(id);
+              final deleted = await repo.deleteMemory(id);
               if (!deleted) throw StateError('Memori tidak ditemukan atau gagal dihapus.');
               await refreshAdmin();
             } catch (error) {
@@ -625,8 +628,8 @@ class _DashboardPage extends StatelessWidget {
   final Map<String, dynamic>? status;
   final Map<String, dynamic>? caps;
   final List<Map<String, dynamic>> doctor;
-  final List<Map<String, dynamic>> events;
-  final List<Map<String, dynamic>> approvals;
+  final List<RuntimeEvent> events;
+  final List<ApprovalSummary> approvals;
   final bool loading;
   final String? error;
   final bool online;
@@ -634,8 +637,7 @@ class _DashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending =
-        approvals.where((a) => a['state'] == 'pending').length;
+    final pending = approvals.where((a) => a.isPending).length;
     final routing = RoutingSummary.fromStatus(status);
     return Column(
       children: [
@@ -758,8 +760,8 @@ class _DashboardPage extends StatelessWidget {
               const SizedBox(height: 8),
               ...events.take(20).map((e) => ListTile(
                     dense: true,
-                    title: Text('${e['type'] ?? ''}'),
-                    subtitle: Text('${e['at'] ?? e}'),
+                    title: Text(e.type),
+                    subtitle: Text(e.at),
                   )),
             ],
           ),
@@ -779,7 +781,7 @@ class _ApprovalsPage extends StatelessWidget {
     required this.onDecide,
   });
 
-  final List<Map<String, dynamic>> approvals;
+  final List<ApprovalSummary> approvals;
   final bool online;
   final bool loading;
   final Future<void> Function() onRefresh;
@@ -787,8 +789,8 @@ class _ApprovalsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = approvals.where((a) => a['state'] == 'pending').toList();
-    final rest = approvals.where((a) => a['state'] != 'pending').toList();
+    final pending = approvals.where((a) => a.isPending).toList();
+    final rest = approvals.where((a) => !a.isPending).toList();
     return Column(
       children: [
         _TopBar(
@@ -810,9 +812,9 @@ class _ApprovalsPage extends StatelessWidget {
               ...pending.map((a) => Card(
                     color: context.simpulPanel,
                     child: ListTile(
-                      title: Text('${a['tool']} · ${a['risk']}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text('${a.tool} · ${a.risk}', maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
-                        '${a['id']}\n${a['args']}\n${a['created_at'] ?? ''}',
+                        '${a.id}\n${a.args}\n${a.createdAt}',
                         maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -822,12 +824,12 @@ class _ApprovalsPage extends StatelessWidget {
                         children: [
                           IconButton(
                             tooltip: 'Approve',
-                            onPressed: () => onDecide('${a['id']}', true),
+                            onPressed: () => onDecide(a.id, true),
                             icon: Icon(Icons.check_circle, color: context.simpulAccent),
                           ),
                           IconButton(
                             tooltip: 'Deny',
-                            onPressed: () => onDecide('${a['id']}', false),
+                            onPressed: () => onDecide(a.id, false),
                             icon: Icon(Icons.cancel, color: context.simpulDanger),
                           ),
                         ],
@@ -841,8 +843,8 @@ class _ApprovalsPage extends StatelessWidget {
                 ),
                 ...rest.take(30).map((a) => ListTile(
                       dense: true,
-                      title: Text('${a['state']} · ${a['tool']}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${a['id']} · ${a['actor'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text('${a.state} · ${a.tool}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${a.id} · ${a.actor}', maxLines: 2, overflow: TextOverflow.ellipsis),
                     )),
               ],
             ],
@@ -867,7 +869,7 @@ class _SessionsPage extends StatelessWidget {
     required this.onDelete,
   });
 
-  final List<Map<String, dynamic>> sessions;
+  final List<SessionSummary> sessions;
   final String current;
   final bool online;
   final bool loading;
@@ -877,9 +879,9 @@ class _SessionsPage extends StatelessWidget {
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
 
-  Future<void> _confirmRename(BuildContext context, Map<String, dynamic> session) async {
-    final id = '${session['id']}';
-    final controller = TextEditingController(text: '${session['title'] ?? id}');
+  Future<void> _confirmRename(BuildContext context, SessionSummary session) async {
+    final id = session.id;
+    final controller = TextEditingController(text: session.displayTitle);
     final title = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -941,14 +943,14 @@ class _SessionsPage extends StatelessWidget {
                   itemCount: sessions.length,
                   itemBuilder: (context, i) {
                     final session = sessions[i];
-                    final id = '${session['id']}';
-                    final title = '${session['title'] ?? id}';
+                    final id = session.id;
+                    final title = session.displayTitle;
                     return ListTile(
                       selected: id == current,
                       leading: const Icon(Icons.forum_outlined),
                       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
-                        '$id · ${session['channel'] ?? ''} · ${session['updated_at'] ?? ''} · turns=${session['turns'] ?? ''}',
+                        '$id · ${session.channel} · ${session.updatedAt} · turns=${session.turns}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -998,7 +1000,7 @@ class _MemoryPage extends StatelessWidget {
     required this.onRefresh,
     required this.onDelete,
   });
-  final List<Map<String, dynamic>> memories;
+  final List<MemoryFact> memories;
   final bool online;
   final bool loading;
   final String? error;
@@ -1029,8 +1031,8 @@ class _MemoryPage extends StatelessWidget {
                   itemBuilder: (context, i) {
                     final memory = memories[i];
                     return ListTile(
-                      title: Text('${memory['text'] ?? memory}', maxLines: 4, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${memory['id']} · ${memory['kind'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(memory.text, maxLines: 4, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${memory.id} · ${memory.kind}', maxLines: 2, overflow: TextOverflow.ellipsis),
                       trailing: IconButton(
                         tooltip: 'Hapus memori',
                         icon: const Icon(Icons.delete_outline),
@@ -1046,7 +1048,7 @@ class _MemoryPage extends StatelessWidget {
                               ],
                             ),
                           );
-                          if (confirmed == true) await onDelete('${memory['id']}');
+                          if (confirmed == true) await onDelete(memory.id);
                         },
                       ),
                     );
@@ -1104,7 +1106,7 @@ class _DaemonStatusCard extends StatelessWidget {
 
 class _MorePage extends StatelessWidget {
   const _MorePage({
-    required this.client,
+    required this.repo,
     required this.baseUrl,
     required this.token,
     required this.memories,
@@ -1114,10 +1116,10 @@ class _MorePage extends StatelessWidget {
     required this.settings,
     required this.onSettingsChanged,
   });
-  final AgentApiClient client;
+  final AgentRepository repo;
   final String baseUrl;
   final String token;
-  final List<Map<String, dynamic>> memories;
+  final List<MemoryFact> memories;
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
@@ -1143,7 +1145,7 @@ class _MorePage extends StatelessWidget {
                   onRefresh: onRefresh,
                   onDelete: (id) async {
                     try {
-                      final deleted = await client.deleteMemory(id);
+                      final deleted = await repo.deleteMemory(id);
                       if (!deleted) throw StateError('Memori tidak ditemukan atau gagal dihapus.');
                       await onRefresh();
                       if (context.mounted) Navigator.of(context).pop();
