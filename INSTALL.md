@@ -2,6 +2,34 @@
 
 Dokumen ini adalah panduan instalasi **source repository** Tiko-Agent. Ini menggantikan petunjuk lama yang hanya menjelaskan ekstraksi UI-repair overlay.
 
+## 0. Instalasi sekali-perintah (Linux/macOS)
+
+Cara tercepat — satu perintah mengurus semuanya (Dart SDK bila perlu,
+dependensi, compile, dan pemasangan biner ke `~/.local/bin`):
+
+```bash
+git clone https://github.com/kiosmarmer-commits/Tiko-Agent.git
+cd Tiko-Agent
+bash install.sh
+```
+
+Opsi:
+
+```bash
+bash install.sh --prefix /opt/tiko/bin   # lokasi biner kustom
+bash install.sh --skip-dart-install      # pakai dart yang sudah ada
+bash install.sh --help                   # daftar lengkap
+```
+
+Yang dilakukan installer: pasang Dart SDK stabil (pin 3.13.4, sama dengan CI)
+ke `~/.tiko/dart-sdk` bila `dart` tidak ada/terlalu tua, `dart pub get`,
+compile `tiko`/`agentd`/`agent_cli` ke `build/`, pasang ke prefix, dan smoke
+test `--help`.
+
+Yang **tidak** dilakukan (jujur): memasang Flutter SDK/membangun client
+Flutter, dan mengonfigurasi provider LLM — jalankan `tiko setup --provider
+mock` setelah install (lihat bagian 2).
+
 ## 1. Persyaratan
 
 - Git.

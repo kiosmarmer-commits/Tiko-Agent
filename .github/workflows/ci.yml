@@ -167,25 +167,28 @@ jobs:
             grep -E '(Error|error|Exception|gagal|invalid)' "$scout" | head -10 | sed 's/^/::error ::/' || true
             exit 1
           fi
-      - name: Compile executable entrypoints
+      - name: Compile executables via one-command installer (smoke)
         shell: bash
         run: |
           set -uo pipefail
           set +e
           cout="$(mktemp)"
-          {
-            mkdir -p build
-            dart compile exe apps/tiko/bin/tiko.dart -o build/tiko
-            dart compile exe apps/agentd/bin/agentd.dart -o build/agentd
-            dart compile exe apps/agent_cli/bin/agent_cli.dart -o build/agent_cli
-          } >"$cout" 2>&1
+          bash install.sh --skip-dart-install --prefix "$HOME/.local/bin" >"$cout" 2>&1
           rc=$?
           tail -30 "$cout"
           if [[ $rc -ne 0 ]]; then
-            echo '::error::dart compile gagal'
-            grep -E 'Error|error:' "$cout" | head -10 | sed 's/^/::error ::/' || true
+            echo '::error::installer gagal'
+            grep -E 'Error|error:|✗' "$cout" | head -10 | sed 's/^/::error ::/' || true
             exit 1
           fi
+          test -x build/tiko && test -x build/agentd && test -x build/agent_cli || {
+            echo '::error::biner build/ tidak lengkap setelah installer'
+            exit 1
+          }
+          test -x "$HOME/.local/bin/tiko" || {
+            echo '::error::biner tidak terpasang ke prefix'
+            exit 1
+          }
       - name: Daemon lifecycle and HTTP API smoke
         shell: bash
         run: |
