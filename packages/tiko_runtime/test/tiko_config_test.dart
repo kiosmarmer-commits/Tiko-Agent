@@ -307,6 +307,58 @@ mcp:
       );
     });
 
+    test('memory.idle_consolidation: default false, mapping & invalid (E2)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.idleConsolidation.enabled, isFalse);
+
+      final (cfg, issues) = TikoConfig.parse('''
+memory:
+  idle_consolidation:
+    enabled: true
+    idle_turns: 10
+    min_candidates: 3
+    max_entries_per_batch: 15
+    max_summaries_per_day: 4
+    max_retention: 0.3
+    max_output_facts: 5
+mcp:
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.idleConsolidation.enabled, isTrue);
+      expect(cfg.idleConsolidation.idleTurns, 10);
+      expect(cfg.idleConsolidation.minCandidates, 3);
+      expect(cfg.idleConsolidation.maxEntriesPerBatch, 15);
+      expect(cfg.idleConsolidation.maxSummariesPerDay, 4);
+      expect(cfg.idleConsolidation.maxRetention, 0.3);
+      expect(cfg.idleConsolidation.maxOutputFacts, 5);
+
+      final (bad, badIssues) = TikoConfig.parse('''
+memory:
+  idle_consolidation:
+    enabled: 1
+    idle_turns: 0
+    max_retention: "tinggi"
+mcp:
+  servers: []
+''');
+      expect(bad.idleConsolidation.enabled, isFalse);
+      expect(bad.idleConsolidation.idleTurns, 25);
+      expect(bad.idleConsolidation.maxRetention, 0.5);
+      expect(
+        badIssues.map((i) => i.path),
+        containsAll([
+          'memory.idle_consolidation.enabled',
+          'memory.idle_consolidation.idle_turns',
+          'memory.idle_consolidation.max_retention',
+        ]),
+      );
+    });
+
     test('MCP HTTP protocol version has a default and accepts an override', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:

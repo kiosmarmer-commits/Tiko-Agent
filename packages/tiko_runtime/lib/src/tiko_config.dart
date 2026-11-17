@@ -296,6 +296,27 @@ class TokenAnomalyConfig {
   final int maxQuarantinesPerDay;
 }
 
+/// Opt-in (E2): konsolidasi memori idle via LLM auxiliar. Default false.
+class IdleConsolidationCfg {
+  const IdleConsolidationCfg({
+    this.enabled = false,
+    this.idleTurns = 25,
+    this.minCandidates = 5,
+    this.maxEntriesPerBatch = 20,
+    this.maxSummariesPerDay = 6,
+    this.maxRetention = 0.5,
+    this.maxOutputFacts = 8,
+  });
+
+  final bool enabled;
+  final int idleTurns;
+  final int minCandidates;
+  final int maxEntriesPerBatch;
+  final int maxSummariesPerDay;
+  final double maxRetention;
+  final int maxOutputFacts;
+}
+
 class TikoConfig {
   TikoConfig({
     this.profile = 'default',
@@ -343,6 +364,7 @@ class TikoConfig {
     this.schedulerDuplicatePolicy = 'resend',
     this.scriptSelfRepair = false,
     this.tokenAnomaly = const TokenAnomalyConfig(),
+    this.idleConsolidation = const IdleConsolidationCfg(),
   });
 
   final String profile;
@@ -373,6 +395,9 @@ class TikoConfig {
 
   /// Opt-in (E1): deteksi anomali token per skill. Default false.
   final TokenAnomalyConfig tokenAnomaly;
+
+  /// Opt-in (E2): konsolidasi memori idle via LLM auxiliar. Default false.
+  final IdleConsolidationCfg idleConsolidation;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -848,6 +873,10 @@ class TikoConfig {
     final tokenAnomalyCfg = _parseTokenAnomaly(security['token_anomaly'],
         issues);
 
+    // E2 (opt-in): memory.idle_consolidation
+    final idleConsolidationCfg =
+        _parseIdleConsolidation(memorySec['idle_consolidation'], issues);
+
     final mcpServers = <McpServerConfig>[];
     final rawMcpServers = mcp['servers'];
     if (rawMcpServers != null && rawMcpServers is! YamlList) {
@@ -1185,6 +1214,7 @@ class TikoConfig {
       mcpAnswerServerRequests: mcpAnswerServerRequests,
       scriptSelfRepair: scriptSelfRepair,
       tokenAnomaly: tokenAnomalyCfg,
+      idleConsolidation: idleConsolidationCfg,
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
@@ -1228,6 +1258,62 @@ class TikoConfig {
               : null,
     );
     return (cfg, issues);
+  }
+
+  /// E2: parse blok `memory.idle_consolidation` (opt-in, default false).
+  /// Nilai tidak valid -> ConfigIssue + fallback default (fail-closed).
+  static IdleConsolidationCfg _parseIdleConsolidation(
+    Object? raw,
+    List<ConfigIssue> issues,
+  ) {
+    if (raw == null) return const IdleConsolidationCfg();
+    if (raw is bool) {
+      return IdleConsolidationCfg(enabled: raw);
+    }
+    if (raw is! YamlMap) {
+      issues.add(const ConfigIssue(
+        'memory.idle_consolidation',
+        'harus boolean atau mapping',
+      ));
+      return const IdleConsolidationCfg();
+    }
+    int intOf(Object? v, int fallback, String key, int min) {
+      if (v == null) return fallback;
+      if (v is int && v >= min) return v;
+      issues.add(ConfigIssue('memory.idle_consolidation.$key',
+          'harus integer >= $min'));
+      return fallback;
+    }
+
+    final rawEnabled = raw['enabled'];
+    if (rawEnabled != null && rawEnabled is! bool) {
+      issues.add(const ConfigIssue('memory.idle_consolidation.enabled',
+          'harus boolean'));
+    }
+    final rawRetention = raw['max_retention'];
+    double maxRetention = 0.5;
+    if (rawRetention != null) {
+      if (rawRetention is num) {
+        maxRetention = rawRetention.toDouble().clamp(0.0, 1.0);
+      } else {
+        issues.add(const ConfigIssue(
+          'memory.idle_consolidation.max_retention',
+          'harus angka 0..1',
+        ));
+      }
+    }
+    return IdleConsolidationCfg(
+      enabled: rawEnabled is bool ? rawEnabled : false,
+      idleTurns: intOf(raw['idle_turns'], 25, 'idle_turns', 1),
+      minCandidates: intOf(raw['min_candidates'], 5, 'min_candidates', 1),
+      maxEntriesPerBatch:
+          intOf(raw['max_entries_per_batch'], 20, 'max_entries_per_batch', 1),
+      maxSummariesPerDay: intOf(
+          raw['max_summaries_per_day'], 6, 'max_summaries_per_day', 0),
+      maxRetention: maxRetention,
+      maxOutputFacts:
+          intOf(raw['max_output_facts'], 8, 'max_output_facts', 1),
+    );
   }
 
   /// E1: parse blok `security.token_anomaly` (opt-in, default false).

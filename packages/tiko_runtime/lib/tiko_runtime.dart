@@ -24,3 +24,4 @@ export 'src/bot_group_router.dart';
 export 'src/bot_mode.dart';
 export 'src/character_card.dart';
 export 'src/script_repair_advisor.dart';
+export 'src/idle_consolidation.dart';

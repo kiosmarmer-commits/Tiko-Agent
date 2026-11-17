@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 
 import 'provider_factory.dart';
 import 'runtime_lock.dart';
+import 'idle_consolidation.dart';
 import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
@@ -139,6 +140,24 @@ class TikoRuntime {
             cooldown: Duration(minutes: config.tokenAnomaly.cooldownMinutes),
           )
         : null;
+    _idleConsolidator = config.idleConsolidation.enabled && providers.isNotEmpty
+        ? IdleMemoryConsolidator(
+            memory: layeredMemory,
+            llm: auxiliaryLlm()!,
+            config: IdleConsolidationConfig(
+              enabled: true,
+              idleTurns: config.idleConsolidation.idleTurns,
+              minCandidates: config.idleConsolidation.minCandidates,
+              maxEntriesPerBatch:
+                  config.idleConsolidation.maxEntriesPerBatch,
+              maxSummariesPerDay:
+                  config.idleConsolidation.maxSummariesPerDay,
+              maxRetention: config.idleConsolidation.maxRetention,
+              maxOutputFacts: config.idleConsolidation.maxOutputFacts,
+            ),
+            onEvent: events.emit,
+          )
+        : null;
     this.selfLearningEngine = selfLearningEngine ??
         (providers.isEmpty
             ? null
@@ -186,6 +205,9 @@ class TikoRuntime {
 
   /// E1 (opt-in): detektor anomali token per skill. Null = nonaktif.
   TokenAnomalyDetector? _tokenAnomaly;
+
+  /// E2 (opt-in): konsolidator memori idle. Null = nonaktif.
+  IdleMemoryConsolidator? _idleConsolidator;
 
   /// E1: hitung karantina per UTC day (cap anti-spam penindakan).
   final Map<String, int> _tokenQuarantinesByDay = {};
@@ -1789,6 +1811,7 @@ class TikoRuntime {
       );
       _rememberSessionSkills(session.id, result.skillsUsed);
       unawaited(_checkTokenAnomaly(session, result));
+      unawaited(_runIdleConsolidation(session.id));
       unawaited(spans.recordTurn(
         traceId: session.id,
         attributes: {
@@ -2609,6 +2632,54 @@ class TikoRuntime {
     }
     return true;
   }
+
+  /// E2 (opt-in): jalankan konsolidasi memori idle (best-effort). Dipicu
+  /// setelah giliran chat saat ambang idle tercapai. Saat fakta baru
+  /// dihasilkan: event `memory.idle_consolidated` + AuditLog + persist
+  /// layered memory segera (tidak menunggu shutdown).
+  Future<IdleConsolidationReport?> _runIdleConsolidation(
+    String sessionId,
+  ) async {
+    final consolidator = _idleConsolidator;
+    if (consolidator == null) return null;
+    final IdleConsolidationReport? report;
+    try {
+      report = await consolidator.noteTurn();
+    } catch (_) {
+      return null; // best-effort
+    }
+    if (report == null || report.factsAdded == 0) return report;
+    try {
+      await layeredMemory.save(p.join(dataDir, 'layered_memory.json'));
+    } catch (_) {
+      // Persist best-effort; memori tetap di memori sampai shutdown.
+    }
+    try {
+      await audit.log(
+        sessionId: sessionId,
+        tool: 'idle_consolidation',
+        args: const {},
+        risk: 'low',
+        verdict: 'ok',
+        resultSummary:
+            '${report.factsAdded} fakta semantik dari ${report.candidates} '
+            'entri episodik',
+      );
+    } catch (_) {
+      // Audit best-effort.
+    }
+    return report;
+  }
+
+  /// E2 (khusus test): akses konsolidator untuk verifikasi wiring.
+  // ignore: avoid_public_member_api_docs
+  IdleMemoryConsolidator? get idleConsolidatorForTest => _idleConsolidator;
+
+  /// E2 (khusus test): panggil pass konsolidasi idle secara langsung.
+  Future<IdleConsolidationReport?> runIdleConsolidationForTest(
+    String sessionId,
+  ) =>
+      _runIdleConsolidation(sessionId);
 
   /// E1 (khusus test): akses detektor untuk verifikasi wiring.
   // ignore: avoid_public_member_api_docs
