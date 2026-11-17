@@ -431,6 +431,31 @@ Future<void> main(List<String> argv) async {
         );
         rt.skills.register(skill);
         stdout.writeln('skill standar diimpor sebagai trial: ${skill.slug}');
+      } else if (args.first == 'install' && args.length > 1) {
+        // E3: install skill dari sumber lokal (paket JSON / SKILL.md /
+        // direktori) dengan verifikasi SHA-256 opsional. Tanpa registry.
+        var expectedSha256 = '';
+        for (var i = 2; i + 1 < args.length; i++) {
+          if (args[i] == '--sha256') expectedSha256 = args[i + 1];
+        }
+        try {
+          final result = await SkillLocalInstaller(
+            skillsDirectory: skillsDir,
+            onChanged: (_) => rt.reloadSkills(),
+          ).install(
+            args[1],
+            expectedSha256: expectedSha256.isEmpty ? null : expectedSha256,
+          );
+          stdout.writeln(
+            'terpasang: ${result.slug} (status=draft, sha256=${result.sha256}, '
+            'sumber=${result.source})',
+          );
+          stdout.writeln(
+              'Tinjau lalu approve: tiko skills approve ${result.slug}');
+        } on SkillLocalInstallException catch (e) {
+          stderr.writeln('$e');
+          exitCode = 1;
+        }
       } else if (args.first == 'rollback' && args.length > 1) {
         var to = 'draft';
         for (var i = 2; i + 1 < args.length; i++) {
@@ -447,7 +472,8 @@ Future<void> main(List<String> argv) async {
       } else {
         stderr.writeln(
           'skills list|scan <dir>|evaluate <slug> [--promote]|'
-          'approve <slug> [--actor nama]|rollback <slug> [--to draft]',
+          'approve <slug> [--actor nama]|rollback <slug> [--to draft]|'
+          'install <path> [--sha256 <hex>]',
         );
         exitCode = 2;
       }

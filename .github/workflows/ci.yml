@@ -291,6 +291,25 @@ jobs:
         run: |
           [ -f .ci-flutter-testfailures.txt ] && sed -n '11,20p' .ci-flutter-testfailures.txt | sed 's/^/::error ::/' || true
 
+  tiko-widgets:
+    name: tiko_widgets package validation (E4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          cache: true
+      - name: Analyze and test tiko_widgets
+        shell: bash
+        run: |
+          set -uo pipefail
+          cd apps/tiko_widgets
+          flutter pub get
+          flutter analyze
+          flutter test
+
   flutter-desktop:
     name: Flutter desktop build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}

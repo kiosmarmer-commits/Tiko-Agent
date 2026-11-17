@@ -1,0 +1,21 @@
+name: tiko_widgets
+description: Reusable Tiko agent Flutter widgets (GenUI renderer, chat interface, status card).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  agent_core:
+    path: ../../packages/agent_core
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
