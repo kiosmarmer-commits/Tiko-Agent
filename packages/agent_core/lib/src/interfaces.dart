@@ -347,6 +347,11 @@ abstract class SessionStore {
   /// Removes a session; returns false when it did not exist.
   Future<bool> delete(String sessionId);
 
+  /// Sets a human-readable title for a session; returns false when the
+  /// session does not exist, the store does not support renaming, or the
+  /// title is empty.
+  Future<bool> rename(String sessionId, String title) async => false;
+
   /// Cross-conversation search over stored turns (P1: session search).
   /// Implementations without search support return an empty list.
   Future<List<SessionSearchHit>> searchSessions(

@@ -148,4 +148,30 @@ class ChatController extends ChangeNotifier {
     messages.clear();
     notifyListeners();
   }
+
+  /// Memuat transcript sesi dari daemon dan mengganti isi chat. Dipakai saat
+  /// pengguna memilih sesi lama di halaman Sessions, sehingga riwayat
+  /// percakapan terlihat kembali, bukan sekadar chat kosong.
+  Future<void> openSession(String sessionKey, {int limit = 200}) async {
+    try {
+      final list = await client.fetchSessionMessages(sessionKey, limit: limit);
+      messages
+        ..clear()
+        ..addAll([
+          for (final m in list)
+            {
+              'role': m['role'] as String? ?? 'user',
+              'text': m['content'] as String? ?? '',
+            },
+        ]);
+    } catch (e) {
+      messages
+        ..clear()
+        ..add({
+          'role': 'system',
+          'text': 'Gagal memuat transcript sesi: $e',
+        });
+    }
+    notifyListeners();
+  }
 }
