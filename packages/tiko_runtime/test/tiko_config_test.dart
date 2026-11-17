@@ -241,6 +241,72 @@ mcp:
       expect(badIssues.map((i) => i.path), contains('script.self_repair'));
     });
 
+    test('security.token_anomaly: default false, bentuk ringkas & mapping (E1)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.tokenAnomaly.enabled, isFalse);
+
+      // Bentuk ringkas: boolean.
+      final (simple, simpleIssues) = TikoConfig.parse('''
+security:
+  token_anomaly: true
+mcp:
+  servers: []
+''');
+      expect(simpleIssues.where((issue) => issue.fatal), isEmpty);
+      expect(simple.tokenAnomaly.enabled, isTrue);
+      expect(simple.tokenAnomaly.minSamples, 5);
+
+      // Bentuk mapping dengan override.
+      final (cfg, issues) = TikoConfig.parse('''
+security:
+  token_anomaly:
+    enabled: true
+    min_samples: 3
+    window_size: 20
+    z_multiplier: 2.5
+    min_spike_ratio: 4.0
+    cooldown_minutes: 15
+    max_quarantines_per_day: 1
+mcp:
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.tokenAnomaly.enabled, isTrue);
+      expect(cfg.tokenAnomaly.minSamples, 3);
+      expect(cfg.tokenAnomaly.windowSize, 20);
+      expect(cfg.tokenAnomaly.zMultiplier, 2.5);
+      expect(cfg.tokenAnomaly.minSpikeRatio, 4.0);
+      expect(cfg.tokenAnomaly.cooldownMinutes, 15);
+      expect(cfg.tokenAnomaly.maxQuarantinesPerDay, 1);
+
+      // Nilai tidak valid -> ConfigIssue + fallback default.
+      final (bad, badIssues) = TikoConfig.parse('''
+security:
+  token_anomaly:
+    enabled: "yes"
+    min_samples: 1
+    z_multiplier: "besar"
+mcp:
+  servers: []
+''');
+      expect(bad.tokenAnomaly.enabled, isFalse,
+          reason: 'nilai tidak valid jatuh ke default');
+      expect(bad.tokenAnomaly.minSamples, 5);
+      expect(bad.tokenAnomaly.zMultiplier, 3.0);
+      expect(
+        badIssues.map((i) => i.path),
+        containsAll([
+          'security.token_anomaly.enabled',
+          'security.token_anomaly.min_samples',
+          'security.token_anomaly.z_multiplier',
+        ]),
+      );
+    });
+
     test('MCP HTTP protocol version has a default and accepts an override', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:
