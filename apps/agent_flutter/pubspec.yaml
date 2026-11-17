@@ -12,6 +12,8 @@ dependencies:
   http: ^1.2.2
   agent_core:
     path: ../../packages/agent_core
+  tiko_widgets:
+    path: ../tiko_widgets
   simpul_core:
     path: ../../packages/simpul_core
   path: ^1.9.0
