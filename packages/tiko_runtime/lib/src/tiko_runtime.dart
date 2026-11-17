@@ -610,6 +610,7 @@ class TikoRuntime {
       ..register(ClaimTool(ledger: evidence))
       ..register(VerifyClaimsTool(ledger: evidence))
       ..register(DeferQuestionTool(store: deferred))
+      ..register(const RenderUiTool())
       ..register(AnswerDeferredTool(store: deferred))
       ..register(ListDeferredTool(store: deferred))
       ..register(const EffectPreviewTool())

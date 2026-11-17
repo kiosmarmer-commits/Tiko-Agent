@@ -46,3 +46,4 @@ export 'src/skill_metrics.dart';
 export 'src/context_files.dart';
 export 'src/cancellation.dart';
 export 'src/otel.dart';
+export 'src/genui.dart';

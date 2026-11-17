@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  agent_core:
+    path: ../../packages/agent_core
   simpul_core:
     path: ../../packages/simpul_core
   path: ^1.9.0
