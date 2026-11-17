@@ -35,7 +35,7 @@ class _ApiServer {
           }));
         } else if (path.startsWith('/v1/sessions/') &&
             path.endsWith('/messages')) {
-          if (path.contains('flutter:tidak-ada')) {
+          if (path.contains('tidak-ada')) {
             req.response.statusCode = 404;
             req.response.write(jsonEncode(<String, dynamic>{
               'ok': false,
