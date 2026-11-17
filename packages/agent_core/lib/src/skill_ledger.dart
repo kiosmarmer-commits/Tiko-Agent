@@ -150,6 +150,11 @@ class SkillApprovalLedger {
   /// Fingerprint konten (FNV-1a 64-bit atas field kanonik skill).
   /// Sengaja tanpa dependensi baru (AGD-08): hanya perlu mendeteksi edit,
   /// bukan menahan pencarian collision adversarial.
+  static final BigInt _fnvOffsetBasis =
+      BigInt.parse('cbf29ce484222325', radix: 16);
+  static final BigInt _fnvPrime = BigInt.parse('100000001b3', radix: 16);
+  static final BigInt _mask64 = (BigInt.one << 64) - BigInt.one;
+
   static String fingerprintOf(Skill skill) {
     final basis = jsonEncode([
       skill.slug,
@@ -160,10 +165,14 @@ class SkillApprovalLedger {
       skill.tools,
       skill.version,
     ]);
-    var hash = 0xcbf29ce484222325;
+    // FNV-1a 64-bit via BigInt: literal 64-bit mentah tidak dapat
+    // direpresentasikan persis di JavaScript dan merusak `flutter build web`
+    // (agent_core kini menjadi dependensi klien Flutter). Hasil hex 16 digit
+    // tetap identik dengan implementasi integer aslinya.
+    var hash = _fnvOffsetBasis;
     for (final byte in utf8.encode(basis)) {
-      hash ^= byte;
-      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+      hash ^= BigInt.from(byte);
+      hash = (hash * _fnvPrime) & _mask64;
     }
     return hash.toRadixString(16).padLeft(16, '0');
   }

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
 import 'daemon/desktop_daemon.dart';
 import 'ui/chat_controller.dart';
+import 'ui/gen_ui_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
 import 'ui/theme.dart';
@@ -443,10 +445,20 @@ class _ChatPageState extends State<_ChatPage> {
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: context.simpulBorder),
                             ),
-                            child: SelectableText(
-                              (message['text'] ?? '').toString(),
-                              style: const TextStyle(height: 1.4),
-                            ),
+                            child: message['role'] == 'assistant'
+                                ? GenUiMessageView(
+                                    text: (message['text'] ?? '').toString(),
+                                    onAction: (actionId, values) {
+                                      final payload = values.isEmpty
+                                          ? ''
+                                          : ' ${jsonEncode(values)}';
+                                      chat.send('/ui $actionId$payload');
+                                    },
+                                  )
+                                : SelectableText(
+                                    (message['text'] ?? '').toString(),
+                                    style: const TextStyle(height: 1.4),
+                                  ),
                           ),
                         );
                       },
