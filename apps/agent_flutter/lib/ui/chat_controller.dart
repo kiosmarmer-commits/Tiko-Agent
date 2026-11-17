@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../agent_api_client.dart';
@@ -146,6 +148,42 @@ class ChatController extends ChangeNotifier {
 
   void clearChat() {
     messages.clear();
+    notifyListeners();
+  }
+
+  /// Typed GenUI action (GUI-P0-04): kirim aksi form/tombol via endpoint
+  /// tervalidasi daemon. Bila daemon lama belum mendukung (501), fallback ke
+  /// jalur teks lama `/ui ...`; kegagalan lain tampil sebagai pesan system
+  /// tanpa mengirim ulang (menghindari side effect ganda).
+  Future<void> sendUiAction(
+    String actionId,
+    Map<String, dynamic> values, {
+    String? sessionKey,
+  }) async {
+    final sk = sessionKey ?? this.sessionKey;
+    if (busy) return;
+    final echo = values.isEmpty ? actionId : '$actionId ${jsonEncode(values)}';
+    busy = true;
+    messages.add({'role': 'user', 'text': echo});
+    messages.add({'role': 'assistant', 'text': '…'});
+    notifyListeners();
+    final aiIndex = messages.length - 1;
+    try {
+      final reply = await client.submitUiAction(sk, actionId, values);
+      messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
+    } catch (e) {
+      messages.removeRange(messages.length - 2, messages.length);
+      busy = false;
+      notifyListeners();
+      if ('$e'.contains('ui actions 501')) {
+        await send('/ui $echo', sessionKey: sk);
+      } else {
+        messages.add({'role': 'system', 'text': 'Gagal mengirim aksi UI: $e'});
+        notifyListeners();
+      }
+      return;
+    }
+    busy = false;
     notifyListeners();
   }
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -479,10 +478,11 @@ class _ChatPageState extends State<_ChatPage> {
                                 ? GenUiMessageView(
                                     text: (message['text'] ?? '').toString(),
                                     onAction: (actionId, values) {
-                                      final payload = values.isEmpty
-                                          ? ''
-                                          : ' ${jsonEncode(values)}';
-                                      chat.send('/ui $actionId$payload');
+                                      unawaited(chat.sendUiAction(
+                                        actionId,
+                                        values,
+                                        sessionKey: widget.sessionKey,
+                                      ));
                                     },
                                   )
                                 : SelectableText(

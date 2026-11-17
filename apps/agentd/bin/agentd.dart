@@ -632,6 +632,25 @@ Future<void> main(List<String> args) async {
   if (useApi) {
     // apiToken was validated and persisted before any background service ran.
     final token = apiToken!;
+    // Typed GenUI actions (GUI-P0-04): spesifikasi yang dirender agen
+    // didaftarkan per sesi sehingga POST /v1/ui/actions bisa memvalidasi
+    // ownership, expiry, single-use, dan nilai form sebelum diteruskan.
+    final uiActions = GenUiActionRegistry();
+    Future<String> httpMessage(InboundMessage m) async {
+      final c = Completer<String>();
+      await handleMessage(m, replyVia: _CollectGateway(c));
+      String reply;
+      try {
+        reply = await c.future.timeout(const Duration(seconds: 180));
+      } catch (_) {
+        return '(timeout)';
+      }
+      for (final block in extractGenUiBlocks(reply)) {
+        uiActions.register(m.sessionKey, block.spec);
+      }
+      return reply;
+    }
+
     try {
       api = HttpApiServer(
         authToken: token,
@@ -639,14 +658,19 @@ Future<void> main(List<String> args) async {
         port: port,
         webhookEndpoint: webhooks,
         webRoot: _findWebRoot(),
-        onMessage: (m) async {
-          final c = Completer<String>();
-          await handleMessage(m, replyVia: _CollectGateway(c));
-          try {
-            return await c.future.timeout(const Duration(seconds: 180));
-          } catch (_) {
-            return '(timeout)';
-          }
+        onMessage: httpMessage,
+        uiActionHandler: (sessionKey, actionId, values) async {
+          uiActions.validateAndConsume(sessionKey, actionId, values);
+          final text = values.isEmpty
+              ? '/ui $actionId'
+              : '/ui $actionId ${jsonEncode(values)}';
+          final answer = await httpMessage(InboundMessage(
+            channel: 'http',
+            userKey: 'ui-action',
+            sessionKey: sessionKey,
+            text: text,
+          ));
+          return {'ok': true, 'text': answer};
         },
         listSessions: () async {
           final list = await rt.sessions.list();

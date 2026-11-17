@@ -162,6 +162,30 @@ class AgentApiClient {
     return json['text'] as String? ?? '';
   }
 
+  /// Typed GenUI action (GUI-P0-04): kirim aksi form/tombol ke endpoint
+  /// tervalidasi daemon. Melempar exception bila ditolak (400) atau daemon
+  /// lama tanpa dukungan (501).
+  Future<String> submitUiAction(
+    String sessionKey,
+    String actionId,
+    Map<String, dynamic> values,
+  ) async {
+    final res = await _http
+        .post(
+          _u('/v1/ui/actions'),
+          headers: _headers,
+          body: jsonEncode({
+            'session_key': sessionKey,
+            'action_id': actionId,
+            'values': values,
+          }),
+        )
+        .timeout(const Duration(seconds: 180));
+    _throwIf(res, 'ui actions');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['text'] as String? ?? '';
+  }
+
   Future<void> respondConfirm(String id, bool allow) async {
     final ok = await decideApproval(id, allow);
     if (!ok) throw StateError('Approval $id tidak lagi pending atau kedaluwarsa.');
