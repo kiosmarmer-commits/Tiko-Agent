@@ -337,8 +337,6 @@ class _AgentAppState extends State<AgentApp> {
           onSettingsChanged: _applySettings,
           daemonCard: _DaemonStatusCard(),
         );
-      default:
-        return const SizedBox.shrink();
     }
   }
 
