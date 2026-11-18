@@ -30,13 +30,16 @@ class ProcessPlugin extends Plugin {
     this.args = const [],
     this.workingDirectory,
     this.hookTimeout = const Duration(seconds: 10),
-  }) : _name = name;
+    Duration? initTimeout,
+  })  : _name = name,
+        _initTimeout = initTimeout ?? hookTimeout;
 
   final String _name;
   final String command;
   final List<String> args;
   final String? workingDirectory;
   final Duration hookTimeout;
+  final Duration _initTimeout;
 
   Process? _process;
   StreamIterator<String>? _replies;
@@ -53,11 +56,11 @@ class ProcessPlugin extends Plugin {
     await _stdin?.flush();
   }
 
-  Future<Map<String, dynamic>> _receive() async {
+  Future<Map<String, dynamic>> _receive({Duration? timeout}) async {
     final it = _replies;
     bool has;
     try {
-      has = it != null && await it.moveNext().timeout(hookTimeout);
+      has = it != null && await it.moveNext().timeout(timeout ?? hookTimeout);
     } on TimeoutException {
       throw StateError('plugin "$_name" tidak merespons (timeout)');
     }
@@ -88,7 +91,7 @@ class ProcessPlugin extends Plugin {
       }),
     );
     await _send({'op': 'hello', 'name': _name});
-    final reply = await _receive();
+    final reply = await _receive(timeout: _initTimeout);
     if (reply['ok'] != true) {
       throw StateError('handshake plugin "$_name" gagal: $reply');
     }
