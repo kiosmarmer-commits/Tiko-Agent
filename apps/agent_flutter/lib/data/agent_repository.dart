@@ -42,6 +42,15 @@ abstract class AgentRepository {
   Future<ChannelsSnapshot> channels();
   Future<JobsSnapshot> jobs();
   Future<SecuritySnapshot> security();
+  Future<AuditQueryResult> audit({
+    String? tool,
+    String? session,
+    String? risk,
+    String? verdict,
+    bool? taint,
+    int limit = 50,
+    int offset = 0,
+  });
   Future<JobInfo> createJob(Map<String, dynamic> body);
   Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
   Future<bool> deleteJob(String id);
@@ -211,6 +220,27 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<SecuritySnapshot> security() async => SecuritySnapshot.fromMap(
       await _guard(() => _client.fetchSecurity()));
+
+  @override
+  Future<AuditQueryResult> audit({
+    String? tool,
+    String? session,
+    String? risk,
+    String? verdict,
+    bool? taint,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    return AuditQueryResult.fromMap(await _guard(() => _client.queryAudit({
+          if (tool?.trim().isNotEmpty ?? false) 'tool': tool!.trim(),
+          if (session?.trim().isNotEmpty ?? false) 'session': session!.trim(),
+          if (risk?.trim().isNotEmpty ?? false) 'risk': risk!.trim(),
+          if (verdict?.trim().isNotEmpty ?? false) 'verdict': verdict!.trim(),
+          if (taint != null) 'taint': '$taint',
+          'limit': '$limit',
+          'offset': '$offset',
+        })));
+  }
 
   @override
   Future<JobsSnapshot> jobs() async => JobsSnapshot.fromMap({

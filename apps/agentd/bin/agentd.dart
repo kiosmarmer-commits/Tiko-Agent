@@ -956,6 +956,17 @@ Future<void> main(List<String> args) async {
           snapshot['active_sessions'] = (await rt.sessions.list()).length;
           return snapshot;
         },
+        auditQueryProvider: (filters) => rt.auditQuery(
+          tool: filters['tool'] as String?,
+          session: filters['session'] as String?,
+          risk: filters['risk'] as String?,
+          verdict: filters['verdict'] as String?,
+          taint: filters['taint'] as bool?,
+          since: filters['since'] as DateTime?,
+          until: filters['until'] as DateTime?,
+          limit: filters['limit'] as int? ?? 50,
+          offset: filters['offset'] as int? ?? 0,
+        ),
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

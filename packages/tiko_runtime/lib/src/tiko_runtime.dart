@@ -2136,6 +2136,94 @@ class TikoRuntime {
     };
   }
 
+  /// Audit query browser (GUI-P1-11, read-only): filter entri audit dari
+  /// buffer in-memory + file JSONL harian (menyimpan riwayat lintas
+  /// restart, dedupe by serialisasi), urut terbaru dulu, paginate.
+  Future<Map<String, dynamic>> auditQuery({
+    String? tool,
+    String? session,
+    String? risk,
+    String? verdict,
+    bool? taint,
+    DateTime? since,
+    DateTime? until,
+    int limit = 50,
+    int offset = 0,
+    int daysBack = 7,
+  }) async {
+    final toolLower = tool?.toLowerCase();
+    final riskLower = risk?.toLowerCase();
+    final verdictLower = verdict?.toLowerCase();
+    final merged = <String, Map<String, dynamic>>{};
+    void collect(Map<String, dynamic> entry) {
+      final key = jsonEncode(entry);
+      merged.putIfAbsent(key, () => Map<String, dynamic>.from(entry));
+    }
+
+    final dir = Directory(audit.directory);
+    if (await dir.exists()) {
+      final now = DateTime.now().toUtc();
+      final files = <String>[];
+      for (var i = 0; i < daysBack; i++) {
+        final day = now.subtract(Duration(days: i)).toIso8601String();
+        files.add('audit-${day.substring(0, 10).replaceAll('-', '')}.jsonl');
+      }
+      for (final name in files) {
+        final file = File(p.join(dir.path, name));
+        if (!await file.exists()) continue;
+        try {
+          for (final line in await file.readAsLines()) {
+            if (line.trim().isEmpty) continue;
+            try {
+              collect(Map<String, dynamic>.from(
+                  jsonDecode(line) as Map));
+            } catch (_) {}
+          }
+        } catch (_) {} // best-effort: file corrupt/partial
+      }
+    }
+    for (final entry in audit.recent) {
+      collect(entry);
+    }
+
+    bool matches(Map<String, dynamic> entry) {
+      final ts = DateTime.tryParse('${entry['ts']}');
+      if (since != null && ts != null && ts.isBefore(since)) return false;
+      if (until != null && ts != null && ts.isAfter(until)) return false;
+      if (taint != null && (entry['taint'] == true) != taint) return false;
+      if (session != null && '${entry['session']}' != session) return false;
+      if (riskLower != null &&
+          !'${entry['risk']}'.toLowerCase().contains(riskLower)) {
+        return false;
+      }
+      if (verdictLower != null &&
+          !'${entry['verdict']}'.toLowerCase().contains(verdictLower)) {
+        return false;
+      }
+      if (toolLower != null &&
+          !'${entry['tool']}'.toLowerCase().contains(toolLower)) {
+        return false;
+      }
+      return true;
+    }
+
+    final matched = [
+      for (final entry in merged.values)
+        if (matches(entry)) entry,
+    ]..sort((a, b) => '${b['ts']}'.compareTo('${a['ts']}'));
+    final safeLimit = limit.clamp(1, 200);
+    final safeOffset = offset < 0 ? 0 : offset;
+    return {
+      'entries': [
+        for (var i = safeOffset;
+            i < matched.length && i < safeOffset + safeLimit;
+            i++)
+          matched[i],
+      ],
+      'total': matched.length,
+    };
+  }
+
   /// Katalog tool terdaftar di registry host (GUI-P1-06, read-only):
   /// name/description/risk/timeout — paritas `/tools`.
   List<Map<String, dynamic>> toolCatalog() {

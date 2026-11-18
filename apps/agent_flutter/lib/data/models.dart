@@ -850,3 +850,66 @@ class SkillTokenStat {
         samples: (map['samples'] as num?)?.toInt() ?? 0,
       );
 }
+
+/// Satu entri audit hasil query browser (GUI-P1-11) — sudah teredaksi
+/// server-side via SecretRedactor.
+class AuditEntry {
+  const AuditEntry({
+    required this.ts,
+    this.session = '-',
+    this.tool = '-',
+    this.args = const {},
+    this.risk = '-',
+    this.verdict = '-',
+    this.result,
+    this.durationMs,
+    this.error,
+    this.taint = false,
+  });
+
+  final String ts;
+  final String session;
+  final String tool;
+  final Map<String, dynamic> args;
+  final String risk;
+  final String verdict;
+  final String? result;
+  final int? durationMs;
+  final String? error;
+  final bool taint;
+
+  factory AuditEntry.fromMap(Map<String, dynamic> map) => AuditEntry(
+        ts: '${map['ts'] ?? '-'}',
+        session: '${map['session'] ?? '-'}',
+        tool: '${map['tool'] ?? '-'}',
+        args: map['args'] is Map
+            ? Map<String, dynamic>.from(map['args'] as Map)
+            : const {},
+        risk: '${map['risk'] ?? '-'}',
+        verdict: '${map['verdict'] ?? '-'}',
+        result: map['result'] == null ? null : '${map['result']}',
+        durationMs: (map['duration_ms'] as num?)?.toInt(),
+        error: map['error'] == null ? null : '${map['error']}',
+        taint: map['taint'] == true,
+      );
+}
+
+/// Hasil query audit (GUI-P1-11): halaman entri + total semua yang cocok.
+class AuditQueryResult {
+  const AuditQueryResult({
+    this.entries = const [],
+    this.total = 0,
+  });
+
+  final List<AuditEntry> entries;
+  final int total;
+
+  factory AuditQueryResult.fromMap(Map<String, dynamic> map) =>
+      AuditQueryResult(
+        entries: [
+          for (final e in map['entries'] as List? ?? const [])
+            AuditEntry.fromMap(Map<String, dynamic>.from(e as Map)),
+        ],
+        total: (map['total'] as num?)?.toInt() ?? 0,
+      );
+}

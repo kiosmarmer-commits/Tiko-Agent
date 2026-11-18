@@ -925,6 +925,68 @@
     }
   }
 
+  // GUI-P1-11 parity: audit query browser (read-only).
+  let auditOffset = 0;
+  let auditLastLoaded = 0;
+  async function loadAuditQuery(resetOffset = false) {
+    const list = $('#audit-results');
+    if (!list) return;
+    const next = $('#btn-audit-next');
+    if (resetOffset) auditOffset = 0;
+    const params = [];
+    const addParam = (key, value) => {
+      if (value) params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+    };
+    addParam('tool', $('#auditTool')?.value?.trim() || '');
+    addParam('session', $('#auditSession')?.value?.trim() || '');
+    addParam('risk', $('#auditRisk')?.value || '');
+    addParam('verdict', $('#auditVerdict')?.value || '');
+    if ($('#auditTaint')?.checked) addParam('taint', 'true');
+    addParam('limit', '50');
+    addParam('offset', String(auditOffset));
+    list.replaceChildren(emptyItem('Memuat audit\u2026'));
+    try {
+      const data = await api('/v1/audit' + (params.length ? '?' + params.join('&') : ''));
+      const total = Number(data.total || 0);
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      list.replaceChildren();
+      const header = document.createElement('li');
+      header.className = 'hint';
+      header.textContent = total + ' entri cocok \u00b7 menampilkan ' +
+        entries.length + ' (offset ' + auditOffset + ')';
+      list.appendChild(header);
+      if (!entries.length) {
+        list.appendChild(emptyItem('Tidak ada entri yang cocok.'));
+      }
+      for (const entry of entries) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(entry.tool || '-') +
+          ' \u00b7 risk ' + String(entry.risk || '-') +
+          ' \u00b7 ' + String(entry.verdict || '-');
+        title.className = 'job-title';
+        const badge = document.createElement('span');
+        badge.className = entry.verdict === 'deny' || entry.taint
+          ? 'pill offline' : 'pill online';
+        badge.textContent = entry.taint ? 'TAINT' : String(entry.risk || '-');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = String(entry.ts || '-') + ' \u00b7 ' +
+          String(entry.session || '-') +
+          (entry.duration_ms == null ? '' : ' \u00b7 ' + String(entry.duration_ms) + 'ms') +
+          (entry.error ? ' \u00b7 error: ' + String(entry.error) : '') +
+          (entry.result ? ' \u00b7 ' + String(entry.result) : '');
+        li.append(title, badge, meta);
+        list.appendChild(li);
+      }
+      auditLastLoaded = entries.length;
+      if (next) next.hidden = entries.length < 50;
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat audit: ' + error.message));
+      if (next) next.hidden = true;
+    }
+  }
+
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
     const promptEl = $('#jobNewPrompt');
@@ -1180,6 +1242,7 @@
       if (target === 'channels') loadChannels();
       if (target === 'jobs') loadJobs();
       if (target === 'security') loadSecurity();
+      if (target === 'audit') loadAuditQuery(true);
     });
   });
 
@@ -1220,6 +1283,11 @@
   $('#btn-refresh-channels')?.addEventListener('click', loadChannels);
   $('#btn-refresh-jobs')?.addEventListener('click', loadJobs);
   $('#btn-refresh-security')?.addEventListener('click', loadSecurity);
+  $('#btn-audit-query')?.addEventListener('click', () => loadAuditQuery(true));
+  $('#btn-audit-next')?.addEventListener('click', () => {
+    auditOffset += auditLastLoaded > 0 ? auditLastLoaded : 50;
+    loadAuditQuery(false);
+  });
   $('#jobCreateBtn')?.addEventListener('click', createJobFromWeb);
   $('#botCreateBtn')?.addEventListener('click', createBot);
   $('#botBindBtn')?.addEventListener('click', () => bindOrUnbindBot(true));
