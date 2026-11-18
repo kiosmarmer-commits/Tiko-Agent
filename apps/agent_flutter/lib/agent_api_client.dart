@@ -431,6 +431,48 @@ class AgentApiClient {
     if (!ok) throw StateError('Approval $id tidak lagi pending atau kedaluwarsa.');
   }
 
+  /// Live push event runtime (WebSocket `/v1/stream`): hanya frame
+  /// `{'type': 'event', 'event': {...}}` yang di-yield; frame lain
+  /// (typing/text/done/confirm/confirm_result) diabaikan agar feed admin
+  /// tidak tercemar percakapan. Tidak ada pesan yang dikirim lewat socket
+  /// ini, sehingga server tidak menutup koneksi setelah satu turn.
+  /// Koneksi yang putus mengalirkan onDone/onError — reconnection adalah
+  /// tanggung jawab pemanggil (AdminEventFeed).
+  Stream<Map<String, dynamic>> streamEvents() async* {
+    final base = baseUrl.replaceAll(RegExp(r'/$'), '');
+    final wsBase = base.startsWith('https')
+        ? base.replaceFirst('https', 'wss')
+        : base.replaceFirst('http', 'ws');
+    final ticket = await _requestStreamTicket(base);
+    final uri = Uri.parse('$wsBase/v1/stream').replace(
+      queryParameters: ticket == null ? {} : {'ticket': ticket},
+    );
+    final channel = WebSocketChannel.connect(uri);
+    try {
+      await channel.ready.timeout(const Duration(seconds: 10));
+      await for (final raw in channel.stream) {
+        if (raw is! String) continue;
+        final Map<String, dynamic> frame;
+        try {
+          frame = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
+        if (frame['type'] != 'event') continue;
+        final event = frame['event'];
+        if (event is Map<String, dynamic>) yield event;
+      }
+    } finally {
+      try {
+        await channel.sink
+            .close()
+            .timeout(const Duration(seconds: 5), onTimeout: () {});
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
+
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey = 'flutter:default',

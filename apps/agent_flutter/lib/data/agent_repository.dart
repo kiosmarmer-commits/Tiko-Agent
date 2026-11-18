@@ -56,6 +56,9 @@ abstract class AgentRepository {
     Map<String, dynamic> values,
   );
   Stream<Map<String, dynamic>> streamChat(String text, {String sessionKey});
+
+  /// Live push event runtime via WebSocket admin feed (GUI-P2-06).
+  Stream<Map<String, dynamic>> runtimeEvents();
 }
 
 /// Implementasi HTTP di atas [AgentApiClient]; menerjemahkan kegagalan
@@ -248,4 +251,7 @@ class HttpAgentRepository implements AgentRepository {
     String sessionKey = 'flutter:default',
   }) =>
       _client.streamChat(text, sessionKey: sessionKey);
+
+  @override
+  Stream<Map<String, dynamic>> runtimeEvents() => _client.streamEvents();
 }

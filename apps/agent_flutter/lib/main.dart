@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'agent_api_client.dart';
 import 'app/app_routes.dart';
 import 'daemon/desktop_daemon.dart';
+import 'data/admin_event_feed.dart';
 import 'data/agent_repository.dart';
 import 'data/models.dart';
 import 'shell/desktop_shell.dart';
@@ -82,6 +83,8 @@ class _AgentAppState extends State<AgentApp> {
   late AgentRepository repo;
   late ChatController chat;
   Timer? statusTimer;
+  AdminEventFeed? eventFeed;
+  bool _eventFeedStarted = false;
   AppRoute route = AppRoute.chat;
   String sessionKey = 'flutter:default';
 
@@ -121,6 +124,22 @@ class _AgentAppState extends State<AgentApp> {
       }
     });
     unawaited(refreshAdmin());
+  }
+
+  /// Live push WS (GUI-P2-06): event runtime memicu refresh admin segera
+  /// (debounce 1s); polling 15s tetap sebagai fallback bila WS mati. Feed
+  /// dimulai setelah refresh admin pertama sukses (daemon terhubung).
+  void _startEventFeed() {
+    eventFeed?.dispose();
+    eventFeed = AdminEventFeed(
+      events: repo.runtimeEvents(),
+      onRefresh: () async {
+        if (route != AppRoute.chat && route != AppRoute.settings) {
+          await refreshAdmin();
+        }
+      },
+    )
+      ..start();
   }
 
   Future<void> refreshAdmin({bool force = false}) async {
@@ -169,6 +188,10 @@ class _AgentAppState extends State<AgentApp> {
         pluginSnapshot = results[13] as PluginsToolsSnapshot;
         channelSnapshot = results[14] as ChannelsSnapshot;
       });
+      if (!_eventFeedStarted) {
+        _eventFeedStarted = true;
+        _startEventFeed();
+      }
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
         setState(() => adminError = e.toString());
@@ -189,6 +212,10 @@ class _AgentAppState extends State<AgentApp> {
       client.token = tok;
       chat.checkOnline();
     });
+    // Kredensial berubah — buang feed lama; refresh penuh akan memulai ulang
+    // feed WS dengan kredensial baru bila daemon terhubung.
+    eventFeed?.dispose();
+    _eventFeedStarted = false;
     unawaited(refreshAdmin(force: true));
   }
 
@@ -215,6 +242,7 @@ class _AgentAppState extends State<AgentApp> {
   @override
   void dispose() {
     statusTimer?.cancel();
+    eventFeed?.dispose();
     chat.dispose();
     client.close();
     super.dispose();
