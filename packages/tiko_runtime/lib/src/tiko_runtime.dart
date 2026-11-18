@@ -2037,6 +2037,142 @@ class TikoRuntime {
     return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
   }
 
+  /// Snapshot plugin + consent untuk REST/GUI (GUI-P1-06, paritas
+  /// `/plugin list|info`): plugin terdaftar dan menunggu consent, grant
+  /// tersimpan, serta event hook terakhir.
+  Map<String, dynamic> pluginSnapshot() {
+    final names = <String>{
+      for (final p in plugins.plugins) p.name,
+      for (final k in _pendingPlugins.keys) k,
+    }.toList()..sort();
+    final items = <Map<String, dynamic>>[
+      for (final name in names)
+        {
+          'id': name,
+          'registered': plugins.get(name) != null,
+          'pending': _pendingPlugins.containsKey(name),
+          'granted': pluginConsents.grantsOf(name).toList()..sort(),
+          'requested': _pendingPlugins[name]?.permissions ?? const <String>[],
+        },
+    ];
+    return {
+      'plugins': items,
+      'events': [
+        for (final e in plugins.events.reversed.take(10))
+          {
+            'plugin': e.pluginName,
+            'hook': e.hook.name,
+            'detail': e.detail,
+            'error': e.error?.toString(),
+            'at': e.at.toIso8601String(),
+          },
+      ],
+    };
+  }
+
+  /// Katalog tool terdaftar di registry host (GUI-P1-06, read-only):
+  /// name/description/risk/timeout — paritas `/tools`.
+  List<Map<String, dynamic>> toolCatalog() {
+    final items = <Map<String, dynamic>>[
+      for (final spec in registry.specs)
+        {
+          'name': spec.name,
+          'description': spec.description,
+          'risk': spec.risk,
+          'timeout_sec': spec.timeoutSec,
+          'parallel_safe': spec.parallelSafe,
+        },
+    ];
+    items.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+    return items;
+  }
+
+  /// Status server MCP (GUI-P1-06, read-only): konfigurasi dari config
+  /// immutable + hasil loader (ready/disabled/failed + jumlah tool).
+  Map<String, dynamic> mcpSnapshot() => {
+    'started': _mcpStarted,
+    'configured': [
+      for (final s in config.mcpServers)
+        {
+          'id': s.id,
+          'type': s.type,
+          'enabled': s.enabled,
+          'risk': s.risk,
+          'allow': s.allow,
+          if (s.command != null) 'command': s.command,
+        },
+    ],
+    'loader': mcpLoader.statuses,
+  };
+
+  /// Grant consent plugin (GUI-P1-06, paritas `/plugin consent <nama> grant`):
+  /// simpan grant, registrasikan pending plugin, dan daftarkan tool
+  /// deklarasinya. `ok == false` bila plugin tidak menunggu consent.
+  Future<({bool ok, String message})> grantPluginConsent(String name) async {
+    final id = name.trim().toLowerCase();
+    final pending = _pendingPlugins[id];
+    final requested = pending?.permissions ?? const <String>[];
+    if (requested.isEmpty && !_pendingPlugins.containsKey(id)) {
+      return (
+        ok: false,
+        message: 'Plugin "$id" tidak menunggu consent. '
+            'Plugin pending: '
+            '${_pendingPlugins.keys.isEmpty ? "-" : _pendingPlugins.keys.join(", ")}.',
+      );
+    }
+    await pluginConsents.grant(id, requested);
+    events.emit('plugin.consent.granted', {
+      'plugin': id,
+      'permissions': requested.toList(),
+    });
+    if (pending != null) {
+      final ok = await plugins.register(
+        pending.plugin,
+        requestedPermissions: pending.permissions,
+      );
+      if (ok) {
+        _pendingPlugins.remove(id);
+        events.emit('plugin.registered', {'plugin': id});
+        if (pending.plugin is ProcessPlugin) {
+          await _registerPluginTools(
+            pending.plugin as ProcessPlugin,
+            pending.permissions,
+          );
+        }
+        return (
+          ok: true,
+          message: 'Plugin "$id" disetujui dan terdaftar '
+              '(${requested.join(", ")}).',
+        );
+      }
+      return (
+        ok: false,
+        message: 'Consent "$id" tersimpan, tetapi registrasi gagal '
+            '(lihat log plugin).',
+      );
+    }
+    return (ok: true, message: 'Consent "$id" diperbarui.');
+  }
+
+  /// Revoke consent plugin (GUI-P1-06, paritas `/plugin consent <nama> revoke`):
+  /// cabut semua grant dan batalkan registrasi plugin. `ok == false` bila
+  /// plugin tidak dikenal.
+  Future<({bool ok, String message})> revokePluginConsent(String name) async {
+    final id = name.trim().toLowerCase();
+    if (!pluginConsents.hasAnyGrant(id) &&
+        !_pendingPlugins.containsKey(id) &&
+        plugins.get(id) == null) {
+      return (ok: false, message: 'Plugin "$id" tidak dikenal.');
+    }
+    await pluginConsents.revoke(id);
+    await plugins.unregister(id);
+    events.emit('plugin.consent.revoked', {'plugin': id});
+    return (
+      ok: true,
+      message: 'Consent plugin "$id" dicabut; plugin dibatalkan registrasinya.',
+    );
+  }
+
   /// Registrasi plugin dengan capability consent (rekomendasi #5).
   /// Ditolak consent → masuk antrean pending + event `plugin.consent.required`.
   Future<bool> _registerPluginWithConsent(
@@ -2154,72 +2290,14 @@ class TikoRuntime {
             retryable: true,
           );
         }
-        if (cmd.rest == 'grant') {
-          final pending = _pendingPlugins[cmd.id];
-          final requested = pending?.permissions ?? const <String>[];
-          if (requested.isEmpty && !_pendingPlugins.containsKey(cmd.id)) {
-            return ChatRunResult(
-              text: 'Plugin "${cmd.id}" tidak menunggu consent. '
-                  'Plugin pending: '
-                  '${_pendingPlugins.keys.isEmpty ? "-" : _pendingPlugins.keys.join(", ")}.',
-              success: false,
-              retryable: true,
-            );
-          }
-          await pluginConsents.grant(cmd.id, requested);
-          events.emit('plugin.consent.granted', {
-            'plugin': cmd.id,
-            'permissions': requested.toList(),
-          });
-          if (pending != null) {
-            final ok = await plugins.register(
-              pending.plugin,
-              requestedPermissions: pending.permissions,
-            );
-            if (ok) {
-              _pendingPlugins.remove(cmd.id);
-              events.emit('plugin.registered', {'plugin': cmd.id});
-              if (pending.plugin is ProcessPlugin) {
-                await _registerPluginTools(
-                  pending.plugin as ProcessPlugin,
-                  pending.permissions,
-                );
-              }
-              return ChatRunResult(
-                text: 'Plugin "${cmd.id}" disetujui dan terdaftar '
-                    '(${requested.join(", ")}).',
-                success: true,
-              );
-            }
-            return ChatRunResult(
-              text: 'Consent "${cmd.id}" tersimpan, tetapi registrasi '
-                  'gagal (lihat log plugin).',
-              success: false,
-              retryable: true,
-            );
-          }
+        if (cmd.rest == 'grant' || cmd.rest == 'revoke') {
+          final result = cmd.rest == 'grant'
+              ? await grantPluginConsent(cmd.id)
+              : await revokePluginConsent(cmd.id);
           return ChatRunResult(
-            text: 'Consent "${cmd.id}" diperbarui.',
-            success: true,
-          );
-        }
-        if (cmd.rest == 'revoke') {
-          if (!pluginConsents.hasAnyGrant(cmd.id) &&
-              !_pendingPlugins.containsKey(cmd.id) &&
-              plugins.get(cmd.id) == null) {
-            return ChatRunResult(
-              text: 'Plugin "${cmd.id}" tidak dikenal.',
-              success: false,
-              retryable: true,
-            );
-          }
-          await pluginConsents.revoke(cmd.id);
-          await plugins.unregister(cmd.id);
-          events.emit('plugin.consent.revoked', {'plugin': cmd.id});
-          return ChatRunResult(
-            text: 'Consent plugin "${cmd.id}" dicabut; plugin '
-                'dibatalkan registrasinya.',
-            success: true,
+            text: result.message,
+            success: result.ok,
+            retryable: !result.ok,
           );
         }
         return ChatRunResult(

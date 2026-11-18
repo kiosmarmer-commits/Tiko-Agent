@@ -63,6 +63,8 @@ class HttpApiServer {
     this.unbindBot,
     this.providersProvider,
     this.sessionProviderSetter,
+    this.pluginProvider,
+    this.pluginConsentSetter,
   });
 
   final MessageHandler onMessage;
@@ -140,6 +142,28 @@ class HttpApiServer {
     'tool_allowlist',
   };
 
+  /// Validasi payload `POST /v1/plugins/consent` (GUI-P1-06): plugin
+  /// nama non-kosong maks 64, action wajib `grant`/`revoke`.
+  Map<String, dynamic> _validatePluginConsentPayload(
+    dynamic decoded,
+  ) {
+    if (decoded is! Map<String, dynamic>) {
+      throw ApiRequestException(400, 'invalid_request',
+          'body wajib berupa mapping {plugin, action}');
+    }
+    final plugin = decoded['plugin'];
+    if (plugin is! String || plugin.trim().isEmpty || plugin.trim().length > 64) {
+      throw ApiRequestException(400, 'invalid_request',
+          'plugin wajib nama non-kosong maksimal 64 karakter');
+    }
+    final action = decoded['action'];
+    if (action is! String || (action != 'grant' && action != 'revoke')) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'action wajib grant atau revoke');
+    }
+    return {'plugin': plugin.trim().toLowerCase(), 'action': action};
+  }
+
   void _validateBotPayload(
     Map<String, dynamic> body, {
     required bool forCreate,
@@ -214,6 +238,14 @@ class HttpApiServer {
   final Future<Map<String, dynamic>> Function()? providersProvider;
   final Future<bool> Function(String sessionId, String providerArg)?
       sessionProviderSetter;
+
+  /// Plugin & tools manager callbacks (GUI-P1-06). Callback yang null
+  /// membuat endpoint terkait merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function()? pluginProvider;
+
+  /// [action] adalah `grant` atau `revoke`; hasil memuat `ok` dan `message`.
+  final Future<Map<String, dynamic>> Function(String plugin, String action)?
+      pluginConsentSetter;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -842,6 +874,30 @@ class HttpApiServer {
           _error(req, 404, 'not_found', 'provider not found');
         } else {
           _json(req, {'ok': true, 'session_id': sessionId.trim(), 'provider': provider.trim()});
+        }
+      // Plugin & tools manager endpoints (GUI-P1-06)
+      } else if (path == '/v1/plugins' && req.method == 'GET') {
+        final snapshot = await (pluginProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'plugin manager not configured')));
+        _json(req, snapshot);
+      } else if (path == '/v1/plugins/consent' && req.method == 'POST') {
+        if (pluginConsentSetter == null) {
+          _error(req, 501, 'not_implemented', 'plugin manager not configured');
+          return;
+        }
+        final body = _validatePluginConsentPayload(
+            jsonDecode(await utf8.decoder.bind(req).join()));
+        final result = await pluginConsentSetter!(
+            body['plugin'] as String, body['action'] as String);
+        if (result['ok'] != true) {
+          _error(req, 404, 'not_found',
+              '${result['message'] ?? 'plugin not found'}');
+        } else {
+          _json(req, {
+            'ok': true,
+            'message': '${result['message'] ?? ''}',
+          });
         }
       } else {
         _error(req, 404, 'not_found', 'not found');

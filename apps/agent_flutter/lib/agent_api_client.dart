@@ -256,6 +256,29 @@ class AgentApiClient {
     return json['ok'] == true;
   }
 
+  /// Plugin & tools manager (GUI-P1-06): snapshot plugin + consent,
+  /// katalog tool registry host, dan status server MCP.
+  Future<Map<String, dynamic>> fetchPlugins() async {
+    final res = await _http
+        .get(_u('/v1/plugins'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'plugins');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// [action] adalah `grant` atau `revoke`; melempar [ApiError] bila plugin
+  /// tidak dikenal / tidak menunggu consent (404) atau body invalid (400).
+  Future<Map<String, dynamic>> setPluginConsent(
+      String plugin, String action) async {
+    final res = await _http
+        .post(_u('/v1/plugins/consent'),
+            headers: _headers,
+            body: jsonEncode({'plugin': plugin, 'action': action}))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'plugin consent');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Bot manager (GUI-P1-04). Backend memakai error model typed
   /// (401/400/404/409/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listBots() async {

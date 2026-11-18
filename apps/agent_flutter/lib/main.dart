@@ -15,6 +15,7 @@ import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
 import 'ui/bot_manager_view.dart';
 import 'ui/provider_manager_view.dart';
+import 'ui/plugin_manager_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -95,6 +96,7 @@ class _AgentAppState extends State<AgentApp> {
   List<BotProfileItem> bots = [];
   Map<String, String> botBindings = {};
   ProvidersSnapshot? providerSnapshot;
+  PluginsToolsSnapshot? pluginSnapshot;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -144,6 +146,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.botBindings(),
         repo.providers(),
         repo.memories(),
+        repo.pluginsTools(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
@@ -160,6 +163,7 @@ class _AgentAppState extends State<AgentApp> {
         botBindings = results[10] as Map<String, String>;
         providerSnapshot = results[11] as ProvidersSnapshot;
         memories = results[12] as List<MemoryFact>;
+        pluginSnapshot = results[13] as PluginsToolsSnapshot;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -276,6 +280,7 @@ class _AgentAppState extends State<AgentApp> {
         bots: bots,
         bindings: botBindings,
         providers: providerSnapshot,
+        pluginSnapshot: pluginSnapshot,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
         onRefresh: refreshAdmin,
@@ -440,6 +445,19 @@ class _AgentAppState extends State<AgentApp> {
             final ok = await repo.setSessionProvider(sessionId, providerArg);
             if (ok) unawaited(refreshAdmin(force: true));
             return ok;
+          },
+        );
+      case AppRoute.plugins:
+        return PluginManagerPage(
+          snapshot: pluginSnapshot,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onConsent: (plugin, action) async {
+            final message = await repo.setPluginConsent(plugin, action);
+            unawaited(refreshAdmin(force: true));
+            return message;
           },
         );
       case AppRoute.memory:
@@ -1196,6 +1214,7 @@ class _MorePage extends StatelessWidget {
     required this.bots,
     required this.bindings,
     required this.providers,
+    required this.pluginSnapshot,
     required this.availableSessions,
     required this.online,
     required this.onRefresh,
@@ -1214,6 +1233,7 @@ class _MorePage extends StatelessWidget {
   final List<BotProfileItem> bots;
   final Map<String, String> bindings;
   final ProvidersSnapshot? providers;
+  final PluginsToolsSnapshot? pluginSnapshot;
   final List<String> availableSessions;
   final bool online;
   final Future<void> Function() onRefresh;
@@ -1352,6 +1372,28 @@ class _MorePage extends StatelessWidget {
                         sessionId, providerArg);
                     if (ok) await onRefresh();
                     return ok;
+                  },
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.extension_outlined),
+          title: Text('Plugins (${pluginSnapshot?.plugins.length ?? 0})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: PluginManagerPage(
+                  snapshot: pluginSnapshot,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onConsent: (plugin, action) async {
+                    final message = await repo.setPluginConsent(plugin, action);
+                    await onRefresh();
+                    return message;
                   },
                 ),
               ),
