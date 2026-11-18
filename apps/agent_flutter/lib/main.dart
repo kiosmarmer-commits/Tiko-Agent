@@ -19,6 +19,7 @@ import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
+import 'ui/artifact_view.dart';
 import 'ui/audit_page.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
@@ -110,6 +111,12 @@ class _AgentAppState extends State<AgentApp> {
   AuditQueryResult? auditResult;
   Map<String, String> auditFilters = const {};
   int auditOffset = 0;
+  ArtifactsListing? artifactsListing;
+  String artifactsDir = '';
+  ArtifactContent? artifactContent;
+  ArtifactDiff? artifactDiff;
+  bool loadingArtifacts = false;
+  String? artifactsError;
   bool auditLoading = false;
   String? auditError;
   List<MemoryFact> memories = [];
@@ -243,6 +250,55 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  Future<void> _loadArtifacts({String dir = ''}) async {
+    setState(() {
+      artifactsError = null;
+      loadingArtifacts = true;
+    });
+    try {
+      final listing = await repo.artifacts(dir: dir);
+      if (!mounted) return;
+      setState(() {
+        artifactsListing = listing;
+        artifactsDir = dir;
+      });
+    } catch (e) {
+      if (mounted) setState(() => artifactsError = e.toString());
+    } finally {
+      if (mounted) setState(() => loadingArtifacts = false);
+    }
+  }
+
+  Future<void> _openArtifact(String path) async {
+    if (path.isEmpty) {
+      setState(() {
+        artifactContent = null;
+        artifactDiff = null;
+      });
+      return;
+    }
+    setState(() {
+      artifactsError = null;
+      loadingArtifacts = true;
+    });
+    try {
+      final content = await repo.artifactRead(path);
+      if (!mounted) return;
+      setState(() => artifactContent = content);
+      if (content.bakExists) {
+        final diff = await repo.artifactDiff(path);
+        if (!mounted) return;
+        setState(() => artifactDiff = diff);
+      } else {
+        setState(() => artifactDiff = null);
+      }
+    } catch (e) {
+      if (mounted) setState(() => artifactsError = e.toString());
+    } finally {
+      if (mounted) setState(() => loadingArtifacts = false);
+    }
+  }
+
   void updateConnection({required String base, required String tok}) {
     setState(() {
       baseUrl = base;
@@ -325,6 +381,10 @@ class _AgentAppState extends State<AgentApp> {
 
   void _selectRoute(AppRoute next) {
     setState(() => route = next);
+    if (next == AppRoute.artifacts &&
+        artifactsListing == null) {
+      unawaited(_loadArtifacts());
+    }
     if (next != AppRoute.chat) unawaited(refreshAdmin());
   }
 
@@ -357,6 +417,15 @@ class _AgentAppState extends State<AgentApp> {
         securitySnapshot: securitySnapshot,
         auditResult: auditResult,
         onQueryAudit: _queryAudit,
+        artifactsListing: artifactsListing,
+        artifactsDir: artifactsDir,
+        artifactContent: artifactContent,
+        artifactDiff: artifactDiff,
+        loadingArtifacts: loadingArtifacts,
+        artifactsError: artifactsError,
+        onOpenArtifactsDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
+        onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
+        onCloseArtifactPreview: () => _openArtifact(''),
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
@@ -591,6 +660,18 @@ class _AgentAppState extends State<AgentApp> {
               auditFilters,
               offset:
                   auditOffset + (auditResult?.entries.length ?? 50)),
+        );
+      case AppRoute.artifacts:
+        return ArtifactsPage(
+          listing: artifactsListing,
+          online: chat.online,
+          loading: loadingArtifacts,
+          error: artifactsError,
+          dir: artifactsDir,
+          onOpenDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
+          onOpenFile: (path) => unawaited(_openArtifact(path)),
+          onClosePreview: () => _openArtifact(''),
+          onRefresh: () => _loadArtifacts(dir: artifactsDir),
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1353,6 +1434,15 @@ class _MorePage extends StatelessWidget {
     required this.securitySnapshot,
     required this.auditResult,
     required this.onQueryAudit,
+    required this.artifactsListing,
+    required this.artifactsDir,
+    required this.artifactContent,
+    required this.artifactDiff,
+    required this.loadingArtifacts,
+    required this.artifactsError,
+    required this.onOpenArtifactsDir,
+    required this.onOpenArtifactFile,
+    required this.onCloseArtifactPreview,
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
@@ -1378,6 +1468,15 @@ class _MorePage extends StatelessWidget {
   final SecuritySnapshot? securitySnapshot;
   final AuditQueryResult? auditResult;
   final Future<void> Function(Map<String, String> filters) onQueryAudit;
+  final ArtifactsListing? artifactsListing;
+  final String artifactsDir;
+  final ArtifactContent? artifactContent;
+  final ArtifactDiff? artifactDiff;
+  final bool loadingArtifacts;
+  final String? artifactsError;
+  final void Function(String dir) onOpenArtifactsDir;
+  final void Function(String path) onOpenArtifactFile;
+  final VoidCallback onCloseArtifactPreview;
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
@@ -1630,6 +1729,28 @@ class _MorePage extends StatelessWidget {
                   loading: false,
                   error: null,
                   onQuery: onQueryAudit,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.folder_copy_outlined),
+          title: Text('Artifacts'
+              '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: ArtifactsPage(
+                  listing: artifactsListing,
+                  online: online,
+                  loading: loadingArtifacts,
+                  error: artifactsError,
+                  dir: artifactsDir,
+                  onOpenDir: onOpenArtifactsDir,
+                  onOpenFile: onOpenArtifactFile,
+                  onClosePreview: onCloseArtifactPreview,
+                  onRefresh: () async { onOpenArtifactsDir(artifactsDir); },
                 ),
               ),
             ));

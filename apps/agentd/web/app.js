@@ -987,6 +987,120 @@
     }
   }
 
+  // GUI-P2-04 parity: artifacts browser read-only + diff.
+  let artifactsDir = '';
+  let artifactContent = null;
+  let artifactDiff = null;
+  let artifactShowDiff = false;
+  function _sizeLabel(bytes) {
+    const n = Number(bytes || 0);
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+  async function loadArtifacts(dir) {
+    const list = $('#artifact-list');
+    if (!list) return;
+    artifactsDir = typeof dir === 'string' ? dir : artifactsDir;
+    list.replaceChildren(emptyItem('Memuat artifacts\u2026'));
+    try {
+      const data = await api('/v1/artifacts' +
+        (artifactsDir ? '?dir=' + encodeURIComponent(artifactsDir) : ''));
+      const files = Array.isArray(data.files) ? data.files : [];
+      list.replaceChildren();
+      if (artifactsDir) {
+        const up = document.createElement('li');
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.textContent = '.. (naik)';
+        upBtn.addEventListener('click', () => {
+          const parent = artifactsDir.split('/').slice(0, -1).join('/');
+          loadArtifacts(parent);
+        });
+        up.appendChild(upBtn);
+        list.appendChild(up);
+      }
+      if (!files.length) {
+        list.appendChild(emptyItem('Tidak ada file di direktori ini.'));
+      }
+      for (const file of files) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(file.path || '?');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = _sizeLabel(file.bytes) +
+          ' \u00b7 ' + String(file.modified || '-');
+        li.append(title, meta);
+        li.addEventListener('click', () => openArtifact(
+          artifactsDir ? artifactsDir + '/' + String(file.path) : String(file.path)));
+        list.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat artifacts: ' + error.message));
+    }
+  }
+
+  function renderArtifactPreview() {
+    const box = $('#artifact-preview');
+    const title = $('#artifact-preview-title');
+    const contentEl = $('#artifact-content');
+    const note = $('#artifact-note');
+    const toggle = $('#btn-artifact-toggle-diff');
+    if (!box || !title || !contentEl || !note) return;
+    if (!artifactContent) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    title.textContent = artifactContent.path || 'Preview';
+    if (toggle) {
+      toggle.hidden = !artifactDiff;
+      toggle.textContent = artifactShowDiff ? 'Preview' : 'Diff';
+    }
+    if (artifactContent.binary) {
+      contentEl.textContent = '(File biner \u2014 pratinjau teks tidak tersedia)';
+      if (note) note.textContent = '';
+    } else if (artifactShowDiff && artifactDiff) {
+      contentEl.textContent = artifactDiff.lines
+        .map((l) => (l.type || '=') + ' ' + (l.text || ''))
+        .join('\n');
+      if (note) {
+        note.textContent = artifactDiff.truncated
+          ? '\u2026 diff terpotong di batas server' : '';
+      }
+    } else {
+      contentEl.textContent = (artifactContent.content || '') +
+        (artifactContent.truncated ? '\n\u2026 (terpotong di batas server)' : '');
+      if (note) note.textContent = '';
+    }
+  }
+
+  async function openArtifact(path) {
+    if (!path) {
+      artifactContent = null;
+      artifactDiff = null;
+      artifactShowDiff = false;
+      renderArtifactPreview();
+      return;
+    }
+    try {
+      artifactContent = await api('/v1/artifacts/read?path=' + encodeURIComponent(path));
+      artifactShowDiff = false;
+      artifactDiff = null;
+      renderArtifactPreview();
+      if (artifactContent.bak_exists || artifactContent.bakExists) {
+        artifactDiff = await api('/v1/artifacts/diff?path=' + encodeURIComponent(path));
+        renderArtifactPreview();
+      }
+    } catch (error) {
+      artifactContent = null;
+      artifactDiff = null;
+      renderArtifactPreview();
+      addMsg('system', 'Gagal membuka file: ' + error.message);
+    }
+  }
+
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
     const promptEl = $('#jobNewPrompt');
@@ -1243,6 +1357,7 @@
       if (target === 'jobs') loadJobs();
       if (target === 'security') loadSecurity();
       if (target === 'audit') loadAuditQuery(true);
+      if (target === 'artifacts') loadArtifacts('');
     });
   });
 
@@ -1288,6 +1403,12 @@
     auditOffset += auditLastLoaded > 0 ? auditLastLoaded : 50;
     loadAuditQuery(false);
   });
+  $('#btn-refresh-artifacts')?.addEventListener('click', () => loadArtifacts(artifactsDir));
+  $('#btn-artifact-toggle-diff')?.addEventListener('click', () => {
+    artifactShowDiff = !artifactShowDiff;
+    renderArtifactPreview();
+  });
+  $('#btn-artifact-close')?.addEventListener('click', () => openArtifact(''));
   $('#jobCreateBtn')?.addEventListener('click', createJobFromWeb);
   $('#botCreateBtn')?.addEventListener('click', createBot);
   $('#botBindBtn')?.addEventListener('click', () => bindOrUnbindBot(true));

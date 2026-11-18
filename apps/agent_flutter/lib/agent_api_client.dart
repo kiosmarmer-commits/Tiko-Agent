@@ -364,6 +364,35 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Artifacts browser (GUI-P2-04, read-only): list/read/diff workspace.
+  Future<Map<String, dynamic>> listArtifacts(String dir) async {
+    final path =
+        '/v1/artifacts${dir.isEmpty ? '' : '?dir=${Uri.encodeQueryComponent(dir)}'}';
+    final res = await _http
+        .get(_u(path), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'artifacts');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> readArtifact(String path) async {
+    final res = await _http
+        .get(_u('/v1/artifacts/read?path=${Uri.encodeQueryComponent(path)}'),
+            headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'artifacts read');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> diffArtifact(String path) async {
+    final res = await _http
+        .get(_u('/v1/artifacts/diff?path=${Uri.encodeQueryComponent(path)}'),
+            headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'artifacts diff');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
   /// typed (400/404/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listJobs() async {
