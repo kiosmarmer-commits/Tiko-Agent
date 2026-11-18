@@ -39,6 +39,7 @@ abstract class AgentRepository {
   Future<bool> setSessionProvider(String sessionId, String providerArg);
   Future<PluginsToolsSnapshot> pluginsTools();
   Future<String> setPluginConsent(String plugin, String action);
+  Future<ChannelsSnapshot> channels();
   Future<List<BotProfileItem>> bots();
   Future<BotProfileItem> createBot(Map<String, dynamic> body);
   Future<BotProfileItem> updateBot(String id, Map<String, dynamic> body);
@@ -193,6 +194,10 @@ class HttpAgentRepository implements AgentRepository {
     final res = await _guard(() => _client.setPluginConsent(plugin, action));
     return '${res['message'] ?? ''}';
   }
+
+  @override
+  Future<ChannelsSnapshot> channels() async =>
+      ChannelsSnapshot.fromMap(await _guard(_client.fetchChannels));
 
   @override
   Future<BotProfileItem> createBot(Map<String, dynamic> body) async =>

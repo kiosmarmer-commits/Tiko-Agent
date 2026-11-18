@@ -65,6 +65,7 @@ class HttpApiServer {
     this.sessionProviderSetter,
     this.pluginProvider,
     this.pluginConsentSetter,
+    this.channelsProvider,
   });
 
   final MessageHandler onMessage;
@@ -246,6 +247,10 @@ class HttpApiServer {
   /// [action] adalah `grant` atau `revoke`; hasil memuat `ok` dan `message`.
   final Future<Map<String, dynamic>> Function(String plugin, String action)?
       pluginConsentSetter;
+
+  /// Channels setup (GUI-P1-07): status channel gateway aktif + nama env
+  /// yang mengonfigurasinya (read-only; env + restart untuk mengubah).
+  final Future<Map<String, dynamic>> Function()? channelsProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -899,6 +904,11 @@ class HttpApiServer {
             'message': '${result['message'] ?? ''}',
           });
         }
+      } else if (path == '/v1/channels' && req.method == 'GET') {
+        final snapshot = await (channelsProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'channels status not configured')));
+        _json(req, snapshot);
       } else {
         _error(req, 404, 'not_found', 'not found');
       }

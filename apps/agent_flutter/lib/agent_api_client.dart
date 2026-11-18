@@ -256,6 +256,16 @@ class AgentApiClient {
     return json['ok'] == true;
   }
 
+  /// Channels setup (GUI-P1-07): status channel gateway + nama env
+  /// (read-only).
+  Future<Map<String, dynamic>> fetchChannels() async {
+    final res = await _http
+        .get(_u('/v1/channels'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'channels');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Plugin & tools manager (GUI-P1-06): snapshot plugin + consent,
   /// katalog tool registry host, dan status server MCP.
   Future<Map<String, dynamic>> fetchPlugins() async {

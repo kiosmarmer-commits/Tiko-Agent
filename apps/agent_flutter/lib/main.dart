@@ -16,6 +16,7 @@ import 'ui/page_header.dart';
 import 'ui/bot_manager_view.dart';
 import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
+import 'ui/channels_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -97,6 +98,7 @@ class _AgentAppState extends State<AgentApp> {
   Map<String, String> botBindings = {};
   ProvidersSnapshot? providerSnapshot;
   PluginsToolsSnapshot? pluginSnapshot;
+  ChannelsSnapshot? channelSnapshot;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -147,6 +149,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.providers(),
         repo.memories(),
         repo.pluginsTools(),
+        repo.channels(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
@@ -164,6 +167,7 @@ class _AgentAppState extends State<AgentApp> {
         providerSnapshot = results[11] as ProvidersSnapshot;
         memories = results[12] as List<MemoryFact>;
         pluginSnapshot = results[13] as PluginsToolsSnapshot;
+        channelSnapshot = results[14] as ChannelsSnapshot;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -281,6 +285,7 @@ class _AgentAppState extends State<AgentApp> {
         bindings: botBindings,
         providers: providerSnapshot,
         pluginSnapshot: pluginSnapshot,
+        channelSnapshot: channelSnapshot,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
         onRefresh: refreshAdmin,
@@ -459,6 +464,14 @@ class _AgentAppState extends State<AgentApp> {
             unawaited(refreshAdmin(force: true));
             return message;
           },
+        );
+      case AppRoute.channels:
+        return ChannelsPage(
+          snapshot: channelSnapshot,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1215,6 +1228,7 @@ class _MorePage extends StatelessWidget {
     required this.bindings,
     required this.providers,
     required this.pluginSnapshot,
+    required this.channelSnapshot,
     required this.availableSessions,
     required this.online,
     required this.onRefresh,
@@ -1234,6 +1248,7 @@ class _MorePage extends StatelessWidget {
   final Map<String, String> bindings;
   final ProvidersSnapshot? providers;
   final PluginsToolsSnapshot? pluginSnapshot;
+  final ChannelsSnapshot? channelSnapshot;
   final List<String> availableSessions;
   final bool online;
   final Future<void> Function() onRefresh;
@@ -1395,6 +1410,24 @@ class _MorePage extends StatelessWidget {
                     await onRefresh();
                     return message;
                   },
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.hub_outlined),
+          title: Text('Channels ('
+              '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: ChannelsPage(
+                  snapshot: channelSnapshot,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
                 ),
               ),
             ));

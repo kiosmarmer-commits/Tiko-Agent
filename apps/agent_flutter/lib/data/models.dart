@@ -622,3 +622,43 @@ class McpServerInfo {
         ],
       );
 }
+
+/// Snapshot channels setup (GUI-P1-07): mirror payload `GET /v1/channels`
+/// — status channel gateway aktif + nama variabel env yang
+/// mengonfigurasinya (read-only; ubah env lalu restart daemon).
+class ChannelsSnapshot {
+  const ChannelsSnapshot({this.channels = const []});
+
+  final List<ChannelInfo> channels;
+
+  factory ChannelsSnapshot.fromMap(Map<String, dynamic> map) =>
+      ChannelsSnapshot(
+        channels: [
+          for (final c in map['channels'] as List? ?? const [])
+            ChannelInfo.fromMap(Map<String, dynamic>.from(c as Map)),
+        ],
+      );
+}
+
+/// Satu channel gateway: status aktif + nama env (GUI-P1-07, read-only).
+class ChannelInfo {
+  const ChannelInfo({
+    required this.channel,
+    this.active = false,
+    this.env = const [],
+  });
+
+  final String channel;
+  final bool active;
+
+  /// Hanya **nama** variabel env; nilai rahasia tidak pernah dikirim server.
+  final List<String> env;
+
+  factory ChannelInfo.fromMap(Map<String, dynamic> map) => ChannelInfo(
+        channel: '${map['channel'] ?? ''}',
+        active: map['active'] == true,
+        env: [
+          for (final e in map['env'] as List? ?? const []) '$e',
+        ],
+      );
+}
