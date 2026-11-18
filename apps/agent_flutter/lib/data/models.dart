@@ -302,3 +302,40 @@ class SkillHistoryEntry {
         reason: map['reason'] == null ? null : '${map['reason']}',
       );
 }
+
+/// Profil bot persisten (GUI-P1-04): mirror BotProfile.toJson dari
+/// tiko_runtime (snake_case).
+class BotProfileItem {
+  const BotProfileItem({
+    required this.id,
+    this.name = '',
+    this.persona = '',
+    this.model,
+    this.greeting = '',
+    this.toolAllowlist = const [],
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  final String id;
+  final String name;
+  final String persona;
+  final String? model;
+  final String greeting;
+  final List<String> toolAllowlist;
+  final String createdAt;
+  final String updatedAt;
+
+  factory BotProfileItem.fromMap(Map<String, dynamic> map) => BotProfileItem(
+        id: '${map['id'] ?? ''}',
+        name: '${map['name'] ?? ''}',
+        persona: '${map['persona'] ?? ''}',
+        model: map['model'] == null ? null : '${map['model']}',
+        greeting: '${map['greeting'] ?? ''}',
+        toolAllowlist: [
+          for (final t in map['tool_allowlist'] as List? ?? const []) '$t',
+        ],
+        createdAt: '${map['created_at'] ?? ''}',
+        updatedAt: '${map['updated_at'] ?? ''}',
+      );
+}

@@ -11,6 +11,20 @@ import 'skill_api.dart';
 
 typedef MessageHandler = Future<String> Function(InboundMessage message);
 
+/// Exception yang dilempar callback API untuk memetakan kegagalan domain
+/// (convlict/not found/dsb.) ke respons HTTP typed via [_error] alih-alih
+/// 500 generik. (GUI-P1-04)
+class ApiRequestException implements Exception {
+  ApiRequestException(this.status, this.code, this.message);
+
+  final int status;
+  final String code;
+  final String message;
+
+  @override
+  String toString() => 'ApiRequestException($status, $code): $message';
+}
+
 /// HTTP + WebSocket API + static web UI for beginners.
 class HttpApiServer {
   HttpApiServer({
@@ -39,6 +53,14 @@ class HttpApiServer {
     this.tasksProvider,
     this.logsProvider,
     this.logContentProvider,
+    this.listBots,
+    this.getBot,
+    this.createBot,
+    this.updateBot,
+    this.deleteBot,
+    this.listBotBindings,
+    this.bindBot,
+    this.unbindBot,
   });
 
   final MessageHandler onMessage;
@@ -97,6 +119,71 @@ class HttpApiServer {
     return cleaned.length > 64 ? cleaned.substring(0, 64) : cleaned;
   }
 
+  /// Validasi payload bot (GUI-P1-04): id cocok pola BotProfile.isValidId
+  /// di tiko_runtime, name wajib string non-kosong, field di-whitelist.
+  static final RegExp _botIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+  static const _botCreateKeys = {
+    'id',
+    'name',
+    'persona',
+    'model',
+    'greeting',
+    'tool_allowlist',
+  };
+  static const _botUpdateKeys = {
+    'name',
+    'persona',
+    'model',
+    'greeting',
+    'tool_allowlist',
+  };
+
+  void _validateBotPayload(
+    Map<String, dynamic> body, {
+    required bool forCreate,
+  }) {
+    final allowed = forCreate ? _botCreateKeys : _botUpdateKeys;
+    for (final key in body.keys) {
+      if (!allowed.contains(key)) {
+        throw ApiRequestException(400, 'invalid_request', 'field tidak dikenal: $key');
+      }
+    }
+    if (forCreate) {
+      final id = body['id'];
+      if (id is! String || !_botIdPattern.hasMatch(id)) {
+        throw ApiRequestException(400, 'invalid_request',
+            'id bot wajib [a-z0-9][a-z0-9_-]{0,63}');
+      }
+    }
+    final name = body['name'];
+    if (forCreate && (name is! String || name.trim().isEmpty)) {
+      throw ApiRequestException(400, 'invalid_request', 'name wajib diisi');
+    }
+    if (name != null &&
+        (name is! String || name.trim().isEmpty || name.trim().length > 128)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'name wajib string non-kosong maks 128');
+    }
+    for (final key in const ['persona', 'greeting']) {
+      final value = body[key];
+      if (value != null && value is! String) {
+        throw ApiRequestException(
+            400, 'invalid_request', '$key wajib berupa string');
+      }
+    }
+    final model = body['model'];
+    if (model != null && model is! String) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'model wajib string atau null');
+    }
+    final allowlist = body['tool_allowlist'];
+    if (allowlist != null &&
+        (allowlist is! List || allowlist.any((e) => e is! String))) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'tool_allowlist wajib berupa daftar string');
+    }
+  }
+
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
 
@@ -104,6 +191,21 @@ class HttpApiServer {
   final Future<List<Map<String, dynamic>>> Function()? tasksProvider;
   final Future<List<Map<String, dynamic>>> Function()? logsProvider;
   final Future<Map<String, dynamic>?> Function(String name)? logContentProvider;
+
+  /// Bot manager callbacks (GUI-P1-04). Callback yang null membuat endpoint
+  /// terkait merespons 501 not_implemented.
+  final Future<List<Map<String, dynamic>>> Function()? listBots;
+  final Future<Map<String, dynamic>?> Function(String id)? getBot;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      createBot;
+  final Future<Map<String, dynamic>?> Function(
+    String id,
+    Map<String, dynamic> body,
+  )? updateBot;
+  final Future<bool> Function(String id)? deleteBot;
+  final Future<Map<String, String>> Function()? listBotBindings;
+  final Future<bool> Function(String botId, String sessionId)? bindBot;
+  final Future<bool> Function(String botId, String sessionId)? unbindBot;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -595,9 +697,118 @@ class HttpApiServer {
             _json(req, result);
           }
         }
+      // Bot manager endpoints (GUI-P1-04)
+      } else if (path == '/v1/bots' && req.method == 'GET') {
+        final bots = await (listBots?.call() ??
+            (throw ApiRequestException(
+                501, 'not_implemented', 'bot manager not configured')));
+        _json(req, {'bots': bots});
+      } else if (path == '/v1/bots' && req.method == 'POST') {
+        if (createBot == null) {
+          _error(req, 501, 'not_implemented', 'bot manager not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateBotPayload(body, forCreate: true);
+        final profile = await createBot!(body);
+        req.response.statusCode = 201;
+        _json(req, profile);
+      } else if (path == '/v1/bots/bindings' && req.method == 'GET') {
+        final bindings = await (listBotBindings?.call() ??
+            (throw ApiRequestException(
+                501, 'not_implemented', 'bot manager not configured')));
+        _json(req, {'bindings': bindings});
+      } else if (path.startsWith('/v1/bots/') &&
+          req.method == 'GET' &&
+          !path.endsWith('/bind') &&
+          !path.endsWith('/unbind')) {
+        final id = path.substring('/v1/bots/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid bot id');
+          return;
+        }
+        final profile = await (getBot?.call(id) ??
+            (throw ApiRequestException(
+                501, 'not_implemented', 'bot manager not configured')));
+        if (profile == null) {
+          _error(req, 404, 'not_found', 'bot not found');
+        } else {
+          _json(req, profile);
+        }
+      } else if (path.startsWith('/v1/bots/') && req.method == 'PATCH') {
+        if (updateBot == null) {
+          _error(req, 501, 'not_implemented', 'bot manager not configured');
+          return;
+        }
+        final id = path.substring('/v1/bots/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid bot id');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateBotPayload(body, forCreate: false);
+        final updated = await updateBot!(id, body);
+        if (updated == null) {
+          _error(req, 404, 'not_found', 'bot not found');
+        } else {
+          _json(req, updated);
+        }
+      } else if (path.startsWith('/v1/bots/') && req.method == 'DELETE') {
+        if (deleteBot == null) {
+          _error(req, 501, 'not_implemented', 'bot manager not configured');
+          return;
+        }
+        final id = path.substring('/v1/bots/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid bot id');
+          return;
+        }
+        final ok = await deleteBot!(id);
+        if (!ok) {
+          _error(req, 404, 'not_found', 'bot not found');
+        } else {
+          _json(req, {'deleted': true});
+        }
+      } else if (path.startsWith('/v1/bots/') &&
+          req.method == 'POST' &&
+          (path.endsWith('/bind') || path.endsWith('/unbind'))) {
+        final bind = path.endsWith('/bind');
+        final id = path.substring(
+            '/v1/bots/'.length,
+            path.length - (bind ? '/bind'.length : '/unbind'.length));
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid bot id');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final sessionId = body['session_id'];
+        if (sessionId is! String || sessionId.trim().isEmpty) {
+          _error(req, 400, 'invalid_request', 'session_id wajib diisi');
+          return;
+        }
+        final ok = bind
+            ? await (bindBot?.call(id, sessionId.trim()) ??
+                (throw ApiRequestException(
+                    501, 'not_implemented', 'bot manager not configured')))
+            : await (unbindBot?.call(id, sessionId.trim()) ??
+                (throw ApiRequestException(
+                    501, 'not_implemented', 'bot manager not configured')));
+        if (!ok) {
+          _error(req, 404, 'not_found', 'bot or binding not found');
+        } else {
+          _json(req, {'ok': true, 'bound': bind});
+        }
       } else {
         _error(req, 404, 'not_found', 'not found');
       }
+    } on ApiRequestException catch (e) {
+      _error(req, e.status, e.code, e.message);
     } catch (e) {
       _error(req, 500, 'server', e.toString(), retryable: true);
     }

@@ -35,6 +35,13 @@ abstract class AgentRepository {
   Future<SkillGateOutcome> approveSkill(String slug);
   Future<SkillGateOutcome> rollbackSkill(String slug);
   Future<List<SkillHistoryEntry>> skillHistory(String slug);
+  Future<List<BotProfileItem>> bots();
+  Future<BotProfileItem> createBot(Map<String, dynamic> body);
+  Future<BotProfileItem> updateBot(String id, Map<String, dynamic> body);
+  Future<bool> deleteBot(String id);
+  Future<Map<String, String>> botBindings();
+  Future<bool> bindBot(String botId, String sessionId);
+  Future<bool> unbindBot(String botId, String sessionId);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
   Future<String> sendMessage(String text, {String sessionKey});
@@ -160,6 +167,33 @@ class HttpAgentRepository implements AgentRepository {
       (await _guard(() => _client.fetchSkillHistory(slug)))
           .map(SkillHistoryEntry.fromMap)
           .toList();
+
+  @override
+  Future<List<BotProfileItem>> bots() async =>
+      (await _guard(_client.listBots)).map(BotProfileItem.fromMap).toList();
+
+  @override
+  Future<BotProfileItem> createBot(Map<String, dynamic> body) async =>
+      BotProfileItem.fromMap(await _guard(() => _client.createBot(body)));
+
+  @override
+  Future<BotProfileItem> updateBot(String id, Map<String, dynamic> body) async =>
+      BotProfileItem.fromMap(await _guard(() => _client.updateBot(id, body)));
+
+  @override
+  Future<bool> deleteBot(String id) => _guard(() => _client.deleteBot(id));
+
+  @override
+  Future<Map<String, String>> botBindings() =>
+      _guard(_client.listBotBindings);
+
+  @override
+  Future<bool> bindBot(String botId, String sessionId) =>
+      _guard(() => _client.bindBot(botId, sessionId));
+
+  @override
+  Future<bool> unbindBot(String botId, String sessionId) =>
+      _guard(() => _client.unbindBot(botId, sessionId));
 
   @override
   Future<List<MemoryFact>> memories() async => (await _guard(_client.listMemories))

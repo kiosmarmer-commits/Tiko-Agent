@@ -141,6 +141,8 @@ class BotStore {
 
   BotProfile? get(String id) => _profiles[id];
 
+  Map<String, String> bindings() => Map.unmodifiable(_bindings);
+
   BotProfile? botFor(String sessionId) {
     final botId = _bindings[sessionId];
     return botId == null ? null : _profiles[botId];
