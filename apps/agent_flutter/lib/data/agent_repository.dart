@@ -29,6 +29,12 @@ abstract class AgentRepository {
   Future<List<TaskItem>> tasks();
   Future<List<LogFileInfo>> logs();
   Future<LogFileContent> logContent(String name);
+  Future<List<SkillItem>> skills();
+  Future<bool> skillFeedback(String slug, bool positive);
+  Future<SkillGateOutcome> evaluateSkill(String slug);
+  Future<SkillGateOutcome> approveSkill(String slug);
+  Future<SkillGateOutcome> rollbackSkill(String slug);
+  Future<List<SkillHistoryEntry>> skillHistory(String slug);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
   Future<String> sendMessage(String text, {String sessionKey});
@@ -125,6 +131,35 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<LogFileContent> logContent(String name) async =>
       LogFileContent.fromMap(await _guard(() => _client.fetchLogContent(name)));
+
+  @override
+  Future<List<SkillItem>> skills() async =>
+      (await _guard(_client.listSkills)).map(SkillItem.fromMap).toList();
+
+  @override
+  Future<bool> skillFeedback(String slug, bool positive) async {
+    final result =
+        await _guard(() => _client.sendSkillFeedback(slug, positive));
+    return result['recorded'] == true;
+  }
+
+  @override
+  Future<SkillGateOutcome> evaluateSkill(String slug) async =>
+      SkillGateOutcome.fromMap(await _guard(() => _client.evaluateSkill(slug)));
+
+  @override
+  Future<SkillGateOutcome> approveSkill(String slug) async =>
+      SkillGateOutcome.fromMap(await _guard(() => _client.approveSkill(slug)));
+
+  @override
+  Future<SkillGateOutcome> rollbackSkill(String slug) async =>
+      SkillGateOutcome.fromMap(await _guard(() => _client.rollbackSkill(slug)));
+
+  @override
+  Future<List<SkillHistoryEntry>> skillHistory(String slug) async =>
+      (await _guard(() => _client.fetchSkillHistory(slug)))
+          .map(SkillHistoryEntry.fromMap)
+          .toList();
 
   @override
   Future<List<MemoryFact>> memories() async => (await _guard(_client.listMemories))

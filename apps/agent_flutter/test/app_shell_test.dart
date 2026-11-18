@@ -29,8 +29,8 @@ void main() {
           .toSet();
       expect(
           grouped,
-          {AppRoute.tasks, AppRoute.memory, AppRoute.events, AppRoute.logs,
-              AppRoute.settings});
+          {AppRoute.tasks, AppRoute.skills, AppRoute.memory, AppRoute.events,
+              AppRoute.logs, AppRoute.settings});
     });
   });
 

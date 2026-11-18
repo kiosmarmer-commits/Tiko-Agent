@@ -171,3 +171,134 @@ class LogFileContent {
         content: '${map['content'] ?? ''}',
       );
 }
+
+/// Satu skill pada Skills Manager (GUI-P1-03). Status mengikuti lifecycle
+/// backend (draft/trial/approved/retired); metrics berasal dari ledger.
+class SkillItem {
+  const SkillItem({
+    required this.slug,
+    this.name = '',
+    this.description = '',
+    this.triggers = const [],
+    this.tools = const [],
+    this.version = 1,
+    this.status = 'draft',
+    this.uses = 0,
+    this.successes = 0,
+    this.positive = 0,
+    this.negative = 0,
+    this.goldenScore = 0,
+    this.goldenTotal = 0,
+    this.approvedBy,
+  });
+
+  final String slug;
+  final String name;
+  final String description;
+  final List<String> triggers;
+  final List<String> tools;
+  final int version;
+  final String status;
+  final int uses;
+  final int successes;
+  final int positive;
+  final int negative;
+  final double goldenScore;
+  final double goldenTotal;
+  final String? approvedBy;
+
+  /// Feedback hanya berlaku untuk skill aktif (trial/approved) sesuai
+  /// gate backend RuntimeSkillApi.recordFeedback.
+  bool get feedbackAllowed => status != 'draft' && status != 'retired';
+
+  double get successRate => uses == 0 ? 0 : successes / uses;
+
+  factory SkillItem.fromMap(Map<String, dynamic> map) {
+    final metrics =
+        Map<String, dynamic>.from(map['metrics'] as Map? ?? const {});
+    int asInt(Object? v) => v is num ? v.toInt() : 0;
+    return SkillItem(
+      slug: '${map['slug'] ?? ''}',
+      name: '${map['name'] ?? ''}',
+      description: '${map['description'] ?? ''}',
+      triggers: [
+        for (final t in map['triggers'] as List? ?? const []) '$t',
+      ],
+      tools: [
+        for (final t in map['tools'] as List? ?? const []) '$t',
+      ],
+      version: asInt(map['version']),
+      status: '${map['status'] ?? 'draft'}',
+      uses: asInt(map['uses']),
+      successes: asInt(map['successes']),
+      positive: asInt(metrics['positive']),
+      negative: asInt(metrics['negative']),
+      goldenScore:
+          map['golden_score'] is num ? (map['golden_score'] as num).toDouble() : 0,
+      goldenTotal:
+          map['golden_total'] is num ? (map['golden_total'] as num).toDouble() : 0,
+      approvedBy:
+          map['approved_by'] == null ? null : '${map['approved_by']}',
+    );
+  }
+}
+
+/// Hasil gate skill (GUI-P1-03 evaluate/approve/rollback): SkillGateResult
+/// dari SkillPromotionGate di agent_core.
+class SkillGateOutcome {
+  const SkillGateOutcome({
+    required this.ok,
+    required this.slug,
+    this.stage = '',
+    this.findings = const [],
+    this.goldenScore = 0,
+    this.goldenTotal = 0,
+    this.message = '',
+  });
+
+  final bool ok;
+  final String slug;
+  final String stage;
+  final List<String> findings;
+  final double goldenScore;
+  final double goldenTotal;
+  final String message;
+
+  factory SkillGateOutcome.fromMap(Map<String, dynamic> map) =>
+      SkillGateOutcome(
+        ok: map['ok'] == true,
+        slug: '${map['slug'] ?? ''}',
+        stage: '${map['stage'] ?? ''}',
+        findings: [
+          for (final f in map['findings'] as List? ?? const []) '$f',
+        ],
+        goldenScore:
+            map['golden_score'] is num ? (map['golden_score'] as num).toDouble() : 0,
+        goldenTotal:
+            map['golden_total'] is num ? (map['golden_total'] as num).toDouble() : 0,
+        message: '${map['message'] ?? ''}',
+      );
+}
+
+/// Satu baris riwayat skill (GUI-P1-03): SkillLedgerRecord dari ledger.
+class SkillHistoryEntry {
+  const SkillHistoryEntry({
+    required this.action,
+    required this.actor,
+    required this.at,
+    this.reason,
+  });
+
+  final String action;
+  final String actor;
+  final String at;
+  final String? reason;
+
+  factory SkillHistoryEntry.fromMap(Map<String, dynamic> map) =>
+      SkillHistoryEntry(
+        action: '${map['action'] ?? ''}',
+        actor: '${map['actor'] ?? ''}',
+        at: '${map['at'] ?? ''}',
+        reason: map['reason'] == null ? null : '${map['reason']}',
+      );
+}

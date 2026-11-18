@@ -155,6 +155,84 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Skills listing (GUI-P1-03). Backend mengembalikan `{'error': ...}`
+  /// dengan HTTP 200 saat skill API belum terkonfigurasi maupun saat gate
+  /// menolak; diangkat menjadi [ApiError] agar UI bisa menampilkannya.
+  Future<List<Map<String, dynamic>>> listSkills() async {
+    final res = await _http.get(_u('/v1/skills'), headers: _headers);
+    _throwIf(res, 'skills');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skills');
+    final list = json['skills'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> sendSkillFeedback(String slug, bool positive) async {
+    final safeSlug = Uri.encodeComponent(slug);
+    final res = await _http
+        .post(_u('/v1/skills/$safeSlug/feedback'),
+            headers: _headers, body: jsonEncode({'positive': positive}))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'skill feedback');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skill feedback');
+    return json;
+  }
+
+  Future<Map<String, dynamic>> evaluateSkill(String slug) async {
+    final safeSlug = Uri.encodeComponent(slug);
+    final res = await _http
+        .post(_u('/v1/skills/$safeSlug/evaluate'), headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    _throwIf(res, 'skill evaluate');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skill evaluate');
+    return json;
+  }
+
+  Future<Map<String, dynamic>> approveSkill(String slug) async {
+    final safeSlug = Uri.encodeComponent(slug);
+    final res = await _http
+        .post(_u('/v1/skills/$safeSlug/approve'), headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    _throwIf(res, 'skill approve');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skill approve');
+    return json;
+  }
+
+  Future<Map<String, dynamic>> rollbackSkill(String slug) async {
+    final safeSlug = Uri.encodeComponent(slug);
+    final res = await _http
+        .post(_u('/v1/skills/$safeSlug/rollback'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'skill rollback');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skill rollback');
+    return json;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSkillHistory(String slug) async {
+    final safeSlug = Uri.encodeComponent(slug);
+    final res = await _http
+        .get(_u('/v1/skills/$safeSlug/history'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'skill history');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'skill history');
+    final list = json['history'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Skill/gate errors tiba sebagai HTTP 200 dengan kunci `error`
+  /// (RuntimeSkillApi), bukan status HTTP — diangkat jadi [ApiError].
+  void _throwPayloadError(Map<String, dynamic> json, String what) {
+    final error = json['error'];
+    if (error is String && error.isNotEmpty) {
+      throw ApiError(code: ApiErrorCode.invalidRequest, message: error);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listMemories() async {
     final res = await _http.get(_u('/v1/memories'), headers: _headers);
     _throwIf(res, 'memories');
