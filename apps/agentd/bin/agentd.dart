@@ -990,6 +990,7 @@ Future<void> main(List<String> args) async {
             throw ApiRequestException(400, 'invalid_request', '$e');
           }
         },
+        runsProvider: () async => rt.turnInspectorSnapshot(),
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

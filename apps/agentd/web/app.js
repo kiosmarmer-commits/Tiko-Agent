@@ -1101,6 +1101,69 @@
     }
   }
 
+  // GUI-P2-04 parity: run-inspector read-only (turn aktif + riwayat).
+  async function loadRuns() {
+    const list = $('#runs-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat runs\u2026'));
+    try {
+      const data = await api('/v1/runs');
+      const active = Array.isArray(data.active) ? data.active : [];
+      const recent = Array.isArray(data.recent) ? data.recent : [];
+      list.replaceChildren();
+      if (!active.length && !recent.length) {
+        list.appendChild(emptyItem('Belum ada run terekam.'));
+        return;
+      }
+      if (active.length) {
+        const label = document.createElement('li');
+        label.className = 'hint';
+        label.textContent = 'AKTIF (' + active.length + ')';
+        list.appendChild(label);
+      }
+      for (const run of active) list.appendChild(_runItem(run));
+      if (recent.length) {
+        const label = document.createElement('li');
+        label.className = 'hint';
+        label.textContent = 'RIWAYAT (' + recent.length + ')';
+        list.appendChild(label);
+      }
+      for (const run of recent) list.appendChild(_runItem(run));
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat runs: ' + error.message));
+    }
+  }
+
+  function _runItem(run) {
+    const li = document.createElement('li');
+    const active = run.state === 'running';
+    const failed = run.state === 'error' ||
+      (typeof run.success === 'boolean' && !run.success);
+    const title = document.createElement('strong');
+    title.textContent = String(run.input || '(tanpa input)');
+    const meta = document.createElement('p');
+    meta.className = 'hint';
+    const badge = active ? 'RUNNING' : (run.state === 'error' || failed ? 'GAGAL' : 'SELESAI');
+    meta.textContent = badge + ' \u00b7 ' + String(run.session || '?') +
+      ' \u00b7 ' + String(run.channel || '?') +
+      (run.subagent ? ' \u00b7 subagent dari ' + String(run.parent || '?') : '') +
+      ' \u00b7 ' + ((run.steps || []).length) + ' langkah';
+    li.append(title, meta);
+    const steps = document.createElement('ul');
+    steps.className = 'list';
+    steps.hidden = true;
+    for (const step of run.steps || []) {
+      const item = document.createElement('li');
+      item.className = 'hint';
+      item.textContent = (step.is_error ? '\u00d7 ' : '\u2713 ') + String(step.tool || '?') +
+        ' [' + String(step.verdict || '?') + '] ' + Number(step.duration_ms || 0) + 'ms';
+      steps.appendChild(item);
+    }
+    li.appendChild(steps);
+    li.addEventListener('click', () => { steps.hidden = !steps.hidden; });
+    return li;
+  }
+
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
     const promptEl = $('#jobNewPrompt');
@@ -1358,6 +1421,7 @@
       if (target === 'security') loadSecurity();
       if (target === 'audit') loadAuditQuery(true);
       if (target === 'artifacts') loadArtifacts('');
+      if (target === 'runs') loadRuns();
     });
   });
 
@@ -1404,6 +1468,7 @@
     loadAuditQuery(false);
   });
   $('#btn-refresh-artifacts')?.addEventListener('click', () => loadArtifacts(artifactsDir));
+  $('#btn-refresh-runs')?.addEventListener('click', () => loadRuns());
   $('#btn-artifact-toggle-diff')?.addEventListener('click', () => {
     artifactShowDiff = !artifactShowDiff;
     renderArtifactPreview();

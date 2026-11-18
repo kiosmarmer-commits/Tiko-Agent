@@ -76,6 +76,7 @@ class HttpApiServer {
     this.artifactsListProvider,
     this.artifactsReadProvider,
     this.artifactsDiffProvider,
+    this.runsProvider,
   });
 
   final MessageHandler onMessage;
@@ -452,6 +453,10 @@ class HttpApiServer {
   final Future<Map<String, dynamic>> Function(String dir)? artifactsListProvider;
   final Future<Map<String, dynamic>> Function(String path)? artifactsReadProvider;
   final Future<Map<String, dynamic>> Function(String path)? artifactsDiffProvider;
+
+  /// Run-inspector callback (GUI-P2-04, read-only): snapshot {active, recent,
+  /// truncated} — callback null membuat GET /v1/runs merespons 501.
+  final Future<Map<String, dynamic>> Function()? runsProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -1146,6 +1151,12 @@ class HttpApiServer {
         final result = await (artifactsDiffProvider?.call(filePath) ??
             (throw ApiRequestException(501, 'not_implemented',
                 'artifacts not configured')));
+        _json(req, result);
+      // Run-inspector endpoint (GUI-P2-04, read-only): live + recent turns.
+      } else if (path == '/v1/runs' && req.method == 'GET') {
+        final result = await (runsProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'run inspector not configured')));
         _json(req, result);
       // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {

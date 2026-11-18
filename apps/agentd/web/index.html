@@ -37,6 +37,7 @@
         <button type="button" data-tab="security" aria-pressed="false" aria-controls="tab-security">Security</button>
         <button type="button" data-tab="audit" aria-pressed="false" aria-controls="tab-audit">Audit</button>
         <button type="button" data-tab="artifacts" aria-pressed="false" aria-controls="tab-artifacts">Artifacts</button>
+        <button type="button" data-tab="runs" aria-pressed="false" aria-controls="tab-runs">Runs</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -310,6 +311,14 @@
           <pre id="artifact-content" class="hint" style="max-height:320px;overflow:auto;white-space:pre-wrap;"></pre>
           <p class="hint" id="artifact-note"></p>
         </article>
+      </section>
+
+      <section id="tab-runs" class="tab" hidden aria-label="Runs">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">OBSERVABILITY</p><h1>Runs</h1><p class="subheading">Run-inspector read-only: turn agent aktif, langkah tool, dan subagent di atas endpoint `GET /v1/runs`.</p></div>
+          <button type="button" id="btn-refresh-runs" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="runs-list" class="list"></ul>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">
