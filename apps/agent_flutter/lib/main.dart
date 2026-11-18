@@ -13,6 +13,7 @@ import 'ui/chat_controller.dart';
 import 'ui/gen_ui_view.dart';
 import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
+import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
 import 'ui/theme.dart';
@@ -88,6 +89,7 @@ class _AgentAppState extends State<AgentApp> {
   List<RuntimeEvent> events = [];
   List<TaskItem> tasks = [];
   List<LogFileInfo> logFiles = [];
+  List<SkillItem> skills = [];
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -132,6 +134,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.events(),
         repo.tasks(),
         repo.logs(),
+        repo.skills(),
         repo.memories(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
@@ -144,7 +147,8 @@ class _AgentAppState extends State<AgentApp> {
         events = results[5] as List<RuntimeEvent>;
         tasks = results[6] as List<TaskItem>;
         logFiles = results[7] as List<LogFileInfo>;
-        memories = results[8] as List<MemoryFact>;
+        skills = results[8] as List<SkillItem>;
+        memories = results[9] as List<MemoryFact>;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -172,6 +176,15 @@ class _AgentAppState extends State<AgentApp> {
   Future<void> _applySettings(AppSettings next) async {
     setState(() => settings = next);
     await next.save();
+  }
+
+  Future<bool> _sendSkillFeedback(String slug, bool positive) async {
+    final ok = await repo.skillFeedback(slug, positive);
+    if (ok) {
+      if (mounted) setState(() => adminError = null);
+      unawaited(refreshAdmin());
+    }
+    return ok;
   }
 
   @override
@@ -242,6 +255,7 @@ class _AgentAppState extends State<AgentApp> {
         tasks: tasks,
         logFiles: logFiles,
         events: events,
+        skills: skills,
         online: chat.online,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
@@ -352,6 +366,19 @@ class _AgentAppState extends State<AgentApp> {
           error: adminError,
           onRefresh: refreshAdmin,
           onLoadContent: repo.logContent,
+        );
+      case AppRoute.skills:
+        return SkillsPage(
+          skills: skills,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onFeedback: _sendSkillFeedback,
+          onEvaluate: repo.evaluateSkill,
+          onApprove: repo.approveSkill,
+          onRollback: repo.rollbackSkill,
+          onLoadHistory: repo.skillHistory,
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1103,6 +1130,7 @@ class _MorePage extends StatelessWidget {
     required this.tasks,
     required this.logFiles,
     required this.events,
+    required this.skills,
     required this.online,
     required this.onRefresh,
     required this.onConnect,
@@ -1116,6 +1144,7 @@ class _MorePage extends StatelessWidget {
   final List<TaskItem> tasks;
   final List<LogFileInfo> logFiles;
   final List<RuntimeEvent> events;
+  final List<SkillItem> skills;
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
@@ -1174,6 +1203,32 @@ class _MorePage extends StatelessWidget {
                   error: null,
                   onRefresh: onRefresh,
                   onLoadContent: repo.logContent,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.auto_awesome_outlined),
+          title: Text('Skills (${skills.length})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: SkillsPage(
+                  skills: skills,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onFeedback: (slug, positive) async {
+                    final ok = await repo.skillFeedback(slug, positive);
+                    if (ok) await onRefresh();
+                    return ok;
+                  },
+                  onEvaluate: repo.evaluateSkill,
+                  onApprove: repo.approveSkill,
+                  onRollback: repo.rollbackSkill,
+                  onLoadHistory: repo.skillHistory,
                 ),
               ),
             ));
