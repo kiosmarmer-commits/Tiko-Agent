@@ -687,8 +687,9 @@ class _AgentAppState extends State<AgentApp> {
           onRename: (id, title) async {
             try {
               final ok = await repo.renameSession(id, title);
-              if (!ok)
+              if (!ok) {
                 throw StateError('Sesi tidak ditemukan atau gagal diubah.');
+              }
               await refreshAdmin(force: true);
             } catch (error) {
               if (mounted) {
@@ -699,8 +700,9 @@ class _AgentAppState extends State<AgentApp> {
           onDelete: (id) async {
             try {
               final deleted = await repo.deleteSession(id);
-              if (!deleted)
+              if (!deleted) {
                 throw StateError('Sesi tidak ditemukan atau gagal dihapus.');
+              }
               if (id == sessionKey) {
                 setState(() => sessionKey = 'flutter:default');
                 chat.clearChat();
@@ -896,12 +898,14 @@ class _AgentAppState extends State<AgentApp> {
           onDelete: (id) async {
             try {
               final deleted = await repo.deleteMemory(id);
-              if (!deleted)
+              if (!deleted) {
                 throw StateError('Memori tidak ditemukan atau gagal dihapus.');
+              }
               await refreshAdmin();
             } catch (error) {
-              if (mounted)
+              if (mounted) {
                 setState(() => adminError = 'Gagal menghapus memori: $error');
+              }
             }
           },
           onSaveCurated: _saveCurated,
@@ -2206,10 +2210,11 @@ class _MorePage extends StatelessWidget {
                     onDelete: (id) async {
                       try {
                         final deleted = await repo.deleteMemory(id);
-                        if (!deleted)
+                        if (!deleted) {
                           throw StateError(
                             'Memori tidak ditemukan atau gagal dihapus.',
                           );
+                        }
                         await onRefresh();
                         if (context.mounted) Navigator.of(context).pop();
                       } catch (error) {
