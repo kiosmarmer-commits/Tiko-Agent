@@ -106,16 +106,17 @@ function createHarness() {
     'artifact-preview', 'artifact-preview-title',
     'btn-artifact-toggle-diff', 'btn-artifact-close',
     'artifact-content', 'artifact-note',
+    'runs-list', 'btn-refresh-runs',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -239,6 +240,34 @@ function createHarness() {
           { type: '-', text: 'lama' },
           { type: '+', text: '<script>alert(1)</script>baru' },
         ],
+        truncated: false,
+      };
+      else if (pathname === '/v1/runs') body = globalThis.__mock_empty_runs ? {
+        active: [], recent: [], truncated: false,
+      } : {
+        active: [{
+          id: 'run-1', session: 'web:default', channel: 'web', subagent: false,
+          parent: null, input: '<script>alert(1)</script>kerja tugas',
+          state: 'running', started_at: '2026-11-18T13:00:00.000Z',
+          ended_at: null, duration_ms: null, success: null,
+          tokens_used: 0, tool_calls: 1, answer: null, error: null,
+          steps: [{
+            tool: 'datetime', verdict: 'allowed', is_error: false,
+            duration_ms: 12, at: '2026-11-18T13:00:01.000Z',
+          }],
+        }],
+        recent: [{
+          id: 'run-2', session: 'web:default/sub/1/1', channel: 'web',
+          subagent: true, parent: 'web:default', input: 'sub tugas',
+          state: 'done', started_at: '2026-11-18T12:00:00.000Z',
+          ended_at: '2026-11-18T12:00:02.000Z', duration_ms: 2000,
+          success: true, tokens_used: 80, tool_calls: 1,
+          answer: 'selesai', error: null,
+          steps: [{
+            tool: 'write_file', verdict: 'allowed', is_error: false,
+            duration_ms: 40, at: '2026-11-18T12:00:01.000Z',
+          }],
+        }],
         truncated: false,
       };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
@@ -692,4 +721,47 @@ test('Hapus job mengirim DELETE /v1/jobs/:id', async () => {
   await tick();
   await tick();
   assert.ok(h.calls.some((call) => call.url.endsWith('/v1/jobs/job-1') && call.options.method === 'DELETE'));
+});
+
+test('Runs tab menampilkan run aktif + riwayat dan langkah expand aman XSS', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'runs').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-runs').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/runs')));
+  const items = h.elements['runs-list'].children;
+  assert.equal(items.length, 4);
+  assert.ok(items[0].textContent.includes('AKTIF'));
+  assert.ok(items[1].children[0].textContent.includes('kerja tugas'));
+  assert.ok(items[1].children[1].textContent.includes('RUNNING'));
+  assert.ok(items[1].children[1].textContent.includes('1 langkah'));
+  assert.ok(items[3].children[1].textContent.includes('subagent dari web:default'));
+
+  assert.equal(items[1].children[2].hidden, true);
+  items[1].dispatch('click');
+  assert.equal(items[1].children[2].hidden, false);
+  const stepItems = items[1].children[2].children;
+  assert.equal(stepItems.length, 1);
+  assert.ok(stepItems[0].textContent.includes('\u2713 datetime'));
+  assert.ok(stepItems[0].textContent.includes('[allowed] 12ms'));
+  assert.ok(!items[1].innerHTML?.includes('<script>'));
+
+  h.elements['btn-refresh-runs'].dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/runs')).length >= 2);
+});
+
+test('Runs kosong menampilkan placeholder', async () => {
+  const h = createHarness();
+  globalThis.__mock_empty_runs = true;
+  try {
+    h.tabs.find((tab) => tab.dataset.tab === 'runs').dispatch('click');
+    await tick();
+    await tick();
+    assert.ok(h.elements['runs-list'].children[0].textContent.includes('Belum ada run terekam.'));
+  } finally {
+    globalThis.__mock_empty_runs = false;
+  }
 });

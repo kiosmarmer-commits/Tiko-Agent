@@ -1022,3 +1022,113 @@ class ArtifactDiff {
         truncated: map['truncated'] == true,
       );
 }
+
+/// Run-inspector (GUI-P2-04): satu langkah tool dalam run agent.
+class RunStepEntry {
+  const RunStepEntry({
+    required this.tool,
+    required this.verdict,
+    required this.isError,
+    required this.durationMs,
+    required this.at,
+  });
+  final String tool;
+  final String verdict;
+  final bool isError;
+  final int durationMs;
+  final String at;
+
+  factory RunStepEntry.fromMap(Map<String, dynamic> map) => RunStepEntry(
+        tool: '${map['tool'] ?? ''}',
+        verdict: '${map['verdict'] ?? ''}',
+        isError: map['is_error'] == true,
+        durationMs: (map['duration_ms'] as num?)?.toInt() ?? 0,
+        at: '${map['at'] ?? ''}',
+      );
+}
+
+/// Run-inspector (GUI-P2-04): satu run agent (turn) aktif atau riwayat.
+class RunEntry {
+  const RunEntry({
+    required this.id,
+    required this.session,
+    required this.channel,
+    required this.subagent,
+    required this.parent,
+    required this.input,
+    required this.state,
+    required this.startedAt,
+    required this.endedAt,
+    required this.durationMs,
+    required this.success,
+    required this.tokensUsed,
+    required this.toolCalls,
+    required this.answer,
+    required this.error,
+    required this.steps,
+  });
+  final String id;
+  final String session;
+  final String channel;
+  final bool subagent;
+  final String? parent;
+  final String input;
+  final String state;
+  final String startedAt;
+  final String? endedAt;
+  final int? durationMs;
+  final bool? success;
+  final int tokensUsed;
+  final int toolCalls;
+  final String? answer;
+  final String? error;
+  final List<RunStepEntry> steps;
+
+  bool get running => state == 'running';
+
+  factory RunEntry.fromMap(Map<String, dynamic> map) => RunEntry(
+        id: '${map['id'] ?? ''}',
+        session: '${map['session'] ?? ''}',
+        channel: '${map['channel'] ?? ''}',
+        subagent: map['subagent'] == true,
+        parent: map['parent'] == null ? null : '${map['parent']}',
+        input: '${map['input'] ?? ''}',
+        state: '${map['state'] ?? 'running'}',
+        startedAt: '${map['started_at'] ?? ''}',
+        endedAt: map['ended_at'] == null ? null : '${map['ended_at']}',
+        durationMs: (map['duration_ms'] as num?)?.toInt(),
+        success: map['success'] == null ? null : map['success'] == true,
+        tokensUsed: (map['tokens_used'] as num?)?.toInt() ?? 0,
+        toolCalls: (map['tool_calls'] as num?)?.toInt() ?? 0,
+        answer: map['answer'] == null ? null : '${map['answer']}',
+        error: map['error'] == null ? null : '${map['error']}',
+        steps: [
+          for (final s in map['steps'] as List? ?? const [])
+            RunStepEntry.fromMap(Map<String, dynamic>.from(s as Map)),
+        ],
+      );
+}
+
+/// Run-inspector (GUI-P2-04): snapshot {active, recent, truncated}.
+class RunsSnapshot {
+  const RunsSnapshot({
+    required this.active,
+    required this.recent,
+    required this.truncated,
+  });
+  final List<RunEntry> active;
+  final List<RunEntry> recent;
+  final bool truncated;
+
+  factory RunsSnapshot.fromMap(Map<String, dynamic> map) => RunsSnapshot(
+        active: [
+          for (final r in map['active'] as List? ?? const [])
+            RunEntry.fromMap(Map<String, dynamic>.from(r as Map)),
+        ],
+        recent: [
+          for (final r in map['recent'] as List? ?? const [])
+            RunEntry.fromMap(Map<String, dynamic>.from(r as Map)),
+        ],
+        truncated: map['truncated'] == true,
+      );
+}

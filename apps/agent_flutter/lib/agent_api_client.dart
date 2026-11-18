@@ -393,6 +393,15 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Run-inspector (GUI-P2-04, read-only): snapshot turn aktif + riwayat.
+  Future<Map<String, dynamic>> listRuns() async {
+    final res = await _http
+        .get(_u('/v1/runs'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'runs');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
   /// typed (400/404/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listJobs() async {

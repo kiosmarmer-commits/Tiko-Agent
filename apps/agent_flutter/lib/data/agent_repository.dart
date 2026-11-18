@@ -54,6 +54,7 @@ abstract class AgentRepository {
   Future<ArtifactsListing> artifacts({String dir = ''});
   Future<ArtifactContent> artifactRead(String path);
   Future<ArtifactDiff> artifactDiff(String path);
+  Future<RunsSnapshot> runInspector();
   Future<JobInfo> createJob(Map<String, dynamic> body);
   Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
   Future<bool> deleteJob(String id);
@@ -256,6 +257,10 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<ArtifactDiff> artifactDiff(String path) async =>
       ArtifactDiff.fromMap(await _guard(() => _client.diffArtifact(path)));
+
+  @override
+  Future<RunsSnapshot> runInspector() async =>
+      RunsSnapshot.fromMap(await _guard(_client.listRuns));
 
   @override
   Future<JobsSnapshot> jobs() async => JobsSnapshot.fromMap({

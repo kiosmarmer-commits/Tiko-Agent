@@ -75,6 +75,190 @@ class ChatRunResult {
       };
 }
 
+/// One recorded tool step inside an inspected run (Run-inspector).
+class RunStep {
+  const RunStep({
+    required this.tool,
+    required this.verdict,
+    required this.isError,
+    required this.durationMs,
+    required this.at,
+  });
+  final String tool;
+  final String verdict;
+  final bool isError;
+  final int durationMs;
+  final String at;
+
+  Map<String, dynamic> toJson() => {
+        'tool': tool,
+        'verdict': verdict,
+        'is_error': isError,
+        'duration_ms': durationMs,
+        'at': at,
+      };
+}
+
+/// Live/recent record of one agent turn (Run-inspector). Runs are kept in a
+/// bounded in-memory ring — nothing here is a security decision; every field
+/// is sanitized by the caller (same [SecuritySanitizer] used for chat).
+class InspectedRun {
+  InspectedRun({
+    required this.id,
+    required this.session,
+    required this.channel,
+    required this.input,
+  })  : startedAt = DateTime.now().toUtc().toIso8601String(),
+        subagent = session.contains('/sub/'),
+        parent = session.contains('/sub/')
+            ? session.substring(0, session.indexOf('/sub/'))
+            : null;
+  final String id;
+  final String session;
+  final String channel;
+  final String input;
+  final bool subagent;
+  final String? parent;
+  final String startedAt;
+  String state = 'running';
+  DateTime? endedAt;
+  int? durationMs;
+  bool? success;
+  int tokensUsed = 0;
+  int toolCalls = 0;
+  String? answer;
+  String? error;
+  final List<RunStep> steps = [];
+
+  Map<String, dynamic> toJson({bool includeSteps = true}) {
+    return {
+      'id': id,
+      'session': session,
+      'channel': channel,
+      'subagent': subagent,
+      'parent': parent,
+      'input': input,
+      'state': state,
+      'started_at': startedAt,
+      'ended_at': endedAt?.toIso8601String(),
+      'duration_ms': durationMs,
+      'success': success,
+      'tokens_used': tokensUsed,
+      'tool_calls': toolCalls,
+      'answer': answer,
+      'error': error,
+      'steps': includeSteps
+          ? steps.map((s) => s.toJson()).toList()
+          : <Map<String, dynamic>>[],
+    };
+  }
+}
+
+/// Live turn registry backing the Run-inspector (GUI-P2-04). Purely
+/// observational: begin/record/finish are called around each turn, never
+/// influence the turn itself. Bounded memory: recent run ring + step cap.
+class TurnInspector {
+  static const int _maxRuns = 50;
+  static const int _maxStepsPerRun = 100;
+  final List<InspectedRun> _runs = [];
+  int _seq = 0;
+
+  InspectedRun begin({
+    required String session,
+    required String channel,
+    required String input,
+  }) {
+    final entry = InspectedRun(
+      id: 'run-${DateTime.now().microsecondsSinceEpoch}-${++_seq}',
+      session: session,
+      channel: channel,
+      input: input,
+    );
+    _runs.add(entry);
+    while (_runs.length > _maxRuns) {
+      _runs.removeAt(0);
+    }
+    return entry;
+  }
+
+  /// Live tool step; matches by run id (unique per entry, even when several
+  /// same-session runs nest via internal commands).
+  void recordTool(
+    String runId, {
+    required String tool,
+    required String verdict,
+    required bool isError,
+    required int durationMs,
+  }) {
+    final entry = _entry(runId);
+    if (entry == null || entry.steps.length >= _maxStepsPerRun) return;
+    entry.steps.add(RunStep(
+      tool: tool,
+      verdict: verdict,
+      isError: isError,
+      durationMs: durationMs,
+      at: DateTime.now().toUtc().toIso8601String(),
+    ));
+  }
+
+  void finish(
+    String runId, {
+    required bool success,
+    required int tokensUsed,
+    required int toolCalls,
+    String? answer,
+  }) {
+    final entry = _entry(runId);
+    if (entry == null || entry.state != 'running') return;
+    entry
+      ..state = 'done'
+      ..endedAt = DateTime.now().toUtc()
+      ..success = success
+      ..tokensUsed = tokensUsed
+      ..toolCalls = toolCalls
+      ..answer = answer
+      ..durationMs = entry.endedAt!.difference(DateTime.parse(entry.startedAt)).inMilliseconds;
+  }
+
+  void fail(String runId, {required String error}) {
+    final entry = _entry(runId);
+    if (entry == null || entry.state != 'running') return;
+    entry
+      ..state = 'error'
+      ..endedAt = DateTime.now().toUtc()
+      ..success = false
+      ..error = error
+      ..durationMs = entry.endedAt!.difference(DateTime.parse(entry.startedAt)).inMilliseconds;
+  }
+
+  InspectedRun? _entry(String runId) {
+    for (var i = _runs.length - 1; i >= 0; i--) {
+      if (_runs[i].id == runId) return _runs[i];
+    }
+    return null;
+  }
+
+  /// `{active: [...running], recent: [...done/error newest first],
+  /// truncated}` — [maxRuns] caps each list.
+  Map<String, dynamic> snapshot({int maxRuns = 40}) {
+    final cap = maxRuns.clamp(1, _maxRuns);
+    final active = <Map<String, dynamic>>[];
+    final recent = <Map<String, dynamic>>[];
+    for (final run in _runs.reversed) {
+      if (run.state == 'running') {
+        if (active.length < cap) active.add(run.toJson());
+      } else if (recent.length < cap) {
+        recent.add(run.toJson());
+      }
+    }
+    return {
+      'active': active,
+      'recent': recent,
+      'truncated': _runs.length >= _maxRuns,
+    };
+  }
+}
+
 class DoctorCheck {
   const DoctorCheck(this.name, this.status, this.detail);
   final String name;
@@ -356,6 +540,9 @@ class TikoRuntime {
   final TaintTracker _taint = TaintTracker();
   final SessionLock _lock = SessionLock();
   final SecuritySanitizer _sanitizer = SecuritySanitizer();
+
+  /// Run-inspector (GUI-P2-04): live/recent registry of agent turns.
+  final TurnInspector turnInspector = TurnInspector();
 
   /// Cooperative cancellation registry keyed by session id (P1-11). One live
   /// token per running turn; subagent turns chain to their parent's token so
@@ -1489,6 +1676,9 @@ class TikoRuntime {
       )).text;
 
   /// One agent turn with explicit completion status for durable queues/jobs.
+  /// Instrumented for the Run-inspector: every call registers a bounded-run
+  /// entry (input preview, tool steps, outcome) observable via
+  /// [turnInspectorSnapshot].
   Future<ChatRunResult> chatWithStatus(
     String text, {
     String sessionId = 'cli:default',
@@ -1502,6 +1692,60 @@ class TikoRuntime {
     void Function(String delta)? onTextDelta,
     bool internalCommand = false,
     String? interruptNote,
+  }) async {
+    final inputPreview = _sanitizer.output(
+      text.length > 240 ? '${text.substring(0, 240)}…' : text,
+    );
+    final entry = turnInspector.begin(
+      session: sessionId,
+      channel: channel,
+      input: inputPreview,
+    );
+    try {
+      final result = await _chatWithStatusCore(
+        text,
+        sessionId: sessionId,
+        channel: channel,
+        userKey: userKey,
+        confirm: confirm,
+        gateOverride: gateOverride,
+        configOverride: configOverride,
+        toolFilter: toolFilter,
+        onTextDelta: onTextDelta,
+        internalCommand: internalCommand,
+        interruptNote: interruptNote,
+        turnEntry: entry,
+      );
+      turnInspector.finish(
+        entry.id,
+        success: result.success,
+        tokensUsed: result.tokensUsed,
+        toolCalls: result.toolCallCount,
+        answer: _sanitizer.output(
+          result.text.length > 240 ? '${result.text.substring(0, 240)}…' : result.text,
+        ),
+      );
+      return result;
+    } catch (error) {
+      turnInspector.fail(entry.id, error: _sanitizer.output('$error'));
+      rethrow;
+    }
+  }
+
+  Future<ChatRunResult> _chatWithStatusCore(
+    String text, {
+    String sessionId = 'cli:default',
+    String channel = 'cli',
+    String userKey = 'local',
+    Future<bool> Function(ToolCall call, Session session, String approvalId)?
+        confirm,
+    PermissionGate? gateOverride,
+    AgentConfig? configOverride,
+    Set<String>? toolFilter,
+    void Function(String delta)? onTextDelta,
+    bool internalCommand = false,
+    String? interruptNote,
+    InspectedRun? turnEntry,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
     // luarnya — SessionLock tidak re-entrant.
@@ -1686,6 +1930,16 @@ class TikoRuntime {
         onTextDelta:
             onTextDelta == null ? null : (d) => onTextDelta(_sanitizer.output(d)),
         audit: (call, verdict, result) {
+          final entry = turnEntry;
+          if (entry != null) {
+            turnInspector.recordTool(
+              entry.id,
+              tool: call.name,
+              verdict: verdict.verdict.name,
+              isError: result.isError,
+              durationMs: result.durationMs ?? 0,
+            );
+          }
           evidence.recordCall(result.callId, call.name, result.content);
           unawaited(plugins.dispatchAfterToolCall(
             ToolHookInput(
@@ -2425,6 +2679,13 @@ class TikoRuntime {
       if (b < 9 || (b > 13 && b < 32)) suspicious++;
     }
     return count > 0 && suspicious * 100 > count * 10;
+  }
+
+  /// Run-inspector (GUI-P2-04, read-only): snapshot turn aktif + riwayat
+  /// terbaru ({active, recent, truncated}); input/answer sudah disanitasi
+  /// [SecuritySanitizer] saat direkam, steps dibatasi per run.
+  Map<String, dynamic> turnInspectorSnapshot({int limit = 40}) {
+    return turnInspector.snapshot(maxRuns: limit);
   }
 
   /// Katalog tool terdaftar di registry host (GUI-P1-06, read-only):

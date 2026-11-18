@@ -21,6 +21,7 @@ import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
 import 'ui/audit_page.dart';
+import 'ui/runs_page.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
@@ -117,6 +118,9 @@ class _AgentAppState extends State<AgentApp> {
   ArtifactDiff? artifactDiff;
   bool loadingArtifacts = false;
   String? artifactsError;
+  RunsSnapshot? runsSnapshot;
+  bool runsLoading = false;
+  String? runsError;
   bool auditLoading = false;
   String? auditError;
   List<MemoryFact> memories = [];
@@ -299,6 +303,22 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  Future<void> _loadRuns() async {
+    setState(() {
+      runsLoading = true;
+      runsError = null;
+    });
+    try {
+      final snapshot = await repo.runInspector();
+      if (!mounted) return;
+      setState(() => runsSnapshot = snapshot);
+    } catch (e) {
+      if (mounted) setState(() => runsError = e.toString());
+    } finally {
+      if (mounted) setState(() => runsLoading = false);
+    }
+  }
+
   void updateConnection({required String base, required String tok}) {
     setState(() {
       baseUrl = base;
@@ -385,6 +405,9 @@ class _AgentAppState extends State<AgentApp> {
         artifactsListing == null) {
       unawaited(_loadArtifacts());
     }
+    if (next == AppRoute.runs && runsSnapshot == null) {
+      unawaited(_loadRuns());
+    }
     if (next != AppRoute.chat) unawaited(refreshAdmin());
   }
 
@@ -426,6 +449,10 @@ class _AgentAppState extends State<AgentApp> {
         onOpenArtifactsDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
         onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
         onCloseArtifactPreview: () => _openArtifact(''),
+        runsSnapshot: runsSnapshot,
+        runsLoading: runsLoading,
+        runsError: runsError,
+        onLoadRuns: _loadRuns,
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
@@ -672,6 +699,14 @@ class _AgentAppState extends State<AgentApp> {
           onOpenFile: (path) => unawaited(_openArtifact(path)),
           onClosePreview: () => _openArtifact(''),
           onRefresh: () => _loadArtifacts(dir: artifactsDir),
+        );
+      case AppRoute.runs:
+        return RunsPage(
+          snapshot: runsSnapshot,
+          online: chat.online,
+          loading: runsLoading,
+          error: runsError,
+          onRefresh: _loadRuns,
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1443,6 +1478,10 @@ class _MorePage extends StatelessWidget {
     required this.onOpenArtifactsDir,
     required this.onOpenArtifactFile,
     required this.onCloseArtifactPreview,
+    required this.runsSnapshot,
+    required this.runsLoading,
+    required this.runsError,
+    required this.onLoadRuns,
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
@@ -1477,6 +1516,10 @@ class _MorePage extends StatelessWidget {
   final void Function(String dir) onOpenArtifactsDir;
   final void Function(String path) onOpenArtifactFile;
   final VoidCallback onCloseArtifactPreview;
+  final RunsSnapshot? runsSnapshot;
+  final bool runsLoading;
+  final String? runsError;
+  final Future<void> Function() onLoadRuns;
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
@@ -1751,6 +1794,27 @@ class _MorePage extends StatelessWidget {
                   onOpenFile: onOpenArtifactFile,
                   onClosePreview: onCloseArtifactPreview,
                   onRefresh: () async { onOpenArtifactsDir(artifactsDir); },
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.play_circle_outline),
+          title: Text('Runs'
+              '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}'),
+          onTap: () {
+            onLoadRuns();
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: SafeArea(
+                  child: RunsPage(
+                    snapshot: runsSnapshot,
+                    online: online,
+                    loading: runsLoading,
+                    error: runsError,
+                    onRefresh: onLoadRuns,
+                  ),
                 ),
               ),
             ));
