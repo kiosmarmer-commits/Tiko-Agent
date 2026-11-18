@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_flutter/agent_api_client.dart';
 import 'package:agent_flutter/data/models.dart';
 import 'package:agent_flutter/ui/tasks_view.dart';
 import 'package:agent_flutter/ui/events_view.dart';

@@ -1100,6 +1100,9 @@ class _MorePage extends StatelessWidget {
     required this.baseUrl,
     required this.token,
     required this.memories,
+    required this.tasks,
+    required this.logFiles,
+    required this.events,
     required this.online,
     required this.onRefresh,
     required this.onConnect,
@@ -1143,7 +1146,7 @@ class _MorePage extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.bolt_outlined),
-          title: Text('Events (${eventTypes.length})'),
+          title: Text('Events (${events.length})'),
           onTap: () {
             Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => Scaffold(
