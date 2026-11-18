@@ -770,6 +770,60 @@ Future<void> main(List<String> args) async {
             await raf.close();
           }
         },
+        listBots: () async =>
+            rt.botStore.list().map((b) => b.toJson()).toList(),
+        getBot: (id) async => rt.botStore.get(id)?.toJson(),
+        createBot: (body) async {
+          final id = body['id'] as String;
+          if (rt.botStore.get(id) != null) {
+            throw ApiRequestException(409, 'conflict', 'bot "$id" sudah ada');
+          }
+          final profile = await rt.botStore.create(
+            id: id,
+            name: (body['name'] as String).trim(),
+            persona: (body['persona'] as String?) ?? '',
+            model: body['model'] as String?,
+            greeting: (body['greeting'] as String?) ?? '',
+          );
+          final allowlist = (body['tool_allowlist'] as List?)?.cast<String>().toList();
+          if (allowlist == null || allowlist.isEmpty) return profile.toJson();
+          final updated = await rt.botStore
+              .update(id, (b) => b.copyWith(toolAllowlist: allowlist));
+          return updated.toJson();
+        },
+        updateBot: (id, body) async {
+          final current = rt.botStore.get(id);
+          if (current == null) return null;
+          final updated = current.copyWith(
+            name: (body['name'] as String?)?.trim(),
+            persona: body['persona'] as String?,
+            model: body['model'] as String?,
+            clearModel: body.containsKey('model') && body['model'] == null,
+            greeting: body['greeting'] as String?,
+            toolAllowlist: (body['tool_allowlist'] as List?)?.cast<String>().toList(),
+          );
+          final saved = await rt.botStore.update(id, (_) => updated);
+          return saved.toJson();
+        },
+        deleteBot: (id) async {
+          if (rt.botStore.get(id) == null) return false;
+          await rt.botStore.delete(id);
+          return true;
+        },
+        listBotBindings: () async => rt.botStore.bindings(),
+        bindBot: (botId, sessionId) async {
+          if (rt.botStore.get(botId) == null) return false;
+          await rt.botStore.bind(sessionId, botId);
+          return true;
+        },
+        unbindBot: (botId, sessionId) async {
+          if (rt.botStore.get(botId) == null ||
+              rt.botStore.boundBotId(sessionId) != botId) {
+            return false;
+          }
+          await rt.botStore.unbind(sessionId);
+          return true;
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

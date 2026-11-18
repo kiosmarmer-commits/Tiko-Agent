@@ -13,6 +13,7 @@ import 'ui/chat_controller.dart';
 import 'ui/gen_ui_view.dart';
 import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
+import 'ui/bot_manager_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -90,6 +91,8 @@ class _AgentAppState extends State<AgentApp> {
   List<TaskItem> tasks = [];
   List<LogFileInfo> logFiles = [];
   List<SkillItem> skills = [];
+  List<BotProfileItem> bots = [];
+  Map<String, String> botBindings = {};
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -135,6 +138,8 @@ class _AgentAppState extends State<AgentApp> {
         repo.tasks(),
         repo.logs(),
         repo.skills(),
+        repo.bots(),
+        repo.botBindings(),
         repo.memories(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
@@ -148,7 +153,9 @@ class _AgentAppState extends State<AgentApp> {
         tasks = results[6] as List<TaskItem>;
         logFiles = results[7] as List<LogFileInfo>;
         skills = results[8] as List<SkillItem>;
-        memories = results[9] as List<MemoryFact>;
+        bots = results[9] as List<BotProfileItem>;
+        botBindings = results[10] as Map<String, String>;
+        memories = results[11] as List<MemoryFact>;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -185,6 +192,12 @@ class _AgentAppState extends State<AgentApp> {
       unawaited(refreshAdmin());
     }
     return ok;
+  }
+
+  Future<void> _mutateBots(Future<void> Function() action) async {
+    await action();
+    if (mounted) setState(() => adminError = null);
+    unawaited(refreshAdmin(force: true));
   }
 
   @override
@@ -256,6 +269,8 @@ class _AgentAppState extends State<AgentApp> {
         logFiles: logFiles,
         events: events,
         skills: skills,
+        bots: bots,
+        bindings: botBindings,
         online: chat.online,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
@@ -379,6 +394,33 @@ class _AgentAppState extends State<AgentApp> {
           onApprove: repo.approveSkill,
           onRollback: repo.rollbackSkill,
           onLoadHistory: repo.skillHistory,
+        );
+      case AppRoute.bots:
+        return BotsPage(
+          bots: bots,
+          bindings: botBindings,
+          availableSessions: [for (final s in sessions) s.id],
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onCreate: (body) => _mutateBots(() => repo.createBot(body)),
+          onUpdate: (id, body) => _mutateBots(() => repo.updateBot(id, body)),
+          onDelete: (id) async {
+            final ok = await repo.deleteBot(id);
+            if (ok) unawaited(refreshAdmin(force: true));
+            return ok;
+          },
+          onBind: (botId, sessionId) async {
+            final ok = await repo.bindBot(botId, sessionId);
+            if (ok) unawaited(refreshAdmin(force: true));
+            return ok;
+          },
+          onUnbind: (botId, sessionId) async {
+            final ok = await repo.unbindBot(botId, sessionId);
+            if (ok) unawaited(refreshAdmin(force: true));
+            return ok;
+          },
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1131,6 +1173,8 @@ class _MorePage extends StatelessWidget {
     required this.logFiles,
     required this.events,
     required this.skills,
+    required this.bots,
+    required this.bindings,
     required this.online,
     required this.onRefresh,
     required this.onConnect,
@@ -1145,6 +1189,8 @@ class _MorePage extends StatelessWidget {
   final List<LogFileInfo> logFiles;
   final List<RuntimeEvent> events;
   final List<SkillItem> skills;
+  final List<BotProfileItem> bots;
+  final Map<String, String> bindings;
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
@@ -1229,6 +1275,36 @@ class _MorePage extends StatelessWidget {
                   onApprove: repo.approveSkill,
                   onRollback: repo.rollbackSkill,
                   onLoadHistory: repo.skillHistory,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.smart_toy_outlined),
+          title: Text('Bots (${bots.length})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: BotsPage(
+                  bots: bots,
+                  bindings: bindings,
+                  availableSessions: const [],
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onCreate: (body) async {
+                    await repo.createBot(body);
+                    await onRefresh();
+                  },
+                  onUpdate: (id, body) async {
+                    await repo.updateBot(id, body);
+                    await onRefresh();
+                  },
+                  onDelete: repo.deleteBot,
+                  onBind: repo.bindBot,
+                  onUnbind: repo.unbindBot,
                 ),
               ),
             ));

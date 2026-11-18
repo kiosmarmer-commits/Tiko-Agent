@@ -233,6 +233,82 @@ class AgentApiClient {
     }
   }
 
+  /// Bot manager (GUI-P1-04). Backend memakai error model typed
+  /// (401/400/404/409/501), jadi cukup `_throwIf`.
+  Future<List<Map<String, dynamic>>> listBots() async {
+    final res = await _http
+        .get(_u('/v1/bots'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'bots');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['bots'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createBot(Map<String, dynamic> body) async {
+    final res = await _http
+        .post(_u('/v1/bots'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'create bot');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateBot(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .patch(_u('/v1/bots/$safeId'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'update bot');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<bool> deleteBot(String id) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .delete(_u('/v1/bots/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['deleted'] == true;
+  }
+
+  Future<Map<String, String>> listBotBindings() async {
+    final res = await _http
+        .get(_u('/v1/bots/bindings'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'bot bindings');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final raw = json['bindings'] as Map? ?? const {};
+    return <String, String>{
+      for (final e in raw.entries) e.key: '${e.value}',
+    };
+  }
+
+  Future<bool> bindBot(String botId, String sessionId) async {
+    final safeId = Uri.encodeComponent(botId);
+    final res = await _http
+        .post(_u('/v1/bots/$safeId/bind'),
+            headers: _headers, body: jsonEncode({'session_id': sessionId}))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
+  Future<bool> unbindBot(String botId, String sessionId) async {
+    final safeId = Uri.encodeComponent(botId);
+    final res = await _http
+        .post(_u('/v1/bots/$safeId/unbind'),
+            headers: _headers, body: jsonEncode({'session_id': sessionId}))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
   Future<List<Map<String, dynamic>>> listMemories() async {
     final res = await _http.get(_u('/v1/memories'), headers: _headers);
     _throwIf(res, 'memories');
