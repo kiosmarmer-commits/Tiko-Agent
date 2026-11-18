@@ -77,6 +77,12 @@ class HttpApiServer {
     this.artifactsReadProvider,
     this.artifactsDiffProvider,
     this.runsProvider,
+    this.memoryCuratedProvider,
+    this.memoryCuratedSetProvider,
+    this.memoryLayersProvider,
+    this.memoryLayerAddProvider,
+    this.memoryLayerDeleteProvider,
+    this.memoryRagProvider,
   });
 
   final MessageHandler onMessage;
@@ -195,6 +201,107 @@ class HttpApiServer {
           400, 'invalid_request', "$field mengandung karakter invalid");
     }
     return value;
+  }
+
+  /// Validasi payload PATCH /v1/memory/curated (GUI-P1-12): pilih file
+  /// kurasi ('memory'/'user') + teks pengganti (string, sane cap).
+  Map<String, dynamic> _validateMemoryCuratedPatch(Object? raw) {
+    if (raw is! Map<String, dynamic>) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'body JSON object wajib');
+    }
+    final file = raw['file'];
+    if (file is! String || (file != 'memory' && file != 'user')) {
+      throw ApiRequestException(
+          400, 'invalid_request', "file wajib 'memory' atau 'user'");
+    }
+    final text = raw['text'];
+    if (text is! String) {
+      throw ApiRequestException(400, 'invalid_request', 'text string wajib');
+    }
+    if (text.length > 200000) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'text maksimal 200000 karakter');
+    }
+    return {'file': file, 'text': text};
+  }
+
+  /// Normalisasi query string GET /v1/memory/layers (GUI-P1-12):
+  /// q (opsional, substr retrieval) + limit 1..500.
+  Map<String, dynamic> _parseMemoryLayersQuery(Map<String, String> q) {
+    var limit = 200;
+    final rawLimit = q['limit']?.trim() ?? '';
+    if (rawLimit.isNotEmpty) {
+      final parsed = int.tryParse(rawLimit);
+      if (parsed == null) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'limit harus bilangan');
+      }
+      if (parsed < 1 || parsed > 500) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'limit wajib 1..500');
+      }
+      limit = parsed;
+    }
+    final query = q['q']?.trim() ?? '';
+    return {
+      'q': query.isEmpty ? null : (query.length > 256 ? null : query),
+      'limit': limit,
+    };
+  }
+
+  /// Validasi payload POST /v1/memory/layers (GUI-P1-12): layer enum,
+  /// text wajib, importance 0..1, tags maks 12.
+  Map<String, dynamic> _validateMemoryLayerPayload(Object? raw) {
+    if (raw is! Map<String, dynamic>) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'body JSON object wajib');
+    }
+    final layer = raw['layer'];
+    if (layer is! String ||
+        !['episodic', 'semantic', 'procedural'].contains(layer)) {
+      throw ApiRequestException(400, 'invalid_request',
+          'layer wajib episodic/semantic/procedural');
+    }
+    final text = raw['text'];
+    if (text is! String || text.trim().isEmpty) {
+      throw ApiRequestException(400, 'invalid_request', 'text wajib diisi');
+    }
+    if (text.length > 20000) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'text maksimal 20000 karakter');
+    }
+    final importanceRaw = raw['importance'];
+    if (importanceRaw is! num && importanceRaw != null) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'importance harus angka');
+    }
+    final importance = (importanceRaw as num?)?.toDouble();
+    if (importance != null && (importance < 0 || importance > 1)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'importance wajib 0..1');
+    }
+    final tagsRaw = raw['tags'];
+    if (tagsRaw is! List && tagsRaw != null) {
+      throw ApiRequestException(400, 'invalid_request', 'tags harus array');
+    }
+    final tags = <String>[
+      for (final tag in (tagsRaw as List? ?? const []))
+        if (tag is String && tag.trim().isNotEmpty)
+          (tag.trim().length > 64 ? tag.trim().substring(0, 64) : tag.trim()),
+    ];
+    if (tags.length > 12) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'tags maksimal 12');
+    }
+    return {
+      'layer': layer,
+      'text': text,
+      'importance': importance ?? 0.5,
+      'tags': tags,
+      if (raw['owner_key'] is String) 'owner_key': raw['owner_key'],
+      if (raw['source_session'] is String) 'source_session': raw['source_session'],
+    };
   }
 
   /// Normalisasi + validasi query string /v1/audit menjadi filter typed.
@@ -457,6 +564,20 @@ class HttpApiServer {
   /// Run-inspector callback (GUI-P2-04, read-only): snapshot {active, recent,
   /// truncated} — callback null membuat GET /v1/runs merespons 501.
   final Future<Map<String, dynamic>> Function()? runsProvider;
+
+  /// Memory Explorer callbacks (GUI-P1-12): kurasi MEMORY.md/USER.md
+  /// (read + replace dengan anggaran), entri berlapis (list/add/delete),
+  /// dan sumber RAG per dokumen — callback null membuat endpoint terkait
+  /// merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function()? memoryCuratedProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      memoryCuratedSetProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> filters)?
+      memoryLayersProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      memoryLayerAddProvider;
+  final Future<bool> Function(String id)? memoryLayerDeleteProvider;
+  final Future<Map<String, dynamic>> Function()? memoryRagProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -1157,6 +1278,55 @@ class HttpApiServer {
         final result = await (runsProvider?.call() ??
             (throw ApiRequestException(501, 'not_implemented',
                 'run inspector not configured')));
+        _json(req, result);
+      // Memory Explorer endpoints (GUI-P1-12): kurasi, lapisan, RAG.
+      } else if (path == '/v1/memory/curated' && req.method == 'GET') {
+        final result = await (memoryCuratedProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
+        _json(req, result);
+      } else if (path == '/v1/memory/curated' && req.method == 'PATCH') {
+        final body = _validateMemoryCuratedPatch(
+            jsonDecode(await utf8.decoder.bind(req).join()));
+        final result = await (memoryCuratedSetProvider?.call(body) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
+        _json(req, result);
+      } else if (path == '/v1/memory/layers' && req.method == 'GET') {
+        final result = await (memoryLayersProvider?.call(
+                _parseMemoryLayersQuery(req.uri.queryParameters)) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
+        _json(req, result);
+      } else if (path == '/v1/memory/layers' && req.method == 'POST') {
+        final body = _validateMemoryLayerPayload(
+            jsonDecode(await utf8.decoder.bind(req).join()));
+        final result = await (memoryLayerAddProvider?.call(body) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
+        req.response.statusCode = 201;
+        _json(req, result);
+      } else if (path.startsWith('/v1/memory/layers/') &&
+          req.method == 'DELETE') {
+        final id = Uri.decodeComponent(
+            path.substring('/v1/memory/layers/'.length));
+        if (id.isEmpty) {
+          _error(req, 400, 'invalid_request', 'id wajib diisi');
+          return;
+        }
+        final ok = await (memoryLayerDeleteProvider?.call(id) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
+        if (!ok) {
+          _error(req, 404, 'not_found',
+              'entri berlapis tidak ditemukan: $id');
+          return;
+        }
+        _json(req, {'ok': true, 'id': id});
+      } else if (path == '/v1/memory/rag' && req.method == 'GET') {
+        final result = await (memoryRagProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'memory explorer not configured')));
         _json(req, result);
       // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {

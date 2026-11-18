@@ -2688,6 +2688,157 @@ class TikoRuntime {
     return turnInspector.snapshot(maxRuns: limit);
   }
 
+  String get _layeredMemoryPath => p.join(dataDir, 'layered_memory.json');
+
+  /// Memory Explorer (GUI-P1-12, read): isi kurasi MEMORY.md/USER.md +
+  /// anggaran karakter.
+  Map<String, dynamic> memoryCuratedGet() => {
+        'memory': {
+          'text': curatedMemory.memoryText,
+          'chars': curatedMemory.memoryText.length,
+        },
+        'user': {
+          'text': curatedMemory.userText,
+          'chars': curatedMemory.userText.length,
+        },
+        'budget': curatedMemory.charBudget,
+        'used': curatedMemory.usedChars,
+      };
+
+  /// Memory Explorer (GUI-P1-12, write): ganti penuh satu file kurasi.
+  /// Gagal (ArgumentError -> 400) bila gabungan kedua file melebihi anggaran.
+  Future<Map<String, dynamic>> memoryCuratedSet({
+    required String file,
+    required String text,
+  }) async {
+    final isUser = file == 'user';
+    if (!isUser && file != 'memory') {
+      throw ArgumentError("file harus 'memory' atau 'user'");
+    }
+    final projected = curatedMemory.usedChars -
+        (isUser
+            ? curatedMemory.userText.length
+            : curatedMemory.memoryText.length) +
+        text.length;
+    if (projected > curatedMemory.charBudget) {
+      throw ArgumentError(
+          'melebihi anggaran ${curatedMemory.charBudget} karakter (terproyeksi $projected)');
+    }
+    if (isUser) {
+      curatedMemory.userText = text;
+    } else {
+      curatedMemory.memoryText = text;
+    }
+    await curatedMemory.save();
+    return {
+      'ok': true,
+      'used': curatedMemory.usedChars,
+      'budget': curatedMemory.charBudget,
+    };
+  }
+
+  /// Memory Explorer (GUI-P1-12, read): entri berlapis. Dengan [query]
+  /// memakai retrieval lintas lapis (skor x relevansi); tanpa query
+  /// seluruh entri diurutkan terbaru dulu. Sertakan stats per lapisan.
+  Map<String, dynamic> memoryLayersGet({String? query, int limit = 200}) {
+    final capped = limit.clamp(1, 500);
+    List<MemoryEntry> entries;
+    if (query != null && query.trim().isNotEmpty) {
+      entries = layeredMemory.retrieve(query.trim(), k: capped);
+    } else {
+      final all = layeredMemory.all.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      entries = all.take(capped).toList();
+    }
+    return {
+      'stats': layeredMemory.stats(),
+      'entries': [for (final e in entries) _layerEntryMap(e)],
+      'total': layeredMemory.length,
+      'truncated': layeredMemory.length > entries.length,
+    };
+  }
+
+  Map<String, dynamic> _layerEntryMap(MemoryEntry e) {
+    return {
+      'id': e.id,
+      'layer': e.layer.name,
+      'text': e.text,
+      'importance': e.importance,
+      'tags': e.tags,
+      'access_count': e.accessCount,
+      'created_at': e.createdAt.toIso8601String(),
+      'last_accessed_at': e.lastAccessedAt.toIso8601String(),
+      'owner_key': e.ownerKey,
+      'source_session': e.sourceSession,
+    };
+  }
+
+  /// Memory Explorer (GUI-P1-12, write): tambah entri berlapis + persist.
+  Future<Map<String, dynamic>> memoryLayerAdd({
+    required String layer,
+    required String text,
+    double importance = 0.5,
+    List<String> tags = const [],
+    String? ownerKey,
+    String? sourceSession,
+  }) async {
+    final matches = MemoryLayerType.values.where((t) => t.name == layer);
+    if (matches.isEmpty) {
+      throw ArgumentError('layer harus episodic/semantic/procedural');
+    }
+    if (text.trim().isEmpty) {
+      throw ArgumentError('text wajib diisi');
+    }
+    final entry = layeredMemory.add(
+      matches.first,
+      text,
+      importance: importance,
+      tags: tags,
+      ownerKey: ownerKey,
+      sourceSession: sourceSession,
+    );
+    await layeredMemory.save(_layeredMemoryPath);
+    return _layerEntryMap(entry);
+  }
+
+  /// Memory Explorer (GUI-P1-12, write): hapus entri berlapis + persist.
+  /// StateError -> 404 bila id tidak ada.
+  Future<bool> memoryLayerDelete(String id) async {
+    final ok = layeredMemory.remove(id);
+    if (!ok) throw StateError('entri berlapis tidak ditemukan: $id');
+    await layeredMemory.save(_layeredMemoryPath);
+    return true;
+  }
+
+  /// Memory Explorer (GUI-P1-12, read): sumber RAG dikelompokkan per
+  /// dokumen (jumlah chunk + ukuran teks); read-only.
+  Map<String, dynamic> memoryRagSources({int limit = 200}) {
+    final capped = limit.clamp(1, 1000);
+    final docs = <String, Map<String, dynamic>>{};
+    for (final chunk in ragPipeline.chunks) {
+      final doc = docs.putIfAbsent(chunk.docId, () => <String, dynamic>{
+            'doc_id': chunk.docId,
+            'chunks': 0,
+            'chars': 0,
+            'preview': '',
+          });
+      doc['chunks'] = (doc['chunks'] as int) + 1;
+      doc['chars'] = (doc['chars'] as int) + chunk.text.length;
+      if ((doc['preview'] as String).isEmpty) {
+        doc['preview'] = chunk.text.trim().length > 120
+            ? '${chunk.text.trim().substring(0, 120)}\u2026'
+            : chunk.text.trim();
+      }
+    }
+    final list = docs.values.toList()
+      ..sort((a, b) => (b['chunks'] as int).compareTo(a['chunks'] as int));
+    return {
+      'chunk_count': ragPipeline.chunkCount,
+      'docs': list.take(capped).toList(),
+      'truncated': list.length > capped,
+    };
+  }
+
   /// Katalog tool terdaftar di registry host (GUI-P1-06, read-only):
   /// name/description/risk/timeout — paritas `/tools`.
   List<Map<String, dynamic>> toolCatalog() {

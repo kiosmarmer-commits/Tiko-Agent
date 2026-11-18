@@ -107,6 +107,13 @@ function createHarness() {
     'btn-artifact-toggle-diff', 'btn-artifact-close',
     'artifact-content', 'artifact-note',
     'runs-list', 'btn-refresh-runs',
+    'mem-budget-info', 'btn-load-curated',
+    'mem-edit-mem', 'mem-edit-user',
+    'btn-save-curated-mem', 'btn-save-curated-user',
+    'layer-list', 'mem-layer-q',
+    'btn-layer-search', 'btn-layer-reset',
+    'layer-new-layer', 'layer-new-tags', 'layer-new-importance', 'layer-new-text',
+    'btn-layer-create', 'rag-list', 'btn-load-rag',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
@@ -167,6 +174,29 @@ function createHarness() {
       if (pathname === '/v1/auth/ticket') body = { ticket: 'test-ticket' };
       else if (pathname === '/v1/status') body = { provider: 'mock' };
       else if (pathname === '/v1/memories') body = { memories: [{ kind: '<img src=x onerror=alert(1)>', importance: '<b>high</b>', text: '<script>alert(1)</script>' }] };
+      else if (pathname === '/v1/memory/curated' && options.method !== 'PATCH') body = {
+        memory: { text: '# Fakta', chars: 18 },
+        user: { text: 'Suka teh', chars: 8 },
+        budget: 100,
+        used: 26,
+      };
+      else if (pathname === '/v1/memory/curated') body = { ok: true, used: 31, budget: 100 };
+      else if (options.method === 'POST' && pathname === '/v1/memory/layers') body = { id: 'lay-9', layer: 'semantic', text: 'x', importance: 0.5, tags: ['uji'], access_count: 0, created_at: '2026-11-18T13:00:00.000Z' };
+      else if (options.method === 'DELETE' && pathname.startsWith('/v1/memory/layers/')) body = { ok: true, id: pathname };
+      else if (pathname === '/v1/memory/layers') body = {
+        stats: { semantic: { count: 1 }, episodic: { count: 1 } },
+        entries: [
+          { id: 'lay-1', layer: 'semantic', text: 'Tiko agent', importance: 0.8, tags: ['tiko'], access_count: 2, created_at: '2026-11-18T13:00:00.000Z' },
+          { id: 'lay-2', layer: 'episodic', text: 'Pertanyaan build', importance: 0.4, tags: [], access_count: 0, created_at: '2026-11-18T12:00:00.000Z' },
+        ],
+        total: 2,
+        truncated: false,
+      };
+      else if (pathname === '/v1/memory/rag') body = {
+        chunk_count: 3,
+        docs: [{ doc_id: 'handbook.md', chunks: 2, chars: 900, preview: 'Panduan build' }, { doc_id: 'faq.md', chunks: 1, chars: 240, preview: 'FAQ' }],
+        truncated: false,
+      };
       else if (pathname === '/v1/approvals') body = { approvals: [{ id: 'apr_1', state: 'pending', tool: 'write_file', risk: 'high' }] };
       else if (pathname === '/v1/sessions') body = { sessions: [{ id: 'web:default', channel: 'http', turns: 2 }] };
       else if (pathname.startsWith('/v1/approvals/')) body = { ok: true };
@@ -764,4 +794,76 @@ test('Runs kosong menampilkan placeholder', async () => {
   } finally {
     globalThis.__mock_empty_runs = false;
   }
+});
+
+test('Memory Explorer: kurasi + lapisan + RAG dimuat saat tab Memori dibuka', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'memory').dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/memories')));
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/memory/curated')));
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/memory/layers')));
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/memory/rag')));
+  assert.ok(h.elements['mem-budget-info'].textContent.includes('26/100'));
+  const layerItems = h.elements['layer-list'].children;
+  assert.ok(layerItems.length >= 3);
+  assert.ok(layerItems[1].children[1].textContent.includes('semantic'));
+  assert.ok(layerItems[1].children[1].textContent.includes('skor 0.8'));
+  assert.ok(!layerItems[1].innerHTML?.includes('<script>'));
+  assert.ok(h.elements['rag-list'].children[0].textContent.includes('3 chunk dalam 2 dokumen'));
+});
+
+test('Simpan kurasi mengirim PATCH /v1/memory/curated', async () => {
+  const h = createHarness();
+  h.elements['mem-edit-user'].value = 'baru';
+  h.elements['btn-save-curated-user'].dispatch('click');
+  await tick();
+  await tick();
+  const call = h.calls.find((c) => c.url.includes('/v1/memory/curated') && c.options.method === 'PATCH');
+  assert.ok(call);
+  const body = JSON.parse(call.options.body);
+  assert.equal(body.file, 'user');
+  assert.equal(body.text, 'baru');
+});
+
+test('Layer search mengirim q + tambah entri POST /v1/memory/layers', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'memory').dispatch('click');
+  await tick();
+  await tick();
+  h.elements['mem-layer-q'].value = 'prosedur';
+  h.elements['btn-layer-search'].dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.includes('q=prosedur')));
+
+  h.elements['layer-new-text'].value = 'uji entri';
+  h.elements['layer-new-importance'].value = '0.7';
+  h.elements['layer-new-tags'].value = 'a, b';
+  h.elements['btn-layer-create'].dispatch('click');
+  await tick();
+  await tick();
+  const post = h.calls.find((call) => call.url.includes('/v1/memory/layers') && call.options.method === 'POST');
+  assert.ok(post);
+  const body = JSON.parse(post.options.body);
+  assert.equal(body.layer, 'semantic');
+  assert.equal(body.text, 'uji entri');
+  assert.equal(body.importance, 0.7);
+  assert.deepEqual(body.tags, ['a', 'b']);
+});
+
+test('Hapus entri berlapis mengirim DELETE /v1/memory/layers/:id', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'memory').dispatch('click');
+  await tick();
+  await tick();
+  const li = h.elements['layer-list'].children[1];
+  const removeBtn = li.children.find((btn) => btn.type === 'button' && btn.textContent === 'Hapus');
+  removeBtn.dataset.layerId = 'lay-1';
+  h.elements['layer-list'].dispatch('click', { target: removeBtn });
+  await tick();
+  await tick();
+  const call = h.calls.find((c) => c.url.includes('/v1/memory/layers/lay-1') && c.options.method === 'DELETE');
+  assert.ok(call);
 });

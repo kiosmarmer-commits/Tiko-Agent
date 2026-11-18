@@ -21,6 +21,7 @@ import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
 import 'ui/audit_page.dart';
+import 'ui/memory_explorer_page.dart';
 import 'ui/runs_page.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
@@ -121,6 +122,11 @@ class _AgentAppState extends State<AgentApp> {
   RunsSnapshot? runsSnapshot;
   bool runsLoading = false;
   String? runsError;
+  CuratedMemoryInfo? curatedMemoryInfo;
+  LayersSnapshot? layersSnapshot;
+  RagSourcesInfo? ragSources;
+  bool memoryExplorerLoading = false;
+  String? memoryExplorerError;
   bool auditLoading = false;
   String? auditError;
   List<MemoryFact> memories = [];
@@ -303,6 +309,64 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  /// Memory Explorer (GUI-P1-12): kurasi + lapisan + RAG dimuat paralel.
+  Future<void> _loadMemoryExplorer() async {
+    setState(() {
+      memoryExplorerLoading = true;
+      memoryExplorerError = null;
+    });
+    try {
+      final results = await Future.wait<Object?>([
+        repo.curatedMemory(),
+        repo.layered(),
+        repo.ragSources(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        curatedMemoryInfo = results[0] as CuratedMemoryInfo;
+        layersSnapshot = results[1] as LayersSnapshot;
+        ragSources = results[2] as RagSourcesInfo;
+      });
+    } catch (e) {
+      if (mounted) setState(() => memoryExplorerError = e.toString());
+    } finally {
+      if (mounted) setState(() => memoryExplorerLoading = false);
+    }
+  }
+
+  Future<String?> _saveCurated(String file, String text) async {
+    try {
+      final info =
+          await repo.setCuratedMemory(file: file, text: text);
+      if (!mounted) return null;
+      setState(() => curatedMemoryInfo = info);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> _addLayerEntry(Map<String, dynamic> body) async {
+    try {
+      await repo.addLayerEntry(body);
+      await _loadMemoryExplorer();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> _deleteLayerEntry(String id) async {
+    try {
+      final ok = await repo.deleteLayerEntry(id);
+      if (!ok) return 'Entri lapisan tidak ditemukan atau gagal dihapus.';
+      await _loadMemoryExplorer();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> _loadRuns() async {
     setState(() {
       runsLoading = true;
@@ -407,6 +471,11 @@ class _AgentAppState extends State<AgentApp> {
     }
     if (next == AppRoute.runs && runsSnapshot == null) {
       unawaited(_loadRuns());
+    }
+    if (next == AppRoute.memory &&
+        curatedMemoryInfo == null &&
+        layersSnapshot == null) {
+      unawaited(_loadMemoryExplorer());
     }
     if (next != AppRoute.chat) unawaited(refreshAdmin());
   }
@@ -709,12 +778,18 @@ class _AgentAppState extends State<AgentApp> {
           onRefresh: _loadRuns,
         );
       case AppRoute.memory:
-        return _MemoryPage(
+        return MemoryExplorerPage(
           memories: memories,
+          curated: curatedMemoryInfo,
+          layers: layersSnapshot,
+          rag: ragSources,
           online: chat.online,
-          loading: loadingAdmin,
-          error: adminError,
-          onRefresh: refreshAdmin,
+          loading: loadingAdmin || memoryExplorerLoading,
+          error: memoryExplorerError ?? adminError,
+          onRefresh: () async {
+            await refreshAdmin();
+            await _loadMemoryExplorer();
+          },
           onDelete: (id) async {
             try {
               final deleted = await repo.deleteMemory(id);
@@ -724,6 +799,9 @@ class _AgentAppState extends State<AgentApp> {
               if (mounted) setState(() => adminError = 'Gagal menghapus memori: $error');
             }
           },
+          onSaveCurated: _saveCurated,
+          onAddLayer: _addLayerEntry,
+          onDeleteLayer: _deleteLayerEntry,
         );
       case AppRoute.settings:
         return SettingsView(
