@@ -97,16 +97,18 @@ function createHarness() {
     'provSessionId', 'provOverride', 'provOverrideBtn',
     'plugin-list', 'plugin-tools', 'plugin-mcp', 'btn-refresh-plugins',
     'channel-list', 'btn-refresh-channels',
+    'job-list', 'btn-refresh-jobs',
+    'jobNewCron', 'jobNewPrompt', 'jobNewChannel', 'jobNewTimezone', 'jobCreateBtn',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -184,6 +186,12 @@ function createHarness() {
       };
       else if (pathname === '/v1/plugins/consent') body = { ok: true, message: 'Consent diberikan.' };
       else if (pathname === '/v1/channels') body = { channels: [{ channel: 'telegram', active: true, env: ['TG_TOKEN', 'TG_ALLOW'] }, { channel: 'slack', active: false, env: ['SLACK_BOT_TOKEN'] }] };
+      else if (pathname === '/v1/jobs') body = { jobs: [
+        { id: 'job-1', cron: '*/5 * * * *', prompt: '<script>alert(1)</script>ringkas berita', channel: 'http', enabled: true, missed_policy: 'runOnce', timezone: 'UTC', next_run: '2026-11-18T13:00:00.000Z', delivery_state: 'none' },
+        { id: 'job-2', cron: '0 9 * * *', prompt: 'backup harian', channel: 'telegram', enabled: false, missed_policy: 'skip', timezone: 'Asia/Jakarta', next_run: '2026-11-19T02:00:00.000Z', delivery_state: 'delivered' },
+      ] };
+      else if (pathname === '/v1/jobs/job-1/run') body = { id: 'job-1', next_run: '2026-11-18T13:01:00.000Z', enabled: true };
+      else if (pathname.startsWith('/v1/jobs/')) body = { deleted: true, ok: true };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
   };
@@ -435,4 +443,88 @@ test('Channels tab read-only menampilkan badge aktif dan nama env', async () => 
   const inactive = h.elements['channel-list'].children[1];
   assert.equal(inactive.children[1].className, 'pill offline');
   assert.equal(inactive.children[1].textContent, 'nonaktif');
+});
+
+test('Automation tab memuat daftar job dengan badge ON/OFF dan XSS-dicegah', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'jobs').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-jobs').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/jobs')));
+  const first = h.elements['job-list'].children[0];
+  // Render aman textContent: markup alert tidak boleh menjadi elemen nyata.
+  assert.equal(first.children[0].textContent, '<script>alert(1)</script>ringkas berita · cron */5 * * * *');
+  assert.ok(!first.querySelector || !first.innerHTML?.includes('<script>'));
+  assert.equal(first.children[1].className, 'pill online');
+  assert.equal(first.children[1].textContent, 'ON');
+  const second = h.elements['job-list'].children[1];
+  assert.equal(second.children[1].className, 'pill offline');
+  assert.equal(second.children[1].textContent, 'OFF');
+  assert.ok(second.children[3].textContent.includes('Skip aktif') === false);
+  assert.ok(first.children[2].textContent.includes('delivery none'));
+});
+
+test('Run now mengirim POST /v1/jobs/:id/run, toggle mengirim PATCH enabled', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'jobs').dispatch('click');
+  await tick();
+  await tick();
+  const first = h.elements['job-list'].children[0];
+  const runBtn = first.children[3].children.find((btn) => btn.textContent === 'Run now');
+  runBtn.dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/jobs/job-1/run') && call.options.method === 'POST'));
+
+  const second = h.elements['job-list'].children[1];
+  const toggleBtn = second.children[3].children.find((btn) => btn.textContent === 'Aktifkan');
+  toggleBtn.dispatch('click');
+  await tick();
+  await tick();
+  const patch = h.calls.find((call) => call.options.method === 'PATCH');
+  assert.ok(patch, 'PATCH terkirim');
+  assert.ok(patch.url.endsWith('/v1/jobs/job-2'));
+  assert.deepEqual(JSON.parse(patch.options.body), { enabled: true });
+});
+
+test('Buat cron job mengirim POST /v1/jobs dengan cron + prompt wajib', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'jobs').dispatch('click');
+  await tick();
+  await tick();
+
+  // Cron kosong ditolak tanpa POST.
+  h.elements['jobCreateBtn'].dispatch('click');
+  await tick();
+  assert.ok(!h.calls.some((call) => call.options.method === 'POST' && call.url.endsWith('/v1/jobs')));
+
+  h.elements['jobNewCron'].value = '0 9 * * *';
+  h.elements['jobNewPrompt'].value = 'laporan harian';
+  h.elements['jobNewChannel'].value = 'telegram';
+  h.elements['jobNewTimezone'].value = 'Asia/Jakarta';
+  h.elements['jobCreateBtn'].dispatch('click');
+  await tick();
+  await tick();
+  const create = h.calls.find((call) => call.options.method === 'POST' && call.url.endsWith('/v1/jobs'));
+  assert.ok(create, 'POST /v1/jobs terkirim');
+  assert.deepEqual(JSON.parse(create.options.body), {
+    cron: '0 9 * * *',
+    prompt: 'laporan harian',
+    channel: 'telegram',
+    timezone: 'Asia/Jakarta',
+  });
+});
+
+test('Hapus job mengirim DELETE /v1/jobs/:id', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'jobs').dispatch('click');
+  await tick();
+  await tick();
+  const first = h.elements['job-list'].children[0];
+  const removeBtn = first.children[3].children.find((btn) => btn.textContent === 'Hapus');
+  removeBtn.dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/jobs/job-1') && call.options.method === 'DELETE'));
 });

@@ -54,8 +54,9 @@ class ScheduleJobTool implements Tool {
     }
 
     final policyName = (args['missed_policy'] as String?) ?? 'run_once';
+    final normalizedPolicy = policyName.replaceAll('_', '').toLowerCase();
     final policy = MissedPolicy.values.firstWhere(
-      (p) => p.name == policyName || p.name == policyName.replaceAll('_', ''),
+      (p) => p.name.toLowerCase() == normalizedPolicy,
       orElse: () => MissedPolicy.runOnce,
     );
 

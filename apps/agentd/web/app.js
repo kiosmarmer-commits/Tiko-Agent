@@ -778,6 +778,130 @@
     loadPlugins();
   }
 
+  // GUI-P1-09 parity: automation / cron CRUD.
+  async function loadJobs() {
+    const list = $('#job-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat jobs\u2026'));
+    try {
+      const data = await api('/v1/jobs');
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      list.replaceChildren();
+      if (!jobs.length) {
+        list.appendChild(emptyItem('Belum ada cron job terdaftar.'));
+        return;
+      }
+      for (const job of jobs) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(job.prompt || '(tanpa prompt)') +
+          ' \u00b7 cron ' + String(job.cron || '?');
+        title.className = 'job-title';
+        const badge = document.createElement('span');
+        badge.className = job.enabled ? 'pill online' : 'pill offline';
+        badge.textContent = job.enabled ? 'ON' : 'OFF';
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = 'channel ' + String(job.channel || '-') +
+          ' \u00b7 tz ' + String(job.timezone || 'UTC') +
+          ' \u00b7 missed ' + String(job.missed_policy || 'runOnce') +
+          ' \u00b7 next ' + String(job.next_run || '-') +
+          (job.last_run ? ' \u00b7 terakhir ' + String(job.last_run) : '') +
+          ' \u00b7 delivery ' + String(job.delivery_state || 'none');
+        const actions = document.createElement('div');
+        actions.className = 'row';
+        const run = document.createElement('button');
+        run.type = 'button';
+        run.textContent = 'Run now';
+        run.setAttribute('aria-label', 'Jalankan sekarang job ' + String(job.id || ''));
+        run.addEventListener('click', () => runJobNow(String(job.id)));
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.textContent = job.enabled ? 'Matikan' : 'Aktifkan';
+        toggle.setAttribute('aria-label', (job.enabled ? 'Matikan' : 'Aktifkan') + ' job ' + String(job.id || ''));
+        toggle.addEventListener('click', () => toggleJob(String(job.id), !job.enabled));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'danger-button';
+        remove.textContent = 'Hapus';
+        remove.setAttribute('aria-label', 'Hapus job ' + String(job.id || ''));
+        remove.addEventListener('click', () => deleteJob(String(job.id)));
+        actions.append(run, toggle, remove);
+        li.append(title, badge, meta, actions);
+        list.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat jobs: ' + error.message));
+    }
+  }
+
+  async function createJobFromWeb() {
+    const cronEl = $('#jobNewCron');
+    const promptEl = $('#jobNewPrompt');
+    if (!cronEl || !promptEl) return;
+    const cron = cronEl.value.trim();
+    const prompt = promptEl.value.trim();
+    if (!cron || !prompt) {
+      addMsg('system', 'Cron dan prompt wajib diisi.');
+      return;
+    }
+    const channel = String($('#jobNewChannel')?.value || '').trim();
+    const timezone = String($('#jobNewTimezone')?.value || '').trim();
+    try {
+      await api('/v1/jobs', {
+        method: 'POST',
+        body: JSON.stringify({
+          cron,
+          prompt,
+          ...(channel ? { channel } : {}),
+          ...(timezone ? { timezone } : {}),
+        }),
+      });
+      addMsg('system', 'Cron job dibuat.');
+      cronEl.value = '';
+      promptEl.value = '';
+    } catch (error) {
+      addMsg('system', 'Gagal membuat job: ' + error.message);
+    }
+    loadJobs();
+  }
+
+  async function toggleJob(id, enabled) {
+    if (!id) return;
+    try {
+      await api('/v1/jobs/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      });
+      addMsg('system', 'Job "' + id + '" ' + (enabled ? 'diaktifkan' : 'dimatikan') + '.');
+    } catch (error) {
+      addMsg('system', 'Gagal mengubah job: ' + error.message);
+    }
+    loadJobs();
+  }
+
+  async function runJobNow(id) {
+    if (!id) return;
+    try {
+      await api('/v1/jobs/' + encodeURIComponent(id) + '/run', { method: 'POST' });
+      addMsg('system', 'Job "' + id + '" dijadwalkan berjalan pada tick berikutnya (sekitar 20 detik).');
+    } catch (error) {
+      addMsg('system', 'Gagal memicu job: ' + error.message);
+    }
+    loadJobs();
+  }
+
+  async function deleteJob(id) {
+    if (!id) return;
+    try {
+      await api('/v1/jobs/' + encodeURIComponent(id), { method: 'DELETE' });
+      addMsg('system', 'Job "' + id + '" dihapus.');
+    } catch (error) {
+      addMsg('system', 'Gagal menghapus job: ' + error.message);
+    }
+    loadJobs();
+  }
+
   // GUI-P1-07 parity: status channel gateway (read-only).
   async function loadChannels() {
     const list = $('#channel-list');
@@ -964,6 +1088,7 @@
       if (target === 'providers') loadProviders();
       if (target === 'plugins') loadPlugins();
       if (target === 'channels') loadChannels();
+      if (target === 'jobs') loadJobs();
     });
   });
 
@@ -1002,6 +1127,8 @@
   $('#btn-refresh-providers')?.addEventListener('click', loadProviders);
   $('#btn-refresh-plugins')?.addEventListener('click', loadPlugins);
   $('#btn-refresh-channels')?.addEventListener('click', loadChannels);
+  $('#btn-refresh-jobs')?.addEventListener('click', loadJobs);
+  $('#jobCreateBtn')?.addEventListener('click', createJobFromWeb);
   $('#botCreateBtn')?.addEventListener('click', createBot);
   $('#botBindBtn')?.addEventListener('click', () => bindOrUnbindBot(true));
   $('#botUnbindBtn')?.addEventListener('click', () => bindOrUnbindBot(false));

@@ -40,6 +40,11 @@ abstract class AgentRepository {
   Future<PluginsToolsSnapshot> pluginsTools();
   Future<String> setPluginConsent(String plugin, String action);
   Future<ChannelsSnapshot> channels();
+  Future<JobsSnapshot> jobs();
+  Future<JobInfo> createJob(Map<String, dynamic> body);
+  Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
+  Future<bool> deleteJob(String id);
+  Future<JobInfo?> runJobNow(String id);
   Future<List<BotProfileItem>> bots();
   Future<BotProfileItem> createBot(Map<String, dynamic> body);
   Future<BotProfileItem> updateBot(String id, Map<String, dynamic> body);
@@ -201,6 +206,28 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<ChannelsSnapshot> channels() async =>
       ChannelsSnapshot.fromMap(await _guard(_client.fetchChannels));
+
+  @override
+  Future<JobsSnapshot> jobs() async => JobsSnapshot.fromMap({
+        'jobs': await _guard<List<Map<String, dynamic>>>(_client.listJobs),
+      });
+
+  @override
+  Future<JobInfo> createJob(Map<String, dynamic> body) async =>
+      JobInfo.fromMap(await _guard(() => _client.createJob(body)));
+
+  @override
+  Future<JobInfo> updateJob(String id, Map<String, dynamic> body) async =>
+      JobInfo.fromMap(await _guard(() => _client.updateJob(id, body)));
+
+  @override
+  Future<bool> deleteJob(String id) => _guard(() => _client.deleteJob(id));
+
+  @override
+  Future<JobInfo?> runJobNow(String id) async {
+    final json = await _guard(() => _client.runJobNow(id));
+    return json == null ? null : JobInfo.fromMap(json);
+  }
 
   @override
   Future<BotProfileItem> createBot(Map<String, dynamic> body) async =>

@@ -33,6 +33,7 @@
         <button type="button" data-tab="providers" aria-pressed="false" aria-controls="tab-providers">Provider</button>
         <button type="button" data-tab="plugins" aria-pressed="false" aria-controls="tab-plugins">Plugin</button>
         <button type="button" data-tab="channels" aria-pressed="false" aria-controls="tab-channels">Channels</button>
+        <button type="button" data-tab="jobs" aria-pressed="false" aria-controls="tab-jobs">Automation</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -210,6 +211,29 @@
           <h2>Setup channel</h2>
           <p class="hint">Channel diaktifkan lewat variabel env saat daemon start (config immutable). Setelah env diset, restart daemon; token/nilai rahasia tidak pernah ditampilkan di sini.</p>
         </article>
+      </section>
+
+      <section id="tab-jobs" class="tab" hidden aria-label="Automation">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">SCHEDULER</p><h1>Automation</h1><p class="subheading">Cron job terjadwal di daemon (disimpan durabel di jobs.json).</p></div>
+          <button type="button" id="btn-refresh-jobs" class="secondary">Muat ulang</button>
+        </div>
+        <article class="card settings-card">
+          <h2>Buat cron job</h2>
+          <label for="jobNewCron">Cron (5 field)</label>
+          <input id="jobNewCron" autocomplete="off" placeholder="*/5 * * * *" />
+          <label for="jobNewPrompt">Prompt</label>
+          <input id="jobNewPrompt" autocomplete="off" placeholder="Ringkas berita hari ini" />
+          <label for="jobNewChannel">Channel (opsional)</label>
+          <input id="jobNewChannel" autocomplete="off" placeholder="http" />
+          <label for="jobNewTimezone">Timezone IANA (opsional)</label>
+          <input id="jobNewTimezone" autocomplete="off" placeholder="Asia/Jakarta" />
+          <div class="row">
+            <button type="button" id="jobCreateBtn" class="primary">Buat job</button>
+          </div>
+          <p class="hint">Cron wajib 5 field; prompt dijalankan scheduler daemon pada jadwal (tick sekitar 20 detik). missed_policy default run_once.</p>
+        </article>
+        <ul id="job-list" class="list"></ul>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">
