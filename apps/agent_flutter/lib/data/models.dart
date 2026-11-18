@@ -1109,6 +1109,165 @@ class RunEntry {
       );
 }
 
+/// Memory Explorer (GUI-P1-12): satu file kurasi (MEMORY.md / USER.md).
+class CuratedFileInfo {
+  const CuratedFileInfo({this.text = '', this.chars = 0});
+  final String text;
+  final int chars;
+
+  factory CuratedFileInfo.fromMap(Map<String, dynamic> map) => CuratedFileInfo(
+        text: '${map['text'] ?? ''}',
+        chars: (map['chars'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Memory Explorer (GUI-P1-12): snapshot kurasi + anggaran karakter.
+class CuratedMemoryInfo {
+  const CuratedMemoryInfo({
+    this.memory = const CuratedFileInfo(),
+    this.user = const CuratedFileInfo(),
+    this.budget = 0,
+    this.used = 0,
+  });
+  final CuratedFileInfo memory;
+  final CuratedFileInfo user;
+  final int budget;
+  final int used;
+
+  factory CuratedMemoryInfo.fromMap(Map<String, dynamic> map) =>
+      CuratedMemoryInfo(
+        memory: CuratedFileInfo.fromMap(
+            Map<String, dynamic>.from(map['memory'] as Map? ?? const {})),
+        user: CuratedFileInfo.fromMap(
+            Map<String, dynamic>.from(map['user'] as Map? ?? const {})),
+        budget: (map['budget'] as num?)?.toInt() ?? 0,
+        used: (map['used'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Memory Explorer (GUI-P1-12): satu entri memori berlapis.
+class LayerEntry {
+  const LayerEntry({
+    required this.id,
+    this.layer = 'semantic',
+    this.text = '',
+    this.importance = 0,
+    this.tags = const [],
+    this.accessCount = 0,
+    this.createdAt = '',
+    this.lastAccessedAt = '',
+    this.ownerKey = '',
+    this.sourceSession = '',
+  });
+  final String id;
+  final String layer;
+  final String text;
+  final double importance;
+  final List<String> tags;
+  final int accessCount;
+  final String createdAt;
+  final String lastAccessedAt;
+  final String ownerKey;
+  final String sourceSession;
+
+  factory LayerEntry.fromMap(Map<String, dynamic> map) => LayerEntry(
+        id: '${map['id'] ?? ''}',
+        layer: '${map['layer'] ?? 'semantic'}',
+        text: '${map['text'] ?? ''}',
+        importance: (map['importance'] as num?)?.toDouble() ?? 0,
+        tags: [
+          for (final t in map['tags'] as List? ?? const []) '$t',
+        ],
+        accessCount: (map['access_count'] as num?)?.toInt() ?? 0,
+        createdAt: '${map['created_at'] ?? ''}',
+        lastAccessedAt: '${map['last_accessed_at'] ?? ''}',
+        ownerKey: '${map['owner_key'] ?? ''}',
+        sourceSession: '${map['source_session'] ?? ''}',
+      );
+}
+
+/// Per-lapisan: jumlah entri + rata-rata skor importance.
+class LayerStats {
+  const LayerStats({this.count = 0, this.avgScore = 0});
+  final int count;
+  final double avgScore;
+
+  factory LayerStats.fromMap(Map<String, dynamic> map) => LayerStats(
+        count: (map['count'] as num?)?.toInt() ?? 0,
+        avgScore: (map['avg_score'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+/// Memory Explorer (GUI-P1-12): snapshot entri berlapis + stats.
+class LayersSnapshot {
+  const LayersSnapshot({
+    this.stats = const {},
+    this.entries = const [],
+    this.total = 0,
+    this.truncated = false,
+  });
+  final Map<String, LayerStats> stats;
+  final List<LayerEntry> entries;
+  final int total;
+  final bool truncated;
+
+  factory LayersSnapshot.fromMap(Map<String, dynamic> map) => LayersSnapshot(
+        stats: {
+          for (final e in (map['stats'] as Map? ?? const {}).entries)
+            '${e.key}': LayerStats.fromMap(
+                Map<String, dynamic>.from(e.value as Map? ?? const {})),
+        },
+        entries: [
+          for (final e in map['entries'] as List? ?? const [])
+            LayerEntry.fromMap(Map<String, dynamic>.from(e as Map)),
+        ],
+        total: (map['total'] as num?)?.toInt() ?? 0,
+        truncated: map['truncated'] == true,
+      );
+}
+
+/// Memory Explorer (GUI-P1-12): satu dokumen sumber RAG.
+class RagDocInfo {
+  const RagDocInfo({
+    this.docId = '',
+    this.chunks = 0,
+    this.chars = 0,
+    this.preview = '',
+  });
+  final String docId;
+  final int chunks;
+  final int chars;
+  final String preview;
+
+  factory RagDocInfo.fromMap(Map<String, dynamic> map) => RagDocInfo(
+        docId: '${map['doc_id'] ?? ''}',
+        chunks: (map['chunks'] as num?)?.toInt() ?? 0,
+        chars: (map['chars'] as num?)?.toInt() ?? 0,
+        preview: '${map['preview'] ?? ''}',
+      );
+}
+
+/// Memory Explorer (GUI-P1-12): snapshot sumber RAG grouped per dokumen.
+class RagSourcesInfo {
+  const RagSourcesInfo({
+    this.chunkCount = 0,
+    this.docs = const [],
+    this.truncated = false,
+  });
+  final int chunkCount;
+  final List<RagDocInfo> docs;
+  final bool truncated;
+
+  factory RagSourcesInfo.fromMap(Map<String, dynamic> map) => RagSourcesInfo(
+        chunkCount: (map['chunk_count'] as num?)?.toInt() ?? 0,
+        docs: [
+          for (final d in map['docs'] as List? ?? const [])
+            RagDocInfo.fromMap(Map<String, dynamic>.from(d as Map)),
+        ],
+        truncated: map['truncated'] == true,
+      );
+}
+
 /// Run-inspector (GUI-P2-04): snapshot {active, recent, truncated}.
 class RunsSnapshot {
   const RunsSnapshot({

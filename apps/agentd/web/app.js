@@ -160,6 +160,176 @@
     }
   }
 
+  // GUI-P1-12 parity: Memory Explorer lanjutan (kurasi + lapisan + RAG).
+  function renderCuratedInfo(data) {
+    const info = $('#mem-budget-info');
+    if (!info) return;
+    const used = Number(data.used || 0);
+    const budget = Number(data.budget || 0);
+    const mem = (data.memory && data.memory.text) || '';
+    const user = (data.user && data.user.text) || '';
+    const memBox = $('#mem-edit-mem');
+    const userBox = $('#mem-edit-user');
+    if (memBox) memBox.value = mem;
+    if (userBox) userBox.value = user;
+    info.textContent = 'Anggaran: ' + used + '/' + budget +
+      ' karakter \u00b7 MEMORY.md ' + (data.memory ? String(data.memory.chars || 0) : 0) +
+      ' \u00b7 USER.md ' + (data.user ? String(data.user.chars || 0) : 0);
+  }
+
+  async function loadCurated() {
+    try {
+      renderCuratedInfo(await api('/v1/memory/curated'));
+    } catch (error) {
+      const info = $('#mem-budget-info');
+      if (info) info.textContent = 'Gagal memuat kurasi: ' + error.message;
+    }
+  }
+
+  async function saveCurated(file) {
+    const box = $('#mem-edit-' + file);
+    if (!box) return;
+    try {
+      const result = await api('/v1/memory/curated', {
+        method: 'PATCH',
+        body: JSON.stringify({ file, text: box.value }),
+      });
+      renderCuratedInfo({
+        memory: { text: file === 'memory' ? box.value : undefined, chars: 0 },
+        user: { text: file === 'user' ? box.value : undefined, chars: 0 },
+        used: result.used,
+        budget: result.budget,
+      });
+      addMsg('system', 'Kurasi ' + file + ' tersimpan.');
+      await loadCurated();
+    } catch (error) {
+      addMsg('system', 'Gagal menyimpan kurasi ' + file + ': ' + error.message);
+    }
+  }
+
+  async function loadLayers(query) {
+    const list = $('#layer-list');
+    if (!list) return;
+    const q = String(query || $('#mem-layer-q')?.value || '').trim();
+    list.replaceChildren(emptyItem('Memuat entri berlapis\u2026'));
+    try {
+      const data = await api('/v1/memory/layers' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      list.replaceChildren();
+      if (!entries.length) {
+        list.appendChild(emptyItem('Belum ada entri berlapis.'));
+        return;
+      }
+      const stats = data.stats && typeof data.stats === 'object' ? data.stats : {};
+      const heading = document.createElement('li');
+      heading.className = 'hint';
+      heading.textContent = Object.entries(stats)
+        .map(([name, stat]) => name + ': ' + Number(stat.count || 0) + ' entri')
+        .join(' \u00b7 ') +
+      ' \u00b7 total ' + Number(data.total || 0) + (data.truncated ? ' (terpotong)' : '');
+      list.appendChild(heading);
+      for (const entry of entries) list.appendChild(_layerItem(entry));
+      if (data.truncated) list.appendChild(emptyItem('Hasil terpotong \u2014 perkecil detail atau perkecil entri.'));
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat entri berlapis: ' + error.message));
+    }
+  }
+
+  function _layerItem(entry) {
+    const li = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = String(entry.text || '(tanpa teks)');
+    const meta = document.createElement('p');
+    meta.className = 'hint';
+    meta.textContent = entry.layer + ' \u00b7 skor ' + String(entry.importance ?? 0) +
+      (Array.isArray(entry.tags) && entry.tags.length ? ' \u00b7 ' + entry.tags.join(',') : '');
+    li.append(title, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary';
+    remove.textContent = 'Hapus';
+    remove.dataset.layerId = String(entry.id || '');
+    li.appendChild(remove);
+    return li;
+  }
+
+  async function createLayerFromWeb() {
+    const layer = String($('#layer-new-layer')?.value || 'semantic');
+    const text = String($('#layer-new-text')?.value || '').trim();
+    const tagsRaw = String($('#layer-new-tags')?.value || '');
+    const importance = Number($('#layer-new-importance')?.value || 0.5);
+    if (!text) {
+      addMsg('system', 'Teks entri berlapis wajib diisi.');
+      return;
+    }
+    try {
+      await api('/v1/memory/layers', {
+        method: 'POST',
+        body: JSON.stringify({
+          layer,
+          text,
+          importance: Math.min(1, Math.max(0, importance)),
+          tags: tagsRaw.split(',').map((t) => t.trim()).filter(Boolean),
+        }),
+      });
+      addMsg('system', 'Entri berlapis ditambahkan.');
+      const box = $('#layer-new-text');
+      if (box) box.value = '';
+      await loadLayers();
+    } catch (error) {
+      addMsg('system', 'Gagal menambah entri berlapis: ' + error.message);
+    }
+  }
+
+  async function deleteLayer(id) {
+    if (!id) return;
+    try {
+      const result = await api('/v1/memory/layers/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (result && result.ok === false) {
+        addMsg('system', 'Entri berlapis tidak ditemukan.');
+        return;
+      }
+      addMsg('system', 'Entri berlapis dihapus.');
+      await loadLayers();
+    } catch (error) {
+      addMsg('system', 'Gagal menghapus entri berlapis: ' + error.message);
+    }
+  }
+
+  async function loadRag() {
+    const list = $('#rag-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat sumber RAG\u2026'));
+    try {
+      const data = await api('/v1/memory/rag');
+      const docs = Array.isArray(data.docs) ? data.docs : [];
+      list.replaceChildren();
+      const heading = document.createElement('li');
+      heading.className = 'hint';
+      heading.textContent = Number(data.chunk_count || 0) + ' chunk dalam ' + docs.length + ' dokumen' + (data.truncated ? ' (terpotong)' : '');
+      list.appendChild(heading);
+      if (!docs.length) {
+        list.appendChild(emptyItem('Belum ada dokumen ter-fragmentasi.'));
+        return;
+      }
+      for (const doc of docs) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(doc.doc_id || '?');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = Number(doc.chunks || 0) + ' chunk \u00b7 ' + Number(doc.chars || 0) + ' karakter';
+        const preview = document.createElement('p');
+        preview.className = 'hint';
+        preview.textContent = String(doc.preview || '');
+        li.append(title, meta, preview);
+        list.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat sumber RAG: ' + error.message));
+    }
+  }
+
   async function loadSkills() {
     const list = $('#skill-list');
     if (!list) return;
@@ -1408,7 +1578,7 @@
         section.hidden = !active;
       });
       if (target === 'status') loadStatus();
-      if (target === 'memory') loadMemory();
+      if (target === 'memory') { loadMemory(); loadCurated(); loadLayers(); loadRag(); }
       if (target === 'approvals') loadApprovals();
       if (target === 'sessions') loadSessions();
       if (target === 'skills') loadSkills();
@@ -1451,7 +1621,28 @@
   confirmYes?.addEventListener('click', () => decidePending(true));
   confirmNo?.addEventListener('click', () => decidePending(false));
   $('#refreshStatus')?.addEventListener('click', loadStatus);
-  $('#refreshMem')?.addEventListener('click', loadMemory);
+  $('#refreshMem')?.addEventListener('click', () => {
+    loadMemory();
+    loadCurated();
+    loadLayers();
+    loadRag();
+  });
+  $('#btn-load-curated')?.addEventListener('click', loadCurated);
+  $('#btn-save-curated-mem')?.addEventListener('click', () => saveCurated('memory'));
+  $('#btn-save-curated-user')?.addEventListener('click', () => saveCurated('user'));
+  $('#btn-layer-search')?.addEventListener('click', () => loadLayers());
+  $('#btn-layer-reset')?.addEventListener('click', () => {
+    const input = $('#mem-layer-q');
+    if (input) input.value = '';
+    loadLayers('');
+  });
+  $('#btn-layer-create')?.addEventListener('click', createLayerFromWeb);
+  $('#layer-list')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!target || !target.dataset || !target.dataset.layerId) return;
+    deleteLayer(target.dataset.layerId);
+  });
+  $('#btn-load-rag')?.addEventListener('click', loadRag);
   $('#btn-refresh-approvals')?.addEventListener('click', loadApprovals);
   $('#btn-refresh-sessions')?.addEventListener('click', loadSessions);
   $('#btn-refresh-skills')?.addEventListener('click', loadSkills);

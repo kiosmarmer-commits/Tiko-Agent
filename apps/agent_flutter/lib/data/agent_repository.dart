@@ -68,6 +68,12 @@ abstract class AgentRepository {
   Future<bool> unbindBot(String botId, String sessionId);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
+  Future<CuratedMemoryInfo> curatedMemory();
+  Future<CuratedMemoryInfo> setCuratedMemory({required String file, required String text});
+  Future<LayersSnapshot> layered({String? query, int? limit});
+  Future<LayerEntry> addLayerEntry(Map<String, dynamic> body);
+  Future<bool> deleteLayerEntry(String id);
+  Future<RagSourcesInfo> ragSources();
   Future<String> sendMessage(String text, {String sessionKey});
   Future<String> submitUiAction(
     String sessionKey,
@@ -314,6 +320,34 @@ class HttpAgentRepository implements AgentRepository {
 
   @override
   Future<bool> deleteMemory(String id) => _guard(() => _client.deleteMemory(id));
+
+  @override
+  Future<CuratedMemoryInfo> curatedMemory() async => CuratedMemoryInfo.fromMap(
+      await _guard(_client.memoryCurated));
+
+  @override
+  Future<CuratedMemoryInfo> setCuratedMemory(
+      {required String file, required String text}) async {
+    await _guard(() => _client.updateMemoryCurated(file, text));
+    return curatedMemory();
+  }
+
+  @override
+  Future<LayersSnapshot> layered({String? query, int? limit}) async =>
+      LayersSnapshot.fromMap(
+          await _guard(() => _client.memoryLayers(query: query, limit: limit)));
+
+  @override
+  Future<LayerEntry> addLayerEntry(Map<String, dynamic> body) async =>
+      LayerEntry.fromMap(await _guard(() => _client.addLayerEntry(body)));
+
+  @override
+  Future<bool> deleteLayerEntry(String id) =>
+      _guard(() => _client.deleteLayerEntry(id));
+
+  @override
+  Future<RagSourcesInfo> ragSources() async =>
+      RagSourcesInfo.fromMap(await _guard(_client.memoryRag));
 
   @override
   Future<String> sendMessage(String text, {String sessionKey = 'flutter:default'}) =>

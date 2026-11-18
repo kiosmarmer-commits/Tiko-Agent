@@ -278,6 +278,10 @@ class RagPipeline {
 
   int get chunkCount => _chunks.length;
 
+  /// Semua chunk terindeks (read-only) — dipakai Memory Explorer untuk
+  /// mengelompokkan sumber RAG per dokumen.
+  Iterable<RagChunk> get chunks => _chunks.values;
+
   RagChunk? getChunk(String id) => _chunks[id];
 
   /// Chunks [text], indexes each chunk in both the vector index (when an

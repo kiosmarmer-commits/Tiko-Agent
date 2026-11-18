@@ -72,10 +72,52 @@
 
       <section id="tab-memory" class="tab" hidden aria-label="Memori">
         <div class="section-heading compact">
-          <div><p class="eyebrow">PERSONAL CONTEXT</p><h1>Memori</h1><p class="subheading">Fakta yang disimpan untuk membantu percakapan berikutnya.</p></div>
+          <div><p class="eyebrow">PERSONAL CONTEXT</p><h1>Memory Explorer</h1><p class="subheading">Fakta kurasi, MEMORY.md/USER.md + anggaran, memori berlapis, dan sumber RAG (GUI-P1-12).</p></div>
           <button type="button" id="refreshMem" class="secondary">Muat ulang</button>
         </div>
         <ul id="memList" class="list"></ul>
+
+        <article class="card settings-card">
+          <h2>Kurasi — MEMORY.md / USER.md</h2>
+          <p class="hint" id="mem-budget-info">Budget kurasi belum dimuat.</p>
+          <div class="row">
+            <button type="button" id="btn-load-curated" class="secondary">Muat kurasi</button>
+          </div>
+          <div class="row" style="border:0;gap:12px;align-items:stretch;flex-wrap:wrap;">
+            <div style="flex:1;min-width:260px;">
+              <label>MEMORY.md<br><textarea id="mem-edit-mem" rows="6" style="width:100%;white-space:pre-wrap;"></textarea></label>
+              <button type="button" id="btn-save-curated-mem" class="secondary">Simpan MEMORY.md</button>
+            </div>
+            <div style="flex:1;min-width:260px;">
+              <label>USER.md<br><textarea id="mem-edit-user" rows="6" style="width:100%;white-space:pre-wrap;"></textarea></label>
+              <button type="button" id="btn-save-curated-user" class="secondary">Simpan USER.md</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <h2>Memori berlapis</h2>
+          <div class="row">
+            <input id="mem-layer-q" type="text" placeholder="Cari entri berlapis (kosong = terbaru)">
+            <button type="button" id="btn-layer-search" class="secondary">Cari</button>
+            <button type="button" id="btn-layer-reset" class="secondary">Tanpa query</button>
+          </div>
+          <div class="row">
+            <select id="layer-new-layer"><option value="episodic">episodic</option><option value="semantic">semantic</option><option value="procedural">procedural</option></select>
+            <input id="layer-new-tags" type="text" placeholder="tag1, tag2"></input>
+            <input id="layer-new-importance" type="number" value="0.5" min="0" max="1" step="0.1"></input>
+            <button type="button" id="btn-layer-create" class="secondary">Tambah</button>
+          </div>
+          <input id="layer-new-text" type="text" placeholder="Teks entri berlapis">
+          <ul id="layer-list" class="list"></ul>
+          <p class="hint">Retrieval lintas lapis memakai skor x relevansi saat query diisi; angka berkisar 0-1 untuk importance.</p>
+        </article>
+
+        <article class="card settings-card">
+          <h2>Sumber RAG</h2>
+          <div class="row"><button type="button" id="btn-load-rag" class="secondary">Muat RAG</button></div>
+          <ul id="rag-list" class="list"></ul>
+        </article>
       </section>
 
       <section id="tab-status" class="tab" hidden aria-label="Status">

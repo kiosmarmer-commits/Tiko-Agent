@@ -494,6 +494,73 @@ class AgentApiClient {
     return json['deleted'] == true;
   }
 
+  /// Memory Explorer (GUI-P1-12): isi kurasi MEMORY.md/USER.md + budget.
+  Future<Map<String, dynamic>> memoryCurated() async {
+    final res = await _http
+        .get(_u('/v1/memory/curated'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'memory curated');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Ganti penuh satu file kurasi ('memory'/'user'); backend menolak bila
+  /// gabungan melebihi anggaran karakter (400).
+  Future<Map<String, dynamic>> updateMemoryCurated(
+    String file,
+    String text,
+  ) async {
+    final res = await _http
+        .patch(_u('/v1/memory/curated'),
+            headers: _headers, body: jsonEncode({'file': file, 'text': text}))
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'update memory curated');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Entri memori berlapis; [query] non-empty memakai retrieval, [limit]
+  /// dibatasi backend 1..500.
+  Future<Map<String, dynamic>> memoryLayers({String? query, int? limit}) async {
+    final q = <String>[
+      if (query != null && query.isNotEmpty)
+        'q=${Uri.encodeQueryComponent(query)}',
+      if (limit != null) 'limit=$limit',
+    ];
+    final path =
+        '/v1/memory/layers${q.isEmpty ? '' : '?${q.join('&')}'}';
+    final res = await _http
+        .get(_u(path), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'memory layers');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> addLayerEntry(Map<String, dynamic> body) async {
+    final res = await _http
+        .post(_u('/v1/memory/layers'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'add layer entry');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<bool> deleteLayerEntry(String id) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .delete(_u('/v1/memory/layers/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
+  /// Sumber RAG dikelompokkan per dokumen; read-only.
+  Future<Map<String, dynamic>> memoryRag() async {
+    final res = await _http
+        .get(_u('/v1/memory/rag'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'memory rag');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<String> sendMessage(
     String text, {
     String sessionKey = 'flutter:default',

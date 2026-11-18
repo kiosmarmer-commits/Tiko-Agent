@@ -991,6 +991,43 @@ Future<void> main(List<String> args) async {
           }
         },
         runsProvider: () async => rt.turnInspectorSnapshot(),
+        memoryCuratedProvider: () async => rt.memoryCuratedGet(),
+        memoryCuratedSetProvider: (body) async {
+          try {
+            return await rt.memoryCuratedSet(
+              file: body['file'] as String,
+              text: body['text'] as String,
+            );
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        memoryLayersProvider: (filters) async => rt.memoryLayersGet(
+          query: filters['q'] as String?,
+          limit: filters['limit'] as int? ?? 200,
+        ),
+        memoryLayerAddProvider: (body) async {
+          try {
+            return await rt.memoryLayerAdd(
+              layer: body['layer'] as String,
+              text: body['text'] as String,
+              importance: body['importance'] as double? ?? 0.5,
+              tags: [for (final t in (body['tags'] as List? ?? const [])) '$t'],
+              ownerKey: body['owner_key'] as String?,
+              sourceSession: body['source_session'] as String?,
+            );
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        memoryLayerDeleteProvider: (id) async {
+          try {
+            return await rt.memoryLayerDelete(id);
+          } on StateError catch (e) {
+            throw ApiRequestException(404, 'not_found', '$e');
+          }
+        },
+        memoryRagProvider: () async => rt.memoryRagSources(),
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,
