@@ -662,3 +662,63 @@ class ChannelInfo {
         ],
       );
 }
+
+/// Snapshot job automation (GUI-P1-09): mirror payload `GET /v1/jobs`
+/// — daftar cron job scheduler yang durabel di `jobs.json`.
+class JobsSnapshot {
+  const JobsSnapshot({this.jobs = const []});
+
+  final List<JobInfo> jobs;
+
+  factory JobsSnapshot.fromMap(Map<String, dynamic> map) => JobsSnapshot(
+        jobs: [
+          for (final j in map['jobs'] as List? ?? const [])
+            JobInfo.fromMap(Map<String, dynamic>.from(j as Map)),
+        ],
+      );
+}
+
+/// Satu cron job scheduler dengan status delivery (GUI-P1-09).
+class JobInfo {
+  const JobInfo({
+    required this.id,
+    required this.cron,
+    required this.prompt,
+    required this.channel,
+    required this.userKey,
+    required this.nextRun,
+    this.lastRun,
+    this.enabled = true,
+    this.missedPolicy = 'runOnce',
+    this.timezone = 'UTC',
+    this.deliveryState = 'none',
+  });
+
+  final String id;
+  final String cron;
+  final String prompt;
+  final String channel;
+  final String userKey;
+  final String nextRun;
+  final String? lastRun;
+  final bool enabled;
+  final String missedPolicy;
+  final String timezone;
+
+  /// none | pending | delivered | failed — status delivery terakhir.
+  final String deliveryState;
+
+  factory JobInfo.fromMap(Map<String, dynamic> map) => JobInfo(
+        id: '${map['id'] ?? ''}',
+        cron: '${map['cron'] ?? ''}',
+        prompt: '${map['prompt'] ?? ''}',
+        channel: '${map['channel'] ?? ''}',
+        userKey: '${map['user_key'] ?? ''}',
+        nextRun: '${map['next_run'] ?? ''}',
+        lastRun: map['last_run'] == null ? null : '${map['last_run']}',
+        enabled: map['enabled'] != false,
+        missedPolicy: '${map['missed_policy'] ?? 'runOnce'}',
+        timezone: '${map['timezone'] ?? 'UTC'}',
+        deliveryState: '${map['delivery_state'] ?? 'none'}',
+      );
+}

@@ -343,6 +343,59 @@ class AgentApiClient {
     };
   }
 
+  /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
+  /// typed (400/404/501), jadi cukup `_throwIf`.
+  Future<List<Map<String, dynamic>>> listJobs() async {
+    final res = await _http
+        .get(_u('/v1/jobs'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'jobs');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['jobs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createJob(Map<String, dynamic> body) async {
+    final res = await _http
+        .post(_u('/v1/jobs'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'create job');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateJob(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .patch(_u('/v1/jobs/$safeId'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'update job');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<bool> deleteJob(String id) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .delete(_u('/v1/jobs/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['deleted'] == true;
+  }
+
+  /// Run now: majukan `next_run` job sehingga tick scheduler berikutnya
+  /// (≤20s) mengklaimnya; false bila id asing atau job sedang busy.
+  Future<Map<String, dynamic>?> runJobNow(String id) async {
+    final safeId = Uri.encodeComponent(id);
+    final res = await _http
+        .post(_u('/v1/jobs/$safeId/run'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return null;
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<bool> bindBot(String botId, String sessionId) async {
     final safeId = Uri.encodeComponent(botId);
     final res = await _http

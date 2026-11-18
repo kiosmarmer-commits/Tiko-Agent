@@ -66,6 +66,11 @@ class HttpApiServer {
     this.pluginProvider,
     this.pluginConsentSetter,
     this.channelsProvider,
+    this.jobsProvider,
+    this.createJob,
+    this.updateJob,
+    this.deleteJob,
+    this.runJobNow,
   });
 
   final MessageHandler onMessage;
@@ -165,6 +170,85 @@ class HttpApiServer {
     return {'plugin': plugin.trim().toLowerCase(), 'action': action};
   }
 
+  void _validateJobPayload(
+    Map<String, dynamic> body, {
+    required bool forCreate,
+  }) {
+    const allowed = {
+      'cron',
+      'prompt',
+      'channel',
+      'user_key',
+      'enabled',
+      'missed_policy',
+      'timezone',
+    };
+    for (final key in body.keys) {
+      if (!allowed.contains(key)) {
+        throw ApiRequestException(400, 'invalid_request', 'field tidak dikenal: $key');
+      }
+    }
+    if (forCreate) {
+      final cron = body['cron'];
+      if (cron is! String || cron.trim().isEmpty) {
+        throw ApiRequestException(400, 'invalid_request',
+            'cron wajib diisi (ekspresi 5 field, mis. "*/5 * * * *")');
+      }
+      final prompt = body['prompt'];
+      if (prompt is! String || prompt.trim().isEmpty) {
+        throw ApiRequestException(400, 'invalid_request', 'prompt wajib diisi');
+      }
+    }
+    final cron = body['cron'];
+    if (cron != null &&
+        (cron is! String || cron.trim().isEmpty || cron.trim().length > 256)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'cron wajib string non-kosong maks 256');
+    }
+    final prompt = body['prompt'];
+    if (prompt != null &&
+        (prompt is! String || prompt.trim().isEmpty || prompt.length > 10000)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'prompt wajib string 1..10000 karakter');
+    }
+    final channel = body['channel'];
+    if (channel != null &&
+        (channel is! String || channel.trim().isEmpty || channel.trim().length > 64)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'channel wajib string non-kosong maks 64');
+    }
+    final userKey = body['user_key'];
+    if (userKey != null &&
+        (userKey is! String || userKey.trim().isEmpty || userKey.trim().length > 256)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'user_key wajib string non-kosong maks 256');
+    }
+    final enabled = body['enabled'];
+    if (enabled != null && enabled is! bool) {
+      throw ApiRequestException(400, 'invalid_request', 'enabled wajib boolean');
+    }
+    final policy = body['missed_policy'];
+    if (policy != null) {
+      if (policy is! String) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'missed_policy wajib string');
+      }
+      const known = {'skip', 'runonce', 'catchup'};
+      if (!known.contains(policy.replaceAll('_', '').toLowerCase())) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'missed_policy wajib skip | run_once | catch_up');
+      }
+    }
+    final timezone = body['timezone'];
+    if (timezone != null &&
+        (timezone is! String ||
+            timezone.trim().isEmpty ||
+            timezone.trim().length > 64)) {
+      throw ApiRequestException(
+          400, 'invalid_request', 'timezone wajib nama zona IANA maks 64');
+    }
+  }
+
   void _validateBotPayload(
     Map<String, dynamic> body, {
     required bool forCreate,
@@ -251,6 +335,18 @@ class HttpApiServer {
   /// Channels setup (GUI-P1-07): status channel gateway aktif + nama env
   /// yang mengonfigurasinya (read-only; env + restart untuk mengubah).
   final Future<Map<String, dynamic>> Function()? channelsProvider;
+
+  /// Automation / cron CRUD callbacks (GUI-P1-09). Callback yang null
+  /// membuat endpoint terkait merespons 501 not_implemented.
+  final Future<List<Map<String, dynamic>>> Function()? jobsProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      createJob;
+  final Future<Map<String, dynamic>?> Function(
+    String id,
+    Map<String, dynamic> body,
+  )? updateJob;
+  final Future<bool> Function(String id)? deleteJob;
+  final Future<Map<String, dynamic>?> Function(String id)? runJobNow;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -909,6 +1005,81 @@ class HttpApiServer {
             (throw ApiRequestException(501, 'not_implemented',
                 'channels status not configured')));
         _json(req, snapshot);
+      // Automation / cron CRUD endpoints (GUI-P1-09)
+      } else if (path == '/v1/jobs' && req.method == 'GET') {
+        final jobs = await (jobsProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'scheduler not configured')));
+        _json(req, {'jobs': jobs});
+      } else if (path == '/v1/jobs' && req.method == 'POST') {
+        if (createJob == null) {
+          _error(req, 501, 'not_implemented', 'scheduler not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateJobPayload(body, forCreate: true);
+        final job = await createJob!(body);
+        req.response.statusCode = 201;
+        _json(req, job);
+      } else if (path.startsWith('/v1/jobs/') &&
+          req.method == 'PATCH') {
+        if (updateJob == null) {
+          _error(req, 501, 'not_implemented', 'scheduler not configured');
+          return;
+        }
+        final id = path.substring('/v1/jobs/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid job id');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateJobPayload(body, forCreate: false);
+        final updated = await updateJob!(id, body);
+        if (updated == null) {
+          _error(req, 404, 'not_found', 'job not found');
+        } else {
+          _json(req, updated);
+        }
+      } else if (path.startsWith('/v1/jobs/') &&
+          req.method == 'DELETE') {
+        if (deleteJob == null) {
+          _error(req, 501, 'not_implemented', 'scheduler not configured');
+          return;
+        }
+        final id = path.substring('/v1/jobs/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid job id');
+          return;
+        }
+        final ok = await deleteJob!(id);
+        if (!ok) {
+          _error(req, 404, 'not_found', 'job not found');
+        } else {
+          _json(req, {'deleted': true});
+        }
+      } else if (path.startsWith('/v1/jobs/') &&
+          req.method == 'POST' &&
+          path.endsWith('/run')) {
+        if (runJobNow == null) {
+          _error(req, 501, 'not_implemented', 'scheduler not configured');
+          return;
+        }
+        final id = path.substring(
+            '/v1/jobs/'.length, path.length - '/run'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid job id');
+          return;
+        }
+        final job = await runJobNow!(id);
+        if (job == null) {
+          _error(req, 404, 'not_found', 'job not found or busy');
+        } else {
+          _json(req, job);
+        }
       } else {
         _error(req, 404, 'not_found', 'not found');
       }

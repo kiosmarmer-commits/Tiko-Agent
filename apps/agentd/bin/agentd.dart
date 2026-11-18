@@ -885,6 +885,72 @@ Future<void> main(List<String> args) async {
               : await rt.revokePluginConsent(plugin);
           return {'ok': result.ok, 'message': result.message};
         },
+        jobsProvider: () async => [
+          for (final job in rt.jobs.all)
+            {
+              'id': job.id,
+              'cron': job.cron,
+              'prompt': job.prompt,
+              'channel': job.channel,
+              'user_key': job.userKey,
+              'enabled': job.enabled,
+              'missed_policy': job.missedPolicy.name,
+              'timezone': job.timezone,
+              'next_run': job.nextRun.toUtc().toIso8601String(),
+              'last_run': job.lastRun?.toUtc().toIso8601String(),
+              'delivery_state': job.deliveryState,
+            },
+        ],
+        createJob: (body) async {
+          try {
+            final job = await rt.jobs.addAndSave(
+              cron: body['cron'] as String,
+              prompt: body['prompt'] as String,
+              channel: (body['channel'] as String?)?.trim() ?? 'http',
+              userKey: (body['user_key'] as String?)?.trim() ?? 'admin',
+              missedPolicy: _missedPolicy(body['missed_policy'] as String?),
+              timezone: ((body['timezone'] as String?)?.trim().isNotEmpty ??
+                      false)
+                  ? (body['timezone'] as String).trim()
+                  : 'UTC',
+            );
+            return job.toJson();
+          } on FormatException catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        updateJob: (id, body) async {
+          try {
+            final job = rt.jobs.update(
+              id,
+              cron: body['cron'] as String?,
+              prompt: body['prompt'] as String?,
+              channel: (body['channel'] as String?)?.trim(),
+              userKey: (body['user_key'] as String?)?.trim(),
+              enabled: body['enabled'] as bool?,
+              missedPolicy: body['missed_policy'] as String?,
+              timezone: (body['timezone'] as String?)?.trim(),
+            );
+            return job?.toJson();
+          } on FormatException catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        deleteJob: (id) async {
+          final ok = rt.jobs.remove(id);
+          if (ok) await rt.jobs.save();
+          return ok;
+        },
+        runJobNow: (id) async {
+          final job = rt.jobs.runNow(id);
+          if (job == null) return null;
+          await rt.jobs.save();
+          return job.toJson();
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,
@@ -1097,6 +1163,17 @@ String _randomToken() {
   final r = Random.secure();
   final bytes = List<int>.generate(16, (_) => r.nextInt(256));
   return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+}
+
+/// GUI-P1-09: normalisasi missed_policy dari HTTP (skip | run_once |
+/// catch_up, case-insensitive) ke enum [MissedPolicy].
+MissedPolicy _missedPolicy(String? name) {
+  if (name == null) return MissedPolicy.runOnce;
+  final normalized = name.replaceAll('_', '').toLowerCase();
+  for (final candidate in MissedPolicy.values) {
+    if (candidate.name.toLowerCase() == normalized) return candidate;
+  }
+  throw ArgumentError('invalid missed_policy: $name');
 }
 
 /// GUI-P1-07: snapshot status channel gateway (read-only). [active] adalah

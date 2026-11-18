@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Single route map (GUI-P0-01): desktop rail, mobile bottom bar and the
 /// mobile More page all derive their destinations from [kAppRoutes] so labels
 /// and structure cannot drift between Android, desktop and web.
-enum AppRoute { chat, dashboard, approvals, sessions, tasks, skills, bots, providers, plugins, channels, memory, events, logs, settings }
+enum AppRoute { chat, dashboard, approvals, sessions, tasks, skills, bots, providers, plugins, channels, automations, memory, events, logs, settings }
 
 class AppRouteInfo {
   const AppRouteInfo(
@@ -61,6 +61,12 @@ const List<AppRouteInfo> kAppRoutes = [
     AppRoute.channels,
     'Channels',
     Icons.hub_outlined,
+    primaryOnMobile: false,
+  ),
+  AppRouteInfo(
+    AppRoute.automations,
+    'Automation',
+    Icons.schedule_outlined,
     primaryOnMobile: false,
   ),
   AppRouteInfo(

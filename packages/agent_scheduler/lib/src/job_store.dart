@@ -339,6 +339,86 @@ class JobStore {
     });
   }
 
+  /// Mutasi parsial job (Automation CRUD, GUI-P1-09). Field `cron`/`timezone`
+  /// yang berubah menghitung ulang [Job.nextRun] dengan [CronExpression];
+  /// `missedPolicy` dinormalisasi seperti ScheduleJobTool (`run_once` →
+  /// `runOnce`). Mengembalikan null bila id tidak dikenal.
+  Job? update(
+    String id, {
+    String? cron,
+    String? prompt,
+    String? channel,
+    String? userKey,
+    bool? enabled,
+    String? missedPolicy,
+    String? timezone,
+  }) {
+    final job = _jobs[id];
+    if (job == null) return null;
+    final newCron = cron?.trim();
+    if (newCron != null && newCron.isNotEmpty) {
+      CronExpression.parse(newCron); // throws ArgumentError bila invalid
+      job.cron = newCron;
+    }
+    if (prompt != null) {
+      if (prompt.trim().isEmpty || prompt.length > 10000) {
+        throw ArgumentError.value(prompt, 'prompt', 'must contain 1..10000 characters');
+      }
+      job.prompt = prompt.trim();
+    }
+    if (channel != null) {
+      if (channel.trim().isEmpty || channel.length > 64) {
+        throw ArgumentError('invalid channel');
+      }
+      job.channel = channel.trim();
+    }
+    if (userKey != null) {
+      if (userKey.trim().isEmpty || userKey.length > 256) {
+        throw ArgumentError('invalid userKey');
+      }
+      job.userKey = userKey.trim();
+    }
+    if (enabled != null) job.enabled = enabled;
+    if (missedPolicy != null) {
+      MissedPolicy? policy;
+      final normalized = missedPolicy.replaceAll('_', '').toLowerCase();
+      for (final candidate in MissedPolicy.values) {
+        if (candidate.name.toLowerCase() == normalized) {
+          policy = candidate;
+          break;
+        }
+      }
+      if (policy == null) {
+        throw ArgumentError('invalid missed_policy: $missedPolicy');
+      }
+      job.missedPolicy = policy;
+    }
+    final newTimezone = timezone?.trim();
+    final scheduleChanged = (newCron != null && newCron.isNotEmpty) ||
+        (newTimezone != null && newTimezone != job.timezone);
+    if (newTimezone != null && newTimezone.isNotEmpty) job.timezone = newTimezone;
+    if (scheduleChanged) {
+      job.nextRun =
+          CronExpression.parse(job.cron).nextAfter(DateTime.now().toUtc(), timezone: job.timezone);
+      job.pendingRunAt = null;
+      job.scheduledAt = null;
+    }
+    unawaitedSave();
+    return job;
+  }
+
+  /// Run now (GUI-P1): majukan [Job.nextRun] ke sekarang sehingga tick
+  /// scheduler berikutnya mengklaim job (durasi ≤ [Scheduler.tickInterval]).
+  /// Null bila id tidak dikenal atau job sedang delivery-pending.
+  Job? runNow(String id) {
+    final job = _jobs[id];
+    if (job == null) return null;
+    if (job.deliveryRunId != null || job.pendingRunAt != null) return null;
+    job.nextRun = DateTime.now().toUtc();
+    unawaitedSave();
+    return job;
+  }
+
   bool remove(String id) {
     final ok = _jobs.remove(id) != null;
     if (ok) unawaitedSave();

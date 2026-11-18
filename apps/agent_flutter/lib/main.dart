@@ -18,6 +18,7 @@ import 'ui/bot_manager_view.dart';
 import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
+import 'ui/automation_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -102,6 +103,7 @@ class _AgentAppState extends State<AgentApp> {
   ProvidersSnapshot? providerSnapshot;
   PluginsToolsSnapshot? pluginSnapshot;
   ChannelsSnapshot? channelSnapshot;
+  JobsSnapshot? jobsSnapshot;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -169,6 +171,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.memories(),
         repo.pluginsTools(),
         repo.channels(),
+        repo.jobs(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
@@ -187,6 +190,7 @@ class _AgentAppState extends State<AgentApp> {
         memories = results[12] as List<MemoryFact>;
         pluginSnapshot = results[13] as PluginsToolsSnapshot;
         channelSnapshot = results[14] as ChannelsSnapshot;
+        jobsSnapshot = results[15] as JobsSnapshot;
       });
       if (!_eventFeedStarted) {
         _eventFeedStarted = true;
@@ -314,6 +318,7 @@ class _AgentAppState extends State<AgentApp> {
         providers: providerSnapshot,
         pluginSnapshot: pluginSnapshot,
         channelSnapshot: channelSnapshot,
+        jobsSnapshot: jobsSnapshot,
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
@@ -501,6 +506,32 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingAdmin,
           error: adminError,
           onRefresh: refreshAdmin,
+        );
+      case AppRoute.automations:
+        return AutomationPage(
+          snapshot: jobsSnapshot,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onCreate: (body) async {
+            await repo.createJob(body);
+            unawaited(refreshAdmin(force: true));
+          },
+          onUpdate: (id, body) async {
+            await repo.updateJob(id, body);
+            unawaited(refreshAdmin(force: true));
+          },
+          onDelete: (id) async {
+            final ok = await repo.deleteJob(id);
+            if (ok) unawaited(refreshAdmin(force: true));
+            return ok;
+          },
+          onRunNow: (id) async {
+            final job = await repo.runJobNow(id);
+            if (job != null) unawaited(refreshAdmin(force: true));
+            return job;
+          },
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1259,6 +1290,7 @@ class _MorePage extends StatelessWidget {
     required this.providers,
     required this.pluginSnapshot,
     required this.channelSnapshot,
+    required this.jobsSnapshot,
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
@@ -1280,6 +1312,7 @@ class _MorePage extends StatelessWidget {
   final ProvidersSnapshot? providers;
   final PluginsToolsSnapshot? pluginSnapshot;
   final ChannelsSnapshot? channelSnapshot;
+  final JobsSnapshot? jobsSnapshot;
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
@@ -1460,6 +1493,42 @@ class _MorePage extends StatelessWidget {
                   loading: false,
                   error: null,
                   onRefresh: onRefresh,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.schedule_outlined),
+          title: Text('Automation ('
+              '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: AutomationPage(
+                  snapshot: jobsSnapshot,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onCreate: (body) async {
+                    await repo.createJob(body);
+                    await onRefresh();
+                  },
+                  onUpdate: (id, body) async {
+                    await repo.updateJob(id, body);
+                    await onRefresh();
+                  },
+                  onDelete: (id) async {
+                    final ok = await repo.deleteJob(id);
+                    await onRefresh();
+                    return ok;
+                  },
+                  onRunNow: (id) async {
+                    final job = await repo.runJobNow(id);
+                    await onRefresh();
+                    return job;
+                  },
                 ),
               ),
             ));
