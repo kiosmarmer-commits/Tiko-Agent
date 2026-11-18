@@ -50,7 +50,10 @@
             <h1>Percakapan</h1>
             <p class="subheading">Tanyakan sesuatu atau minta Tiko menjalankan tugas.</p>
           </div>
+          <button type="button" id="btn-multipane" aria-pressed="false" title="Multi-pane (GUI-P2-03)">Multi-pane</button>
         </div>
+        <div id="chat-panes" class="chat-panes">
+        <div id="pane-chat">
         <div id="messages" class="messages" aria-live="polite" aria-relevant="additions text"></div>
         <div id="confirmBox" class="confirm hidden" role="group" aria-label="Konfirmasi tindakan">
           <div class="confirm-copy">
@@ -68,6 +71,22 @@
           <button type="submit" id="sendBtn" class="primary" title="Kirim pesan">Kirim</button>
         </form>
         <p class="hint">Contoh: <code>hitung 12 × 8</code> · <code>rencanakan tugas</code> · <code>cari file README</code></p>
+        </div>
+        <aside id="pane-sessions" class="pane-side" hidden aria-label="Pane sesi (GUI-P2-03)">
+          <div class="pane-side-head"><strong>Sessions</strong><button type="button" id="btn-refresh-pane-sessions" title="Muat ulang sesi">Refresh</button></div>
+          <ul id="pane-session-list" class="list"></ul>
+        </aside>
+        <aside id="pane-inspector" class="pane-side" hidden aria-label="Pane inspector (GUI-P2-03)">
+          <div class="pane-side-head">
+            <strong>Inspector</strong>
+            <span class="row">
+              <button type="button" id="btn-refresh-pane-runs" title="Muat ulang runs">Refresh</button>
+              <button type="button" id="btn-close-pane" title="Tutup multi-pane">×</button>
+            </span>
+          </div>
+          <ul id="pane-runs-list" class="list"></ul>
+        </aside>
+        </div>
       </section>
 
       <section id="tab-memory" class="tab" hidden aria-label="Memori">

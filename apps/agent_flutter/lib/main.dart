@@ -23,6 +23,7 @@ import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
 import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
+import 'ui/multi_pane_view.dart';
 import 'ui/runs_page.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
@@ -48,8 +49,10 @@ Future<void> main() async {
   // (web/Android) or fails.
   try {
     final conn = await DesktopDaemon.ensure(
-      binaryOverride:
-          const String.fromEnvironment('AGENTD_BIN', defaultValue: ''),
+      binaryOverride: const String.fromEnvironment(
+        'AGENTD_BIN',
+        defaultValue: '',
+      ),
     );
     if (conn != null) {
       base = conn.baseUrl;
@@ -59,11 +62,13 @@ Future<void> main() async {
     // Bootstrap is best-effort; the manual connection settings still work.
   }
   final settings = await AppSettings.load();
-  runApp(AgentApp(
-    initialBaseUrl: base,
-    initialToken: token,
-    initialSettings: settings,
-  ));
+  runApp(
+    AgentApp(
+      initialBaseUrl: base,
+      initialToken: token,
+      initialSettings: settings,
+    ),
+  );
 }
 
 class AgentApp extends StatefulWidget {
@@ -94,6 +99,7 @@ class _AgentAppState extends State<AgentApp> {
   bool _eventFeedStarted = false;
   AppRoute route = AppRoute.chat;
   String sessionKey = 'flutter:default';
+  bool inspectorVisible = true;
 
   Map<String, dynamic>? status;
   Map<String, dynamic>? caps;
@@ -166,8 +172,7 @@ class _AgentAppState extends State<AgentApp> {
           await refreshAdmin();
         }
       },
-    )
-      ..start();
+    )..start();
   }
 
   Future<void> refreshAdmin({bool force = false}) async {
@@ -236,7 +241,10 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
-  Future<void> _queryAudit(Map<String, String> filters, {int offset = 0}) async {
+  Future<void> _queryAudit(
+    Map<String, String> filters, {
+    int offset = 0,
+  }) async {
     setState(() {
       auditFilters = filters;
       auditOffset = offset;
@@ -337,8 +345,7 @@ class _AgentAppState extends State<AgentApp> {
 
   Future<String?> _saveCurated(String file, String text) async {
     try {
-      final info =
-          await repo.setCuratedMemory(file: file, text: text);
+      final info = await repo.setCuratedMemory(file: file, text: text);
       if (!mounted) return null;
       setState(() => curatedMemoryInfo = info);
       return null;
@@ -400,8 +407,30 @@ class _AgentAppState extends State<AgentApp> {
   }
 
   Future<void> _applySettings(AppSettings next) async {
+    final multiPaneTurnedOn = next.multiPane && !settings.multiPane;
     setState(() => settings = next);
     await next.save();
+    // GUI-P2-03: saat multi-pane baru diaktifkan di route chat, muat data
+    // inspector agar pane tidak kosong.
+    if (multiPaneTurnedOn && route == AppRoute.chat && runsSnapshot == null) {
+      unawaited(_loadRuns());
+    }
+  }
+
+  void _toggleInspector() {
+    setState(() => inspectorVisible = !inspectorVisible);
+    if (inspectorVisible && runsSnapshot == null) {
+      unawaited(_loadRuns());
+    }
+  }
+
+  void _openSessionFromPane(String id) {
+    setState(() {
+      sessionKey = id;
+      adminError = null;
+      route = AppRoute.chat;
+    });
+    unawaited(chat.openSession(id));
   }
 
   Future<bool> _sendSkillFeedback(String slug, bool positive) async {
@@ -433,10 +462,16 @@ class _AgentAppState extends State<AgentApp> {
   void _openCommandPalette() {
     final actions = [
       for (final entry in kAppRoutes)
-        PaletteAction(entry.label, () => _selectRoute(entry.route),
-            hint: 'Buka halaman ${entry.label}'),
-      PaletteAction('Muat ulang data admin', () => refreshAdmin(force: true),
-          hint: 'Semua GET dashboard dipanggil ulang'),
+        PaletteAction(
+          entry.label,
+          () => _selectRoute(entry.route),
+          hint: 'Buka halaman ${entry.label}',
+        ),
+      PaletteAction(
+        'Muat ulang data admin',
+        () => refreshAdmin(force: true),
+        hint: 'Semua GET dashboard dipanggil ulang',
+      ),
     ];
     if (!mounted) return;
     showCommandPalette(context, actions);
@@ -454,25 +489,25 @@ class _AgentAppState extends State<AgentApp> {
       home: PaletteShortcut(
         onPalette: _openCommandPalette,
         child: Scaffold(
-        body: wide
-            ? DesktopShell(
-                selected: route,
-                onSelect: _selectRoute,
-                pendingApprovals: _pendingApprovals,
-                child: AnimatedBuilder(
-                  animation: chat,
-                  builder: (context, _) => _body(wide: true),
+          body: wide
+              ? DesktopShell(
+                  selected: route,
+                  onSelect: _selectRoute,
+                  pendingApprovals: _pendingApprovals,
+                  child: AnimatedBuilder(
+                    animation: chat,
+                    builder: (context, _) => _body(wide: true),
+                  ),
+                )
+              : MobileShell(
+                  selected: route.primaryOnMobile ? route : null,
+                  onSelect: _selectMobileRoute,
+                  pendingApprovals: _pendingApprovals,
+                  child: AnimatedBuilder(
+                    animation: chat,
+                    builder: (context, _) => _body(wide: false),
+                  ),
                 ),
-              )
-            : MobileShell(
-                selected: route.primaryOnMobile ? route : null,
-                onSelect: _selectMobileRoute,
-                pendingApprovals: _pendingApprovals,
-                child: AnimatedBuilder(
-                  animation: chat,
-                  builder: (context, _) => _body(wide: false),
-                ),
-              ),
         ),
       ),
     );
@@ -483,11 +518,18 @@ class _AgentAppState extends State<AgentApp> {
 
   void _selectRoute(AppRoute next) {
     setState(() => route = next);
-    if (next == AppRoute.artifacts &&
-        artifactsListing == null) {
+    if (next == AppRoute.artifacts && artifactsListing == null) {
       unawaited(_loadArtifacts());
     }
     if (next == AppRoute.runs && runsSnapshot == null) {
+      unawaited(_loadRuns());
+    }
+    // GUI-P2-03: inspector pane di chat butuh snapshot runs saat pertama
+    // kali ditampilkan pada mode multi-pane.
+    if (next == AppRoute.chat &&
+        settings.multiPane &&
+        inspectorVisible &&
+        runsSnapshot == null) {
       unawaited(_loadRuns());
     }
     if (next == AppRoute.memory &&
@@ -551,7 +593,43 @@ class _AgentAppState extends State<AgentApp> {
     }
     switch (route) {
       case AppRoute.chat:
-        return _ChatPage(chat: chat, sessionKey: sessionKey);
+        final chatPage = _ChatPage(
+          chat: chat,
+          sessionKey: sessionKey,
+          multiPane: settings.multiPane,
+          inspectorVisible: inspectorVisible,
+          onToggleInspector: _toggleInspector,
+        );
+        // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
+        if (!settings.multiPane) return chatPage;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SessionsPane(
+              sessions: sessions,
+              current: sessionKey,
+              online: chat.online,
+              loading: loadingAdmin,
+              error: adminError,
+              onRefresh: () => refreshAdmin(force: true),
+              onSelect: _openSessionFromPane,
+            ),
+            Expanded(child: chatPage),
+            if (inspectorVisible)
+              InspectorPane(
+                runsSnapshot: runsSnapshot,
+                runsLoading: runsLoading,
+                runsError: runsError,
+                artifactsListing: artifactsListing,
+                artifactsError: artifactsError,
+                online: chat.online,
+                onLoadRuns: _loadRuns,
+                onLoadArtifacts: () => unawaited(_loadArtifacts()),
+                onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
+                onClose: _toggleInspector,
+              ),
+          ],
+        );
       case AppRoute.dashboard:
         return _DashboardPage(
           status: status,
@@ -575,12 +653,17 @@ class _AgentAppState extends State<AgentApp> {
               final decided = await repo.decideApproval(id, ok);
               await refreshAdmin();
               if (!decided && mounted) {
-                setState(() => adminError =
-                    'Approval $id tidak lagi pending atau sudah kedaluwarsa.');
+                setState(
+                  () => adminError =
+                      'Approval $id tidak lagi pending atau sudah kedaluwarsa.',
+                );
               }
             } catch (error) {
               if (mounted) {
-                setState(() => adminError = 'Gagal mengirim keputusan approval: $error');
+                setState(
+                  () =>
+                      adminError = 'Gagal mengirim keputusan approval: $error',
+                );
               }
             }
           },
@@ -604,7 +687,8 @@ class _AgentAppState extends State<AgentApp> {
           onRename: (id, title) async {
             try {
               final ok = await repo.renameSession(id, title);
-              if (!ok) throw StateError('Sesi tidak ditemukan atau gagal diubah.');
+              if (!ok)
+                throw StateError('Sesi tidak ditemukan atau gagal diubah.');
               await refreshAdmin(force: true);
             } catch (error) {
               if (mounted) {
@@ -615,7 +699,8 @@ class _AgentAppState extends State<AgentApp> {
           onDelete: (id) async {
             try {
               final deleted = await repo.deleteSession(id);
-              if (!deleted) throw StateError('Sesi tidak ditemukan atau gagal dihapus.');
+              if (!deleted)
+                throw StateError('Sesi tidak ditemukan atau gagal dihapus.');
               if (id == sessionKey) {
                 setState(() => sessionKey = 'flutter:default');
                 chat.clearChat();
@@ -771,9 +856,9 @@ class _AgentAppState extends State<AgentApp> {
           onQuery: _queryAudit,
           onRefresh: () => _queryAudit(auditFilters, offset: auditOffset),
           onNext: () => _queryAudit(
-              auditFilters,
-              offset:
-                  auditOffset + (auditResult?.entries.length ?? 50)),
+            auditFilters,
+            offset: auditOffset + (auditResult?.entries.length ?? 50),
+          ),
         );
       case AppRoute.artifacts:
         return ArtifactsPage(
@@ -811,10 +896,12 @@ class _AgentAppState extends State<AgentApp> {
           onDelete: (id) async {
             try {
               final deleted = await repo.deleteMemory(id);
-              if (!deleted) throw StateError('Memori tidak ditemukan atau gagal dihapus.');
+              if (!deleted)
+                throw StateError('Memori tidak ditemukan atau gagal dihapus.');
               await refreshAdmin();
             } catch (error) {
-              if (mounted) setState(() => adminError = 'Gagal menghapus memori: $error');
+              if (mounted)
+                setState(() => adminError = 'Gagal menghapus memori: $error');
             }
           },
           onSaveCurated: _saveCurated,
@@ -834,14 +921,22 @@ class _AgentAppState extends State<AgentApp> {
         );
     }
   }
-
 }
 
 // ——— Chat ———
 class _ChatPage extends StatefulWidget {
-  const _ChatPage({required this.chat, required this.sessionKey});
+  const _ChatPage({
+    required this.chat,
+    required this.sessionKey,
+    this.multiPane = false,
+    this.inspectorVisible = false,
+    this.onToggleInspector,
+  });
   final ChatController chat;
   final String sessionKey;
+  final bool multiPane;
+  final bool inspectorVisible;
+  final VoidCallback? onToggleInspector;
 
   @override
   State<_ChatPage> createState() => _ChatPageState();
@@ -860,7 +955,8 @@ class _ChatPageState extends State<_ChatPage> {
   void _followLatestMessage() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
-    final shouldFollow = !position.hasContentDimensions ||
+    final shouldFollow =
+        !position.hasContentDimensions ||
         position.maxScrollExtent - position.pixels <= 120;
     if (!shouldFollow) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -892,6 +988,19 @@ class _ChatPageState extends State<_ChatPage> {
               title: 'Chat',
               subtitle: widget.sessionKey,
               online: chat.online,
+              trailing: widget.multiPane
+                  ? IconButton(
+                      tooltip: widget.inspectorVisible
+                          ? 'Tutup inspector'
+                          : 'Buka inspector (GUI-P2-03)',
+                      icon: Icon(
+                        widget.inspectorVisible
+                            ? Icons.chevron_right
+                            : Icons.view_column_outlined,
+                      ),
+                      onPressed: widget.onToggleInspector,
+                    )
+                  : null,
             ),
             Expanded(
               child: chat.messages.isEmpty
@@ -909,13 +1018,17 @@ class _ChatPageState extends State<_ChatPage> {
                         final message = chat.messages[i];
                         final user = message['role'] == 'user';
                         return Align(
-                          alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+                          alignment: user
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(12),
                             constraints: const BoxConstraints(maxWidth: 640),
                             decoration: BoxDecoration(
-                              color: user ? context.simpulUserBubble : context.simpulBotBubble,
+                              color: user
+                                  ? context.simpulUserBubble
+                                  : context.simpulBotBubble,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: context.simpulBorder),
                             ),
@@ -923,11 +1036,13 @@ class _ChatPageState extends State<_ChatPage> {
                                 ? GenUiMessageView(
                                     text: (message['text'] ?? '').toString(),
                                     onAction: (actionId, values) {
-                                      unawaited(chat.sendUiAction(
-                                        actionId,
-                                        values,
-                                        sessionKey: widget.sessionKey,
-                                      ));
+                                      unawaited(
+                                        chat.sendUiAction(
+                                          actionId,
+                                          values,
+                                          sessionKey: widget.sessionKey,
+                                        ),
+                                      );
                                     },
                                   )
                                 : SelectableText(
@@ -968,7 +1083,9 @@ class _ChatPageState extends State<_ChatPage> {
                   ],
                 ),
               ),
-            _Composer(onSend: (text) => chat.send(text, sessionKey: widget.sessionKey)),
+            _Composer(
+              onSend: (text) => chat.send(text, sessionKey: widget.sessionKey),
+            ),
           ],
         );
       },
@@ -997,9 +1114,9 @@ class _ComposerState extends State<_Composer> {
       c.clear();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengirim pesan: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal mengirim pesan: $error')));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -1124,17 +1241,20 @@ class _DashboardPage extends StatelessWidget {
                       children: [
                         Text('default: ${routing.defaultProvider}'),
                         for (final tier in const ['1', '2', '3'])
-                          Text(
-                              'tier $tier → ${routing.providerForTier(tier)}'),
+                          Text('tier $tier → ${routing.providerForTier(tier)}'),
                         if (routing.health.isEmpty)
-                          Text('belum ada data kesehatan',
-                              style: TextStyle(color: context.simpulMuted)),
+                          Text(
+                            'belum ada data kesehatan',
+                            style: TextStyle(color: context.simpulMuted),
+                          ),
                         for (final e in routing.health.entries)
                           Text(
                             '${e.key}: ${e.value['open'] == true ? 'circuit open' : 'sehat'}'
                             ' (${e.value['failures'] ?? 0} gagal)',
                             style: TextStyle(
-                              color: e.value['open'] == true ? context.simpulDanger : context.simpulMuted,
+                              color: e.value['open'] == true
+                                  ? context.simpulDanger
+                                  : context.simpulMuted,
                             ),
                           ),
                       ],
@@ -1155,7 +1275,9 @@ class _DashboardPage extends StatelessWidget {
                                   '${s['id']} · ${s['type']} · '
                                   '${s['enabled'] == true ? 'aktif' : 'nonaktif'}',
                                   style: TextStyle(
-                                    color: s['enabled'] == true ? null : context.simpulMuted,
+                                    color: s['enabled'] == true
+                                        ? null
+                                        : context.simpulMuted,
                                   ),
                                 ),
                             ],
@@ -1168,7 +1290,9 @@ class _DashboardPage extends StatelessWidget {
                           ? 'Tidak ada pending'
                           : '$pending menunggu keputusan',
                       style: TextStyle(
-                        color: pending > 0 ? context.simpulWarn : context.simpulMuted,
+                        color: pending > 0
+                            ? context.simpulWarn
+                            : context.simpulMuted,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1178,33 +1302,46 @@ class _DashboardPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: doctor.isEmpty
-                          ? [Text('—', style: TextStyle(color: context.simpulMuted))]
+                          ? [
+                              Text(
+                                '—',
+                                style: TextStyle(color: context.simpulMuted),
+                              ),
+                            ]
                           : doctor
-                              .map((c) => Text(
+                                .map(
+                                  (c) => Text(
                                     '[${c['status']}] ${c['name']}: ${c['detail']}',
                                     style: TextStyle(
                                       color: c['status'] == 'fail'
                                           ? context.simpulDanger
                                           : c['status'] == 'warn'
-                                              ? context.simpulWarn
-                                              : null,
+                                          ? context.simpulWarn
+                                          : null,
                                       height: 1.4,
                                     ),
-                                  ))
-                              .toList(),
+                                  ),
+                                )
+                                .toList(),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              const Text('Events terbaru',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                'Events terbaru',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
-              ...events.take(20).map((e) => ListTile(
-                    dense: true,
-                    title: Text(e.type),
-                    subtitle: Text(e.at),
-                  )),
+              ...events
+                  .take(20)
+                  .map(
+                    (e) => ListTile(
+                      dense: true,
+                      title: Text(e.type),
+                      subtitle: Text(e.at),
+                    ),
+                  ),
             ],
           ),
         ),
@@ -1239,7 +1376,10 @@ class _ApprovalsPage extends StatelessWidget {
           title: 'Approvals',
           subtitle: '${pending.length} pending',
           online: online,
-          trailing: IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+          trailing: IconButton(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
         if (loading) const LinearProgressIndicator(minHeight: 2),
         Expanded(
@@ -1249,45 +1389,72 @@ class _ApprovalsPage extends StatelessWidget {
               if (pending.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Tidak ada permintaan izin.', style: TextStyle(color: context.simpulMuted)),
+                  child: Text(
+                    'Tidak ada permintaan izin.',
+                    style: TextStyle(color: context.simpulMuted),
+                  ),
                 ),
-              ...pending.map((a) => Card(
-                    color: context.simpulPanel,
-                    child: ListTile(
-                      title: Text('${a.tool} · ${a.risk}', maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '${a.id}\n${a.args}\n${a.createdAt}',
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      isThreeLine: true,
-                      trailing: Wrap(
-                        spacing: 2,
-                        children: [
-                          IconButton(
-                            tooltip: 'Approve',
-                            onPressed: () => onDecide(a.id, true),
-                            icon: Icon(Icons.check_circle, color: context.simpulAccent),
-                          ),
-                          IconButton(
-                            tooltip: 'Deny',
-                            onPressed: () => onDecide(a.id, false),
-                            icon: Icon(Icons.cancel, color: context.simpulDanger),
-                          ),
-                        ],
-                      ),
+              ...pending.map(
+                (a) => Card(
+                  color: context.simpulPanel,
+                  child: ListTile(
+                    title: Text(
+                      '${a.tool} · ${a.risk}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )),
+                    subtitle: Text(
+                      '${a.id}\n${a.args}\n${a.createdAt}',
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    isThreeLine: true,
+                    trailing: Wrap(
+                      spacing: 2,
+                      children: [
+                        IconButton(
+                          tooltip: 'Approve',
+                          onPressed: () => onDecide(a.id, true),
+                          icon: Icon(
+                            Icons.check_circle,
+                            color: context.simpulAccent,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Deny',
+                          onPressed: () => onDecide(a.id, false),
+                          icon: Icon(Icons.cancel, color: context.simpulDanger),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               if (rest.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.fromLTRB(8, 16, 8, 8),
-                  child: Text('Riwayat', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Riwayat',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                ...rest.take(30).map((a) => ListTile(
-                      dense: true,
-                      title: Text('${a.state} · ${a.tool}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${a.id} · ${a.actor}', maxLines: 2, overflow: TextOverflow.ellipsis),
-                    )),
+                ...rest
+                    .take(30)
+                    .map(
+                      (a) => ListTile(
+                        dense: true,
+                        title: Text(
+                          '${a.state} · ${a.tool}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${a.id} · ${a.actor}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
               ],
             ],
           ),
@@ -1321,7 +1488,10 @@ class _SessionsPage extends StatelessWidget {
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
 
-  Future<void> _confirmRename(BuildContext context, SessionSummary session) async {
+  Future<void> _confirmRename(
+    BuildContext context,
+    SessionSummary session,
+  ) async {
     final id = session.id;
     final controller = TextEditingController(text: session.displayTitle);
     final title = await showDialog<String>(
@@ -1335,7 +1505,10 @@ class _SessionsPage extends StatelessWidget {
           onSubmitted: (value) => Navigator.pop(dialogContext, value),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text),
             child: const Text('Simpan'),
@@ -1354,8 +1527,14 @@ class _SessionsPage extends StatelessWidget {
         title: const Text('Hapus sesi?'),
         content: Text('Transcript "$id" akan dihapus permanen dari daemon.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Hapus')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Hapus'),
+          ),
         ],
       ),
     );
@@ -1370,7 +1549,10 @@ class _SessionsPage extends StatelessWidget {
           title: 'Sessions',
           subtitle: '${sessions.length} sesi',
           online: online,
-          trailing: IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+          trailing: IconButton(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
         if (loading) const LinearProgressIndicator(minHeight: 2),
         if (error != null)
@@ -1380,7 +1562,12 @@ class _SessionsPage extends StatelessWidget {
           ),
         Expanded(
           child: sessions.isEmpty
-              ? Center(child: Text('Belum ada sesi.', style: TextStyle(color: context.simpulMuted)))
+              ? Center(
+                  child: Text(
+                    'Belum ada sesi.',
+                    style: TextStyle(color: context.simpulMuted),
+                  ),
+                )
               : ListView.builder(
                   itemCount: sessions.length,
                   itemBuilder: (context, i) {
@@ -1390,7 +1577,11 @@ class _SessionsPage extends StatelessWidget {
                     return ListTile(
                       selected: id == current,
                       leading: const Icon(Icons.forum_outlined),
-                      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      title: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       subtitle: Text(
                         '$id · ${session.channel} · ${session.updatedAt} · turns=${session.turns}',
                         maxLines: 2,
@@ -1457,7 +1648,10 @@ class _MemoryPage extends StatelessWidget {
           title: 'Memory',
           subtitle: '${memories.length} fakta',
           online: online,
-          trailing: IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+          trailing: IconButton(
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
         ),
         if (loading) const LinearProgressIndicator(minHeight: 2),
         if (error != null)
@@ -1467,14 +1661,27 @@ class _MemoryPage extends StatelessWidget {
           ),
         Expanded(
           child: memories.isEmpty
-              ? Center(child: Text('Kosong', style: TextStyle(color: context.simpulMuted)))
+              ? Center(
+                  child: Text(
+                    'Kosong',
+                    style: TextStyle(color: context.simpulMuted),
+                  ),
+                )
               : ListView.builder(
                   itemCount: memories.length,
                   itemBuilder: (context, i) {
                     final memory = memories[i];
                     return ListTile(
-                      title: Text(memory.text, maxLines: 4, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${memory.id} · ${memory.kind}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(
+                        memory.text,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${memory.id} · ${memory.kind}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       trailing: IconButton(
                         tooltip: 'Hapus memori',
                         icon: const Icon(Icons.delete_outline),
@@ -1483,10 +1690,20 @@ class _MemoryPage extends StatelessWidget {
                             context: context,
                             builder: (dialogContext) => AlertDialog(
                               title: const Text('Hapus memori?'),
-                              content: const Text('Fakta ini akan dihapus dari penyimpanan Tiko.'),
+                              content: const Text(
+                                'Fakta ini akan dihapus dari penyimpanan Tiko.',
+                              ),
                               actions: [
-                                TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
-                                FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Hapus')),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, false),
+                                  child: const Text('Batal'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
+                                  child: const Text('Hapus'),
+                                ),
                               ],
                             ),
                           );
@@ -1515,13 +1732,16 @@ class _DaemonStatusCard extends StatelessWidget {
     final String detail;
     if (c == null) {
       modeText = 'manual';
-      detail = 'Daemon tidak di-bootstrap otomatis; gunakan koneksi manual di atas.';
+      detail =
+          'Daemon tidak di-bootstrap otomatis; gunakan koneksi manual di atas.';
     } else if (c.mode == 'reuse') {
       modeText = 'daemon berjalan (reuse)';
-      detail = 'Terhubung ke daemon yang sudah sehat di ${c.baseUrl}. Home: ${c.home}';
+      detail =
+          'Terhubung ke daemon yang sudah sehat di ${c.baseUrl}. Home: ${c.home}';
     } else if (c.mode == 'started') {
       modeText = 'daemon di-spawn otomatis';
-      detail = 'Agentd diluncurkan dari binary bundled (pid ${c.pid}). Home: ${c.home}. Log: ${c.logPath}';
+      detail =
+          'Agentd diluncurkan dari binary bundled (pid ${c.pid}). Home: ${c.home}. Log: ${c.logPath}';
     } else {
       modeText = c.mode;
       detail = c.home ?? '';
@@ -1537,9 +1757,15 @@ class _DaemonStatusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Daemon: $modeText', style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            'Daemon: $modeText',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 6),
-          Text(detail, style: TextStyle(color: context.simpulMuted, height: 1.4)),
+          Text(
+            detail,
+            style: TextStyle(color: context.simpulMuted, height: 1.4),
+          ),
         ],
       ),
     );
@@ -1628,372 +1854,430 @@ class _MorePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        PageHeader(title: 'More', subtitle: 'Tasks, Memory, Tools', online: online),
+        PageHeader(
+          title: 'More',
+          subtitle: 'Tasks, Memory, Tools',
+          online: online,
+        ),
         ListTile(
           leading: const Icon(Icons.view_kanban_outlined),
           title: Text('Tasks (${tasks.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: TaskBoardPage(
-                  tasks: tasks,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: TaskBoardPage(
+                    tasks: tasks,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.bolt_outlined),
           title: Text('Events (${events.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: EventsPage(
-                  events: events,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: EventsPage(
+                    events: events,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.article_outlined),
           title: Text('Logs (${logFiles.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: LogsPage(
-                  logs: logFiles,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onLoadContent: repo.logContent,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: LogsPage(
+                    logs: logFiles,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onLoadContent: repo.logContent,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.auto_awesome_outlined),
           title: Text('Skills (${skills.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: SkillsPage(
-                  skills: skills,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onFeedback: (slug, positive) async {
-                    final ok = await repo.skillFeedback(slug, positive);
-                    if (ok) await onRefresh();
-                    return ok;
-                  },
-                  onEvaluate: repo.evaluateSkill,
-                  onApprove: repo.approveSkill,
-                  onRollback: repo.rollbackSkill,
-                  onLoadHistory: repo.skillHistory,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: SkillsPage(
+                    skills: skills,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onFeedback: (slug, positive) async {
+                      final ok = await repo.skillFeedback(slug, positive);
+                      if (ok) await onRefresh();
+                      return ok;
+                    },
+                    onEvaluate: repo.evaluateSkill,
+                    onApprove: repo.approveSkill,
+                    onRollback: repo.rollbackSkill,
+                    onLoadHistory: repo.skillHistory,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.smart_toy_outlined),
           title: Text('Bots (${bots.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: BotsPage(
-                  bots: bots,
-                  bindings: bindings,
-                  availableSessions: const [],
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onCreate: (body) async {
-                    await repo.createBot(body);
-                    await onRefresh();
-                  },
-                  onUpdate: (id, body) async {
-                    await repo.updateBot(id, body);
-                    await onRefresh();
-                  },
-                  onDelete: repo.deleteBot,
-                  onBind: repo.bindBot,
-                  onUnbind: repo.unbindBot,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: BotsPage(
+                    bots: bots,
+                    bindings: bindings,
+                    availableSessions: const [],
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onCreate: (body) async {
+                      await repo.createBot(body);
+                      await onRefresh();
+                    },
+                    onUpdate: (id, body) async {
+                      await repo.updateBot(id, body);
+                      await onRefresh();
+                    },
+                    onDelete: repo.deleteBot,
+                    onBind: repo.bindBot,
+                    onUnbind: repo.unbindBot,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.route_outlined),
           title: Text('Providers (${providers?.providers.length ?? 0})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: ProviderManagerPage(
-                  snapshot: providers,
-                  availableSessions: availableSessions,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onSetSessionProvider: (sessionId, providerArg) async {
-                    final ok = await repo.setSessionProvider(
-                        sessionId, providerArg);
-                    if (ok) await onRefresh();
-                    return ok;
-                  },
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: ProviderManagerPage(
+                    snapshot: providers,
+                    availableSessions: availableSessions,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onSetSessionProvider: (sessionId, providerArg) async {
+                      final ok = await repo.setSessionProvider(
+                        sessionId,
+                        providerArg,
+                      );
+                      if (ok) await onRefresh();
+                      return ok;
+                    },
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.extension_outlined),
           title: Text('Plugins (${pluginSnapshot?.plugins.length ?? 0})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: PluginManagerPage(
-                  snapshot: pluginSnapshot,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onConsent: (plugin, action) async {
-                    final message = await repo.setPluginConsent(plugin, action);
-                    await onRefresh();
-                    return message;
-                  },
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: PluginManagerPage(
+                    snapshot: pluginSnapshot,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onConsent: (plugin, action) async {
+                      final message = await repo.setPluginConsent(
+                        plugin,
+                        action,
+                      );
+                      await onRefresh();
+                      return message;
+                    },
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.hub_outlined),
-          title: Text('Channels ('
-              '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})'),
+          title: Text(
+            'Channels ('
+            '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})',
+          ),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: ChannelsPage(
-                  snapshot: channelSnapshot,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: ChannelsPage(
+                    snapshot: channelSnapshot,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.schedule_outlined),
-          title: Text('Automation ('
-              '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)'),
+          title: Text(
+            'Automation ('
+            '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)',
+          ),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: AutomationPage(
-                  snapshot: jobsSnapshot,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onCreate: (body) async {
-                    await repo.createJob(body);
-                    await onRefresh();
-                  },
-                  onUpdate: (id, body) async {
-                    await repo.updateJob(id, body);
-                    await onRefresh();
-                  },
-                  onDelete: (id) async {
-                    final ok = await repo.deleteJob(id);
-                    await onRefresh();
-                    return ok;
-                  },
-                  onRunNow: (id) async {
-                    final job = await repo.runJobNow(id);
-                    await onRefresh();
-                    return job;
-                  },
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: AutomationPage(
+                    snapshot: jobsSnapshot,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onCreate: (body) async {
+                      await repo.createJob(body);
+                      await onRefresh();
+                    },
+                    onUpdate: (id, body) async {
+                      await repo.updateJob(id, body);
+                      await onRefresh();
+                    },
+                    onDelete: (id) async {
+                      final ok = await repo.deleteJob(id);
+                      await onRefresh();
+                      return ok;
+                    },
+                    onRunNow: (id) async {
+                      final job = await repo.runJobNow(id);
+                      await onRefresh();
+                      return job;
+                    },
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.security_outlined),
           title: Text(
-              'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}'),
+            'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
+          ),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: SecurityPage(
-                  snapshot: securitySnapshot,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: SecurityPage(
+                    snapshot: securitySnapshot,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.receipt_long_outlined),
-          title: Text('Audit'
-              '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}'),
+          title: Text(
+            'Audit'
+            '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}',
+          ),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: AuditPage(
-                  result: auditResult,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onQuery: onQueryAudit,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: AuditPage(
+                    result: auditResult,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onQuery: onQueryAudit,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.folder_copy_outlined),
-          title: Text('Artifacts'
-              '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}'),
+          title: Text(
+            'Artifacts'
+            '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}',
+          ),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: ArtifactsPage(
-                  listing: artifactsListing,
-                  online: online,
-                  loading: loadingArtifacts,
-                  error: artifactsError,
-                  dir: artifactsDir,
-                  onOpenDir: onOpenArtifactsDir,
-                  onOpenFile: onOpenArtifactFile,
-                  onClosePreview: onCloseArtifactPreview,
-                  onRefresh: () async { onOpenArtifactsDir(artifactsDir); },
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: ArtifactsPage(
+                    listing: artifactsListing,
+                    online: online,
+                    loading: loadingArtifacts,
+                    error: artifactsError,
+                    dir: artifactsDir,
+                    onOpenDir: onOpenArtifactsDir,
+                    onOpenFile: onOpenArtifactFile,
+                    onClosePreview: onCloseArtifactPreview,
+                    onRefresh: () async {
+                      onOpenArtifactsDir(artifactsDir);
+                    },
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.play_circle_outline),
-          title: Text('Runs'
-              '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}'),
+          title: Text(
+            'Runs'
+            '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}',
+          ),
           onTap: () {
             onLoadRuns();
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: SafeArea(
-                  child: RunsPage(
-                    snapshot: runsSnapshot,
-                    online: online,
-                    loading: runsLoading,
-                    error: runsError,
-                    onRefresh: onLoadRuns,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: SafeArea(
+                    child: RunsPage(
+                      snapshot: runsSnapshot,
+                      online: online,
+                      loading: runsLoading,
+                      error: runsError,
+                      onRefresh: onLoadRuns,
+                    ),
                   ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.memory_outlined),
           title: Text('Memory (${memories.length})'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: _MemoryPage(
-                  memories: memories,
-                  online: online,
-                  loading: false,
-                  error: null,
-                  onRefresh: onRefresh,
-                  onDelete: (id) async {
-                    try {
-                      final deleted = await repo.deleteMemory(id);
-                      if (!deleted) throw StateError('Memori tidak ditemukan atau gagal dihapus.');
-                      await onRefresh();
-                      if (context.mounted) Navigator.of(context).pop();
-                    } catch (error) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Gagal menghapus memori: $error')),
-                        );
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: _MemoryPage(
+                    memories: memories,
+                    online: online,
+                    loading: false,
+                    error: null,
+                    onRefresh: onRefresh,
+                    onDelete: (id) async {
+                      try {
+                        final deleted = await repo.deleteMemory(id);
+                        if (!deleted)
+                          throw StateError(
+                            'Memori tidak ditemukan atau gagal dihapus.',
+                          );
+                        await onRefresh();
+                        if (context.mounted) Navigator.of(context).pop();
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Gagal menghapus memori: $error'),
+                            ),
+                          );
+                        }
                       }
-                    }
-                  },
+                    },
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.hub_outlined),
           title: const Text('Graf Vault (Simpul)'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SimpulGraphPage(),
-            ));
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => SimpulGraphPage()));
           },
         ),
         ListTile(
           leading: const Icon(Icons.edit_note_outlined),
           title: const Text('Editor Catatan (Simpul)'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SimpulNoteEditorPage(
-                vault: settings.vaultPath,
-                powerSaverEnabled: settings.powerSaver,
-                resourceStats: true,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => SimpulNoteEditorPage(
+                  vault: settings.vaultPath,
+                  powerSaverEnabled: settings.powerSaver,
+                  resourceStats: true,
+                ),
               ),
-            ));
+            );
           },
         ),
         ListTile(
           leading: const Icon(Icons.settings_outlined),
           title: const Text('Settings'),
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: SettingsView(
-                  settings: settings,
-                  baseUrl: baseUrl,
-                  token: token,
-                  online: online,
-                  onConnect: onConnect,
-                  onSettingsChanged: onSettingsChanged,
-                  daemonCard: _DaemonStatusCard(),
-                  daemonStatus: daemonStatus,
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: SettingsView(
+                    settings: settings,
+                    baseUrl: baseUrl,
+                    token: token,
+                    online: online,
+                    onConnect: onConnect,
+                    onSettingsChanged: onSettingsChanged,
+                    daemonCard: _DaemonStatusCard(),
+                    daemonStatus: daemonStatus,
+                  ),
                 ),
               ),
-            ));
+            );
           },
         ),
       ],
     );
   }
 }
-
 
 class _Card extends StatelessWidget {
   const _Card({required this.title, required this.child});

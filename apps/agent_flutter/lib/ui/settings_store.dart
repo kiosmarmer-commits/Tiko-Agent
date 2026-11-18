@@ -14,6 +14,7 @@ class AppSettings {
     this.vaultPath = '',
     this.autoLockMinutes = 0,
     this.powerSaver = false,
+    this.multiPane = false,
   });
 
   final ThemeMode themeMode;
@@ -26,12 +27,18 @@ class AppSettings {
   /// is plugged in (unknown power state is treated as plugged).
   final bool powerSaver;
 
+  /// GUI-P2-03: on wide screens, the chat workspace renders multi-pane
+  /// (sessions pane + chat + inspector pane). Pure layout preference —
+  /// the same routes and APIs stay available in single-pane mode.
+  final bool multiPane;
+
   static const _kThemeMode = 'ui.themeMode';
   static const _kAccent = 'ui.accent';
   static const _kOllamaHost = 'ui.ollamaHost';
   static const _kVaultPath = 'ui.vaultPath';
   static const _kAutoLock = 'ui.autoLockMinutes';
   static const _kPowerSaver = 'ui.powerSaver';
+  static const _kMultiPane = 'ui.multiPane';
 
   static const accents = [
     Color(0xFF2A9D8F),
@@ -48,6 +55,7 @@ class AppSettings {
     String? vaultPath,
     int? autoLockMinutes,
     bool? powerSaver,
+    bool? multiPane,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -56,6 +64,7 @@ class AppSettings {
       vaultPath: vaultPath ?? this.vaultPath,
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
       powerSaver: powerSaver ?? this.powerSaver,
+      multiPane: multiPane ?? this.multiPane,
     );
   }
 
@@ -64,7 +73,9 @@ class AppSettings {
     Color accent = SimpulTheme.accent;
     final storedAccent = prefs.getInt(_kAccent);
     if (storedAccent != null) {
-      final match = accents.where((c) => c.toARGB32() == storedAccent).firstOrNull;
+      final match = accents
+          .where((c) => c.toARGB32() == storedAccent)
+          .firstOrNull;
       if (match != null) accent = match;
     }
     return AppSettings(
@@ -75,11 +86,11 @@ class AppSettings {
         _ => ThemeMode.dark,
       },
       accent: accent,
-      ollamaHost:
-          prefs.getString(_kOllamaHost) ?? 'http://127.0.0.1:11434',
+      ollamaHost: prefs.getString(_kOllamaHost) ?? 'http://127.0.0.1:11434',
       vaultPath: prefs.getString(_kVaultPath) ?? '',
       autoLockMinutes: prefs.getInt(_kAutoLock) ?? 0,
       powerSaver: prefs.getBool(_kPowerSaver) ?? false,
+      multiPane: prefs.getBool(_kMultiPane) ?? false,
     );
   }
 
@@ -91,5 +102,6 @@ class AppSettings {
     await prefs.setString(_kVaultPath, vaultPath);
     await prefs.setInt(_kAutoLock, autoLockMinutes);
     await prefs.setBool(_kPowerSaver, powerSaver);
+    await prefs.setBool(_kMultiPane, multiPane);
   }
 }

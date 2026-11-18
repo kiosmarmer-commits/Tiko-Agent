@@ -623,8 +623,8 @@
     }
   }
 
-  async function loadSessions() {
-    const list = $('#session-list');
+  async function loadSessions(listId) {
+    const list = $('#' + (listId || 'session-list'));
     if (!list) return;
     list.replaceChildren(emptyItem('Memuat sessions…'));
     try {
@@ -1272,8 +1272,8 @@
   }
 
   // GUI-P2-04 parity: run-inspector read-only (turn aktif + riwayat).
-  async function loadRuns() {
-    const list = $('#runs-list');
+  async function loadRuns(listId) {
+    const list = $('#' + (listId || 'runs-list'));
     if (!list) return;
     list.replaceChildren(emptyItem('Memuat runs\u2026'));
     try {
@@ -1333,6 +1333,39 @@
     li.addEventListener('click', () => { steps.hidden = !steps.hidden; });
     return li;
   }
+
+  // GUI-P2-03 parity: multi-pane workspace pada tab chat — pane sessions
+  // (kiri) dan pane inspector runs (kanan), diaktifkan lewat tombol Multi-pane.
+  const tabChat = $('#tab-chat');
+  const btnMultipane = $('#btn-multipane');
+
+  function loadPaneSessions() {
+    return loadSessions('pane-session-list');
+  }
+
+  function loadPaneRuns() {
+    return loadRuns('pane-runs-list');
+  }
+
+  function setMultipane(on) {
+    if (!tabChat || !btnMultipane) return;
+    tabChat.classList.toggle('multipane', on);
+    btnMultipane.setAttribute('aria-pressed', String(on));
+    const sessionsPane = $('#pane-sessions');
+    const inspectorPane = $('#pane-inspector');
+    if (sessionsPane) sessionsPane.hidden = !on;
+    if (inspectorPane) inspectorPane.hidden = !on;
+    if (on) {
+      loadPaneSessions();
+      loadPaneRuns();
+    }
+  }
+
+  btnMultipane?.addEventListener('click', () =>
+    setMultipane(!tabChat.classList.contains('multipane')));
+  $('#btn-refresh-pane-sessions')?.addEventListener('click', loadPaneSessions);
+  $('#btn-refresh-pane-runs')?.addEventListener('click', loadPaneRuns);
+  $('#btn-close-pane')?.addEventListener('click', () => setMultipane(false));
 
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
