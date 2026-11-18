@@ -36,6 +36,7 @@
         <button type="button" data-tab="jobs" aria-pressed="false" aria-controls="tab-jobs">Automation</button>
         <button type="button" data-tab="security" aria-pressed="false" aria-controls="tab-security">Security</button>
         <button type="button" data-tab="audit" aria-pressed="false" aria-controls="tab-audit">Audit</button>
+        <button type="button" data-tab="artifacts" aria-pressed="false" aria-controls="tab-artifacts">Artifacts</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -292,6 +293,23 @@
         <div class="row">
           <button type="button" id="btn-audit-next" class="secondary" hidden>Berikutnya</button>
         </div>
+      </section>
+
+      <section id="tab-artifacts" class="tab" hidden aria-label="Artifacts">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">WORKSPACE</p><h1>Artifacts</h1><p class="subheading">Browser file workspace read-only + diff versus versi terakhir (`.bak` dari write_file). Path divalidasi PathSafety fail-closed.</p></div>
+          <button type="button" id="btn-refresh-artifacts" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="artifact-list" class="list"></ul>
+        <article class="card settings-card" id="artifact-preview" hidden>
+          <h2 id="artifact-preview-title">Preview</h2>
+          <div class="row">
+            <button type="button" id="btn-artifact-toggle-diff" class="secondary" hidden>Diff</button>
+            <button type="button" id="btn-artifact-close" class="secondary">Tutup</button>
+          </div>
+          <pre id="artifact-content" class="hint" style="max-height:320px;overflow:auto;white-space:pre-wrap;"></pre>
+          <p class="hint" id="artifact-note"></p>
+        </article>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">

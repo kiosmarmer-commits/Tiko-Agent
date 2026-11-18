@@ -2224,6 +2224,209 @@ class TikoRuntime {
     };
   }
 
+  static const _artifactSkipDirs = {
+    '.git', 'build', '.dart_tool', 'node_modules', '.vibe', '__pycache__',
+  };
+
+  /// Artifacts browser (GUI-P2-04, read-only): daftar file di workspace
+  /// (rekursif terbatas, skip direktori build/VC) — path relatif + ukuran
+  /// + mtime. Path divalidasi PathSafety (symlink-aware, fail-closed).
+  Map<String, dynamic> artifactsList({String sub = '', int limit = 200}) {
+    final trimmed = sub.trim();
+    final dirPath = trimmed.isEmpty
+        ? workspace
+        : PathSafety.resolveInRoot(workspace, trimmed);
+    if (dirPath == null) {
+      throw ArgumentError('path di luar workspace');
+    }
+    final dir = Directory(dirPath);
+    if (!dir.existsSync()) return {'files': const [], 'truncated': false};
+    final files = <Map<String, dynamic>>[];
+    var truncated = false;
+    void walk(Directory d, String prefix) {
+      if (truncated) return;
+      final entities = d.listSync(followLinks: false)
+        ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+      for (final entity in entities) {
+        if (files.length >= limit) {
+          truncated = true;
+          return;
+        }
+        final name = p.basename(entity.path);
+        if (entity is Directory) {
+          if (_artifactSkipDirs.contains(name)) continue;
+          walk(entity, prefix.isEmpty ? name : '$prefix/$name');
+        } else if (entity is File) {
+          final stat = entity.statSync();
+          files.add({
+            'path': prefix.isEmpty ? name : '$prefix/$name',
+            'bytes': stat.size,
+            'modified': stat.modified.toUtc().toIso8601String(),
+          });
+        }
+      }
+    }
+
+    walk(dir, '');
+    return {'files': files, 'truncated': truncated};
+  }
+
+  /// Baca isi file teks dari workspace (GUI-P2-04, read-only, terpotong
+  /// di [maxBytes]; file biner ditandai tanpa konten).
+  Map<String, dynamic> artifactsRead(String path, {int maxBytes = 262144}) {
+    final resolved = PathSafety.resolveInRoot(workspace, path.trim());
+    if (resolved == null) throw ArgumentError('path di luar workspace');
+    final file = File(resolved);
+    if (!file.existsSync()) throw StateError('file tidak ditemukan');
+    final stat = file.statSync();
+    final bytes = file.readAsBytesSync();
+    final probeLen = bytes.length < 8000 ? bytes.length : 8000;
+    final binary =
+        bytes.take(probeLen).contains(0) || _looksBinary(bytes.take(probeLen));
+    if (binary) {
+      return {
+        'path': p.relative(resolved, from: workspace),
+        'bytes': stat.size,
+        'binary': true,
+        'truncated': false,
+        'bak_exists': _bakExists(path.trim()),
+      };
+    }
+    final truncated = bytes.length > maxBytes;
+    final slice = truncated ? bytes.take(maxBytes).toList() : bytes;
+    return {
+      'path': p.relative(resolved, from: workspace),
+      'bytes': stat.size,
+      'binary': false,
+      'truncated': truncated,
+      'content': utf8.decode(slice, allowMalformed: true),
+      'bak_exists': _bakExists(path.trim()),
+    };
+  }
+
+  bool _bakExists(String path) {
+    final bak = PathSafety.resolveInRoot(workspace, '$path.bak');
+    return bak != null && File(bak).existsSync();
+  }
+
+  /// Diffviewer (GUI-P2-04, read-only): bandingkan versi terakhir file
+  /// (`.bak` yang ditulis write_file) dengan file sekarang. LCS line-diff
+  /// tanpa dependency; hasil marker '='/'+'/'-' dengan batas entri.
+  Map<String, dynamic> artifactsDiff(String path, {int maxEntries = 400}) {
+    final trimmed = path.trim();
+    final newResolved = PathSafety.resolveInRoot(workspace, trimmed);
+    if (newResolved == null) throw ArgumentError('path di luar workspace');
+    final newFile = File(newResolved);
+    final newExists = newFile.existsSync();
+    final oldResolved = PathSafety.resolveInRoot(workspace, '$trimmed.bak');
+    final oldExists = oldResolved != null && File(oldResolved).existsSync();
+    if (!newExists) {
+      return {
+        'path': trimmed,
+        'old_exists': oldExists,
+        'new_exists': false,
+        'lines': const [],
+        'truncated': false,
+      };
+    }
+    final newLines = const LineSplitter().convert(
+        utf8.decode(newFile.readAsBytesSync(), allowMalformed: true));
+    final oldLines = oldExists
+        ? const LineSplitter().convert(utf8.decode(
+            File(oldResolved).readAsBytesSync(),
+            allowMalformed: true))
+        : const <String>[];
+    final entries = <Map<String, dynamic>>[];
+    var truncated = false;
+    void add(String type, String text) {
+      if (entries.length >= maxEntries) {
+        truncated = true;
+        return;
+      }
+      entries.add({'type': type, 'text': text});
+    }
+
+    // Trim prefix & suffix yang identik untuk mengecilkan DP.
+    var start = 0;
+    while (start < oldLines.length &&
+        start < newLines.length &&
+        oldLines[start] == newLines[start]) {
+      start++;
+    }
+    var endOld = oldLines.length;
+    var endNew = newLines.length;
+    while (endOld > start &&
+        endNew > start &&
+        oldLines[endOld - 1] == newLines[endNew - 1]) {
+      endOld--;
+      endNew--;
+    }
+    for (var i = 0; i < start && !truncated; i++) {
+      add('=', oldLines[i]);
+    }
+    final midOld = oldLines.sublist(start, endOld);
+    final midNew = newLines.sublist(start, endNew);
+    const dpLimit = 1200;
+    final dpOk = midOld.length <= dpLimit && midNew.length <= dpLimit;
+    if (dpOk) {
+      final n = midOld.length;
+      final m = midNew.length;
+      final lcs = List.generate(n + 1, (_) => List.filled(m + 1, 0));
+      for (var i = n - 1; i >= 0; i--) {
+        for (var j = m - 1; j >= 0; j--) {
+          lcs[i][j] = midOld[i] == midNew[j]
+              ? lcs[i + 1][j + 1] + 1
+              : (lcs[i + 1][j] >= lcs[i][j + 1] ? lcs[i + 1][j] : lcs[i][j + 1]);
+        }
+      }
+      var i = 0;
+      var j = 0;
+      while ((i < n || j < m) && !truncated) {
+        if (i < n && j < m && midOld[i] == midNew[j]) {
+          add('=', midOld[i]);
+          i++;
+          j++;
+        } else if (j >= m || (i < n && lcs[i + 1][j] >= lcs[i][j + 1])) {
+          add('-', midOld[i]);
+          i++;
+        } else {
+          add('+', midNew[j]);
+          j++;
+        }
+      }
+    } else {
+      for (final line in midOld) {
+        add('-', line);
+      }
+      for (final line in midNew) {
+        add('+', line);
+      }
+    }
+    for (var k = endOld; k < oldLines.length && !truncated; k++) {
+      add('-', oldLines[k]);
+    }
+    for (var k = endNew; k < newLines.length && !truncated; k++) {
+      add('+', newLines[k]);
+    }
+    return {
+      'path': trimmed,
+      'old_exists': oldExists,
+      'new_exists': newExists,
+      'lines': entries,
+      'truncated': truncated,
+    };
+  }
+
+  bool _looksBinary(Iterable<int> bytes) {
+    var suspicious = 0;
+    var count = 0;
+    for (final b in bytes) {
+      count++;
+      if (b < 9 || (b > 13 && b < 32)) suspicious++;
+    }
+    return count > 0 && suspicious * 100 > count * 10;
+  }
+
   /// Katalog tool terdaftar di registry host (GUI-P1-06, read-only):
   /// name/description/risk/timeout — paritas `/tools`.
   List<Map<String, dynamic>> toolCatalog() {

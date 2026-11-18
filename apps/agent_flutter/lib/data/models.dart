@@ -913,3 +913,112 @@ class AuditQueryResult {
         total: (map['total'] as num?)?.toInt() ?? 0,
       );
 }
+
+/// Satu file workspace untuk Artifacts browser (GUI-P2-04).
+class ArtifactFileInfo {
+  const ArtifactFileInfo({
+    required this.path,
+    this.bytes = 0,
+    this.modified = '-',
+  });
+
+  final String path;
+  final int bytes;
+  final String modified;
+
+  factory ArtifactFileInfo.fromMap(Map<String, dynamic> map) =>
+      ArtifactFileInfo(
+        path: '${map['path'] ?? ''}',
+        bytes: (map['bytes'] as num?)?.toInt() ?? 0,
+        modified: '${map['modified'] ?? '-'}',
+      );
+}
+
+/// Daftar file artifacts (GUI-P2-04) + flag truncation listing.
+class ArtifactsListing {
+  const ArtifactsListing({
+    this.files = const [],
+    this.truncated = false,
+  });
+
+  final List<ArtifactFileInfo> files;
+  final bool truncated;
+
+  factory ArtifactsListing.fromMap(Map<String, dynamic> map) =>
+      ArtifactsListing(
+        files: [
+          for (final f in map['files'] as List? ?? const [])
+            ArtifactFileInfo.fromMap(Map<String, dynamic>.from(f as Map)),
+        ],
+        truncated: map['truncated'] == true,
+      );
+}
+
+/// Isi file teks yang dibaca (GUI-P2-04) — read-only, terpotong di
+/// maxBytes server; file biner ditandai tanpa konten.
+class ArtifactContent {
+  const ArtifactContent({
+    required this.path,
+    this.bytes = 0,
+    this.binary = false,
+    this.truncated = false,
+    this.content = '',
+    this.bakExists = false,
+  });
+
+  final String path;
+  final int bytes;
+  final bool binary;
+  final bool truncated;
+  final String content;
+  final bool bakExists;
+
+  factory ArtifactContent.fromMap(Map<String, dynamic> map) =>
+      ArtifactContent(
+        path: '${map['path'] ?? ''}',
+        bytes: (map['bytes'] as num?)?.toInt() ?? 0,
+        binary: map['binary'] == true,
+        truncated: map['truncated'] == true,
+        content: map['content'] == null ? '' : '${map['content']}',
+        bakExists: map['bak_exists'] == true,
+      );
+}
+
+/// Satu baris diff (GUI-P2-04): '=' konteks, '-' baris lama, '+' baru.
+class DiffLine {
+  const DiffLine({required this.type, this.text = ''});
+
+  final String type;
+  final String text;
+
+  factory DiffLine.fromMap(Map<String, dynamic> map) =>
+      DiffLine(type: '${map['type'] ?? '='}', text: '${map['text'] ?? ''}');
+}
+
+/// Hasil diff file vs `.bak` (GUI-P2-04) — read-only dari runtime.
+class ArtifactDiff {
+  const ArtifactDiff({
+    required this.path,
+    this.oldExists = false,
+    this.newExists = false,
+    this.lines = const [],
+    this.truncated = false,
+  });
+
+  final String path;
+  final bool oldExists;
+  final bool newExists;
+  final List<DiffLine> lines;
+  final bool truncated;
+
+  factory ArtifactDiff.fromMap(Map<String, dynamic> map) => ArtifactDiff(
+        path: '${map['path'] ?? ''}',
+        oldExists: map['old_exists'] == true,
+        newExists: map['new_exists'] == true,
+        lines: [
+          for (final l in map['lines'] as List? ?? const [])
+            DiffLine.fromMap(Map<String, dynamic>.from(l as Map)),
+        ],
+        truncated: map['truncated'] == true,
+      );
+}

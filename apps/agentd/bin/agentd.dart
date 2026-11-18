@@ -967,6 +967,29 @@ Future<void> main(List<String> args) async {
           limit: filters['limit'] as int? ?? 50,
           offset: filters['offset'] as int? ?? 0,
         ),
+        artifactsListProvider: (dir) async {
+          try {
+            return rt.artifactsList(sub: dir);
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        artifactsReadProvider: (path) async {
+          try {
+            return rt.artifactsRead(path);
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on StateError catch (e) {
+            throw ApiRequestException(404, 'not_found', '$e');
+          }
+        },
+        artifactsDiffProvider: (path) async {
+          try {
+            return rt.artifactsDiff(path);
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

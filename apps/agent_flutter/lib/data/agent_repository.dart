@@ -51,6 +51,9 @@ abstract class AgentRepository {
     int limit = 50,
     int offset = 0,
   });
+  Future<ArtifactsListing> artifacts({String dir = ''});
+  Future<ArtifactContent> artifactRead(String path);
+  Future<ArtifactDiff> artifactDiff(String path);
   Future<JobInfo> createJob(Map<String, dynamic> body);
   Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
   Future<bool> deleteJob(String id);
@@ -241,6 +244,18 @@ class HttpAgentRepository implements AgentRepository {
           'offset': '$offset',
         })));
   }
+
+  @override
+  Future<ArtifactsListing> artifacts({String dir = ''}) async =>
+      ArtifactsListing.fromMap(await _guard(() => _client.listArtifacts(dir)));
+
+  @override
+  Future<ArtifactContent> artifactRead(String path) async =>
+      ArtifactContent.fromMap(await _guard(() => _client.readArtifact(path)));
+
+  @override
+  Future<ArtifactDiff> artifactDiff(String path) async =>
+      ArtifactDiff.fromMap(await _guard(() => _client.diffArtifact(path)));
 
   @override
   Future<JobsSnapshot> jobs() async => JobsSnapshot.fromMap({

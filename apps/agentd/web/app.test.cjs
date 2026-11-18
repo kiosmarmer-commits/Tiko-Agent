@@ -102,16 +102,20 @@ function createHarness() {
     'security-box', 'btn-refresh-security',
     'audit-results', 'btn-audit-query', 'btn-audit-next',
     'auditTool', 'auditSession', 'auditRisk', 'auditVerdict', 'auditTaint',
+    'artifact-list', 'btn-refresh-artifacts',
+    'artifact-preview', 'artifact-preview-title',
+    'btn-artifact-toggle-diff', 'btn-artifact-close',
+    'artifact-content', 'artifact-note',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -214,6 +218,28 @@ function createHarness() {
           risk: 'high', verdict: 'approve', result: 'ok',
           duration_ms: 42, error: null, taint: false,
         }],
+      };
+      else if (pathname === '/v1/artifacts') body = {
+        files: [
+          { path: 'README.md', bytes: 2048, modified: '2026-11-18T13:00:00.000Z' },
+          { path: 'src/main.dart', bytes: 30, modified: '2026-11-18T13:01:00.000Z' },
+        ],
+        truncated: false,
+      };
+      else if (pathname === '/v1/artifacts/read') {
+        const target = new URL(String(url), 'http://127.0.0.1').searchParams.get('path');
+        body = target === 'README.md'
+          ? { path: 'README.md', bytes: 6, binary: false, truncated: false, content: '<script>alert(1)</script>halo', bak_exists: false }
+          : { path: target, bytes: 30, binary: false, truncated: false, content: 'void main(){}', bak_exists: true };
+      } else if (pathname === '/v1/artifacts/diff') body = {
+        path: new URL(String(url), 'http://127.0.0.1').searchParams.get('path'),
+        old_exists: true, new_exists: true,
+        lines: [
+          { type: '=', text: 'sama' },
+          { type: '-', text: 'lama' },
+          { type: '+', text: '<script>alert(1)</script>baru' },
+        ],
+        truncated: false,
       };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
@@ -557,6 +583,55 @@ test('Security tab memuat snapshot read-only dengan status safety', async () => 
   assert.ok(items[2].children[1].textContent.includes('weather (3 izin)'));
   assert.ok(items[3].children[1].textContent.includes('2 turn diblokir'));
   assert.ok(items[4].children[1].textContent.includes('shell.exec'));
+});
+
+test('Artifacts tab memuat daftar file + preview aman dan diff', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'artifacts').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-artifacts').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/artifacts')));
+  const items = h.elements['artifact-list'].children;
+  assert.equal(items[0].children[0].textContent, 'README.md');
+  assert.ok(items[0].children[1].textContent.includes('2.0 KB'));
+
+  items[1].dispatch('click');
+  await tick();
+  await tick();
+  await tick();
+  assert.equal(h.elements['artifact-preview'].hidden, false);
+  assert.equal(h.elements['artifact-preview-title'].textContent, 'src/main.dart');
+  assert.equal(h.elements['artifact-content'].textContent, 'void main(){}');
+  assert.equal(h.elements['btn-artifact-toggle-diff'].hidden, false);
+
+  h.elements['btn-artifact-toggle-diff'].dispatch('click');
+  assert.ok(h.elements['artifact-content'].textContent.includes('+ <script>alert(1)</script>baru'));
+  assert.ok(!h.elements['artifact-content'].innerHTML?.includes('<script>'));
+
+  h.elements['btn-artifact-close'].dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.elements['artifact-preview'].hidden, true);
+});
+
+test('Artifacts tombol naik membuka direktori induk + refresh memakai dir aktif', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'artifacts').dispatch('click');
+  await tick();
+  await tick();
+  h.elements['artifact-list'].children[1].dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/artifacts/read?path=src%2Fmain.dart')));
+
+  const before = h.calls.filter((call) => call.url.endsWith('/v1/artifacts')).length;
+
+  h.elements['btn-refresh-artifacts'].dispatch('click');
+  await tick();
+  await tick();
+  const after = h.calls.filter((call) => call.url.endsWith('/v1/artifacts')).length;
+  assert.ok(after > before, 'refresh memanggil ulang daftar workspace');
 });
 
 test('Tombol refresh security memanggil ulang GET /v1/security', async () => {

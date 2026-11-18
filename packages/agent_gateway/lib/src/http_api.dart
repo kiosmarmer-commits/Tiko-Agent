@@ -73,6 +73,9 @@ class HttpApiServer {
     this.runJobNow,
     this.securityProvider,
     this.auditQueryProvider,
+    this.artifactsListProvider,
+    this.artifactsReadProvider,
+    this.artifactsDiffProvider,
   });
 
   final MessageHandler onMessage;
@@ -170,6 +173,27 @@ class HttpApiServer {
           400, 'invalid_request', 'action wajib grant atau revoke');
     }
     return {'plugin': plugin.trim().toLowerCase(), 'action': action};
+  }
+
+  /// Validasi path query /v1/artifacts: non-kosong (kecuali dir), maksimal
+  /// 256 karakter, tanpa rawan kontrol/NUL. Validasi keamanan penuh
+  /// (symlink/escaping) di runtime via PathSafety — fail-closed.
+  String _parseArtifactsPath(String? raw,
+      {bool allowEmpty = false, required String field}) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty && !allowEmpty) {
+      throw ApiRequestException(
+          400, 'invalid_request', "parameter $field wajib");
+    }
+    if (value.length > 256) {
+      throw ApiRequestException(
+          400, 'invalid_request', "$field maksimal 256 karakter");
+    }
+    if (value.contains('\u0000') || value.contains('\r') || value.contains('\n')) {
+      throw ApiRequestException(
+          400, 'invalid_request', "$field mengandung karakter invalid");
+    }
+    return value;
   }
 
   /// Normalisasi + validasi query string /v1/audit menjadi filter typed.
@@ -422,6 +446,12 @@ class HttpApiServer {
   /// limit/offset int) — callback null membuat GET /v1/audit merespons 501.
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> filters)?
       auditQueryProvider;
+
+  /// Artifacts browser callbacks (GUI-P2-04, read-only). Masing-masing
+  /// null membuat endpoint terkait merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function(String dir)? artifactsListProvider;
+  final Future<Map<String, dynamic>> Function(String path)? artifactsReadProvider;
+  final Future<Map<String, dynamic>> Function(String path)? artifactsDiffProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -1093,6 +1123,29 @@ class HttpApiServer {
                 ?.call(_parseAuditQuery(req.uri.queryParameters)) ??
             (throw ApiRequestException(501, 'not_implemented',
                 'audit query not configured')));
+        _json(req, result);
+      // Artifacts browser endpoints (GUI-P2-04, read-only; path/divalidasi
+      // PathSafety di runtime — fail-closed untuk path di luar workspace)
+      } else if (path == '/v1/artifacts' && req.method == 'GET') {
+        final dir = _parseArtifactsPath(
+            req.uri.queryParameters['dir'], allowEmpty: true, field: 'dir');
+        final result = await (artifactsListProvider?.call(dir) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'artifacts not configured')));
+        _json(req, result);
+      } else if (path == '/v1/artifacts/read' && req.method == 'GET') {
+        final filePath = _parseArtifactsPath(
+            req.uri.queryParameters['path'], field: 'path');
+        final result = await (artifactsReadProvider?.call(filePath) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'artifacts not configured')));
+        _json(req, result);
+      } else if (path == '/v1/artifacts/diff' && req.method == 'GET') {
+        final filePath = _parseArtifactsPath(
+            req.uri.queryParameters['path'], field: 'path');
+        final result = await (artifactsDiffProvider?.call(filePath) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'artifacts not configured')));
         _json(req, result);
       // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {
