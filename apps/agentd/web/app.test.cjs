@@ -100,16 +100,18 @@ function createHarness() {
     'job-list', 'btn-refresh-jobs',
     'jobNewCron', 'jobNewPrompt', 'jobNewChannel', 'jobNewTimezone', 'jobCreateBtn',
     'security-box', 'btn-refresh-security',
+    'audit-results', 'btn-audit-query', 'btn-audit-next',
+    'auditTool', 'auditSession', 'auditRisk', 'auditVerdict', 'auditTaint',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -203,6 +205,15 @@ function createHarness() {
         guard: { blocked_turns: 2, sanitized_turns: 7 },
         audit: { total_in_memory: 320, recent: [{ ts: '2026-11-18T13:00:00.000Z', tool: 'shell.exec', risk: 'high', verdict: 'allowed', session: 's-1' }] },
         active_sessions: 2,
+      };
+      else if (pathname === '/v1/audit') body = {
+        total: 1,
+        entries: [{
+          ts: '2026-11-18T13:00:00.000Z', session: 'web:default',
+          tool: '<script>alert(1)</script>shell.exec', args: { cmd: 'ls' },
+          risk: 'high', verdict: 'approve', result: 'ok',
+          duration_ms: 42, error: null, taint: false,
+        }],
       };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
@@ -559,6 +570,40 @@ test('Tombol refresh security memanggil ulang GET /v1/security', async () => {
   await tick();
   const after = h.calls.filter((call) => call.url.endsWith('/v1/security')).length;
   assert.ok(after > before, 'GET /v1/security dipanggil ulang');
+});
+
+test('Audit tab memuat hasil query dengan filter + XSS dicegah', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'audit').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-audit').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.includes('/v1/audit?')));
+  assert.ok(h.calls.some((call) => call.url.includes('limit=50')));
+  const items = h.elements['audit-results'].children;
+  assert.equal(items[0].textContent, '1 entri cocok · menampilkan 1 (offset 0)');
+  const first = items[1];
+  assert.equal(first.children[0].textContent, '<script>alert(1)</script>shell.exec · risk high · approve');
+  assert.ok(!first.querySelector || !first.innerHTML?.includes('<script>'));
+  assert.equal(first.children[1].textContent, 'high');
+  assert.ok(first.children[2].textContent.includes('42ms'));
+  assert.equal(h.elements['btn-audit-next'].hidden, true);
+});
+
+test('Audit pagination: tombol Berikutnya menaikkan offset', async () => {
+  const h = createHarness();
+  h.elements['auditTool'].value = 'shell';
+  h.elements['auditTaint'].checked = true;
+  h.elements['btn-audit-query'].dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.includes('tool=shell')));
+  assert.ok(h.calls.some((call) => call.url.includes('taint=true')));
+  h.elements['btn-audit-next'].hidden = false;
+  h.elements['btn-audit-next'].dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.includes('offset=1')));
 });
 
 test('Hapus job mengirim DELETE /v1/jobs/:id', async () => {

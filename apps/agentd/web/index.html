@@ -35,6 +35,7 @@
         <button type="button" data-tab="channels" aria-pressed="false" aria-controls="tab-channels">Channels</button>
         <button type="button" data-tab="jobs" aria-pressed="false" aria-controls="tab-jobs">Automation</button>
         <button type="button" data-tab="security" aria-pressed="false" aria-controls="tab-security">Security</button>
+        <button type="button" data-tab="audit" aria-pressed="false" aria-controls="tab-audit">Audit</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -247,6 +248,50 @@
           <p class="hint">Security Center read-only: tidak ada toggle safe mode/panic atau kill switch dari GUI. Counter guard dihitung in-memory (reset saat daemon restart), tanpa nilai rahasia — hanya flag sealed storage.</p>
         </article>
         <ul id="security-box" class="list"></ul>
+      </section>
+
+      <section id="tab-audit" class="tab" hidden aria-label="Audit">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">AUDIT</p><h1>Audit query browser</h1><p class="subheading">Cari entri audit runtime per tool/session/risk/verdict/taint — read-only, entri sudah teredaksi.</p></div>
+          <button type="button" id="btn-audit-query" class="primary">Cari</button>
+        </div>
+        <article class="card settings-card">
+          <h2>Filter</h2>
+          <label for="auditTool">Tool (substring, opsional)</label>
+          <input id="auditTool" autocomplete="off" placeholder="shell" />
+          <label for="auditSession">Session (persis, opsional)</label>
+          <input id="auditSession" autocomplete="off" placeholder="web:default" />
+          <div class="row">
+            <div>
+              <label for="auditRisk">Risk</label>
+              <select id="auditRisk">
+                <option value="">semua</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </div>
+            <div>
+              <label for="auditVerdict">Verdict</label>
+              <select id="auditVerdict">
+                <option value="">semua</option>
+                <option value="allow">allow</option>
+                <option value="approve">approve</option>
+                <option value="deny">deny</option>
+                <option value="sanitize">sanitize</option>
+              </select>
+            </div>
+            <div>
+              <label for="auditTaint">Taint saja</label>
+              <input type="checkbox" id="auditTaint" />
+            </div>
+          </div>
+          <p class="hint">Maksimal 50 entri diambil per halaman (buffer in-memory + file JSONL 7 hari terakhir, dedupe). Gunakan tombol Berikutnya untuk halaman berikutnya.</p>
+        </article>
+        <ul id="audit-results" class="list"></ul>
+        <div class="row">
+          <button type="button" id="btn-audit-next" class="secondary" hidden>Berikutnya</button>
+        </div>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">

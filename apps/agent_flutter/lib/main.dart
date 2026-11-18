@@ -19,6 +19,7 @@ import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
+import 'ui/audit_page.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
@@ -106,6 +107,11 @@ class _AgentAppState extends State<AgentApp> {
   ChannelsSnapshot? channelSnapshot;
   JobsSnapshot? jobsSnapshot;
   SecuritySnapshot? securitySnapshot;
+  AuditQueryResult? auditResult;
+  Map<String, String> auditFilters = const {};
+  int auditOffset = 0;
+  bool auditLoading = false;
+  String? auditError;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -209,6 +215,31 @@ class _AgentAppState extends State<AgentApp> {
         adminRefreshInFlight = false;
         if (mounted) setState(() => loadingAdmin = false);
       }
+    }
+  }
+
+  Future<void> _queryAudit(Map<String, String> filters, {int offset = 0}) async {
+    setState(() {
+      auditFilters = filters;
+      auditOffset = offset;
+      auditLoading = true;
+      auditError = null;
+    });
+    try {
+      final result = await repo.audit(
+        tool: filters['tool'],
+        session: filters['session'],
+        risk: filters['risk'],
+        verdict: filters['verdict'],
+        taint: filters['taint'] == 'true' ? true : null,
+        offset: offset,
+      );
+      if (!mounted) return;
+      setState(() => auditResult = result);
+    } catch (e) {
+      if (mounted) setState(() => auditError = e.toString());
+    } finally {
+      if (mounted) setState(() => auditLoading = false);
     }
   }
 
@@ -324,6 +355,8 @@ class _AgentAppState extends State<AgentApp> {
         channelSnapshot: channelSnapshot,
         jobsSnapshot: jobsSnapshot,
         securitySnapshot: securitySnapshot,
+        auditResult: auditResult,
+        onQueryAudit: _queryAudit,
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
@@ -545,6 +578,19 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingAdmin,
           error: adminError,
           onRefresh: refreshAdmin,
+        );
+      case AppRoute.audit:
+        return AuditPage(
+          result: auditResult,
+          online: chat.online,
+          loading: auditLoading,
+          error: auditError,
+          onQuery: _queryAudit,
+          onRefresh: () => _queryAudit(auditFilters, offset: auditOffset),
+          onNext: () => _queryAudit(
+              auditFilters,
+              offset:
+                  auditOffset + (auditResult?.entries.length ?? 50)),
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1305,6 +1351,8 @@ class _MorePage extends StatelessWidget {
     required this.channelSnapshot,
     required this.jobsSnapshot,
     required this.securitySnapshot,
+    required this.auditResult,
+    required this.onQueryAudit,
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
@@ -1328,6 +1376,8 @@ class _MorePage extends StatelessWidget {
   final ChannelsSnapshot? channelSnapshot;
   final JobsSnapshot? jobsSnapshot;
   final SecuritySnapshot? securitySnapshot;
+  final AuditQueryResult? auditResult;
+  final Future<void> Function(Map<String, String> filters) onQueryAudit;
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
@@ -1562,6 +1612,24 @@ class _MorePage extends StatelessWidget {
                   loading: false,
                   error: null,
                   onRefresh: onRefresh,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.receipt_long_outlined),
+          title: Text('Audit'
+              '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: AuditPage(
+                  result: auditResult,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onQuery: onQueryAudit,
                 ),
               ),
             ));

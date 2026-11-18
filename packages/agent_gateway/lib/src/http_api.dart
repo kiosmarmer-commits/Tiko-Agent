@@ -72,6 +72,7 @@ class HttpApiServer {
     this.deleteJob,
     this.runJobNow,
     this.securityProvider,
+    this.auditQueryProvider,
   });
 
   final MessageHandler onMessage;
@@ -169,6 +170,69 @@ class HttpApiServer {
           400, 'invalid_request', 'action wajib grant atau revoke');
     }
     return {'plugin': plugin.trim().toLowerCase(), 'action': action};
+  }
+
+  /// Normalisasi + validasi query string /v1/audit menjadi filter typed.
+  /// Nilai invalid (limit bukan angka, since/until bukan ISO, taint bukan
+  /// boolean) → 400 invalid_request.
+  Map<String, dynamic> _parseAuditQuery(Map<String, String> q) {
+    final filters = <String, dynamic>{};
+    String? text(String key, {int maxLen = 128}) {
+      final value = q[key]?.trim();
+      if (value == null || value.isEmpty) return null;
+      if (value.length > maxLen) {
+        throw ApiRequestException(
+            400, 'invalid_request', "$key maksimal $maxLen karakter");
+      }
+      return value;
+    }
+
+    final tool = text('tool');
+    if (tool != null) filters['tool'] = tool;
+    final session = text('session');
+    if (session != null) filters['session'] = session;
+    final risk = text('risk', maxLen: 32);
+    if (risk != null) filters['risk'] = risk;
+    final verdict = text('verdict', maxLen: 32);
+    if (verdict != null) filters['verdict'] = verdict;
+    final taintRaw = text('taint', maxLen: 8);
+    if (taintRaw != null) {
+      final lower = taintRaw.toLowerCase();
+      if (lower != 'true' && lower != 'false') {
+        throw ApiRequestException(
+            400, 'invalid_request', "taint hanya 'true' atau 'false'");
+      }
+      filters['taint'] = lower == 'true';
+    }
+    for (final key in const ['since', 'until']) {
+      final raw = text(key, maxLen: 64);
+      if (raw == null) continue;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) {
+        throw ApiRequestException(
+            400, 'invalid_request', "$key bukan timestamp ISO valid");
+      }
+      filters[key] = parsed.toUtc();
+    }
+    final limitRaw = q['limit']?.trim();
+    if (limitRaw != null && limitRaw.isNotEmpty) {
+      final parsed = int.tryParse(limitRaw);
+      if (parsed == null || parsed < 1 || parsed > 200) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'limit harus angka 1..200');
+      }
+      filters['limit'] = parsed;
+    }
+    final offsetRaw = q['offset']?.trim();
+    if (offsetRaw != null && offsetRaw.isNotEmpty) {
+      final parsed = int.tryParse(offsetRaw);
+      if (parsed == null || parsed < 0) {
+        throw ApiRequestException(
+            400, 'invalid_request', 'offset harus angka >= 0');
+      }
+      filters['offset'] = parsed;
+    }
+    return filters;
   }
 
   void _validateJobPayload(
@@ -352,6 +416,12 @@ class HttpApiServer {
   /// Security Center callback (GUI-P1-10). Callback null membuat endpoint
   /// terkait merespons 501 not_implemented.
   final Future<Map<String, dynamic>> Function()? securityProvider;
+
+  /// Audit query browser callback (GUI-P1-11). Menerima filter ternormalisasi
+  /// (tool/session/risk/verdict string, taint bool, since/until DateTime,
+  /// limit/offset int) — callback null membuat GET /v1/audit merespons 501.
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> filters)?
+      auditQueryProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -1016,6 +1086,14 @@ class HttpApiServer {
             (throw ApiRequestException(501, 'not_implemented',
                 'security center not configured')));
         _json(req, snapshot);
+      // Audit query browser endpoint (GUI-P1-11, read-only; filter via
+      // query string tool/session/risk/verdict/taint/since/until/limit/offset)
+      } else if (path == '/v1/audit' && req.method == 'GET') {
+        final result = await (auditQueryProvider
+                ?.call(_parseAuditQuery(req.uri.queryParameters)) ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'audit query not configured')));
+        _json(req, result);
       // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {
         final jobs = await (jobsProvider?.call() ??

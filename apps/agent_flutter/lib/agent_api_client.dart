@@ -353,6 +353,17 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Audit query browser (GUI-P1-11): GET /v1/audit dengan filter via
+  /// query string (tool/session/risk/verdict/taint/since/until/limit/offset).
+  Future<Map<String, dynamic>> queryAudit(Map<String, String> query) async {
+    final res = await _http
+        .get(_u('/v1/audit').replace(queryParameters: query),
+            headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'audit');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
   /// typed (400/404/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listJobs() async {
