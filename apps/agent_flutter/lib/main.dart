@@ -14,6 +14,7 @@ import 'ui/gen_ui_view.dart';
 import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
 import 'ui/bot_manager_view.dart';
+import 'ui/provider_manager_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -93,6 +94,7 @@ class _AgentAppState extends State<AgentApp> {
   List<SkillItem> skills = [];
   List<BotProfileItem> bots = [];
   Map<String, String> botBindings = {};
+  ProvidersSnapshot? providerSnapshot;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -140,6 +142,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.skills(),
         repo.bots(),
         repo.botBindings(),
+        repo.providers(),
         repo.memories(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
@@ -155,7 +158,8 @@ class _AgentAppState extends State<AgentApp> {
         skills = results[8] as List<SkillItem>;
         bots = results[9] as List<BotProfileItem>;
         botBindings = results[10] as Map<String, String>;
-        memories = results[11] as List<MemoryFact>;
+        providerSnapshot = results[11] as ProvidersSnapshot;
+        memories = results[12] as List<MemoryFact>;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -271,6 +275,8 @@ class _AgentAppState extends State<AgentApp> {
         skills: skills,
         bots: bots,
         bindings: botBindings,
+        providers: providerSnapshot,
+        availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
@@ -418,6 +424,20 @@ class _AgentAppState extends State<AgentApp> {
           },
           onUnbind: (botId, sessionId) async {
             final ok = await repo.unbindBot(botId, sessionId);
+            if (ok) unawaited(refreshAdmin(force: true));
+            return ok;
+          },
+        );
+      case AppRoute.providers:
+        return ProviderManagerPage(
+          snapshot: providerSnapshot,
+          availableSessions: [for (final s in sessions) s.id],
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onSetSessionProvider: (sessionId, providerArg) async {
+            final ok = await repo.setSessionProvider(sessionId, providerArg);
             if (ok) unawaited(refreshAdmin(force: true));
             return ok;
           },
@@ -1175,6 +1195,8 @@ class _MorePage extends StatelessWidget {
     required this.skills,
     required this.bots,
     required this.bindings,
+    required this.providers,
+    required this.availableSessions,
     required this.online,
     required this.onRefresh,
     required this.onConnect,
@@ -1191,6 +1213,8 @@ class _MorePage extends StatelessWidget {
   final List<SkillItem> skills;
   final List<BotProfileItem> bots;
   final Map<String, String> bindings;
+  final ProvidersSnapshot? providers;
+  final List<String> availableSessions;
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
@@ -1305,6 +1329,30 @@ class _MorePage extends StatelessWidget {
                   onDelete: repo.deleteBot,
                   onBind: repo.bindBot,
                   onUnbind: repo.unbindBot,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.route_outlined),
+          title: Text('Providers (${providers?.providers.length ?? 0})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: ProviderManagerPage(
+                  snapshot: providers,
+                  availableSessions: availableSessions,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onSetSessionProvider: (sessionId, providerArg) async {
+                    final ok = await repo.setSessionProvider(
+                        sessionId, providerArg);
+                    if (ok) await onRefresh();
+                    return ok;
+                  },
                 ),
               ),
             ));

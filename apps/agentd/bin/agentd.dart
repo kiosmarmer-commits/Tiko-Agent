@@ -824,6 +824,40 @@ Future<void> main(List<String> args) async {
           await rt.botStore.unbind(sessionId);
           return true;
         },
+        providersProvider: () async {
+          final health = rt.providerHealth();
+          return {
+            'default': rt.defaultProviderId,
+            'providers': [
+              for (final id in rt.providerIds())
+                {
+                  'id': id,
+                  if (rt.providerById(id) != null)
+                    'capabilities': {
+                      'tool_calling':
+                          rt.providerById(id)!.capabilities.toolCalling,
+                      'vision': rt.providerById(id)!.capabilities.vision,
+                      'streaming': rt.providerById(id)!.capabilities.streaming,
+                      'max_context':
+                          rt.providerById(id)!.capabilities.maxContext,
+                    },
+                  'health': health[id],
+                },
+            ],
+            'tiers': {
+              for (final e in rt.config.tierProviders.entries)
+                '${e.key}': e.value,
+            },
+            'session_overrides': rt.sessionModelOverrides(),
+          };
+        },
+        sessionProviderSetter: (sessionId, arg) async {
+          if (arg.toLowerCase() == 'default') {
+            rt.clearSessionProvider(sessionId);
+            return true;
+          }
+          return rt.setSessionProvider(sessionId, arg.toLowerCase());
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,
