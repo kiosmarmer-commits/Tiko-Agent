@@ -11,6 +11,7 @@ import 'data/models.dart';
 import 'shell/desktop_shell.dart';
 import 'shell/mobile_shell.dart';
 import 'ui/chat_controller.dart';
+import 'ui/command_palette.dart';
 import 'ui/gen_ui_view.dart';
 import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
@@ -427,6 +428,20 @@ class _AgentAppState extends State<AgentApp> {
     super.dispose();
   }
 
+  /// Command palette global (GUI-P2-02): navigasi ke semua route + aksi
+  /// refresh — di-trigger Ctrl+K / Ctrl+P via [PaletteShortcut].
+  void _openCommandPalette() {
+    final actions = [
+      for (final entry in kAppRoutes)
+        PaletteAction(entry.label, () => _selectRoute(entry.route),
+            hint: 'Buka halaman ${entry.label}'),
+      PaletteAction('Muat ulang data admin', () => refreshAdmin(force: true),
+          hint: 'Semua GET dashboard dipanggil ulang'),
+    ];
+    if (!mounted) return;
+    showCommandPalette(context, actions);
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -436,7 +451,9 @@ class _AgentAppState extends State<AgentApp> {
       theme: SimpulTheme.theme(Brightness.light, settings.accent),
       darkTheme: SimpulTheme.theme(Brightness.dark, settings.accent),
       themeMode: settings.themeMode,
-      home: Scaffold(
+      home: PaletteShortcut(
+        onPalette: _openCommandPalette,
+        child: Scaffold(
         body: wide
             ? DesktopShell(
                 selected: route,
@@ -456,6 +473,7 @@ class _AgentAppState extends State<AgentApp> {
                   builder: (context, _) => _body(wide: false),
                 ),
               ),
+        ),
       ),
     );
   }

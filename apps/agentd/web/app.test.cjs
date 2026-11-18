@@ -114,9 +114,11 @@ function createHarness() {
     'btn-layer-search', 'btn-layer-reset',
     'layer-new-layer', 'layer-new-tags', 'layer-new-importance', 'layer-new-text',
     'btn-layer-create', 'rag-list', 'btn-load-rag',
+    'cmd-palette', 'cmd-input', 'cmd-list',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
+  elements['cmd-palette'].hidden = true; // markup: <div id="cmd-palette" hidden>
   const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
@@ -133,6 +135,11 @@ function createHarness() {
   // $('#tab-xxx') harus mengembalikan elemen section seperti di DOM asli.
   Object.assign(elements, Object.fromEntries(sections.map((section) => [section.id, section])));
   const document = {
+    listeners: Object.create(null),
+    addEventListener(name, callback) { (this.listeners[name] ||= []).push(callback); },
+    dispatchEvent(name, event = {}) {
+      for (const callback of this.listeners[name] || []) callback(event);
+    },
     querySelector(selector) {
       if (selector.startsWith('#')) return elements[selector.slice(1)] || null;
       return null;
@@ -304,7 +311,7 @@ function createHarness() {
     },
   };
   vm.runInNewContext(source, context, { filename: 'app.js' });
-  return { elements, tabs, sections, calls, storage, session, timers };
+  return { elements, tabs, sections, calls, storage, session, timers, document };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -866,4 +873,36 @@ test('Hapus entri berlapis mengirim DELETE /v1/memory/layers/:id', async () => {
   await tick();
   const call = h.calls.find((c) => c.url.includes('/v1/memory/layers/lay-1') && c.options.method === 'DELETE');
   assert.ok(call);
+});
+
+test('Ctrl/Cmd+K membuka command palette, filter, dan pilih tab', async () => {
+  const h = createHarness();
+  h.document.dispatchEvent('keydown', { key: 'k', ctrlKey: true, preventDefault() {} });
+  assert.equal(h.elements['cmd-palette'].hidden, false);
+  const items = h.elements['cmd-list'].children;
+  assert.ok(items.length >= 15);
+
+  h.elements['cmd-input'].value = 'ru';
+  h.elements['cmd-input'].dispatch('input');
+  await tick();
+  const filtered = h.elements['cmd-list'].children;
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].dataset.tab, 'runs');
+  h.elements['cmd-list'].dispatch('click', { target: filtered[0] });
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((s) => s.id === 'tab-runs').hidden, false);
+  assert.equal(h.elements['cmd-palette'].hidden, true);
+});
+
+test('Escape menutup palette; Ctrl+K toggle bila sudah terbuka', async () => {
+  const h = createHarness();
+  h.document.dispatchEvent('keydown', { key: 'k', ctrlKey: true, preventDefault() {} });
+  assert.equal(h.elements['cmd-palette'].hidden, false);
+  h.document.dispatchEvent('keydown', { key: 'k', metaKey: true, preventDefault() {} });
+  assert.equal(h.elements['cmd-palette'].hidden, true);
+  h.document.dispatchEvent('keydown', { key: 'k', ctrlKey: true, preventDefault() {} });
+  assert.equal(h.elements['cmd-palette'].hidden, false);
+  h.document.dispatchEvent('keydown', { key: 'Escape' });
+  assert.equal(h.elements['cmd-palette'].hidden, true);
 });
