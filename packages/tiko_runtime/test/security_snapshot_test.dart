@@ -30,7 +30,6 @@ mcp:
   servers: []
 ''');
 
-    final auditDir = Directory(p.join(temp.path, 'logs'));
     // Data dir & logs dibuat runtime saat start.
     final rt = await TikoRuntime.create(configPath: config.path, safe: false);
     addTearDown(rt.close);
@@ -137,7 +136,7 @@ mcp:
 
     await rt.checkTokenAnomalyForTest(
       Session(id: 's-x', channel: 'test', userKey: 'tester'),
-      ChatRunResult(text: 'ok', success: true, tokensUsed: 10, skillsUsed: ['halo-demo']),
+      const ChatRunResult(text: 'ok', success: true, tokensUsed: 10, skillsUsed: ['halo-demo']),
     );
 
     final snap = rt.securitySnapshot();
