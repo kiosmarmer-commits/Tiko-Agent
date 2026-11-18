@@ -858,6 +858,21 @@ Future<void> main(List<String> args) async {
           }
           return rt.setSessionProvider(sessionId, arg.toLowerCase());
         },
+        pluginProvider: () async {
+          final base = rt.pluginSnapshot();
+          return {
+            'plugins': base['plugins'],
+            'events': base['events'],
+            'tools': rt.toolCatalog(),
+            'mcp': rt.mcpSnapshot(),
+          };
+        },
+        pluginConsentSetter: (plugin, action) async {
+          final result = action == 'grant'
+              ? await rt.grantPluginConsent(plugin)
+              : await rt.revokePluginConsent(plugin);
+          return {'ok': result.ok, 'message': result.message};
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

@@ -440,3 +440,185 @@ class BotProfileItem {
         updatedAt: '${map['updated_at'] ?? ''}',
       );
 }
+
+/// Snapshot plugin & tools manager (GUI-P1-06): mirror payload
+/// `GET /v1/plugins` — daftar plugin + status consent, katalog tool
+/// registry host, dan status server MCP.
+class PluginsToolsSnapshot {
+  const PluginsToolsSnapshot({
+    this.plugins = const [],
+    this.tools = const [],
+    this.events = const [],
+    this.mcp,
+  });
+
+  final List<PluginItem> plugins;
+  final List<ToolInfo> tools;
+  final List<PluginEventInfo> events;
+  final McpStatusInfo? mcp;
+
+  factory PluginsToolsSnapshot.fromMap(Map<String, dynamic> map) {
+    final mcp = map['mcp'] as Map?;
+    return PluginsToolsSnapshot(
+      plugins: [
+        for (final p in map['plugins'] as List? ?? const [])
+          PluginItem.fromMap(Map<String, dynamic>.from(p as Map)),
+      ],
+      tools: [
+        for (final t in map['tools'] as List? ?? const [])
+          ToolInfo.fromMap(Map<String, dynamic>.from(t as Map)),
+      ],
+      events: [
+        for (final e in map['events'] as List? ?? const [])
+          PluginEventInfo.fromMap(Map<String, dynamic>.from(e as Map)),
+      ],
+      mcp: mcp == null
+          ? null
+          : McpStatusInfo.fromMap(Map<String, dynamic>.from(mcp)),
+    );
+  }
+}
+
+/// Satu plugin: status registrasi + consent (GUI-P1-06).
+class PluginItem {
+  const PluginItem({
+    required this.id,
+    this.registered = false,
+    this.pending = false,
+    this.granted = const [],
+    this.requested = const [],
+  });
+
+  final String id;
+  final bool registered;
+  final bool pending;
+
+  /// Permission yang sudah disetujui administrator.
+  final List<String> granted;
+
+  /// Permission yang diminta plugin pending consent.
+  final List<String> requested;
+
+  factory PluginItem.fromMap(Map<String, dynamic> map) => PluginItem(
+        id: '${map['id'] ?? ''}',
+        registered: map['registered'] == true,
+        pending: map['pending'] == true,
+        granted: [
+          for (final p in map['granted'] as List? ?? const []) '$p',
+        ],
+        requested: [
+          for (final p in map['requested'] as List? ?? const []) '$p',
+        ],
+      );
+}
+
+/// Satu tool terdaftar di registry host (GUI-P1-06, read-only).
+class ToolInfo {
+  const ToolInfo({
+    required this.name,
+    this.description = '',
+    this.risk = 'low',
+    this.timeoutSec = 30,
+    this.parallelSafe = false,
+  });
+
+  final String name;
+  final String description;
+  final String risk;
+  final int timeoutSec;
+  final bool parallelSafe;
+
+  factory ToolInfo.fromMap(Map<String, dynamic> map) => ToolInfo(
+        name: '${map['name'] ?? ''}',
+        description: '${map['description'] ?? ''}',
+        risk: '${map['risk'] ?? 'low'}',
+        timeoutSec: map['timeout_sec'] is num
+            ? (map['timeout_sec'] as num).toInt()
+            : 30,
+        parallelSafe: map['parallel_safe'] == true,
+      );
+}
+
+/// Event hook plugin terakhir (GUI-P1-06, maksimal 10 entri).
+class PluginEventInfo {
+  const PluginEventInfo({
+    this.plugin = '',
+    this.hook = '',
+    this.detail,
+    this.error,
+    this.at = '',
+  });
+
+  final String plugin;
+  final String hook;
+  final String? detail;
+  final String? error;
+  final String at;
+
+  factory PluginEventInfo.fromMap(Map<String, dynamic> map) =>
+      PluginEventInfo(
+        plugin: '${map['plugin'] ?? ''}',
+        hook: '${map['hook'] ?? ''}',
+        detail: map['detail'] == null ? null : '${map['detail']}',
+        error: map['error'] == null ? null : '${map['error']}',
+        at: '${map['at'] ?? ''}',
+      );
+}
+
+/// Status server MCP (GUI-P1-06, read-only): konfigurasi + hasil loader.
+class McpStatusInfo {
+  const McpStatusInfo({
+    this.started = false,
+    this.configured = const [],
+    this.loader = const [],
+  });
+
+  final bool started;
+  final List<McpServerInfo> configured;
+
+  /// Map mentah per server dari `McpToolLoader.statuses` (ready/failed/
+  /// disabled/invalid + detail + jumlah tool).
+  final List<Map<String, dynamic>> loader;
+
+  factory McpStatusInfo.fromMap(Map<String, dynamic> map) => McpStatusInfo(
+        started: map['started'] == true,
+        configured: [
+          for (final s in map['configured'] as List? ?? const [])
+            McpServerInfo.fromMap(Map<String, dynamic>.from(s as Map)),
+        ],
+        loader: [
+          for (final s in map['loader'] as List? ?? const [])
+            Map<String, dynamic>.from(s as Map),
+        ],
+      );
+}
+
+/// Konfigurasi satu server MCP (GUI-P1-06, config immutable).
+class McpServerInfo {
+  const McpServerInfo({
+    required this.id,
+    this.type = 'stdio',
+    this.enabled = true,
+    this.risk = 'high',
+    this.command,
+    this.allow = const [],
+  });
+
+  final String id;
+  final String type;
+  final bool enabled;
+  final String risk;
+  final String? command;
+  final List<String> allow;
+
+  factory McpServerInfo.fromMap(Map<String, dynamic> map) => McpServerInfo(
+        id: '${map['id'] ?? ''}',
+        type: '${map['type'] ?? 'stdio'}',
+        enabled: map['enabled'] != false,
+        risk: '${map['risk'] ?? 'high'}',
+        command: map['command'] == null ? null : '${map['command']}',
+        allow: [
+          for (final a in map['allow'] as List? ?? const []) '$a',
+        ],
+      );
+}
