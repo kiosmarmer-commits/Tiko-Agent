@@ -233,6 +233,29 @@ class AgentApiClient {
     }
   }
 
+  /// Provider & model manager (GUI-P1-05). Error model typed, cukup
+  /// `_throwIf`.
+  Future<Map<String, dynamic>> fetchProviders() async {
+    final res = await _http
+        .get(_u('/v1/providers'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'providers');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// [providerArg] adalah id provider atau `default` (lepas override);
+  /// false bila provider tidak dikenal (404).
+  Future<bool> setSessionProvider(String sessionId, String providerArg) async {
+    final res = await _http
+        .post(_u('/v1/providers/session'),
+            headers: _headers,
+            body: jsonEncode({'session_id': sessionId, 'provider': providerArg}))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
   /// Bot manager (GUI-P1-04). Backend memakai error model typed
   /// (401/400/404/409/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listBots() async {

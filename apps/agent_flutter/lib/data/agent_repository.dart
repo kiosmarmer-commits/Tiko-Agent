@@ -35,6 +35,8 @@ abstract class AgentRepository {
   Future<SkillGateOutcome> approveSkill(String slug);
   Future<SkillGateOutcome> rollbackSkill(String slug);
   Future<List<SkillHistoryEntry>> skillHistory(String slug);
+  Future<ProvidersSnapshot> providers();
+  Future<bool> setSessionProvider(String sessionId, String providerArg);
   Future<List<BotProfileItem>> bots();
   Future<BotProfileItem> createBot(Map<String, dynamic> body);
   Future<BotProfileItem> updateBot(String id, Map<String, dynamic> body);
@@ -171,6 +173,14 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<List<BotProfileItem>> bots() async =>
       (await _guard(_client.listBots)).map(BotProfileItem.fromMap).toList();
+
+  @override
+  Future<ProvidersSnapshot> providers() async =>
+      ProvidersSnapshot.fromMap(await _guard(_client.fetchProviders));
+
+  @override
+  Future<bool> setSessionProvider(String sessionId, String providerArg) =>
+      _guard(() => _client.setSessionProvider(sessionId, providerArg));
 
   @override
   Future<BotProfileItem> createBot(Map<String, dynamic> body) async =>

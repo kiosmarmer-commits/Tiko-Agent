@@ -61,6 +61,8 @@ class HttpApiServer {
     this.listBotBindings,
     this.bindBot,
     this.unbindBot,
+    this.providersProvider,
+    this.sessionProviderSetter,
   });
 
   final MessageHandler onMessage;
@@ -206,6 +208,12 @@ class HttpApiServer {
   final Future<Map<String, String>> Function()? listBotBindings;
   final Future<bool> Function(String botId, String sessionId)? bindBot;
   final Future<bool> Function(String botId, String sessionId)? unbindBot;
+
+  /// Provider & model manager callbacks (GUI-P1-05). Callback yang null
+  /// membuat endpoint terkait merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function()? providersProvider;
+  final Future<bool> Function(String sessionId, String providerArg)?
+      sessionProviderSetter;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -803,6 +811,37 @@ class HttpApiServer {
           _error(req, 404, 'not_found', 'bot or binding not found');
         } else {
           _json(req, {'ok': true, 'bound': bind});
+        }
+      // Provider & model manager endpoints (GUI-P1-05)
+      } else if (path == '/v1/providers' && req.method == 'GET') {
+        final snapshot = await (providersProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'provider manager not configured')));
+        _json(req, snapshot);
+      } else if (path == '/v1/providers/session' && req.method == 'POST') {
+        if (sessionProviderSetter == null) {
+          _error(req, 501, 'not_implemented', 'provider manager not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final sessionId = body['session_id'];
+        final provider = body['provider'];
+        if (sessionId is! String || sessionId.trim().isEmpty) {
+          _error(req, 400, 'invalid_request', 'session_id wajib diisi');
+          return;
+        }
+        if (provider is! String || provider.trim().isEmpty) {
+          _error(req, 400, 'invalid_request',
+              'provider wajib diisi (id atau "default")');
+          return;
+        }
+        final ok = await sessionProviderSetter!(sessionId.trim(), provider.trim());
+        if (!ok) {
+          _error(req, 404, 'not_found', 'provider not found');
+        } else {
+          _json(req, {'ok': true, 'session_id': sessionId.trim(), 'provider': provider.trim()});
         }
       } else {
         _error(req, 404, 'not_found', 'not found');

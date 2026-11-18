@@ -303,6 +303,107 @@ class SkillHistoryEntry {
       );
 }
 
+/// Snapshot provider & model manager (GUI-P1-05): mirror payload
+/// `GET /v1/providers` — daftar provider + health circuit breaker, mapping
+/// tier, dan override `/model` per sesi.
+class ProvidersSnapshot {
+  const ProvidersSnapshot({
+    this.defaultId,
+    this.providers = const [],
+    this.tiers = const {},
+    this.sessionOverrides = const {},
+  });
+
+  final String? defaultId;
+  final List<ProviderItem> providers;
+  final Map<String, String> tiers;
+  final Map<String, String> sessionOverrides;
+
+  factory ProvidersSnapshot.fromMap(Map<String, dynamic> map) {
+    final tiers = Map<String, dynamic>.from(map['tiers'] as Map? ?? const {});
+    final overrides = Map<String, dynamic>.from(
+        map['session_overrides'] as Map? ?? const {});
+    return ProvidersSnapshot(
+      defaultId: map['default'] == null ? null : '${map['default']}',
+      providers: [
+        for (final p in map['providers'] as List? ?? const [])
+          ProviderItem.fromMap(Map<String, dynamic>.from(p as Map)),
+      ],
+      tiers: {for (final e in tiers.entries) e.key: '${e.value}'},
+      sessionOverrides: {for (final e in overrides.entries) e.key: '${e.value}'},
+    );
+  }
+}
+
+/// Satu provider chat + health breaker-nya.
+class ProviderItem {
+  const ProviderItem({
+    required this.id,
+    this.toolCalling = false,
+    this.vision = false,
+    this.streaming = true,
+    this.maxContext = 0,
+    this.health,
+  });
+
+  final String id;
+  final bool toolCalling;
+  final bool vision;
+  final bool streaming;
+  final int maxContext;
+  final ProviderHealthInfo? health;
+
+  factory ProviderItem.fromMap(Map<String, dynamic> map) {
+    final caps = Map<String, dynamic>.from(
+        map['capabilities'] as Map? ?? const {});
+    return ProviderItem(
+      id: '${map['id'] ?? ''}',
+      toolCalling: caps['tool_calling'] == true,
+      vision: caps['vision'] == true,
+      streaming: caps['streaming'] != false,
+      maxContext: caps['max_context'] is num
+          ? (caps['max_context'] as num).toInt()
+          : 0,
+      health: map['health'] == null
+          ? null
+          : ProviderHealthInfo.fromMap(
+              Map<String, dynamic>.from(map['health'] as Map)),
+    );
+  }
+}
+
+/// Health circuit breaker satu provider (ProviderHealth.toJson).
+class ProviderHealthInfo {
+  const ProviderHealthInfo({
+    this.failures = 0,
+    this.successes = 0,
+    this.open = false,
+    this.phase = 'unknown',
+    this.lastError,
+    this.lastLatencyMs = 0,
+  });
+
+  final int failures;
+  final int successes;
+  final bool open;
+  final String phase;
+  final String? lastError;
+  final double lastLatencyMs;
+
+  factory ProviderHealthInfo.fromMap(Map<String, dynamic> map) =>
+      ProviderHealthInfo(
+        failures: map['failures'] is num ? (map['failures'] as num).toInt() : 0,
+        successes:
+            map['successes'] is num ? (map['successes'] as num).toInt() : 0,
+        open: map['open'] == true,
+        phase: '${map['phase'] ?? 'unknown'}',
+        lastError: map['last_error'] == null ? null : '${map['last_error']}',
+        lastLatencyMs: map['last_latency_ms'] is num
+            ? (map['last_latency_ms'] as num).toDouble()
+            : 0,
+      );
+}
+
 /// Profil bot persisten (GUI-P1-04): mirror BotProfile.toJson dari
 /// tiko_runtime (snake_case).
 class BotProfileItem {

@@ -1307,6 +1307,41 @@ class TikoRuntime {
 
   Map<String, dynamic> providerHealth() => _router.healthSnapshot();
 
+  /// Provider & model manager (GUI-P1-05): accessor di atas router yang sama
+  /// dengan command `/model`, dipakai REST API + GUI Flutter.
+  String? get defaultProviderId => _router.defaultProviderId;
+
+  List<String> providerIds() => _router.providers.keys.toList()..sort();
+
+  Map<String, String> sessionModelOverrides() => Map.unmodifiable(_sessionModel);
+
+  /// Provider efektif untuk satu sesi: override `/model` → default router →
+  /// provider id pertama (sorted); null bila tanpa provider.
+  String? effectiveSessionProvider(String sessionId) {
+    final override = _sessionModel[sessionId];
+    if (override != null) return override;
+    if (_router.defaultProviderId != null) return _router.defaultProviderId;
+    final keys = _router.providers.keys.toList()..sort();
+    return keys.isEmpty ? null : keys.first;
+  }
+
+  /// Mirror `/model <id>`: pasang override sesi; false bila provider tidak
+  /// dikenal.
+  bool setSessionProvider(String sessionId, String providerId) {
+    if (!_router.providers.containsKey(providerId)) return false;
+    _sessionModel[sessionId] = providerId;
+    events.emit('model.switched', {
+      'session': sessionId,
+      'provider': providerId,
+    });
+    return true;
+  }
+
+  /// Mirror `/model default`: lepas override sesi; true bila ada override
+  /// yang dilepas.
+  bool clearSessionProvider(String sessionId) =>
+      _sessionModel.remove(sessionId) != null;
+
   /// Unified provider health (P1): [CircuitBreaker] adapter over the SAME
   /// [ProviderHealth] state the Router uses for selection/fallback. Any
   /// surface that calls a provider directly (scheduler delivery, gateway
