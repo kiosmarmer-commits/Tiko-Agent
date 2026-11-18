@@ -14,12 +14,23 @@
 
   if (!msgs || !form || !input || !sendBtn || !statusPill) return;
 
+  // GUI-P0-05: token tidak lagi bertahan di localStorage (plaintext permanen).
+  // sessionStorage berlaku per-tab dan terhapus saat tab ditutup; token lama
+  // dari localStorage dimigrasi sekali lalu dihapus dari penyimpanan permanen.
   const store = {
     get base() { return localStorage.getItem('agent_base') || location.origin; },
     set base(value) { localStorage.setItem('agent_base', value); },
-    get token() { return localStorage.getItem('agent_token') || ''; },
-    set token(value) { localStorage.setItem('agent_token', value); },
+    get token() { return sessionStorage.getItem('agent_token') || ''; },
+    set token(value) {
+      if (value) sessionStorage.setItem('agent_token', value);
+      else sessionStorage.removeItem('agent_token');
+      localStorage.removeItem('agent_token');
+    },
   };
+  const legacyToken = localStorage.getItem('agent_token');
+  if (legacyToken && !sessionStorage.getItem('agent_token')) {
+    store.token = legacyToken;
+  }
 
   const cfgBase = $('#cfgBase');
   const cfgToken = $('#cfgToken');

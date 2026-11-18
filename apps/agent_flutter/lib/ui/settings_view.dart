@@ -141,6 +141,7 @@ class _SettingsViewState extends State<SettingsView> {
                   decoration: const InputDecoration(
                     labelText: 'Bearer token',
                     border: OutlineInputBorder(),
+                    helperText: 'Hanya dipakai di sesi ini; tidak disimpan ke penyimpanan perangkat.',
                   ),
                   validator: (value) => (value ?? '').trim().isEmpty
                       ? 'Bearer token wajib diisi.'

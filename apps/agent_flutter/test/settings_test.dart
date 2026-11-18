@@ -25,6 +25,21 @@ void main() {
     expect(loaded.autoLockMinutes, 15);
   });
 
+  test('GUI-P0-05: AppSettings tidak menyimpan bearer token ke preferences', () async {
+    SharedPreferences.setMockInitialValues({});
+    await AppSettings(
+      themeMode: ThemeMode.light,
+      accent: AppSettings.accents[1],
+      vaultPath: '/vault',
+    ).save();
+
+    final prefs = await SharedPreferences.getInstance();
+    final secretLike = prefs.getKeys().where(
+      (key) => key.toLowerCase().contains('token') || key.toLowerCase().contains('secret'),
+    );
+    expect(secretLike, isEmpty);
+  });
+
   test('AppSettings default: dark, aksen default, auto-lock mati', () async {
     SharedPreferences.setMockInitialValues({});
     final loaded = await AppSettings.load();
