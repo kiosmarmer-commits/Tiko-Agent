@@ -71,6 +71,7 @@ class HttpApiServer {
     this.updateJob,
     this.deleteJob,
     this.runJobNow,
+    this.securityProvider,
   });
 
   final MessageHandler onMessage;
@@ -347,6 +348,10 @@ class HttpApiServer {
   )? updateJob;
   final Future<bool> Function(String id)? deleteJob;
   final Future<Map<String, dynamic>?> Function(String id)? runJobNow;
+
+  /// Security Center callback (GUI-P1-10). Callback null membuat endpoint
+  /// terkait merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function()? securityProvider;
 
   HttpServer? _server;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -1004,6 +1009,12 @@ class HttpApiServer {
         final snapshot = await (channelsProvider?.call() ??
             (throw ApiRequestException(501, 'not_implemented',
                 'channels status not configured')));
+        _json(req, snapshot);
+      // Security Center endpoint (GUI-P1-10, read-only)
+      } else if (path == '/v1/security' && req.method == 'GET') {
+        final snapshot = await (securityProvider?.call() ??
+            (throw ApiRequestException(501, 'not_implemented',
+                'security center not configured')));
         _json(req, snapshot);
       // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {

@@ -722,3 +722,131 @@ class JobInfo {
         deliveryState: '${map['delivery_state'] ?? 'none'}',
       );
 }
+
+/// Snapshot Security Center (GUI-P1-10): mirror payload `GET /v1/security`
+/// — konsolidasi status keamanan runtime read-only, tanpa nilai rahasia.
+class SecuritySnapshot {
+  const SecuritySnapshot({
+    this.safeMode = false,
+    this.panic = false,
+    this.stopRequested = false,
+    this.sandbox = 'unknown',
+    this.sealedStorage = false,
+    this.plugins = const [],
+    this.tokenAnomalyEnabled = false,
+    this.quarantinesToday = 0,
+    this.maxQuarantinesPerDay = 0,
+    this.tokenSkillStats = const [],
+    this.rateWindowSec = 0,
+    this.rateMaxEvents = 0,
+    this.guardBlockedTurns = 0,
+    this.guardSanitizedTurns = 0,
+    this.auditTotal = 0,
+    this.auditRecent = const [],
+    this.activeSessions = 0,
+  });
+
+  final bool safeMode;
+  final bool panic;
+  final bool stopRequested;
+  final String sandbox;
+
+  /// True saat penyimpanan kredensial terenkripsi at-rest — sekadar flag,
+  /// passphrase tidak pernah dikirim.
+  final bool sealedStorage;
+  final List<SecurityPluginItem> plugins;
+  final bool tokenAnomalyEnabled;
+  final int quarantinesToday;
+  final int maxQuarantinesPerDay;
+  final List<SkillTokenStat> tokenSkillStats;
+  final int rateWindowSec;
+  final int rateMaxEvents;
+  final int guardBlockedTurns;
+  final int guardSanitizedTurns;
+  final int auditTotal;
+
+  /// Entri audit terbaru (sudah direduksi server; tetap Map karena kolom
+  /// per-entri heterogen).
+  final List<Map<String, dynamic>> auditRecent;
+  final int activeSessions;
+
+  factory SecuritySnapshot.fromMap(Map<String, dynamic> map) {
+    final safety = map['safety'] as Map? ?? const {};
+    final credentials = map['credentials'] as Map? ?? const {};
+    final tokenAnomaly = map['token_anomaly'] as Map? ?? const {};
+    final rate = map['rate_anomaly'] as Map? ?? const {};
+    final guard = map['guard'] as Map? ?? const {};
+    final audit = map['audit'] as Map? ?? const {};
+    return SecuritySnapshot(
+      safeMode: safety['safe_mode'] == true,
+      panic: safety['panic'] == true,
+      stopRequested: safety['stop_requested'] == true,
+      sandbox: '${map['sandbox'] ?? 'unknown'}',
+      sealedStorage: credentials['sealed_storage'] == true,
+      plugins: [
+        for (final p in map['plugins'] as List? ?? const [])
+          SecurityPluginItem.fromMap(Map<String, dynamic>.from(p as Map)),
+      ],
+      tokenAnomalyEnabled: tokenAnomaly['enabled'] == true,
+      quarantinesToday: (tokenAnomaly['quarantines_today'] as num?)?.toInt() ?? 0,
+      maxQuarantinesPerDay:
+          (tokenAnomaly['max_quarantines_per_day'] as num?)?.toInt() ?? 0,
+      tokenSkillStats: [
+        for (final s in tokenAnomaly['skills'] as List? ?? const [])
+          SkillTokenStat.fromMap(Map<String, dynamic>.from(s as Map)),
+      ],
+      rateWindowSec: (rate['window_sec'] as num?)?.toInt() ?? 0,
+      rateMaxEvents: (rate['max_events'] as num?)?.toInt() ?? 0,
+      guardBlockedTurns: (guard['blocked_turns'] as num?)?.toInt() ?? 0,
+      guardSanitizedTurns: (guard['sanitized_turns'] as num?)?.toInt() ?? 0,
+      auditTotal: (audit['total_in_memory'] as num?)?.toInt() ?? 0,
+      auditRecent: [
+        for (final e in audit['recent'] as List? ?? const [])
+          Map<String, dynamic>.from(e as Map),
+      ],
+      activeSessions: (map['active_sessions'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// Satu plugin pada Security Center: ringkasan consent (GUI-P1-10).
+class SecurityPluginItem {
+  const SecurityPluginItem({
+    required this.id,
+    this.registered = false,
+    this.pending = false,
+    this.grantedCount = 0,
+    this.requestedCount = 0,
+  });
+
+  final String id;
+  final bool registered;
+  final bool pending;
+  final int grantedCount;
+  final int requestedCount;
+
+  factory SecurityPluginItem.fromMap(Map<String, dynamic> map) =>
+      SecurityPluginItem(
+        id: '${map['id'] ?? ''}',
+        registered: map['registered'] == true,
+        pending: map['pending'] == true,
+        grantedCount: (map['granted_count'] as num?)?.toInt() ?? 0,
+        requestedCount: (map['requested_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Statistik baseline token per skill dari TokenAnomalyDetector (E1).
+class SkillTokenStat {
+  const SkillTokenStat({
+    required this.slug,
+    this.samples = 0,
+  });
+
+  final String slug;
+  final int samples;
+
+  factory SkillTokenStat.fromMap(Map<String, dynamic> map) => SkillTokenStat(
+        slug: '${map['slug'] ?? ''}',
+        samples: (map['samples'] as num?)?.toInt() ?? 0,
+      );
+}

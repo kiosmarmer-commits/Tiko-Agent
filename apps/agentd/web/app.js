@@ -835,6 +835,96 @@
     }
   }
 
+  // GUI-P1-10 parity: security center read-only.
+  async function loadSecurity() {
+    const list = $('#security-box');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat status keamanan\u2026'));
+    try {
+      const data = await api('/v1/security');
+      list.replaceChildren();
+      const safety = data.safety || {};
+      const credentials = data.credentials || {};
+      const token = data.token_anomaly || {};
+      const rate = data.rate_anomaly || {};
+      const guard = data.guard || {};
+      const audit = data.audit || {};
+
+      const safetyLi = document.createElement('li');
+      const safetyTitle = document.createElement('strong');
+      safetyTitle.textContent = safety.panic ? 'Safety \u00b7 PANIC aktif'
+        : safety.safe_mode ? 'Safety \u00b7 safe mode ON' : 'Safety \u00b7 normal';
+      safetyTitle.className = 'job-title';
+      const safetyPill = document.createElement('span');
+      safetyPill.className = safety.panic || safety.stop_requested ? 'pill offline' : 'pill online';
+      safetyPill.textContent = safety.panic ? 'PANIC' : safety.stop_requested ? 'stop request' : 'normal';
+      const safetyMeta = document.createElement('p');
+      safetyMeta.className = 'hint';
+      safetyMeta.textContent = 'sandbox ' + String(data.sandbox || 'unknown') +
+        ' \u00b7 kredensial ' + (credentials.sealed_storage ? 'terenkripsi at-rest' : 'plaintext (chmod 600)') +
+        ' \u00b7 sesi aktif ' + String(data.active_sessions ?? 0);
+      safetyLi.append(safetyTitle, safetyPill, safetyMeta);
+      list.appendChild(safetyLi);
+
+      const tokenLi = document.createElement('li');
+      const tokenTitle = document.createElement('strong');
+      tokenTitle.textContent = 'Token anomaly (E1)';
+      tokenTitle.className = 'job-title';
+      const tokenMeta = document.createElement('p');
+      tokenMeta.className = 'hint';
+      const skills = Array.isArray(token.skills) ? token.skills : [];
+      tokenMeta.textContent = token.enabled
+        ? 'Detektor aktif \u00b7 karantina hari ini ' + String(token.quarantines_today ?? 0) + '/' + String(token.max_quarantines_per_day ?? 0) +
+          (skills.length ? ' \u00b7 ' + skills.map((s) => String(s.slug || '?') + ': ' + String(s.samples ?? 0) + ' sampel').join(', ') : '')
+        : 'Detektor nonaktif (opt-in via config security.token_anomaly)';
+      tokenLi.append(tokenTitle, tokenMeta);
+      list.appendChild(tokenLi);
+
+      const plugins = Array.isArray(data.plugins) ? data.plugins : [];
+      const pluginsLi = document.createElement('li');
+      const pluginsTitle = document.createElement('strong');
+      pluginsTitle.textContent = 'Plugin & consent';
+      pluginsTitle.className = 'job-title';
+      const pluginsMeta = document.createElement('p');
+      pluginsMeta.className = 'hint';
+      pluginsMeta.textContent = plugins.length
+        ? plugins.map((p) => String(p.id || '?') +
+            (p.pending ? ' (menunggu consent)' : p.registered ? ' (' + String(p.granted_count ?? 0) + ' izin)' : ' (tidak terdaftar)')).join(', ')
+        : 'Tidak ada plugin terdaftar.';
+      pluginsLi.append(pluginsTitle, pluginsMeta);
+      list.appendChild(pluginsLi);
+
+      const guardLi = document.createElement('li');
+      const guardTitle = document.createElement('strong');
+      guardTitle.textContent = 'Guard & rate';
+      guardTitle.className = 'job-title';
+      const guardMeta = document.createElement('p');
+      guardMeta.className = 'hint';
+      guardMeta.textContent = 'PromptGuard: ' + String(guard.blocked_turns ?? 0) + ' turn diblokir, ' +
+        String(guard.sanitized_turns ?? 0) + ' turn disanitasi (sejak start) \u00b7 rate anomaly: >' +
+        String(rate.max_events ?? 0) + ' pesan/' + String(rate.window_sec ?? 0) + 's per user dianggap anomali';
+      guardLi.append(guardTitle, guardMeta);
+      list.appendChild(guardLi);
+
+      const recent = Array.isArray(audit.recent) ? audit.recent : [];
+      const auditLi = document.createElement('li');
+      const auditTitle = document.createElement('strong');
+      auditTitle.textContent = 'Audit terakhir (' + String(audit.total_in_memory ?? 0) + ' entri di memori)';
+      auditTitle.className = 'job-title';
+      const auditMeta = document.createElement('p');
+      auditMeta.className = 'hint';
+      auditMeta.textContent = recent.length
+        ? recent.slice(0, 15).map((e) => String(e.ts || '-') + ' \u00b7 ' + String(e.tool || '-') +
+            ' \u00b7 risk ' + String(e.risk || '-') + ' \u00b7 ' + String(e.verdict || '-') +
+            (e.session ? ' \u00b7 ' + String(e.session) : '')).join(' | ')
+        : 'Belum ada entri audit.';
+      auditLi.append(auditTitle, auditMeta);
+      list.appendChild(auditLi);
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat security: ' + error.message));
+    }
+  }
+
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
     const promptEl = $('#jobNewPrompt');
@@ -1089,6 +1179,7 @@
       if (target === 'plugins') loadPlugins();
       if (target === 'channels') loadChannels();
       if (target === 'jobs') loadJobs();
+      if (target === 'security') loadSecurity();
     });
   });
 
@@ -1128,6 +1219,7 @@
   $('#btn-refresh-plugins')?.addEventListener('click', loadPlugins);
   $('#btn-refresh-channels')?.addEventListener('click', loadChannels);
   $('#btn-refresh-jobs')?.addEventListener('click', loadJobs);
+  $('#btn-refresh-security')?.addEventListener('click', loadSecurity);
   $('#jobCreateBtn')?.addEventListener('click', createJobFromWeb);
   $('#botCreateBtn')?.addEventListener('click', createBot);
   $('#botBindBtn')?.addEventListener('click', () => bindOrUnbindBot(true));

@@ -34,6 +34,7 @@
         <button type="button" data-tab="plugins" aria-pressed="false" aria-controls="tab-plugins">Plugin</button>
         <button type="button" data-tab="channels" aria-pressed="false" aria-controls="tab-channels">Channels</button>
         <button type="button" data-tab="jobs" aria-pressed="false" aria-controls="tab-jobs">Automation</button>
+        <button type="button" data-tab="security" aria-pressed="false" aria-controls="tab-security">Security</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -234,6 +235,18 @@
           <p class="hint">Cron wajib 5 field; prompt dijalankan scheduler daemon pada jadwal (tick sekitar 20 detik). missed_policy default run_once.</p>
         </article>
         <ul id="job-list" class="list"></ul>
+      </section>
+
+      <section id="tab-security" class="tab" hidden aria-label="Security">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">SECURITY</p><h1>Security Center</h1><p class="subheading">Status keamanan runtime: safe mode/panic, sandbox, consent plugin, token anomaly, guard, dan audit terakhir (read-only).</p></div>
+          <button type="button" id="btn-refresh-security" class="secondary">Muat ulang</button>
+        </div>
+        <article class="card settings-card">
+          <h2>Batasan</h2>
+          <p class="hint">Security Center read-only: tidak ada toggle safe mode/panic atau kill switch dari GUI. Counter guard dihitung in-memory (reset saat daemon restart), tanpa nilai rahasia — hanya flag sealed storage.</p>
+        </article>
+        <ul id="security-box" class="list"></ul>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">

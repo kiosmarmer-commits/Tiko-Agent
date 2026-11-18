@@ -106,6 +106,10 @@ class TokenAnomalyDetector {
     };
   }
 
+  /// Daftar skill yang punya sampel (Security Center, GUI-P1-10) —
+  /// tanpa nilai token, hanya slug terurut.
+  List<String> get sampledSlugs => _samples.keys.toList()..sort();
+
   void reset([String? slug]) {
     if (slug == null) {
       _samples.clear();
