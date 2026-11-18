@@ -951,6 +951,11 @@ Future<void> main(List<String> args) async {
           await rt.jobs.save();
           return job.toJson();
         },
+        securityProvider: () async {
+          final snapshot = rt.securitySnapshot();
+          snapshot['active_sessions'] = (await rt.sessions.list()).length;
+          return snapshot;
+        },
         capabilitiesProvider: () => {
           'version': tikoVersion,
           'provider': rt.config.defaultProvider,

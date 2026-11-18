@@ -343,6 +343,16 @@ class AgentApiClient {
     };
   }
 
+  /// Security Center (GUI-P1-10): snapshot status keamanan konsolidasi
+  /// (read-only, tanpa nilai rahasia).
+  Future<Map<String, dynamic>> fetchSecurity() async {
+    final res = await _http
+        .get(_u('/v1/security'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'security');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
   /// typed (400/404/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listJobs() async {

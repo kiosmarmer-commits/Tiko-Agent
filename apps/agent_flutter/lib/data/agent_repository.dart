@@ -41,6 +41,7 @@ abstract class AgentRepository {
   Future<String> setPluginConsent(String plugin, String action);
   Future<ChannelsSnapshot> channels();
   Future<JobsSnapshot> jobs();
+  Future<SecuritySnapshot> security();
   Future<JobInfo> createJob(Map<String, dynamic> body);
   Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
   Future<bool> deleteJob(String id);
@@ -206,6 +207,10 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<ChannelsSnapshot> channels() async =>
       ChannelsSnapshot.fromMap(await _guard(_client.fetchChannels));
+
+  @override
+  Future<SecuritySnapshot> security() async => SecuritySnapshot.fromMap(
+      await _guard(() => _client.fetchSecurity()));
 
   @override
   Future<JobsSnapshot> jobs() async => JobsSnapshot.fromMap({

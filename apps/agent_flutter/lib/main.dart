@@ -19,6 +19,7 @@ import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
+import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
@@ -104,6 +105,7 @@ class _AgentAppState extends State<AgentApp> {
   PluginsToolsSnapshot? pluginSnapshot;
   ChannelsSnapshot? channelSnapshot;
   JobsSnapshot? jobsSnapshot;
+  SecuritySnapshot? securitySnapshot;
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -172,6 +174,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.pluginsTools(),
         repo.channels(),
         repo.jobs(),
+        repo.security(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
@@ -191,6 +194,7 @@ class _AgentAppState extends State<AgentApp> {
         pluginSnapshot = results[13] as PluginsToolsSnapshot;
         channelSnapshot = results[14] as ChannelsSnapshot;
         jobsSnapshot = results[15] as JobsSnapshot;
+        securitySnapshot = results[16] as SecuritySnapshot;
       });
       if (!_eventFeedStarted) {
         _eventFeedStarted = true;
@@ -319,6 +323,7 @@ class _AgentAppState extends State<AgentApp> {
         pluginSnapshot: pluginSnapshot,
         channelSnapshot: channelSnapshot,
         jobsSnapshot: jobsSnapshot,
+        securitySnapshot: securitySnapshot,
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
@@ -532,6 +537,14 @@ class _AgentAppState extends State<AgentApp> {
             if (job != null) unawaited(refreshAdmin(force: true));
             return job;
           },
+        );
+      case AppRoute.security:
+        return SecurityPage(
+          snapshot: securitySnapshot,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
         );
       case AppRoute.memory:
         return _MemoryPage(
@@ -1291,6 +1304,7 @@ class _MorePage extends StatelessWidget {
     required this.pluginSnapshot,
     required this.channelSnapshot,
     required this.jobsSnapshot,
+    required this.securitySnapshot,
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
@@ -1313,6 +1327,7 @@ class _MorePage extends StatelessWidget {
   final PluginsToolsSnapshot? pluginSnapshot;
   final ChannelsSnapshot? channelSnapshot;
   final JobsSnapshot? jobsSnapshot;
+  final SecuritySnapshot? securitySnapshot;
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
@@ -1529,6 +1544,24 @@ class _MorePage extends StatelessWidget {
                     await onRefresh();
                     return job;
                   },
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.security_outlined),
+          title: Text(
+              'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: SecurityPage(
+                  snapshot: securitySnapshot,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
                 ),
               ),
             ));

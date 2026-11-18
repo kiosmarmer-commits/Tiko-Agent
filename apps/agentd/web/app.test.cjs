@@ -99,16 +99,17 @@ function createHarness() {
     'channel-list', 'btn-refresh-channels',
     'job-list', 'btn-refresh-jobs',
     'jobNewCron', 'jobNewPrompt', 'jobNewChannel', 'jobNewTimezone', 'jobCreateBtn',
+    'security-box', 'btn-refresh-security',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -192,6 +193,17 @@ function createHarness() {
       ] };
       else if (pathname === '/v1/jobs/job-1/run') body = { id: 'job-1', next_run: '2026-11-18T13:01:00.000Z', enabled: true };
       else if (pathname.startsWith('/v1/jobs/')) body = { deleted: true, ok: true };
+      else if (pathname === '/v1/security') body = {
+        safety: { safe_mode: true, panic: false, stop_requested: false },
+        sandbox: 'landlock',
+        credentials: { sealed_storage: true },
+        plugins: [{ id: 'weather', registered: true, pending: false, granted_count: 3, requested_count: 3 }],
+        token_anomaly: { enabled: true, quarantines_today: 1, max_quarantines_per_day: 5, skills: [{ slug: 'berita', samples: 42 }] },
+        rate_anomaly: { window_sec: 60, max_events: 40 },
+        guard: { blocked_turns: 2, sanitized_turns: 7 },
+        audit: { total_in_memory: 320, recent: [{ ts: '2026-11-18T13:00:00.000Z', tool: 'shell.exec', risk: 'high', verdict: 'allowed', session: 's-1' }] },
+        active_sessions: 2,
+      };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
   };
@@ -514,6 +526,39 @@ test('Buat cron job mengirim POST /v1/jobs dengan cron + prompt wajib', async ()
     channel: 'telegram',
     timezone: 'Asia/Jakarta',
   });
+});
+
+test('Security tab memuat snapshot read-only dengan status safety', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'security').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-security').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/security')));
+  const items = h.elements['security-box'].children;
+  assert.equal(items.length, 5);
+  assert.equal(items[0].children[0].textContent, 'Safety · safe mode ON');
+  assert.equal(items[0].children[1].textContent, 'normal');
+  assert.ok(items[0].children[2].textContent.includes('sandbox landlock'));
+  assert.ok(items[0].children[2].textContent.includes('sesi aktif 2'));
+  assert.ok(items[1].children[1].textContent.includes('karantina hari ini 1/5'));
+  assert.ok(items[1].children[1].textContent.includes('berita: 42 sampel'));
+  assert.ok(items[2].children[1].textContent.includes('weather (3 izin)'));
+  assert.ok(items[3].children[1].textContent.includes('2 turn diblokir'));
+  assert.ok(items[4].children[1].textContent.includes('shell.exec'));
+});
+
+test('Tombol refresh security memanggil ulang GET /v1/security', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'security').dispatch('click');
+  await tick();
+  await tick();
+  const before = h.calls.filter((call) => call.url.endsWith('/v1/security')).length;
+  h.elements['btn-refresh-security'].dispatch('click');
+  await tick();
+  await tick();
+  const after = h.calls.filter((call) => call.url.endsWith('/v1/security')).length;
+  assert.ok(after > before, 'GET /v1/security dipanggil ulang');
 });
 
 test('Hapus job mengirim DELETE /v1/jobs/:id', async () => {

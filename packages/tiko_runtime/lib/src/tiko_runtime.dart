@@ -212,6 +212,11 @@ class TikoRuntime {
   /// E1: hitung karantina per UTC day (cap anti-spam penindakan).
   final Map<String, int> _tokenQuarantinesByDay = {};
 
+  /// Counter turn yang diblokir/di-sanitasi PromptGuard (Security Center,
+  /// GUI-P1-10) — in-memory, reset saat proses restart.
+  int _guardBlockedTurns = 0;
+  int _guardSanitizedTurns = 0;
+
   void _rememberSessionSkills(String sessionId, List<String> slugs) {
     _sessionSkillsUsed[sessionId] = List.of(slugs);
     while (_sessionSkillsUsed.length > 500) {
@@ -1600,6 +1605,7 @@ class TikoRuntime {
         provenance: Provenance.user,
       );
       if (guardVerdict.blocked) {
+        _guardBlockedTurns += 1;
         events.emit('guard.blocked', {
           'session': sessionId,
           'findings':
@@ -1611,6 +1617,7 @@ class TikoRuntime {
           success: false,
         );
       }
+      if (guardVerdict.sanitizedText != null) _guardSanitizedTurns += 1;
       final effectiveText = guardVerdict.sanitizedText ?? text;
       anomalyDetector.record(userKey, now);
       if (anomalyDetector.isAnomalous(userKey, now)) {
@@ -2067,6 +2074,65 @@ class TikoRuntime {
             'at': e.at.toIso8601String(),
           },
       ],
+    };
+  }
+
+  /// Security Center snapshot (GUI-P1-10, read-only): konsolidasi status
+  /// keamanan runtime — safe mode/panic, sandbox, state penyimpanan
+  /// kredensial (tanpa nilai rahasia), consent plugin, token anomaly,
+  /// anomali rate, guard counters, dan ringkasan audit terakhir.
+  Map<String, dynamic> securitySnapshot() {
+    final detector = _tokenAnomaly;
+    final now = DateTime.now().toUtc();
+    final day = now.toIso8601String().substring(0, 10);
+    final pluginItems = pluginSnapshot()['plugins'] as List<dynamic>;
+    final sealed = credentialManager.passphrase != null &&
+        credentialManager.passphrase!.isNotEmpty;
+    return {
+      'safety': {
+        'safe_mode': safety.safeMode,
+        'panic': safety.panic,
+        'stop_requested': safety.stopRequested,
+      },
+      'sandbox': sandboxKind.name,
+      'credentials': {
+        'sealed_storage': sealed,
+      },
+      'plugins': [
+        for (final plugin in pluginItems)
+          {
+            'id': plugin['id'],
+            'registered': plugin['registered'],
+            'pending': plugin['pending'],
+            'granted_count': (plugin['granted'] as List? ?? const []).length,
+            'requested_count':
+                (plugin['requested'] as List? ?? const []).length,
+          },
+      ],
+      'token_anomaly': {
+        'enabled': detector != null,
+        'quarantines_today': _tokenQuarantinesByDay[day] ?? 0,
+        'max_quarantines_per_day': config.tokenAnomaly.maxQuarantinesPerDay,
+        'skills': [
+          if (detector != null)
+            for (final slug in detector.sampledSlugs) detector.statsFor(slug),
+        ],
+      },
+      'rate_anomaly': {
+        'window_sec': anomalyDetector.window.inSeconds,
+        'max_events': anomalyDetector.maxEvents,
+      },
+      'guard': {
+        'blocked_turns': _guardBlockedTurns,
+        'sanitized_turns': _guardSanitizedTurns,
+      },
+      'audit': {
+        'total_in_memory': audit.recent.length,
+        'recent': [
+          for (final entry in audit.recent.reversed.take(15))
+            Map<String, dynamic>.from(entry),
+        ],
+      },
     };
   }
 
