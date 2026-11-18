@@ -127,6 +127,34 @@ class AgentApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Task kanban (GUI-P1-01): read-only, sumber data identik dengan web UI.
+  Future<List<Map<String, dynamic>>> listTasks() async {
+    final res = await _http.get(_u('/v1/tasks'), headers: _headers);
+    _throwIf(res, 'tasks');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['tasks'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Daftar file log (GUI-P1-02).
+  Future<List<Map<String, dynamic>>> listLogs() async {
+    final res = await _http.get(_u('/v1/logs'), headers: _headers);
+    _throwIf(res, 'logs');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['logs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Isi satu file log; 404 dilempar sebagai [ApiError.notFound].
+  Future<Map<String, dynamic>> fetchLogContent(String name) async {
+    final safeName = Uri.encodeComponent(name);
+    final res = await _http
+        .get(_u('/v1/logs/$safeName'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'log content');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> listMemories() async {
     final res = await _http.get(_u('/v1/memories'), headers: _headers);
     _throwIf(res, 'memories');

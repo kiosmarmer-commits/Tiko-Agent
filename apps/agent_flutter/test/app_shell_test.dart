@@ -18,14 +18,19 @@ void main() {
       expect(kAppRoutes.first.route, AppRoute.chat);
     });
 
-    test('label domain sama lintas platform: memory & settings dikelompokkan di More', () {
+    test('label domain sama lintas platform: route admin dikelompokkan di More', () {
       final primary = kMobilePrimaryRoutes;
       expect(primary.length, 4);
       expect(primary.map((e) => e.route),
           [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.sessions]);
-      for (final entry in kAppRoutes.where((e) => !e.primaryOnMobile)) {
-        expect(entry.route, anyOf(AppRoute.memory, AppRoute.settings));
-      }
+      final grouped = kAppRoutes
+          .where((e) => !e.primaryOnMobile)
+          .map((e) => e.route)
+          .toSet();
+      expect(
+          grouped,
+          {AppRoute.tasks, AppRoute.memory, AppRoute.events, AppRoute.logs,
+              AppRoute.settings});
     });
   });
 

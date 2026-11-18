@@ -26,6 +26,9 @@ abstract class AgentRepository {
   Future<List<ApprovalSummary>> approvals();
   Future<bool> decideApproval(String id, bool approve);
   Future<List<RuntimeEvent>> events();
+  Future<List<TaskItem>> tasks();
+  Future<List<LogFileInfo>> logs();
+  Future<LogFileContent> logContent(String name);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
   Future<String> sendMessage(String text, {String sessionKey});
@@ -110,6 +113,18 @@ class HttpAgentRepository implements AgentRepository {
   Future<List<RuntimeEvent>> events() async => (await _guard(_client.listEvents))
       .map(RuntimeEvent.fromMap)
       .toList();
+
+  @override
+  Future<List<TaskItem>> tasks() async =>
+      (await _guard(_client.listTasks)).map(TaskItem.fromMap).toList();
+
+  @override
+  Future<List<LogFileInfo>> logs() async =>
+      (await _guard(_client.listLogs)).map(LogFileInfo.fromMap).toList();
+
+  @override
+  Future<LogFileContent> logContent(String name) async =>
+      LogFileContent.fromMap(await _guard(() => _client.fetchLogContent(name)));
 
   @override
   Future<List<MemoryFact>> memories() async => (await _guard(_client.listMemories))
