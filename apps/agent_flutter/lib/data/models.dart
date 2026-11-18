@@ -108,3 +108,66 @@ class RuntimeEvent {
         at: '${map['at'] ?? ''}',
       );
 }
+
+/// Task kanban (GUI-P1-01): read-only, sumber data identik dengan web UI.
+class TaskItem {
+  const TaskItem({
+    required this.id,
+    this.title = '',
+    this.state = 'backlog',
+    this.claimedBy = '',
+    this.result = '',
+  });
+
+  final String id;
+  final String title;
+  final String state;
+  final String claimedBy;
+  final String result;
+
+  factory TaskItem.fromMap(Map<String, dynamic> map) => TaskItem(
+        id: '${map['id'] ?? ''}',
+        title: '${map['title'] ?? ''}',
+        state: '${map['state'] ?? 'backlog'}',
+        claimedBy: '${map['claimed_by'] ?? ''}',
+        result: '${map['result'] ?? ''}',
+      );
+}
+
+/// Satu file log daemon (GUI-P1-02).
+class LogFileInfo {
+  const LogFileInfo({
+    required this.name,
+    this.bytes = 0,
+  });
+
+  final String name;
+  final int bytes;
+
+  factory LogFileInfo.fromMap(Map<String, dynamic> map) => LogFileInfo(
+        name: '${map['name'] ?? ''}',
+        bytes: map['bytes'] is num ? (map['bytes'] as num).toInt() : 0,
+      );
+}
+
+/// Isi satu file log (GUI-P1-02).
+class LogFileContent {
+  const LogFileContent({
+    required this.name,
+    this.bytes = 0,
+    this.truncated = false,
+    this.content = '',
+  });
+
+  final String name;
+  final int bytes;
+  final bool truncated;
+  final String content;
+
+  factory LogFileContent.fromMap(Map<String, dynamic> map) => LogFileContent(
+        name: '${map['name'] ?? ''}',
+        bytes: map['bytes'] is num ? (map['bytes'] as num).toInt() : 0,
+        truncated: map['truncated'] == true,
+        content: '${map['content'] ?? ''}',
+      );
+}

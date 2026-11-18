@@ -11,9 +11,13 @@ import 'shell/desktop_shell.dart';
 import 'shell/mobile_shell.dart';
 import 'ui/chat_controller.dart';
 import 'ui/gen_ui_view.dart';
+import 'ui/logs_view.dart';
+import 'ui/page_header.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
 import 'ui/theme.dart';
+import 'ui/tasks_view.dart';
+import 'ui/events_view.dart';
 import 'ui/graph_view.dart';
 import 'ui/note_editor.dart';
 import 'ui/status_view.dart';
@@ -82,6 +86,8 @@ class _AgentAppState extends State<AgentApp> {
   List<SessionSummary> sessions = [];
   List<ApprovalSummary> approvals = [];
   List<RuntimeEvent> events = [];
+  List<TaskItem> tasks = [];
+  List<LogFileInfo> logFiles = [];
   List<MemoryFact> memories = [];
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
@@ -124,6 +130,8 @@ class _AgentAppState extends State<AgentApp> {
         repo.sessions(),
         repo.approvals(),
         repo.events(),
+        repo.tasks(),
+        repo.logs(),
         repo.memories(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
@@ -134,7 +142,9 @@ class _AgentAppState extends State<AgentApp> {
         sessions = results[3] as List<SessionSummary>;
         approvals = results[4] as List<ApprovalSummary>;
         events = results[5] as List<RuntimeEvent>;
-        memories = results[6] as List<MemoryFact>;
+        tasks = results[6] as List<TaskItem>;
+        logFiles = results[7] as List<LogFileInfo>;
+        memories = results[8] as List<MemoryFact>;
       });
     } catch (e) {
       if (mounted && generation == adminRefreshGeneration) {
@@ -229,6 +239,9 @@ class _AgentAppState extends State<AgentApp> {
         baseUrl: baseUrl,
         token: token,
         memories: memories,
+        tasks: tasks,
+        logFiles: logFiles,
+        events: events,
         online: chat.online,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
@@ -315,6 +328,31 @@ class _AgentAppState extends State<AgentApp> {
             }
           },
         );
+      case AppRoute.tasks:
+        return TaskBoardPage(
+          tasks: tasks,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+        );
+      case AppRoute.events:
+        return EventsPage(
+          events: events,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+        );
+      case AppRoute.logs:
+        return LogsPage(
+          logs: logFiles,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onLoadContent: repo.logContent,
+        );
       case AppRoute.memory:
         return _MemoryPage(
           memories: memories,
@@ -398,7 +436,7 @@ class _ChatPageState extends State<_ChatPage> {
         final chat = widget.chat;
         return Column(
           children: [
-            _TopBar(
+            PageHeader(
               title: 'Chat',
               subtitle: widget.sessionKey,
               online: chat.online,
@@ -593,7 +631,7 @@ class _DashboardPage extends StatelessWidget {
     final routing = RoutingSummary.fromStatus(status);
     return Column(
       children: [
-        _TopBar(
+        PageHeader(
           title: 'Dashboard',
           subtitle: online ? 'online' : 'offline',
           online: online,
@@ -745,7 +783,7 @@ class _ApprovalsPage extends StatelessWidget {
     final rest = approvals.where((a) => !a.isPending).toList();
     return Column(
       children: [
-        _TopBar(
+        PageHeader(
           title: 'Approvals',
           subtitle: '${pending.length} pending',
           online: online,
@@ -876,7 +914,7 @@ class _SessionsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _TopBar(
+        PageHeader(
           title: 'Sessions',
           subtitle: '${sessions.length} sesi',
           online: online,
@@ -963,7 +1001,7 @@ class _MemoryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _TopBar(
+        PageHeader(
           title: 'Memory',
           subtitle: '${memories.length} fakta',
           online: online,
@@ -1072,6 +1110,9 @@ class _MorePage extends StatelessWidget {
   final String baseUrl;
   final String token;
   final List<MemoryFact> memories;
+  final List<TaskItem> tasks;
+  final List<LogFileInfo> logFiles;
+  final List<RuntimeEvent> events;
   final bool online;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
@@ -1082,7 +1123,59 @@ class _MorePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        _TopBar(title: 'More', subtitle: 'Memory & Settings', online: online),
+        PageHeader(title: 'More', subtitle: 'Tasks, Memory, Tools', online: online),
+        ListTile(
+          leading: const Icon(Icons.view_kanban_outlined),
+          title: Text('Tasks (${tasks.length})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: TaskBoardPage(
+                  tasks: tasks,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.bolt_outlined),
+          title: Text('Events (${eventTypes.length})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: EventsPage(
+                  events: events,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                ),
+              ),
+            ));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.article_outlined),
+          title: Text('Logs (${logFiles.length})'),
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(
+                body: LogsPage(
+                  logs: logFiles,
+                  online: online,
+                  loading: false,
+                  error: null,
+                  onRefresh: onRefresh,
+                  onLoadContent: repo.logContent,
+                ),
+              ),
+            ));
+          },
+        ),
         ListTile(
           leading: const Icon(Icons.memory_outlined),
           title: Text('Memory (${memories.length})'),
@@ -1160,68 +1253,6 @@ class _MorePage extends StatelessWidget {
   }
 }
 
-class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.title,
-    required this.subtitle,
-    required this.online,
-    this.trailing,
-  });
-  final String title;
-  final String subtitle;
-  final bool online;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: BoxDecoration(
-        color: context.simpulPanel,
-        border: Border(bottom: BorderSide(color: context.simpulBorder)),
-      ),
-      child: Row(
-        children: [
-          if (Navigator.of(context).canPop())
-            IconButton(
-              tooltip: 'Kembali',
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(Icons.arrow_back),
-            ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: context.simpulMuted, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: online ? context.simpulAccent : context.simpulDanger,
-            ),
-          ),
-          if (trailing != null) trailing!,
-        ],
-      ),
-    );
-  }
-}
 
 class _Card extends StatelessWidget {
   const _Card({required this.title, required this.child});
