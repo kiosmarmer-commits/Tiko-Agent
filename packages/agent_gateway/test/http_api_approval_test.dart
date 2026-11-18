@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 void main() {
   late HttpApiServer server;
   late HttpClient client;
-  final decisions = <({String id, bool allow})>[];
+  final decisions = <({String id, bool allow, String? actor})>[];
   late StreamController<Map<String, dynamic>> events;
   var shutdownRequested = false;
 
@@ -23,8 +23,8 @@ void main() {
       listApprovals: () async => [
         {'id': 'apr_1', 'state': 'pending'},
       ],
-      decideApproval: (id, allow) async {
-        decisions.add((id: id, allow: allow));
+      decideApproval: (id, allow, {actor}) async {
+        decisions.add((id: id, allow: allow, actor: actor));
         return true;
       },
       eventStream: events.stream,
@@ -69,7 +69,53 @@ void main() {
       body: {'approve': true},
     );
     expect(result['ok'], isTrue);
-    expect(decisions.single, (id: 'apr_1', allow: true));
+    expect(decisions.single, (id: 'apr_1', allow: true, actor: isNull));
+  });
+
+  test('GUI-P0-06: aktor dari body diteruskan ke callback broker', () async {
+    await request(
+      'POST',
+      '/v1/approvals/apr_1',
+      body: {'approve': true, 'actor': 'web'},
+    );
+    expect(decisions.single.actor, 'web');
+  });
+
+  test('GUI-P0-06: aktor dari header x-tiko-actor sebagai fallback', () async {
+    final uri = Uri.parse('http://127.0.0.1:${server.boundPort}/v1/approvals/apr_1');
+    final req = await client.openUrl('POST', uri);
+    req.headers.set(HttpHeaders.authorizationHeader, 'Bearer test-secret');
+    req.headers.set('x-tiko-actor', 'flutter');
+    req.headers.contentType = ContentType.json;
+    req.write(jsonEncode({'approve': false}));
+    final response = await req.close();
+    await response.drain<void>();
+    expect(response.statusCode, 200);
+    expect(decisions.single.actor, 'flutter');
+  });
+
+  test('GUI-P0-06: aktor disanitasi — karakter kontrol dibuang, dipotong 64',
+      () async {
+    await request(
+      'POST',
+      '/v1/approvals/apr_1',
+      body: {'approve': true, 'actor': '  we\tb\nx  '},
+    );
+    expect(decisions.single.actor, 'webx');
+
+    await request(
+      'POST',
+      '/v1/approvals/apr_1',
+      body: {'approve': true, 'actor': 'a' * 100},
+    );
+    expect((decisions.last.actor ?? '').length, 64);
+
+    await request(
+      'POST',
+      '/v1/approvals/apr_1',
+      body: {'approve': true, 'actor': '   '},
+    );
+    expect(decisions.last.actor, isNull);
   });
 
   test('legacy chat confirmation endpoint delegates to the same callback',
@@ -77,10 +123,10 @@ void main() {
     final result = await request(
       'POST',
       '/v1/confirm',
-      body: {'id': 'apr_legacy', 'allow': false},
+      body: {'id': 'apr_legacy', 'allow': false, 'actor': 'ws-client'},
     );
     expect(result['ok'], isTrue);
-    expect(decisions.single, (id: 'apr_legacy', allow: false));
+    expect(decisions.single, (id: 'apr_legacy', allow: false, actor: 'ws-client'));
   });
   test('authenticated shutdown endpoint acknowledges and signals the daemon', () async {
     final result = await request('POST', '/v1/shutdown');

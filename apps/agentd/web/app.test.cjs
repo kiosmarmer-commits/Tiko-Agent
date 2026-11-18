@@ -105,6 +105,8 @@ function createHarness() {
     element.hidden = tab !== 'chat';
     return element;
   });
+  // $('#tab-xxx') harus mengembalikan elemen section seperti di DOM asli.
+  Object.assign(elements, Object.fromEntries(sections.map((section) => [section.id, section])));
   const document = {
     querySelector(selector) {
       if (selector.startsWith('#')) return elements[selector.slice(1)] || null;
@@ -120,6 +122,7 @@ function createHarness() {
   const storage = new Map([['agent_base', 'http://127.0.0.1:8787'], ['agent_token', 's3cr+et & token']]);
   const session = new Map();
   const calls = [];
+  const timers = { sync: false };
   const context = {
     document,
     location: { origin: 'http://127.0.0.1:8787' },
@@ -135,7 +138,10 @@ function createHarness() {
     },
     URL,
     WebSocket: FakeWebSocket,
-    window: { setInterval: () => 1, setTimeout: () => 1 },
+    window: {
+      setInterval: () => 1,
+      setTimeout: (fn, _ms) => { if (timers.sync) fn(); return 0; },
+    },
     fetch: async (url, options = {}) => {
       calls.push({ url: String(url), options });
       const pathname = new URL(String(url), 'http://127.0.0.1').pathname;
@@ -156,7 +162,7 @@ function createHarness() {
     },
   };
   vm.runInNewContext(source, context, { filename: 'app.js' });
-  return { elements, tabs, sections, calls, storage, session };
+  return { elements, tabs, sections, calls, storage, session, timers };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -223,10 +229,45 @@ test('Chat streams over one-time-ticket WebSocket and the shared approval API', 
   h.elements.confirmYes.dispatch('click');
   await tick();
   assert.ok(h.calls.some((call) => call.url.endsWith('/v1/approvals/apr_1') && call.options.method === 'POST'));
+  const decisionCall = h.calls.find((call) => call.url.endsWith('/v1/approvals/apr_1') && call.options.method === 'POST');
+  assert.equal(JSON.parse(decisionCall.options.body).actor, 'web');
   assert.equal(h.elements.confirmBox.classList.contains('hidden'), true);
   ws.fire('message', { data: JSON.stringify({ type: 'text', text: 'Selesai.' }) });
   ws.fire('message', { data: JSON.stringify({ type: 'done' }) });
   assert.equal(h.elements.sendBtn.disabled, false);
+});
+
+test('GUI-P0-06: event approval dari client lain memicu reload daftar approvals saat tab aktif', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'approvals').dispatch('click');
+  await tick();
+  const callsBefore = h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length;
+
+  h.timers.sync = true;
+  const watcher = FakeWebSocket.instances.at(-1);
+  watcher.fire('open');
+  watcher.fire('message', { data: JSON.stringify({ type: 'event', event: { type: 'approval.decided', id: 'apr_1', state: 'approved', actor: 'flutter' } }) });
+  await tick();
+  const callsAfter = h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length;
+  assert.ok(callsAfter > callsBefore, 'daftar approvals dimuat ulang saat event decided masuk');
+
+  const watchedBefore = h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length;
+  watcher.fire('message', { data: JSON.stringify({ type: 'event', event: { type: 'approval.pending', id: 'apr_2', tool: 'write_file' } }) });
+  await tick();
+  assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length > watchedBefore, 'event pending juga memicu reload');
+});
+
+test('GUI-P0-06: event approval diabaikan saat tab approvals tidak aktif', async () => {
+  const h = createHarness();
+  h.timers.sync = true;
+  await tick();
+  await tick();
+  const watcher = FakeWebSocket.instances.at(-1);
+  watcher.fire('open');
+  const callsBefore = h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length;
+  watcher.fire('message', { data: JSON.stringify({ type: 'event', event: { type: 'approval.decided', id: 'apr_9', state: 'denied', actor: 'flutter' } }) });
+  await tick();
+  assert.equal(h.calls.filter((call) => call.url.endsWith('/v1/approvals')).length, callsBefore, 'tab chat aktif: approvals tidak dimuat ulang');
 });
 
 test('Tasks tab renders the kanban board, log list, and log content as text', async () => {

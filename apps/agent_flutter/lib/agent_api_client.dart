@@ -112,7 +112,7 @@ class AgentApiClient {
     final res = await _http.post(
       _u('/v1/approvals/$safeId'),
       headers: _headers,
-      body: jsonEncode({'approve': approve}),
+      body: jsonEncode({'approve': approve, 'actor': 'flutter'}),
     );
     if (res.statusCode >= 400) return false;
     final json = jsonDecode(res.body) as Map<String, dynamic>;

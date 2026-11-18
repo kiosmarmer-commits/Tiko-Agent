@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Server palsu dengan error model typed (GUI-P0-03).
 class _ApiServer {
   final paths = <String>[];
+  Map<String, dynamic>? lastDecisionBody;
   HttpServer? _server;
 
   Future<String> start() async {
@@ -17,6 +18,7 @@ class _ApiServer {
     _server = server;
     unawaited(() async {
       await for (final req in server) {
+        final method = req.method;
         final path = req.uri.path;
         paths.add(path);
         req.response.headers.contentType = ContentType.json;
@@ -59,6 +61,15 @@ class _ApiServer {
               {'id': 'apr_1', 'tool': 'write_file', 'risk': 'high', 'state': 'pending'},
               {'id': 'apr_2', 'tool': 'search', 'state': 'approved', 'actor': 'ui'},
             ],
+          }));
+        } else if (path.startsWith('/v1/approvals/') && method == 'POST') {
+          final body = jsonDecode(await utf8.decoder.bind(req).join())
+              as Map<String, dynamic>;
+          lastDecisionBody = Map<String, dynamic>.from(body);
+          req.response.write(jsonEncode(<String, dynamic>{
+            'ok': true,
+            'id': path.substring('/v1/approvals/'.length),
+            'approve': true,
           }));
         } else if (path == '/v1/memories') {
           req.response.write(jsonEncode(<String, dynamic>{
@@ -126,6 +137,14 @@ void main() {
     expect(messages.map((m) => '${m.role}:${m.content}').toList(),
         ['user:halo', 'assistant:hai juga']);
     expect(messages[1].at, '2026-11-18T10:01:00Z');
+  });
+
+  test('GUI-P0-06: decideApproval mengirim aktor flutter ke gateway', () async {
+    final ok = await repo.decideApproval('apr_1', true);
+    expect(ok, isTrue);
+    expect(fake.lastDecisionBody, isNotNull);
+    expect(fake.lastDecisionBody!['approve'], isTrue);
+    expect(fake.lastDecisionBody!['actor'], 'flutter');
   });
 
   test('approvals()/memories()/events() typed dengan helper isPending',

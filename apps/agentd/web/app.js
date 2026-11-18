@@ -309,6 +309,9 @@
           appendEventFeed(payload.event);
           const type = String(payload.event.type || '');
           if (type.startsWith('job.') && !$('#tab-tasks').hidden) loadTasks();
+          if ((type === 'approval.pending' || type === 'approval.decided') && !$('#tab-approvals').hidden) {
+            refreshApprovalsFromEvents();
+          }
         }
       } catch (_) { /* ignore malformed frames */ }
     });
@@ -363,7 +366,7 @@
   async function requestApproval(id, approve) {
     return api('/v1/approvals/' + encodeURIComponent(id), {
       method: 'POST',
-      body: JSON.stringify({ approve }),
+      body: JSON.stringify({ approve, actor: 'web' }),
     });
   }
 
@@ -396,6 +399,15 @@
       buttons.forEach((button) => { button.disabled = false; });
       addMsg('system', 'Gagal memproses approval: ' + error.message);
     }
+  }
+
+  let approvalsEventTimer = null;
+  function refreshApprovalsFromEvents() {
+    if (approvalsEventTimer) return;
+    approvalsEventTimer = window.setTimeout(() => {
+      approvalsEventTimer = null;
+      loadApprovals();
+    }, 250);
   }
 
   async function loadApprovals() {
@@ -525,6 +537,10 @@
           const id = pendingConfirm.id;
           hideConfirm();
           if (state !== 'approved') addMsg('system', 'Persetujuan ' + id + ': ' + state + '.');
+        }
+        if (detail.type === 'approval.pending' || detail.type === 'approval.decided') {
+          const approvalsVisible = !document.getElementById('tab-approvals')?.hidden;
+          if (approvalsVisible) refreshApprovalsFromEvents();
         }
         break;
       }
