@@ -1564,35 +1564,115 @@
     });
   }
 
-  document.querySelectorAll('.tabs button').forEach((button) => {
-    button.addEventListener('click', () => {
-      const target = button.dataset.tab;
-      document.querySelectorAll('.tabs button').forEach((item) => {
-        const active = item === button;
-        item.classList.toggle('active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
-      document.querySelectorAll('.tab').forEach((section) => {
-        const active = section.id === 'tab-' + target;
-        section.classList.toggle('active', active);
-        section.hidden = !active;
-      });
-      if (target === 'status') loadStatus();
-      if (target === 'memory') { loadMemory(); loadCurated(); loadLayers(); loadRag(); }
-      if (target === 'approvals') loadApprovals();
-      if (target === 'sessions') loadSessions();
-      if (target === 'skills') loadSkills();
-      if (target === 'tasks') { loadTasks(); loadLogs(); }
-      if (target === 'bots') loadBots();
-      if (target === 'providers') loadProviders();
-      if (target === 'plugins') loadPlugins();
-      if (target === 'channels') loadChannels();
-      if (target === 'jobs') loadJobs();
-      if (target === 'security') loadSecurity();
-      if (target === 'audit') loadAuditQuery(true);
-      if (target === 'artifacts') loadArtifacts('');
-      if (target === 'runs') loadRuns();
+  function switchTab(target) {
+    if (!target) return;
+    document.querySelectorAll('.tabs button').forEach((item) => {
+      const active = item.dataset.tab === target;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
     });
+    document.querySelectorAll('.tab').forEach((section) => {
+      const active = section.id === 'tab-' + target;
+      section.classList.toggle('active', active);
+      section.hidden = !active;
+    });
+    if (target === 'status') loadStatus();
+    if (target === 'memory') { loadMemory(); loadCurated(); loadLayers(); loadRag(); }
+    if (target === 'approvals') loadApprovals();
+    if (target === 'sessions') loadSessions();
+    if (target === 'skills') loadSkills();
+    if (target === 'tasks') { loadTasks(); loadLogs(); }
+    if (target === 'bots') loadBots();
+    if (target === 'providers') loadProviders();
+    if (target === 'plugins') loadPlugins();
+    if (target === 'channels') loadChannels();
+    if (target === 'jobs') loadJobs();
+    if (target === 'security') loadSecurity();
+    if (target === 'audit') loadAuditQuery(true);
+    if (target === 'artifacts') loadArtifacts('');
+    if (target === 'runs') loadRuns();
+  }
+
+  document.querySelectorAll('.tabs button').forEach((button) => {
+    button.addEventListener('click', () => switchTab(button.dataset.tab));
+  });
+
+  // GUI-P2-02 parity: command palette global (Ctrl/Cmd+K) — filter tab,
+  // Enter pilih item pertama, Escape tutup.
+  const cmdPalette = $('#cmd-palette');
+  const cmdList = $('#cmd-list');
+  const cmdInput = $('#cmd-input');
+
+  function paletteItems() {
+    const items = [];
+    for (const item of document.querySelectorAll('.tabs button')) {
+      items.push({ tab: String(item.dataset.tab || ''), label: String(item.textContent || item.dataset.tab || '') });
+    }
+    return items;
+  }
+
+  function renderPaletteList() {
+    if (!cmdList) return;
+    const filter = String(cmdInput?.value || '').trim().toLowerCase();
+    cmdList.replaceChildren();
+    let first = true;
+    for (const entry of paletteItems()) {
+      if (filter && !entry.label.toLowerCase().includes(filter)) continue;
+      const li = document.createElement('li');
+      li.dataset.tab = entry.tab;
+      if (first) li.setAttribute('data-selected', 'true');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = entry.label;
+      li.appendChild(btn);
+      cmdList.appendChild(li);
+      first = false;
+    }
+  }
+
+  function choosePalette(target) {
+    closePalette();
+    switchTab(target);
+  }
+
+  function openPalette() {
+    if (!cmdPalette) return;
+    if (cmdInput) cmdInput.value = '';
+    cmdPalette.hidden = false;
+    renderPaletteList();
+    if (cmdInput && cmdInput.focus) cmdInput.focus();
+  }
+
+  function closePalette() {
+    if (cmdPalette) cmdPalette.hidden = true;
+  }
+
+  document.addEventListener('keydown', (event) => {
+    const key = String(event && event.key || '').toLowerCase();
+    if ((event && (event.ctrlKey || event.metaKey)) && key === 'k') {
+      if (event.preventDefault) event.preventDefault();
+      if (!cmdPalette) return;
+      if (cmdPalette.hidden) openPalette();
+      else closePalette();
+      return;
+    }
+    if (event && event.ctrlKey) return;
+    if (!cmdPalette || cmdPalette.hidden) return;
+    if (key === 'escape') {
+      closePalette();
+      return;
+    }
+    if (key === 'enter' && cmdList && cmdList.children.length) {
+      choosePalette(String(cmdList.children[0].dataset.tab || ''));
+    }
+  });
+
+  cmdInput?.addEventListener('input', renderPaletteList);
+  cmdList?.addEventListener('click', (event) => {
+    const target = event.target;
+    const li = target && target.parentElement ? target.parentElement : null;
+    const tab = (li && li.dataset && li.dataset.tab) || (target && target.dataset && target.dataset.tab) || '';
+    if (tab) choosePalette(tab);
   });
 
   form.addEventListener('submit', (event) => {

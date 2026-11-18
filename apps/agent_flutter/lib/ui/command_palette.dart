@@ -89,6 +89,11 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
                   border: OutlineInputBorder(),
                 ),
                 onChanged: (_) => setState(() => selected = 0),
+                onSubmitted: (_) {
+                  final current = _filtered;
+                  if (current.isEmpty) return;
+                  _run(current[selected]);
+                },
               ),
             ),
             Flexible(
