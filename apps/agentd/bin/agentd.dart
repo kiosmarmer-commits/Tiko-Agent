@@ -867,6 +867,18 @@ Future<void> main(List<String> args) async {
             'mcp': rt.mcpSnapshot(),
           };
         },
+        channelsProvider: () async => channelsSnapshot({
+          'telegram': tg != null,
+          'discord': gatewayForChannel('discord') != null,
+          'email': email != null,
+          'imap': imap != null,
+          'whatsapp': wa != null,
+          'slack': slackGw != null,
+          'signal': gatewayForChannel('signal') != null,
+          'matrix': gatewayForChannel('matrix') != null,
+          'openai': openAiServer != null,
+          'http': api != null,
+        }),
         pluginConsentSetter: (plugin, action) async {
           final result = action == 'grant'
               ? await rt.grantPluginConsent(plugin)
@@ -1086,6 +1098,52 @@ String _randomToken() {
   final bytes = List<int>.generate(16, (_) => r.nextInt(256));
   return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
+
+/// GUI-P1-07: snapshot status channel gateway (read-only). [active] adalah
+/// channel -> status aktif saat daemon start; hanya **nama** variabel env
+/// yang diiklankan — nilai rahasia tidak pernah dilewati ke HTTP.
+Future<Map<String, dynamic>> channelsSnapshot(Map<String, bool> active) async =>
+    {
+      'channels': [
+        for (final e in active.entries)
+          {
+            'channel': e.key,
+            'active': e.value,
+            'env': _channelEnv[e.key] ?? const <String>[],
+          },
+      ],
+    };
+
+/// Nama variabel env per channel (GUI-P1-07) — setup via env + restart.
+const Map<String, List<String>> _channelEnv = {
+  'telegram': ['TG_TOKEN', 'TG_ALLOW', 'WHISPER_BIN', 'STT_API_KEY'],
+  'discord': [
+    'DISCORD_WEBHOOK',
+    'DISCORD_BOT_TOKEN',
+    'DISCORD_ALLOW',
+    'DISCORD_APP_ID',
+  ],
+  'email': ['EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT', 'EMAIL_ALLOW'],
+  'imap': [
+    'IMAP_HOST',
+    'IMAP_PORT',
+    'IMAP_USER',
+    'IMAP_PASSWORD',
+    'IMAP_ALLOW',
+    'IMAP_POLL_SEC',
+  ],
+  'whatsapp': [
+    'WHATSAPP_PHONE_NUMBER_ID',
+    'WHATSAPP_ACCESS_TOKEN',
+    'WHATSAPP_VERIFY_TOKEN',
+    'WHATSAPP_APP_SECRET',
+  ],
+  'slack': ['SLACK_WEBHOOK_URL', 'SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET'],
+  'signal': ['SIGNAL_RPC_URL', 'SIGNAL_ACCOUNT', 'SIGNAL_ALLOW'],
+  'matrix': ['MATRIX_HOMESERVER', 'MATRIX_ACCESS_TOKEN', 'MATRIX_ALLOW'],
+  'openai': ['OPENAI_API_PORT', 'OPENAI_API_KEY'],
+  'http': ['API_HOST', 'API_PORT'],
+};
 
 String? _findWebRoot() {
   for (final c in [

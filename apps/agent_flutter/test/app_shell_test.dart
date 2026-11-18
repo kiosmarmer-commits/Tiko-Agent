@@ -30,8 +30,8 @@ void main() {
       expect(
           grouped,
           {AppRoute.tasks, AppRoute.skills, AppRoute.bots, AppRoute.providers,
-              AppRoute.plugins, AppRoute.memory, AppRoute.events, AppRoute.logs,
-              AppRoute.settings});
+              AppRoute.plugins, AppRoute.channels, AppRoute.memory,
+              AppRoute.events, AppRoute.logs, AppRoute.settings});
     });
   });
 
