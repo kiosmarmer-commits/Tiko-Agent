@@ -61,8 +61,10 @@ class _SettingsViewState extends State<SettingsView> {
     return ListView(
       padding: const EdgeInsets.all(SimpulTheme.xl),
       children: [
-        _scopeCaption(context,
-            'Perangkat \u2014 tersimpan lokal di perangkat ini (shared_preferences)'),
+        _scopeCaption(
+          context,
+          'Perangkat \u2014 tersimpan lokal di perangkat ini (shared_preferences)',
+        ),
         _sectionTitle(context, 'Tampilan'),
         _panel(
           brightness,
@@ -90,9 +92,8 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                   ],
                   selected: {settings.themeMode},
-                  onSelectionChanged: (selection) => _update(
-                    settings.copyWith(themeMode: selection.first),
-                  ),
+                  onSelectionChanged: (selection) =>
+                      _update(settings.copyWith(themeMode: selection.first)),
                 ),
               ),
               ListTile(
@@ -110,8 +111,10 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ),
         const SizedBox(height: SimpulTheme.xxl),
-        _scopeCaption(context,
-            'Kredensial \u2014 hanya di memori sesi, tidak pernah dipersist'),
+        _scopeCaption(
+          context,
+          'Kredensial \u2014 hanya di memori sesi, tidak pernah dipersist',
+        ),
         _sectionTitle(context, 'Koneksi'),
         _panel(
           brightness,
@@ -151,15 +154,18 @@ class _SettingsViewState extends State<SettingsView> {
                   decoration: InputDecoration(
                     labelText: 'Bearer token',
                     border: const OutlineInputBorder(),
-                    helperText: 'Hanya di memori sesi; tidak disimpan ke '
+                    helperText:
+                        'Hanya di memori sesi; tidak disimpan ke '
                         'penyimpanan perangkat.',
                     suffixIcon: IconButton(
                       tooltip: _tokenVisible ? 'Sembunyikan' : 'Tampilkan',
                       onPressed: () =>
                           setState(() => _tokenVisible = !_tokenVisible),
-                      icon: Icon(_tokenVisible
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined),
+                      icon: Icon(
+                        _tokenVisible
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
                     ),
                   ),
                   validator: (value) => (value ?? '').trim().isEmpty
@@ -173,7 +179,10 @@ class _SettingsViewState extends State<SettingsView> {
                     onPressed: () {
                       if (!_formKey.currentState!.validate()) return;
                       widget.onConnect(
-                        base: baseC.text.trim().replaceFirst(RegExp(r'/+$'), ''),
+                        base: baseC.text.trim().replaceFirst(
+                          RegExp(r'/+$'),
+                          '',
+                        ),
                         tok: tokC.text.trim(),
                       );
                     },
@@ -196,27 +205,24 @@ class _SettingsViewState extends State<SettingsView> {
                 title: const Text('Host Ollama'),
                 subtitle: Text(
                   settings.ollamaHost,
-                  style: TextStyle(
-                    color: SimpulTheme.mutedText(brightness),
-                  ),
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
                 ),
                 trailing: const Icon(Icons.edit_outlined, size: 18),
                 onTap: () => _editText(
                   title: 'Host Ollama',
                   initial: settings.ollamaHost,
-                  onSubmit: (value) => _update(
-                    settings.copyWith(ollamaHost: value),
-                  ),
+                  onSubmit: (value) =>
+                      _update(settings.copyWith(ollamaHost: value)),
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.folder_outlined),
                 title: const Text('Path vault'),
                 subtitle: Text(
-                  settings.vaultPath.isEmpty ? '(belum diatur)' : settings.vaultPath,
-                  style: TextStyle(
-                    color: SimpulTheme.mutedText(brightness),
-                  ),
+                  settings.vaultPath.isEmpty
+                      ? '(belum diatur)'
+                      : settings.vaultPath,
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
                 ),
                 trailing: const Icon(Icons.edit_outlined, size: 18),
                 onTap: () => _editText(
@@ -251,21 +257,32 @@ class _SettingsViewState extends State<SettingsView> {
                 title: const Text('Mode hemat daya (AI-U04)'),
                 subtitle: Text(
                   'AI (embedding/LLM) hanya berjalan saat perangkat dicolokkan.',
-                  style: TextStyle(
-                    color: SimpulTheme.mutedText(brightness),
-                  ),
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
                 ),
                 value: settings.powerSaver,
                 onChanged: (value) =>
                     _update(settings.copyWith(powerSaver: value)),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.view_column_outlined),
+                title: const Text('Multi-pane workspace (GUI-P2-03)'),
+                subtitle: Text(
+                  'Layar lebar: pane sesi + chat + inspector berdampingan.',
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
+                ),
+                value: settings.multiPane,
+                onChanged: (value) =>
+                    _update(settings.copyWith(multiPane: value)),
               ),
             ],
           ),
         ),
         if (widget.daemonCard != null) ...[
           const SizedBox(height: SimpulTheme.xxl),
-          _scopeCaption(context,
-              'Daemon \u2014 status runtime, read-only (config immutable: ubah config + restart)'),
+          _scopeCaption(
+            context,
+            'Daemon \u2014 status runtime, read-only (config immutable: ubah config + restart)',
+          ),
           _sectionTitle(context, 'Daemon'),
           widget.daemonCard!,
         ],
@@ -283,9 +300,12 @@ class _SettingsViewState extends State<SettingsView> {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.info_outline, size: 18),
                     title: Text(row.key),
-                    subtitle: Text(row.value,
-                        style: TextStyle(
-                            color: SimpulTheme.mutedText(brightness))),
+                    subtitle: Text(
+                      row.value,
+                      style: TextStyle(
+                        color: SimpulTheme.mutedText(brightness),
+                      ),
+                    ),
                   ),
                 ListTile(
                   dense: true,
@@ -296,8 +316,7 @@ class _SettingsViewState extends State<SettingsView> {
                     'Config immutable saat daemon hidup \u2014 ubah file config '
                     'lalu restart; override provider per sesi ada di '
                     'halaman Providers.',
-                    style:
-                        TextStyle(color: SimpulTheme.mutedText(brightness)),
+                    style: TextStyle(color: SimpulTheme.mutedText(brightness)),
                   ),
                 ),
               ],
@@ -375,49 +394,45 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _panel(Brightness brightness, {required Widget child}) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(SimpulTheme.l),
-        decoration: SimpulTheme.panelBox(brightness),
-        child: Material(
-          type: MaterialType.transparency,
-          child: child,
-        ),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(SimpulTheme.l),
+    decoration: SimpulTheme.panelBox(brightness),
+    child: Material(type: MaterialType.transparency, child: child),
+  );
 
   Widget _sectionTitle(BuildContext context, String title) => Padding(
-        padding: const EdgeInsets.only(bottom: SimpulTheme.m),
-        child: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: SimpulTheme.m),
+    child: Text(
+      title,
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+    ),
+  );
 
   /// Caption scope (GUI-P1-08): memisahkan preferensi perangkat,
   /// kredensial, dan status daemon.
   Widget _scopeCaption(BuildContext context, String text) => Padding(
-        padding: const EdgeInsets.only(bottom: SimpulTheme.s),
-        child: Row(
-          children: [
-            const Icon(Icons.rule_outlined, size: 14),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                  color: SimpulTheme.mutedText(Theme.of(context).brightness),
-                  fontSize: 11,
-                ),
-              ),
+    padding: const EdgeInsets.only(bottom: SimpulTheme.s),
+    child: Row(
+      children: [
+        const Icon(Icons.rule_outlined, size: 14),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: SimpulTheme.mutedText(Theme.of(context).brightness),
+              fontSize: 11,
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 /// Rows read-only untuk section "Daemon — status runtime" (GUI-P1-08),
 /// diambil dari payload `GET /v1/status` yang sudah tersedia.
-List<MapEntry<String, String>> _daemonStatusRows(
-    Map<String, dynamic> status) {
+List<MapEntry<String, String>> _daemonStatusRows(Map<String, dynamic> status) {
   String value(Object? key) => '${status[key] ?? '-'}';
   return [
     MapEntry('Versi', value('version')),

@@ -115,10 +115,16 @@ function createHarness() {
     'layer-new-layer', 'layer-new-tags', 'layer-new-importance', 'layer-new-text',
     'btn-layer-create', 'rag-list', 'btn-load-rag',
     'cmd-palette', 'cmd-input', 'cmd-list',
+    'chat-panes', 'pane-chat',
+    'pane-sessions', 'pane-session-list', 'btn-refresh-pane-sessions',
+    'pane-inspector', 'pane-runs-list', 'btn-refresh-pane-runs',
+    'btn-multipane', 'btn-close-pane',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
   elements['cmd-palette'].hidden = true; // markup: <div id="cmd-palette" hidden>
+  elements['pane-sessions'].hidden = true; // markup: pane multi-pane awalnya tersembunyi
+  elements['pane-inspector'].hidden = true;
   const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
@@ -905,4 +911,48 @@ test('Escape menutup palette; Ctrl+K toggle bila sudah terbuka', async () => {
   assert.equal(h.elements['cmd-palette'].hidden, false);
   h.document.dispatchEvent('keydown', { key: 'Escape' });
   assert.equal(h.elements['cmd-palette'].hidden, true);
+});
+
+test('GUI-P2-03: tombol Multi-pane membuka pane sessions + inspector dan memuat API', async () => {
+  const h = createHarness();
+  assert.equal(h.elements['pane-sessions'].hidden, true);
+  assert.equal(h.elements['pane-inspector'].hidden, true);
+
+  h.elements['btn-multipane'].dispatch('click');
+  await tick();
+  await tick();
+
+  assert.ok(h.sections.find((s) => s.id === 'tab-chat').classList.contains('multipane'));
+  assert.equal(h.elements['btn-multipane'].attributes['aria-pressed'], 'true');
+  assert.equal(h.elements['pane-sessions'].hidden, false);
+  assert.equal(h.elements['pane-inspector'].hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/sessions')));
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/runs')));
+  assert.equal(h.elements['pane-session-list'].children[0].children[0].textContent, 'web:default');
+  assert.ok(h.elements['pane-runs-list'].children.length > 0);
+
+  h.elements['btn-close-pane'].dispatch('click');
+  assert.equal(h.sections.find((s) => s.id === 'tab-chat').classList.contains('multipane'), false);
+  assert.equal(h.elements['btn-multipane'].attributes['aria-pressed'], 'false');
+  assert.equal(h.elements['pane-sessions'].hidden, true);
+  assert.equal(h.elements['pane-inspector'].hidden, true);
+});
+
+test('GUI-P2-03: tombol refresh pane memanggil ulang API sessions + runs', async () => {
+  const h = createHarness();
+  h.elements['btn-multipane'].dispatch('click');
+  await tick();
+  await tick();
+  const before = h.calls.filter((call) => call.url.endsWith('/v1/sessions')).length;
+  const runsBefore = h.calls.filter((call) => call.url.endsWith('/v1/runs')).length;
+
+  h.elements['btn-refresh-pane-sessions'].dispatch('click');
+  await tick();
+  await tick();
+  h.elements['btn-refresh-pane-runs'].dispatch('click');
+  await tick();
+  await tick();
+
+  assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/sessions')).length > before);
+  assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/runs')).length > runsBefore);
 });
