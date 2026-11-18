@@ -18,9 +18,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // Layout sempit default (800x600) memakai NavigationBar bawah.
+    // Label domain sama dengan desktop (GUI-P0-01): satu route map.
     expect(find.text('Chat'), findsWidgets);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Approve'), findsOneWidget);
+    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Approvals'), findsOneWidget);
     expect(find.text('Sessions'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
     expect(find.text('Pesan ke Tiko…'), findsOneWidget);
