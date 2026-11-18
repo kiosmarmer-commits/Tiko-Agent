@@ -21,12 +21,18 @@ String get _fixturePath {
   fail('fixture line_plugin.dart tidak ditemukan dari ${Directory.current.path}');
 }
 
-ProcessPlugin _spawn(String mode, {Duration? timeout}) => ProcessPlugin(
+ProcessPlugin _spawn(
+  String mode, {
+  Duration? timeout,
+  Duration? initTimeout,
+}) =>
+    ProcessPlugin(
       name: 'line-$mode',
       command: Platform.resolvedExecutable,
       args: [_fixturePath, mode],
       workingDirectory: Directory.current.path,
       hookTimeout: timeout ?? const Duration(seconds: 10),
+      initTimeout: initTimeout,
     );
 
 void main() {
@@ -57,7 +63,11 @@ void main() {
   });
 
   test('mode hang: hook timeout melempar StateError', () async {
-    final plugin = _spawn('hang', timeout: const Duration(milliseconds: 400));
+    final plugin = _spawn(
+      'hang',
+      timeout: const Duration(milliseconds: 400),
+      initTimeout: const Duration(seconds: 30),
+    );
     await plugin.init();
 
     await expectLater(
