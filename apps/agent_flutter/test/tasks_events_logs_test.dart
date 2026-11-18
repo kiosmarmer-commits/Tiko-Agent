@@ -1,14 +1,7 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:agent_flutter/agent_api_client.dart';
 import 'package:agent_flutter/data/models.dart';
 import 'package:agent_flutter/ui/tasks_view.dart';
 import 'package:agent_flutter/ui/events_view.dart';
 import 'package:agent_flutter/ui/logs_view.dart';
-import 'package:agent_flutter/data/api_error.dart';
-import 'package:agent_flutter/data/agent_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -136,113 +129,4 @@ void main() {
       expect(find.text('audit-20261118.jsonl'), findsNothing);
     });
   });
-
-  group('GUI-P1-01/02: repository typed', () {
-    late _ApiServer fake;
-    late AgentApiClient client;
-    late HttpAgentRepository repo;
-
-    setUp(() async {
-      fake = _ApiServer();
-      client = AgentApiClient(baseUrl: await fake.start(), token: 't');
-      repo = HttpAgentRepository(client);
-    });
-
-    tearDown(() async {
-      client.close();
-      await fake.close();
-    });
-
-    test('tasks()/logs()/logContent() mengembalikan DTO typed', () async {
-      final tasks = await repo.tasks();
-      expect(tasks.single.id, 'kb-1');
-      expect(tasks.single.state, 'doing');
-      expect(tasks.single.claimedBy, 'agent');
-
-      final logs = await repo.logs();
-      expect(logs.single.name, 'audit.jsonl');
-      expect(logs.single.bytes, 42);
-
-      final content = await repo.logContent('audit.jsonl');
-      expect(content.content, '{"tool":"shell"}');
-      expect(content.truncated, isTrue);
-    });
-
-    test('log tak dikenal melempar ApiError notFound typed', () async {
-      try {
-        await repo.logContent('tidak-ada.jsonl');
-        fail('should throw');
-      } on ApiError catch (e) {
-        expect(e.statusCode, 404);
-        expect(e.code, ApiErrorCode.notFound);
-      }
-    });
-  });
-}
-
-class _ApiServer {
-  HttpServer? _server;
-
-  Future<String> start() async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    _server = server;
-    unawaited(() async {
-      await for (final req in server) {
-        final method = req.method;
-        final path = req.uri.path;
-        req.response.headers.contentType = ContentType.json;
-        if (path == '/v1/tasks') {
-          req.response.write(jsonEncode(<String, dynamic>{
-            'tasks': [
-              {
-                'id': 'kb-1',
-                'title': 'ubah CI',
-                'state': 'doing',
-                'claimed_by': 'agent',
-                'result': '',
-              },
-            ],
-          }));
-        } else if (path == '/v1/logs') {
-          req.response.write(jsonEncode(<String, dynamic>{
-            'logs': [
-              {'name': 'audit.jsonl', 'bytes': 42},
-            ],
-          }));
-        } else if (path.startsWith('/v1/logs/') && method == 'GET') {
-          final name = Uri.decodeComponent(path.substring('/v1/logs/'.length));
-          if (name == 'audit.jsonl') {
-            req.response.write(jsonEncode(<String, dynamic>{
-              'name': name,
-              'bytes': 42,
-              'truncated': true,
-              'content': '{"tool":"shell"}',
-            }));
-          } else {
-            req.response.statusCode = 404;
-            req.response.write(jsonEncode(<String, dynamic>{
-              'ok': false,
-              'code': 'not_found',
-              'error': 'log not found',
-              'retryable': false,
-            }));
-          }
-        } else {
-          req.response.statusCode = 404;
-          req.response.write(jsonEncode(<String, dynamic>{
-            'ok': false,
-            'code': 'not_found',
-            'error': 'not found',
-            'retryable': false,
-          }));
-        }
-        await req.response.close();
-      }
-    }());
-    return 'http://127.0.0.1:${server.port}';
-  }
-
-  Future<void> close() async {
-    await _server?.close(force: true);
-  }
 }

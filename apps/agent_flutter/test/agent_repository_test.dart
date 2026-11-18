@@ -83,6 +83,42 @@ class _ApiServer {
               {'type': 'run.completed', 'at': '2026-11-18T10:02:00Z'},
             ],
           }));
+        } else if (path == '/v1/tasks') {
+          req.response.write(jsonEncode(<String, dynamic>{
+            'tasks': [
+              {
+                'id': 'kb-1',
+                'title': 'ubah CI',
+                'state': 'doing',
+                'claimed_by': 'agent',
+                'result': '',
+              },
+            ],
+          }));
+        } else if (path == '/v1/logs') {
+          req.response.write(jsonEncode(<String, dynamic>{
+            'logs': [
+              {'name': 'audit.jsonl', 'bytes': 42},
+            ],
+          }));
+        } else if (path.startsWith('/v1/logs/') && method == 'GET') {
+          final name = Uri.decodeComponent(path.substring('/v1/logs/'.length));
+          if (name == 'audit.jsonl') {
+            req.response.write(jsonEncode(<String, dynamic>{
+              'name': name,
+              'bytes': 42,
+              'truncated': true,
+              'content': '{"tool":"shell"}',
+            }));
+          } else {
+            req.response.statusCode = 404;
+            req.response.write(jsonEncode(<String, dynamic>{
+              'ok': false,
+              'code': 'not_found',
+              'error': 'log not found',
+              'retryable': false,
+            }));
+          }
         } else {
           req.response.statusCode = 404;
           req.response.write(jsonEncode(<String, dynamic>{
@@ -161,6 +197,32 @@ void main() {
     final events = await repo.events();
     expect(events.single.type, 'run.completed');
     expect(events.single.at, '2026-11-18T10:02:00Z');
+  });
+
+  test('GUI-P1-01/02: tasks()/logs()/logContent() typed DTO', () async {
+    final tasks = await repo.tasks();
+    expect(tasks.single.id, 'kb-1');
+    expect(tasks.single.state, 'doing');
+    expect(tasks.single.claimedBy, 'agent');
+
+    final logs = await repo.logs();
+    expect(logs.single.name, 'audit.jsonl');
+    expect(logs.single.bytes, 42);
+
+    final content = await repo.logContent('audit.jsonl');
+    expect(content.content, '{"tool":"shell"}');
+    expect(content.truncated, isTrue);
+  });
+
+  test('GUI-P1-02: log tak dikenal melempar ApiError notFound typed',
+      () async {
+    try {
+      await repo.logContent('tidak-ada.jsonl');
+      fail('harusnya melempar');
+    } on ApiError catch (e) {
+      expect(e.code, ApiErrorCode.notFound);
+      expect(e.statusCode, 404);
+    }
   });
 
   test('error HTTP dari daemon menjadi ApiError typed', () async {
