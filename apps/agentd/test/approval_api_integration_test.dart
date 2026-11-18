@@ -32,8 +32,10 @@ void main() {
       port: 0,
       listApprovals: () async =>
           (await broker.all()).map((item) => item.toJson()).toList(),
-      decideApproval: (id, approve) async =>
-          await broker.decide(id, approve: approve, actor: 'flutter') != null,
+      decideApproval: (id, approve, {actor}) async =>
+          await broker.decide(id,
+              approve: approve, actor: actor ?? 'flutter') !=
+          null,
     );
 
     HttpClient? client;

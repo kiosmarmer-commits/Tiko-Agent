@@ -715,8 +715,9 @@ Future<void> main(List<String> args) async {
         eventStream: rt.events.stream.map((event) => event.toJson()),
         listApprovals: () async =>
             (await rt.approvals.all()).map((a) => a.toJson()).toList(),
-        decideApproval: (id, allow) async {
-          final r = await rt.decideApproval(id, approve: allow, actor: 'api');
+        decideApproval: (id, allow, {actor}) async {
+          final r = await rt.decideApproval(id,
+              approve: allow, actor: actor ?? 'api');
           return r != null;
         },
         onShutdown: () async {

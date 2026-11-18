@@ -73,7 +73,8 @@ class HttpApiServer {
   final Map<String, Object?> Function()? capabilitiesProvider;
   final List<Map<String, dynamic>> Function()? eventsProvider;
   final Future<List<Map<String, dynamic>>> Function()? listApprovals;
-  final Future<bool> Function(String id, bool approve)? decideApproval;
+  final Future<bool> Function(String id, bool approve, {String? actor})?
+      decideApproval;
   final Stream<Map<String, dynamic>>? eventStream;
   final Future<void> Function()? onShutdown;
 
@@ -84,6 +85,17 @@ class HttpApiServer {
 
   /// Format action id GenUI (sama dengan parser D1: [A-Za-z0-9_.-], 1-64).
   static final RegExp _safeActionId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
+
+  /// Aktor approval dari client (GUI-P0-06): dibatasi 64 karakter tanpa
+  /// karakter kontrol; null bila tidak tersedia agar wiring daemon memakai
+  /// default 'api'.
+  static String? _sanitizeActor(String? raw) {
+    if (raw == null) return null;
+    final cleaned =
+        raw.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').trim();
+    if (cleaned.isEmpty) return null;
+    return cleaned.length > 64 ? cleaned.substring(0, 64) : cleaned;
+  }
 
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
@@ -273,8 +285,10 @@ class HttpApiServer {
             if (json['type'] == 'confirm_response') {
               final id = json['id'] as String? ?? '';
               final allow = json['allow'] == true;
+              final actor = _sanitizeActor(json['actor'] as String?);
               final ok = id.isNotEmpty &&
-                  await (decideApproval?.call(id, allow) ?? Future.value(false));
+                  await (decideApproval?.call(id, allow, actor: actor) ??
+                      Future.value(false));
               ws.add(jsonEncode({'type': 'confirm_result', 'id': id, 'ok': ok}));
               return;
             }
@@ -405,7 +419,10 @@ class HttpApiServer {
         final id = path.substring('/v1/approvals/'.length).split('/').first;
         final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
         final allow = body['approve'] == true || path.endsWith('/approve');
-        final ok = await (decideApproval?.call(id, allow) ?? Future.value(false));
+        final actor = _sanitizeActor(body['actor'] as String?) ??
+            _sanitizeActor(req.headers.value('x-tiko-actor'));
+        final ok = await (decideApproval?.call(id, allow, actor: actor) ??
+            Future.value(false));
         _json(req, {'ok': ok, 'id': id, 'approve': allow});
       } else if (path == '/v1/messages' && req.method == 'POST') {
         final body =
@@ -491,8 +508,11 @@ class HttpApiServer {
                 as Map<String, dynamic>;
         final id = body['id'] as String? ?? '';
         final allow = body['allow'] == true;
+        final actor = _sanitizeActor(body['actor'] as String?) ??
+            _sanitizeActor(req.headers.value('x-tiko-actor'));
         final ok = id.isNotEmpty &&
-            await (decideApproval?.call(id, allow) ?? Future.value(false));
+            await (decideApproval?.call(id, allow, actor: actor) ??
+                Future.value(false));
         _json(req, {'ok': ok, 'id': id, 'approve': allow});
       } else if (path == '/v1/memories' && req.method == 'GET') {
         final mems =

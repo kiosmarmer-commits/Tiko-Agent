@@ -186,6 +186,7 @@ class _AgentAppState extends State<AgentApp> {
             ? DesktopShell(
                 selected: route,
                 onSelect: _selectRoute,
+                pendingApprovals: _pendingApprovals,
                 child: AnimatedBuilder(
                   animation: chat,
                   builder: (context, _) => _body(wide: true),
@@ -194,6 +195,7 @@ class _AgentAppState extends State<AgentApp> {
             : MobileShell(
                 selected: route.primaryOnMobile ? route : null,
                 onSelect: _selectMobileRoute,
+                pendingApprovals: _pendingApprovals,
                 child: AnimatedBuilder(
                   animation: chat,
                   builder: (context, _) => _body(wide: false),
@@ -202,6 +204,9 @@ class _AgentAppState extends State<AgentApp> {
       ),
     );
   }
+
+  int get _pendingApprovals =>
+      approvals.where((approval) => approval.isPending).length;
 
   void _selectRoute(AppRoute next) {
     setState(() => route = next);

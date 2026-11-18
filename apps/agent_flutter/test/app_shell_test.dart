@@ -67,6 +67,42 @@ void main() {
       await tester.pump();
       expect(picked, AppRoute.approvals);
     });
+
+    testWidgets('GUI-P0-06: badge approval pending tampil saat > 0',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: DesktopShell(
+            selected: AppRoute.chat,
+            onSelect: (_) {},
+            pendingApprovals: 3,
+            child: const SizedBox(),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(find.byType(Badge), findsOneWidget);
+      expect(find.descendant(
+        of: find.byType(Badge),
+        matching: find.text('3'),
+      ), findsOneWidget);
+    });
+
+    testWidgets('GUI-P0-06: tanpa pending, badge tidak tampil',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: DesktopShell(
+            selected: AppRoute.chat,
+            onSelect: (_) {},
+            child: const SizedBox(),
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(find.byType(Badge), findsNothing);
+    });
   });
 
   group('GUI-P0-01: MobileShell dari route map', () {
@@ -112,6 +148,27 @@ void main() {
       await tester.tap(find.text('Chat'));
       await tester.pump();
       expect(picked, AppRoute.chat);
+    });
+
+    testWidgets('GUI-P0-06: badge approval pending tampil di bottom bar',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MobileShell(
+            selected: AppRoute.chat,
+            onSelect: (_) {},
+            pendingApprovals: 2,
+            child: const SizedBox(),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(find.byType(Badge), findsOneWidget);
+      expect(find.descendant(
+        of: find.byType(Badge),
+        matching: find.text('2'),
+      ), findsOneWidget);
     });
   });
 

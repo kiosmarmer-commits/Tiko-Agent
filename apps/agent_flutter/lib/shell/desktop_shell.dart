@@ -12,11 +12,16 @@ class DesktopShell extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.child,
+    this.pendingApprovals = 0,
   });
 
   final AppRoute selected;
   final ValueChanged<AppRoute> onSelect;
   final Widget child;
+
+  /// Jumlah approval pending (GUI-P0-06): ditampilkan sebagai badge pada
+  /// destinasi Approvals agar state lintas client terlihat di nav.
+  final int pendingApprovals;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +37,7 @@ class DesktopShell extends StatelessWidget {
           destinations: [
             for (final entry in kAppRoutes)
               NavigationRailDestination(
-                icon: Icon(entry.icon),
+                icon: _navIcon(entry, pendingApprovals),
                 label: Text(entry.label),
               ),
           ],
@@ -41,5 +46,13 @@ class DesktopShell extends StatelessWidget {
         Expanded(child: child),
       ],
     );
+  }
+
+  static Widget _navIcon(AppRouteInfo entry, int pendingApprovals) {
+    final icon = Icon(entry.icon);
+    if (entry.route == AppRoute.approvals && pendingApprovals > 0) {
+      return Badge(label: Text('$pendingApprovals'), child: icon);
+    }
+    return icon;
   }
 }

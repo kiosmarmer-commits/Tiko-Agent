@@ -12,12 +12,16 @@ class MobileShell extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.child,
+    this.pendingApprovals = 0,
   });
 
   /// Currently selected primary route, or `null` when the More page is open.
   final AppRoute? selected;
   final ValueChanged<AppRoute?> onSelect;
   final Widget child;
+
+  /// Jumlah approval pending (GUI-P0-06): badge pada destinasi Approvals.
+  final int pendingApprovals;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +45,7 @@ class MobileShell extends StatelessWidget {
           destinations: [
             for (final entry in primary)
               NavigationDestination(
-                icon: Icon(entry.icon),
+                icon: _navIcon(entry, pendingApprovals),
                 label: entry.label,
               ),
             const NavigationDestination(
@@ -52,5 +56,13 @@ class MobileShell extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static Widget _navIcon(AppRouteInfo entry, int pendingApprovals) {
+    final icon = Icon(entry.icon);
+    if (entry.route == AppRoute.approvals && pendingApprovals > 0) {
+      return Badge(label: Text('$pendingApprovals'), child: icon);
+    }
+    return icon;
   }
 }
