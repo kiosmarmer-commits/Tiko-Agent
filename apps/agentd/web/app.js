@@ -481,6 +481,337 @@
     }
   }
 
+  // GUI-P1-04 parity: manajemen bot (list, binding, bind/unbind, create, delete).
+  async function loadBots() {
+    const list = $('#bot-list');
+    const bindings = $('#bot-bindings');
+    if (!list || !bindings) return;
+    list.replaceChildren(emptyItem('Memuat bots\u2026'));
+    bindings.replaceChildren(emptyItem('Memuat bindings\u2026'));
+    try {
+      const [botsData, bindingsData] = await Promise.all([
+        api('/v1/bots'),
+        api('/v1/bots/bindings'),
+      ]);
+      const bots = Array.isArray(botsData.bots) ? botsData.bots : [];
+      list.replaceChildren();
+      if (!bots.length) {
+        list.appendChild(emptyItem('Belum ada bot terdaftar.'));
+      }
+      for (const bot of bots) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(bot.id || 'bot') + ' \u00b7 ' + String(bot.name || '');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = 'persona: ' + String(bot.persona || '(kosong)') +
+          ' \u00b7 model: ' + String(bot.model || '(default)') +
+          ' \u00b7 allowlist: ' + (Array.isArray(bot.tool_allowlist) && bot.tool_allowlist.length
+            ? bot.tool_allowlist.join(', ') : '(kosong \u2014 fail-closed)');
+        const actions = document.createElement('div');
+        actions.className = 'row';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'danger-button';
+        remove.textContent = 'Hapus';
+        remove.setAttribute('aria-label', 'Hapus bot ' + String(bot.id || ''));
+        remove.addEventListener('click', () => deleteBot(String(bot.id), actions));
+        actions.append(remove);
+        li.append(title, meta, actions);
+        list.appendChild(li);
+      }
+      const map = bindingsData.bindings && typeof bindingsData.bindings === 'object'
+        ? bindingsData.bindings : {};
+      const pairs = Object.entries(map);
+      bindings.replaceChildren();
+      if (!pairs.length) {
+        bindings.appendChild(emptyItem('Belum ada sesi yang ter-bind ke bot.'));
+        return;
+      }
+      for (const [sessionKey, botId] of pairs) {
+        const li = document.createElement('li');
+        li.textContent = String(sessionKey) + ' \u2192 ' + String(botId);
+        bindings.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat bots: ' + error.message));
+      bindings.replaceChildren(emptyItem('Gagal memuat bindings: ' + error.message));
+    }
+  }
+
+  async function deleteBot(id, buttonRow) {
+    if (!id) return;
+    if (buttonRow) for (const btn of buttonRow.children || []) btn.disabled = true;
+    try {
+      await api('/v1/bots/' + encodeURIComponent(id), { method: 'DELETE' });
+      addMsg('system', 'Bot "' + id + '" dihapus.');
+    } catch (error) {
+      addMsg('system', 'Gagal menghapus bot: ' + error.message);
+    }
+    loadBots();
+  }
+
+  async function createBot() {
+    const idEl = $('#botNewId');
+    const nameEl = $('#botNewName');
+    if (!idEl || !nameEl) return;
+    const id = idEl.value.trim();
+    const name = nameEl.value.trim();
+    if (!id || !name) {
+      addMsg('system', 'ID dan nama bot wajib diisi.');
+      return;
+    }
+    const allowlist = String($('#botNewAllow')?.value || '')
+      .split(',')
+      .map((tool) => tool.trim())
+      .filter(Boolean);
+    try {
+      await api('/v1/bots', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          name,
+          persona: String($('#botNewPersona')?.value || '').trim(),
+          model: String($('#botNewModel')?.value || '').trim() || null,
+          greeting: String($('#botNewGreeting')?.value || '').trim(),
+          tool_allowlist: allowlist,
+        }),
+      });
+      addMsg('system', 'Bot "' + id + '" dibuat.');
+      idEl.value = '';
+      nameEl.value = '';
+    } catch (error) {
+      addMsg('system', 'Gagal membuat bot: ' + error.message);
+    }
+    loadBots();
+  }
+
+  async function bindOrUnbindBot(bind) {
+    const botId = String($('#botBindId')?.value || '').trim();
+    const sessionId = String($('#botBindSession')?.value || '').trim();
+    if (!botId || !sessionId) {
+      addMsg('system', 'ID bot dan Session ID wajib diisi.');
+      return;
+    }
+    try {
+      await api('/v1/bots/' + encodeURIComponent(botId) + (bind ? '/bind' : '/unbind'), {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      addMsg('system', (bind ? 'Bind' : 'Unbind') + ' sesi "' + sessionId + '" ' +
+        (bind ? 'ke' : 'dari') + ' bot "' + botId + '" berhasil.');
+    } catch (error) {
+      addMsg('system', 'Gagal ' + (bind ? 'bind' : 'unbind') + ': ' + error.message);
+    }
+    loadBots();
+  }
+
+  // GUI-P1-05 parity: provider snapshot read-only + override per sesi.
+  async function loadProviders() {
+    const list = $('#provider-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat providers\u2026'));
+    try {
+      const data = await api('/v1/providers');
+      const providers = Array.isArray(data.providers) ? data.providers : [];
+      list.replaceChildren();
+      const heading = document.createElement('li');
+      heading.textContent = 'Default: ' + String(data.default || '(tidak diketahui)');
+      list.appendChild(heading);
+      for (const provider of providers) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        const caps = provider.capabilities || {};
+        title.textContent = String(provider.id || 'provider') +
+          (String(provider.id) === String(data.default) ? ' (default)' : '');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = 'tool_calling ' + String(caps.tool_calling === true) +
+          ' \u00b7 vision ' + String(caps.vision === true) +
+          ' \u00b7 streaming ' + String(caps.streaming === true) +
+          ' \u00b7 max_context ' + String(caps.max_context ?? '\u2014') +
+          ' \u00b7 health ' + JSON.stringify(provider.health ?? '\u2014');
+        li.append(title, meta);
+        list.appendChild(li);
+      }
+      const tiers = data.tiers && typeof data.tiers === 'object' ? data.tiers : {};
+      const tierPairs = Object.entries(tiers);
+      if (tierPairs.length) {
+        const tierItem = document.createElement('li');
+        const tierTitle = document.createElement('strong');
+        tierTitle.textContent = 'Tiers';
+        const tierMeta = document.createElement('p');
+        tierMeta.className = 'hint';
+        tierMeta.textContent = tierPairs.map(([tier, pid]) => tier + ' \u2192 ' + pid).join(' \u00b7 ');
+        tierItem.append(tierTitle, tierMeta);
+        list.appendChild(tierItem);
+      }
+      const overrides = data.session_overrides && typeof data.session_overrides === 'object'
+        ? data.session_overrides : {};
+      const overridePairs = Object.entries(overrides);
+      if (overridePairs.length) {
+        const overrideItem = document.createElement('li');
+        const overrideTitle = document.createElement('strong');
+        overrideTitle.textContent = 'Override sesi aktif';
+        const overrideMeta = document.createElement('p');
+        overrideMeta.className = 'hint';
+        overrideMeta.textContent = overridePairs
+          .map(([sessionKey, pid]) => sessionKey + ' \u2192 ' + pid).join(' \u00b7 ');
+        overrideItem.append(overrideTitle, overrideMeta);
+        list.appendChild(overrideItem);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat providers: ' + error.message));
+    }
+  }
+
+  async function applyProviderOverride() {
+    const sessionId = String($('#provSessionId')?.value || '').trim();
+    const provider = String($('#provOverride')?.value || '').trim();
+    if (!sessionId || !provider) {
+      addMsg('system', 'Session ID dan provider wajib diisi ("default" untuk reset).');
+      return;
+    }
+    try {
+      await api('/v1/providers/session', {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId, provider }),
+      });
+      addMsg('system', 'Override provider sesi "' + sessionId + '" \u2192 ' + provider + '.');
+    } catch (error) {
+      addMsg('system', 'Gagal override: ' + error.message);
+    }
+    loadProviders();
+  }
+
+  // GUI-P1-06 parity: snapshot plugin + consent grant/revoke.
+  async function loadPlugins() {
+    const list = $('#plugin-list');
+    const toolsList = $('#plugin-tools');
+    const mcpList = $('#plugin-mcp');
+    if (!list || !toolsList || !mcpList) return;
+    list.replaceChildren(emptyItem('Memuat plugins\u2026'));
+    try {
+      const data = await api('/v1/plugins');
+      const plugins = Array.isArray(data.plugins) ? data.plugins : [];
+      const tools = Array.isArray(data.tools) ? data.tools : [];
+      const mcp = data.mcp && typeof data.mcp === 'object' ? data.mcp : {};
+      list.replaceChildren();
+      if (!plugins.length) {
+        list.appendChild(emptyItem('Belum ada plugin terdaftar.'));
+      }
+      for (const plugin of plugins) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(plugin.id || 'plugin') +
+          (plugin.registered ? '' : ' (belum registered)') +
+          (plugin.pending ? ' \u00b7 menunggu consent' : '');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = 'granted: ' + (Array.isArray(plugin.granted) && plugin.granted.length
+          ? plugin.granted.join(', ') : '(belum ada consent)');
+        const actions = document.createElement('div');
+        actions.className = 'row';
+        const grant = document.createElement('button');
+        grant.type = 'button';
+        grant.className = 'secondary';
+        grant.textContent = 'Setujui';
+        grant.addEventListener('click', () => setPluginConsent(String(plugin.id || ''), 'grant', actions));
+        const revoke = document.createElement('button');
+        revoke.type = 'button';
+        revoke.className = 'danger-button';
+        revoke.textContent = 'Cabut';
+        revoke.addEventListener('click', () => setPluginConsent(String(plugin.id || ''), 'revoke', actions));
+        actions.append(grant, revoke);
+        li.append(title, meta, actions);
+        list.appendChild(li);
+      }
+      toolsList.replaceChildren();
+      if (!tools.length) {
+        toolsList.appendChild(emptyItem('Katalog tool kosong.'));
+      }
+      for (const tool of tools) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(tool.name || 'tool') + ' \u00b7 risk ' + String(tool.risk || 'low');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = String(tool.description || '') +
+          ' \u00b7 timeout ' + String(tool.timeout_sec ?? 30) + 's' +
+          (tool.parallel_safe ? ' \u00b7 parallel-safe' : '');
+        li.append(title, meta);
+        toolsList.appendChild(li);
+      }
+      mcpList.replaceChildren();
+      const loader = Array.isArray(mcp.loader) ? mcp.loader : [];
+      if (!loader.length) {
+        mcpList.appendChild(emptyItem('Tidak ada status server MCP.'));
+      }
+      for (const status of loader) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(status.server || 'server') + ' \u00b7 ' + String(status.status || 'unknown');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = JSON.stringify(status.detail ?? status.error ?? {}) +
+          ' \u00b7 tools ' + String(status.tools ?? '\u2014');
+        li.append(title, meta);
+        mcpList.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat plugins: ' + error.message));
+    }
+  }
+
+  async function setPluginConsent(plugin, action, buttonRow) {
+    if (!plugin) return;
+    if (buttonRow) for (const btn of buttonRow.children || []) btn.disabled = true;
+    try {
+      const result = await api('/v1/plugins/consent', {
+        method: 'POST',
+        body: JSON.stringify({ plugin, action }),
+      });
+      addMsg('system', String(result.message || ('Consent ' + action + ' untuk "' + plugin + '".')));
+    } catch (error) {
+      addMsg('system', 'Gagal consent plugin: ' + error.message);
+    }
+    loadPlugins();
+  }
+
+  // GUI-P1-07 parity: status channel gateway (read-only).
+  async function loadChannels() {
+    const list = $('#channel-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat channels\u2026'));
+    try {
+      const data = await api('/v1/channels');
+      const channels = Array.isArray(data.channels) ? data.channels : [];
+      list.replaceChildren();
+      if (!channels.length) {
+        list.appendChild(emptyItem('Tidak ada channel terkonfigurasi.'));
+        return;
+      }
+      for (const channel of channels) {
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = String(channel.channel || 'channel');
+        const badge = document.createElement('span');
+        badge.className = channel.active ? 'pill online' : 'pill offline';
+        badge.textContent = channel.active ? 'aktif' : 'nonaktif';
+        const envList = Array.isArray(channel.env) ? channel.env : [];
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = envList.length
+          ? 'env: ' + envList.map((name) => String(name)).join(', ')
+          : 'env: \u2014';
+        li.append(title, badge, meta);
+        list.appendChild(li);
+      }
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat channels: ' + error.message));
+    }
+  }
+
   async function websocketUrl() {
     const root = store.base.replace(/\/+$/, '');
     const url = new URL(root + '/v1/stream');
@@ -629,6 +960,10 @@
       if (target === 'sessions') loadSessions();
       if (target === 'skills') loadSkills();
       if (target === 'tasks') { loadTasks(); loadLogs(); }
+      if (target === 'bots') loadBots();
+      if (target === 'providers') loadProviders();
+      if (target === 'plugins') loadPlugins();
+      if (target === 'channels') loadChannels();
     });
   });
 
@@ -663,6 +998,14 @@
   $('#btn-refresh-sessions')?.addEventListener('click', loadSessions);
   $('#btn-refresh-skills')?.addEventListener('click', loadSkills);
   $('#btn-refresh-tasks')?.addEventListener('click', () => { loadTasks(); loadLogs(); });
+  $('#btn-refresh-bots')?.addEventListener('click', loadBots);
+  $('#btn-refresh-providers')?.addEventListener('click', loadProviders);
+  $('#btn-refresh-plugins')?.addEventListener('click', loadPlugins);
+  $('#btn-refresh-channels')?.addEventListener('click', loadChannels);
+  $('#botCreateBtn')?.addEventListener('click', createBot);
+  $('#botBindBtn')?.addEventListener('click', () => bindOrUnbindBot(true));
+  $('#botUnbindBtn')?.addEventListener('click', () => bindOrUnbindBot(false));
+  $('#provOverrideBtn')?.addEventListener('click', applyProviderOverride);
   $('#btn-refresh-logs')?.addEventListener('click', loadLogs);
   $('#btn-clear-events')?.addEventListener('click', () => {
     eventFeedItems = 0;

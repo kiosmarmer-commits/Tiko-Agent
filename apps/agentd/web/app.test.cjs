@@ -89,16 +89,24 @@ function createHarness() {
     'refreshMem', 'btn-refresh-approvals', 'btn-refresh-sessions',
     'task-board', 'event-feed', 'logSelect', 'log-view',
     'btn-refresh-tasks', 'btn-clear-events', 'btn-refresh-logs',
+    'bot-list', 'bot-bindings', 'btn-refresh-bots',
+    'botBindId', 'botBindSession', 'botBindBtn', 'botUnbindBtn',
+    'botNewId', 'botNewName', 'botNewPersona', 'botNewModel',
+    'botNewGreeting', 'botNewAllow', 'botCreateBtn',
+    'provider-list', 'btn-refresh-providers',
+    'provSessionId', 'provOverride', 'provOverrideBtn',
+    'plugin-list', 'plugin-tools', 'plugin-mcp', 'btn-refresh-plugins',
+    'channel-list', 'btn-refresh-channels',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
-  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'help'].map((tab) => {
+  const tabs = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'help'].map((tab) => {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
     return element;
   });
-  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'help'].map((tab) => {
+  const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'help'].map((tab) => {
     const element = new FakeElement('tab-' + tab);
     element.id = 'tab-' + tab;
     element.className = tab === 'chat' ? 'tab active' : 'tab';
@@ -158,6 +166,24 @@ function createHarness() {
       ] };
       else if (pathname === '/v1/logs') body = { logs: [{ name: 'audit-20261113.jsonl', bytes: 42 }] };
       else if (pathname.startsWith('/v1/logs/')) body = { name: decodeURIComponent(pathname.slice('/v1/logs/'.length)), bytes: 42, truncated: true, content: '<img src=x onerror=alert(1)>\n{"tool":"shell"}' };
+      else if (pathname === '/v1/bots') body = { bots: [{ id: 'assistant', name: '<script>alert(1)</script>', persona: 'ringkas', model: null, tool_allowlist: ['read_file'], created_at: '2026-11-18T00:00:00.000Z' }] };
+      else if (pathname === '/v1/bots/bindings') body = { bindings: { 'web:default': 'assistant' } };
+      else if (pathname.startsWith('/v1/bots/')) body = { deleted: true, ok: true };
+      else if (pathname === '/v1/providers') body = {
+        default: 'mock-1',
+        providers: [{ id: 'mock-1', capabilities: { tool_calling: true, vision: false, streaming: true, max_context: 32000 }, health: { ok: true } }],
+        tiers: { reasoner: 'mock-2' },
+        session_overrides: { 'web:default': 'mock-2' },
+      };
+      else if (pathname === '/v1/providers/session') body = { ok: true, session_id: 'web:default', provider: 'mock-2' };
+      else if (pathname === '/v1/plugins') body = {
+        plugins: [{ id: 'echo', registered: true, pending: false, granted: ['shell'], requested: ['shell'] }],
+        events: [],
+        tools: [{ name: 'shell', description: 'eksekusi', risk: 'high', timeout_sec: 30, parallel_safe: false }],
+        mcp: { started: true, loader: [{ server: 'demo', status: 'ready', tools: 3 }] },
+      };
+      else if (pathname === '/v1/plugins/consent') body = { ok: true, message: 'Consent diberikan.' };
+      else if (pathname === '/v1/channels') body = { channels: [{ channel: 'telegram', active: true, env: ['TG_TOKEN', 'TG_ALLOW'] }, { channel: 'slack', active: false, env: ['SLACK_BOT_TOKEN'] }] };
       return { ok: true, status: 200, json: async () => body, text: async () => '' };
     },
   };
@@ -300,4 +326,113 @@ test('Live event watcher appends streamed events to the event feed', async () =>
   assert.equal(feed.children[0].children[0].textContent, 'job.completed');
   watcher.fire('message', { data: 'bukan-json' });
   assert.equal(feed.children.length, 1);
+});
+
+test('Bots tab memuat daftar bot, binding, dan aksi hapus memanggil DELETE', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'bots').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-bots').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/bots')));
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/bots/bindings')));
+  const item = h.elements['bot-list'].children[0];
+  assert.equal(item.children[0].textContent, 'assistant \u00b7 <script>alert(1)</script>');
+  assert.equal(item.children[1].textContent, 'persona: ringkas \u00b7 model: (default) \u00b7 allowlist: read_file');
+  assert.equal(h.elements['bot-bindings'].children[0].textContent, 'web:default \u2192 assistant');
+
+  const deleteBtn = item.children[2].children[0];
+  deleteBtn.dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/bots/assistant') && call.options.method === 'DELETE'));
+});
+
+test('Buat bot mengirim POST /v1/bots dan bind/unbind sesi', async () => {
+  const h = createHarness();
+  h.elements.botNewId.value = 'writer';
+  h.elements.botNewName.value = 'Penulis';
+  h.elements.botNewPersona.value = 'Detail';
+  h.elements.botNewAllow.value = 'read_file, shell';
+  h.elements.botCreateBtn.dispatch('click');
+  await tick();
+  await tick();
+  const createCall = h.calls.find((call) => call.url.endsWith('/v1/bots') && call.options.method === 'POST');
+  assert.ok(createCall, 'POST /v1/bots terkirim');
+  const payload = JSON.parse(createCall.options.body);
+  assert.deepEqual(payload.tool_allowlist, ['read_file', 'shell']);
+  assert.equal(payload.model, null);
+
+  h.elements.botBindId.value = 'writer';
+  h.elements.botBindSession.value = 'web:default';
+  h.elements.botBindBtn.dispatch('click');
+  await tick();
+  await tick();
+  const bindCall = h.calls.find((call) => call.url.endsWith('/v1/bots/writer/bind') && call.options.method === 'POST');
+  assert.equal(JSON.parse(bindCall.options.body).session_id, 'web:default');
+
+  h.elements.botUnbindBtn.dispatch('click');
+  await tick();
+  await tick();
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/bots/writer/unbind') && call.options.method === 'POST'));
+});
+
+test('Provider tab memuat snapshot dan override mengirim POST /v1/providers/session', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'providers').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-providers').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/providers')));
+  const first = h.elements['provider-list'].children[0];
+  assert.equal(first.textContent, 'Default: mock-1');
+  const item = h.elements['provider-list'].children[1];
+  assert.ok(item.children[0].textContent.includes('mock-1 (default)'));
+  assert.ok(item.children[1].textContent.includes('mock-2') === false);
+
+  h.elements.provSessionId.value = 'web:default';
+  h.elements.provOverride.value = 'mock-2';
+  h.elements.provOverrideBtn.dispatch('click');
+  await tick();
+  await tick();
+  const overrideCall = h.calls.find((call) => call.url.endsWith('/v1/providers/session') && call.options.method === 'POST');
+  assert.deepEqual(JSON.parse(overrideCall.options.body), { session_id: 'web:default', provider: 'mock-2' });
+});
+
+test('Plugin tab memuat snapshot dan consent memanggil POST /v1/plugins/consent', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'plugins').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-plugins').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/plugins')));
+  const item = h.elements['plugin-list'].children[0];
+  assert.ok(item.children[0].textContent.includes('echo'));
+  assert.ok(item.children[1].textContent.includes('shell'));
+  assert.equal(h.elements['plugin-tools'].children[0].children[0].textContent, 'shell \u00b7 risk high');
+  assert.ok(h.elements['plugin-mcp'].children[0].children[0].textContent.includes('ready'));
+
+  const grant = item.children[2].children[0];
+  grant.dispatch('click');
+  await tick();
+  await tick();
+  const consentCall = h.calls.find((call) => call.url.endsWith('/v1/plugins/consent') && call.options.method === 'POST');
+  assert.deepEqual(JSON.parse(consentCall.options.body), { plugin: 'echo', action: 'grant' });
+});
+
+test('Channels tab read-only menampilkan badge aktif dan nama env', async () => {
+  const h = createHarness();
+  h.tabs.find((tab) => tab.dataset.tab === 'channels').dispatch('click');
+  await tick();
+  await tick();
+  assert.equal(h.sections.find((section) => section.id === 'tab-channels').hidden, false);
+  assert.ok(h.calls.some((call) => call.url.endsWith('/v1/channels')));
+  const active = h.elements['channel-list'].children[0];
+  assert.equal(active.children[0].textContent, 'telegram');
+  assert.equal(active.children[1].className, 'pill online');
+  assert.equal(active.children[1].textContent, 'aktif');
+  assert.equal(active.children[2].textContent, 'env: TG_TOKEN, TG_ALLOW');
+  const inactive = h.elements['channel-list'].children[1];
+  assert.equal(inactive.children[1].className, 'pill offline');
+  assert.equal(inactive.children[1].textContent, 'nonaktif');
 });

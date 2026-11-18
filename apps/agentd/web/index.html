@@ -29,6 +29,10 @@
         <button type="button" data-tab="sessions" aria-pressed="false" aria-controls="tab-sessions">Sessions</button>
         <button type="button" data-tab="skills" aria-pressed="false" aria-controls="tab-skills">Skills</button>
         <button type="button" data-tab="tasks" aria-pressed="false" aria-controls="tab-tasks">Tugas</button>
+        <button type="button" data-tab="bots" aria-pressed="false" aria-controls="tab-bots">Bots</button>
+        <button type="button" data-tab="providers" aria-pressed="false" aria-controls="tab-providers">Provider</button>
+        <button type="button" data-tab="plugins" aria-pressed="false" aria-controls="tab-plugins">Plugin</button>
+        <button type="button" data-tab="channels" aria-pressed="false" aria-controls="tab-channels">Channels</button>
         <button type="button" data-tab="help" aria-pressed="false" aria-controls="tab-help">Bantuan</button>
       </nav>
     </header>
@@ -121,6 +125,91 @@
           </div>
         </div>
         <pre id="log-view" class="code log-view">Pilih file log untuk melihat isinya.</pre>
+      </section>
+
+      <section id="tab-bots" class="tab" hidden aria-label="Bots">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">AGENT MODE</p><h1>Bots</h1><p class="subheading">Profil bot terkelola: persona, model, tool allowlist, dan binding sesi.</p></div>
+          <button type="button" id="btn-refresh-bots" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="bot-list" class="list"></ul>
+        <div class="section-heading compact">
+          <div><p class="eyebrow">BINDING</p><h2>Sesi ter-bind</h2></div>
+        </div>
+        <ul id="bot-bindings" class="list"></ul>
+        <article class="card settings-card">
+          <h2>Bind / unbind sesi</h2>
+          <label for="botBindId">ID bot</label>
+          <input id="botBindId" autocomplete="off" placeholder="assistant" />
+          <label for="botBindSession">Session ID</label>
+          <input id="botBindSession" autocomplete="off" placeholder="web:default" />
+          <div class="row">
+            <button type="button" id="botBindBtn" class="primary">Bind</button>
+            <button type="button" id="botUnbindBtn" class="danger-button">Unbind</button>
+          </div>
+        </article>
+        <article class="card settings-card">
+          <h2>Buat bot</h2>
+          <label for="botNewId">ID</label>
+          <input id="botNewId" autocomplete="off" placeholder="assistant" />
+          <label for="botNewName">Nama</label>
+          <input id="botNewName" autocomplete="off" placeholder="Asisten Pribadi" />
+          <label for="botNewPersona">Persona (opsional)</label>
+          <input id="botNewPersona" autocomplete="off" placeholder="Ringkas dan sopan" />
+          <label for="botNewModel">Model (opsional)</label>
+          <input id="botNewModel" autocomplete="off" placeholder="id provider" />
+          <label for="botNewGreeting">Greeting (opsional)</label>
+          <input id="botNewGreeting" autocomplete="off" placeholder="Halo! Ada yang bisa dibantu?" />
+          <label for="botNewAllow">Tool allowlist (dipisah koma, opsional)</label>
+          <input id="botNewAllow" autocomplete="off" placeholder="read_file, shell" />
+          <button type="button" id="botCreateBtn" class="primary">Buat bot</button>
+          <p class="hint">Allowlist kosong berarti turn ditolak fail-closed sampai tool diizinkan. Aksi berisiko tetap lewat approval.</p>
+        </article>
+      </section>
+
+      <section id="tab-providers" class="tab" hidden aria-label="Provider">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">ROUTING</p><h1>Provider</h1><p class="subheading">Provider terdaftar, capability, kesehatan, dan override per sesi.</p></div>
+          <button type="button" id="btn-refresh-providers" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="provider-list" class="list"></ul>
+        <article class="card settings-card">
+          <h2>Override provider per sesi</h2>
+          <label for="provSessionId">Session ID</label>
+          <input id="provSessionId" autocomplete="off" placeholder="web:default" />
+          <label for="provOverride">Provider (id atau "default")</label>
+          <input id="provOverride" autocomplete="off" placeholder="default" />
+          <button type="button" id="provOverrideBtn" class="primary">Terapkan override</button>
+          <p class="hint">Override hanya berlaku untuk session tersebut selama daemon hidup. Mengubah default: ubah file config lalu restart daemon.</p>
+        </article>
+      </section>
+
+      <section id="tab-plugins" class="tab" hidden aria-label="Plugin">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">EXTENSIONS</p><h1>Plugin &amp; tools</h1><p class="subheading">Consent plugin, katalog tool registry, dan status server MCP.</p></div>
+          <button type="button" id="btn-refresh-plugins" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="plugin-list" class="list"></ul>
+        <div class="section-heading compact">
+          <div><p class="eyebrow">CATALOG</p><h2>Katalog tool</h2></div>
+        </div>
+        <ul id="plugin-tools" class="list"></ul>
+        <div class="section-heading compact">
+          <div><p class="eyebrow">MCP</p><h2>Status server MCP</h2></div>
+        </div>
+        <ul id="plugin-mcp" class="list"></ul>
+      </section>
+
+      <section id="tab-channels" class="tab" hidden aria-label="Channels">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">GATEWAYS</p><h1>Channels</h1><p class="subheading">Status channel gateway yang hidup di daemon dan env yang mengaturnya.</p></div>
+          <button type="button" id="btn-refresh-channels" class="secondary">Muat ulang</button>
+        </div>
+        <ul id="channel-list" class="list"></ul>
+        <article class="card settings-card">
+          <h2>Setup channel</h2>
+          <p class="hint">Channel diaktifkan lewat variabel env saat daemon start (config immutable). Setelah env diset, restart daemon; token/nilai rahasia tidak pernah ditampilkan di sini.</p>
+        </article>
       </section>
 
       <section id="tab-help" class="tab" hidden aria-label="Bantuan">
