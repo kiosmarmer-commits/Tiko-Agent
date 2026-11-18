@@ -69,7 +69,9 @@ void main() {
       body: {'approve': true},
     );
     expect(result['ok'], isTrue);
-    expect(decisions.single, (id: 'apr_1', allow: true, actor: isNull));
+    expect(decisions.single.id, 'apr_1');
+    expect(decisions.single.allow, isTrue);
+    expect(decisions.single.actor, isNull);
   });
 
   test('GUI-P0-06: aktor dari body diteruskan ke callback broker', () async {
@@ -126,7 +128,9 @@ void main() {
       body: {'id': 'apr_legacy', 'allow': false, 'actor': 'ws-client'},
     );
     expect(result['ok'], isTrue);
-    expect(decisions.single, (id: 'apr_legacy', allow: false, actor: 'ws-client'));
+    expect(decisions.single.id, 'apr_legacy');
+    expect(decisions.single.allow, isFalse);
+    expect(decisions.single.actor, 'ws-client');
   });
   test('authenticated shutdown endpoint acknowledges and signals the daemon', () async {
     final result = await request('POST', '/v1/shutdown');
