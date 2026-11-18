@@ -38,6 +38,7 @@ class FakeElement {
     this.className = [...classes].join(' ');
   }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return this.attributes[name] ?? null; }
   addEventListener(name, callback) {
     (this.listeners[name] ||= []).push(callback);
   }
@@ -119,6 +120,7 @@ function createHarness() {
     'pane-sessions', 'pane-session-list', 'btn-refresh-pane-sessions',
     'pane-inspector', 'pane-runs-list', 'btn-refresh-pane-runs',
     'btn-multipane', 'btn-close-pane',
+    'btn-mode-advanced',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
@@ -129,6 +131,9 @@ function createHarness() {
     const element = new FakeElement('tab-button-' + tab);
     element.dataset.tab = tab;
     element.tagName = 'button';
+    if (['skills', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs'].includes(tab)) {
+      element.dataset.advanced = 'true';
+    }
     return element;
   });
   const sections = ['chat', 'memory', 'status', 'approvals', 'sessions', 'skills', 'tasks', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs', 'help'].map((tab) => {
@@ -148,6 +153,9 @@ function createHarness() {
     },
     querySelector(selector) {
       if (selector.startsWith('#')) return elements[selector.slice(1)] || null;
+      if (selector === '.tabs button.active') {
+        return tabs.find((tab) => tab.classList.contains('active')) || null;
+      }
       return null;
     },
     querySelectorAll(selector) {
@@ -955,4 +963,50 @@ test('GUI-P2-03: tombol refresh pane memanggil ulang API sessions + runs', async
 
   assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/sessions')).length > before);
   assert.ok(h.calls.filter((call) => call.url.endsWith('/v1/runs')).length > runsBefore);
+});
+
+test('GUI-P2-01: tombol Mode menyembunyikan tab teknis dan memaksa fallback ke Chat', async () => {
+  const h = createHarness();
+  assert.equal(h.elements['btn-mode-advanced'].attributes['aria-pressed'], 'true');
+
+  h.tabs.find((tab) => tab.dataset.tab === 'runs').dispatch('click');
+  await tick();
+  h.elements['btn-mode-advanced'].dispatch('click');
+  await tick();
+
+  assert.equal(
+    h.elements['btn-mode-advanced'].attributes['aria-pressed'], 'false');
+  assert.equal(
+    h.elements['btn-mode-advanced'].textContent, 'Mode: Simple');
+  const hidden = h.tabs.filter((tab) =>
+    tab.classList.contains('advanced-hidden'));
+  assert.deepEqual(
+    hidden.map((tab) => tab.dataset.tab),
+    ['skills', 'bots', 'providers', 'plugins', 'channels', 'jobs', 'security', 'audit', 'artifacts', 'runs'],
+  );
+  const active = h.tabs.find((tab) => tab.classList.contains('active'));
+  assert.equal(active.dataset.tab, 'chat');
+  assert.equal(
+    h.storage.get('agent_ui_simple'), '1');
+
+  h.elements['btn-mode-advanced'].dispatch('click');
+  assert.equal(
+    h.elements['btn-mode-advanced'].attributes['aria-pressed'], 'true');
+  assert.equal(h.tabs.filter((tab) => tab.classList.contains('advanced-hidden')).length, 0);
+});
+
+test('GUI-P2-01: palette tidak menawarkan tab tersembunyi pada Simple mode', async () => {
+  const h = createHarness();
+  h.elements['btn-mode-advanced'].dispatch('click');
+  h.document.dispatchEvent('keydown', { key: 'k', ctrlKey: true, preventDefault() {} });
+  assert.equal(h.elements['cmd-palette'].hidden, false);
+
+  h.elements['cmd-input'].value = 'run';
+  h.elements['cmd-input'].dispatch('input');
+  assert.equal(h.elements['cmd-list'].children.length, 0);
+
+  h.elements['cmd-input'].value = 'ses';
+  h.elements['cmd-input'].dispatch('input');
+  assert.equal(h.elements['cmd-list'].children.length, 1);
+  assert.equal(h.elements['cmd-list'].children[0].dataset.tab, 'sessions');
 });

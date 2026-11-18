@@ -461,7 +461,7 @@ class _AgentAppState extends State<AgentApp> {
   /// refresh — di-trigger Ctrl+K / Ctrl+P via [PaletteShortcut].
   void _openCommandPalette() {
     final actions = [
-      for (final entry in kAppRoutes)
+      for (final entry in visibleRoutes(advanced: settings.advancedMode))
         PaletteAction(
           entry.label,
           () => _selectRoute(entry.route),
@@ -480,6 +480,7 @@ class _AgentAppState extends State<AgentApp> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
+    final routes = visibleRoutes(advanced: settings.advancedMode);
     return MaterialApp(
       title: 'Tiko',
       debugShowCheckedModeBanner: false,
@@ -494,15 +495,21 @@ class _AgentAppState extends State<AgentApp> {
                   selected: route,
                   onSelect: _selectRoute,
                   pendingApprovals: _pendingApprovals,
+                  entries: routes,
                   child: AnimatedBuilder(
                     animation: chat,
                     builder: (context, _) => _body(wide: true),
                   ),
                 )
               : MobileShell(
-                  selected: route.primaryOnMobile ? route : null,
+                  selected:
+                      routes.any((entry) => entry.route == route) &&
+                          route.primaryOnMobile
+                      ? route
+                      : null,
                   onSelect: _selectMobileRoute,
                   pendingApprovals: _pendingApprovals,
+                  entries: routes,
                   child: AnimatedBuilder(
                     animation: chat,
                     builder: (context, _) => _body(wide: false),
@@ -1856,6 +1863,7 @@ class _MorePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showAdvanced = settings.advancedMode;
     return ListView(
       children: [
         PageHeader(
@@ -1882,318 +1890,330 @@ class _MorePage extends StatelessWidget {
             );
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.bolt_outlined),
-          title: Text('Events (${events.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: EventsPage(
-                    events: events,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.article_outlined),
-          title: Text('Logs (${logFiles.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: LogsPage(
-                    logs: logFiles,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onLoadContent: repo.logContent,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.auto_awesome_outlined),
-          title: Text('Skills (${skills.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: SkillsPage(
-                    skills: skills,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onFeedback: (slug, positive) async {
-                      final ok = await repo.skillFeedback(slug, positive);
-                      if (ok) await onRefresh();
-                      return ok;
-                    },
-                    onEvaluate: repo.evaluateSkill,
-                    onApprove: repo.approveSkill,
-                    onRollback: repo.rollbackSkill,
-                    onLoadHistory: repo.skillHistory,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.smart_toy_outlined),
-          title: Text('Bots (${bots.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: BotsPage(
-                    bots: bots,
-                    bindings: bindings,
-                    availableSessions: const [],
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onCreate: (body) async {
-                      await repo.createBot(body);
-                      await onRefresh();
-                    },
-                    onUpdate: (id, body) async {
-                      await repo.updateBot(id, body);
-                      await onRefresh();
-                    },
-                    onDelete: repo.deleteBot,
-                    onBind: repo.bindBot,
-                    onUnbind: repo.unbindBot,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.route_outlined),
-          title: Text('Providers (${providers?.providers.length ?? 0})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: ProviderManagerPage(
-                    snapshot: providers,
-                    availableSessions: availableSessions,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onSetSessionProvider: (sessionId, providerArg) async {
-                      final ok = await repo.setSessionProvider(
-                        sessionId,
-                        providerArg,
-                      );
-                      if (ok) await onRefresh();
-                      return ok;
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.extension_outlined),
-          title: Text('Plugins (${pluginSnapshot?.plugins.length ?? 0})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: PluginManagerPage(
-                    snapshot: pluginSnapshot,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onConsent: (plugin, action) async {
-                      final message = await repo.setPluginConsent(
-                        plugin,
-                        action,
-                      );
-                      await onRefresh();
-                      return message;
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.hub_outlined),
-          title: Text(
-            'Channels ('
-            '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})',
-          ),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: ChannelsPage(
-                    snapshot: channelSnapshot,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.schedule_outlined),
-          title: Text(
-            'Automation ('
-            '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)',
-          ),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: AutomationPage(
-                    snapshot: jobsSnapshot,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onCreate: (body) async {
-                      await repo.createJob(body);
-                      await onRefresh();
-                    },
-                    onUpdate: (id, body) async {
-                      await repo.updateJob(id, body);
-                      await onRefresh();
-                    },
-                    onDelete: (id) async {
-                      final ok = await repo.deleteJob(id);
-                      await onRefresh();
-                      return ok;
-                    },
-                    onRunNow: (id) async {
-                      final job = await repo.runJobNow(id);
-                      await onRefresh();
-                      return job;
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.security_outlined),
-          title: Text(
-            'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
-          ),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: SecurityPage(
-                    snapshot: securitySnapshot,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.receipt_long_outlined),
-          title: Text(
-            'Audit'
-            '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}',
-          ),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: AuditPage(
-                    result: auditResult,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onQuery: onQueryAudit,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.folder_copy_outlined),
-          title: Text(
-            'Artifacts'
-            '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}',
-          ),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: ArtifactsPage(
-                    listing: artifactsListing,
-                    online: online,
-                    loading: loadingArtifacts,
-                    error: artifactsError,
-                    dir: artifactsDir,
-                    onOpenDir: onOpenArtifactsDir,
-                    onOpenFile: onOpenArtifactFile,
-                    onClosePreview: onCloseArtifactPreview,
-                    onRefresh: () async {
-                      onOpenArtifactsDir(artifactsDir);
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.play_circle_outline),
-          title: Text(
-            'Runs'
-            '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}',
-          ),
-          onTap: () {
-            onLoadRuns();
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: SafeArea(
-                    child: RunsPage(
-                      snapshot: runsSnapshot,
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.bolt_outlined),
+            title: Text('Events (${events.length})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: EventsPage(
+                      events: events,
                       online: online,
-                      loading: runsLoading,
-                      error: runsError,
-                      onRefresh: onLoadRuns,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
                     ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.article_outlined),
+            title: Text('Logs (${logFiles.length})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: LogsPage(
+                      logs: logFiles,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onLoadContent: repo.logContent,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.auto_awesome_outlined),
+            title: Text('Skills (${skills.length})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: SkillsPage(
+                      skills: skills,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onFeedback: (slug, positive) async {
+                        final ok = await repo.skillFeedback(slug, positive);
+                        if (ok) await onRefresh();
+                        return ok;
+                      },
+                      onEvaluate: repo.evaluateSkill,
+                      onApprove: repo.approveSkill,
+                      onRollback: repo.rollbackSkill,
+                      onLoadHistory: repo.skillHistory,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.smart_toy_outlined),
+            title: Text('Bots (${bots.length})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: BotsPage(
+                      bots: bots,
+                      bindings: bindings,
+                      availableSessions: const [],
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onCreate: (body) async {
+                        await repo.createBot(body);
+                        await onRefresh();
+                      },
+                      onUpdate: (id, body) async {
+                        await repo.updateBot(id, body);
+                        await onRefresh();
+                      },
+                      onDelete: repo.deleteBot,
+                      onBind: repo.bindBot,
+                      onUnbind: repo.unbindBot,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.route_outlined),
+            title: Text('Providers (${providers?.providers.length ?? 0})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: ProviderManagerPage(
+                      snapshot: providers,
+                      availableSessions: availableSessions,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onSetSessionProvider: (sessionId, providerArg) async {
+                        final ok = await repo.setSessionProvider(
+                          sessionId,
+                          providerArg,
+                        );
+                        if (ok) await onRefresh();
+                        return ok;
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.extension_outlined),
+            title: Text('Plugins (${pluginSnapshot?.plugins.length ?? 0})'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: PluginManagerPage(
+                      snapshot: pluginSnapshot,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onConsent: (plugin, action) async {
+                        final message = await repo.setPluginConsent(
+                          plugin,
+                          action,
+                        );
+                        await onRefresh();
+                        return message;
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.hub_outlined),
+            title: Text(
+              'Channels ('
+              '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: ChannelsPage(
+                      snapshot: channelSnapshot,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.schedule_outlined),
+            title: Text(
+              'Automation ('
+              '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: AutomationPage(
+                      snapshot: jobsSnapshot,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                      onCreate: (body) async {
+                        await repo.createJob(body);
+                        await onRefresh();
+                      },
+                      onUpdate: (id, body) async {
+                        await repo.updateJob(id, body);
+                        await onRefresh();
+                      },
+                      onDelete: (id) async {
+                        final ok = await repo.deleteJob(id);
+                        await onRefresh();
+                        return ok;
+                      },
+                      onRunNow: (id) async {
+                        final job = await repo.runJobNow(id);
+                        await onRefresh();
+                        return job;
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.security_outlined),
+            title: Text(
+              'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: SecurityPage(
+                      snapshot: securitySnapshot,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onRefresh: onRefresh,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: Text(
+              'Audit'
+              '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: AuditPage(
+                      result: auditResult,
+                      online: online,
+                      loading: false,
+                      error: null,
+                      onQuery: onQueryAudit,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.folder_copy_outlined),
+            title: Text(
+              'Artifacts'
+              '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: ArtifactsPage(
+                      listing: artifactsListing,
+                      online: online,
+                      loading: loadingArtifacts,
+                      error: artifactsError,
+                      dir: artifactsDir,
+                      onOpenDir: onOpenArtifactsDir,
+                      onOpenFile: onOpenArtifactFile,
+                      onClosePreview: onCloseArtifactPreview,
+                      onRefresh: () async {
+                        onOpenArtifactsDir(artifactsDir);
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.play_circle_outline),
+            title: Text(
+              'Runs'
+              '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}',
+            ),
+            onTap: () {
+              onLoadRuns();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    body: SafeArea(
+                      child: RunsPage(
+                        snapshot: runsSnapshot,
+                        online: online,
+                        loading: runsLoading,
+                        error: runsError,
+                        onRefresh: onLoadRuns,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ListTile(
           leading: const Icon(Icons.memory_outlined),
           title: Text('Memory (${memories.length})'),
@@ -2233,30 +2253,32 @@ class _MorePage extends StatelessWidget {
             );
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.hub_outlined),
-          title: const Text('Graf Vault (Simpul)'),
-          onTap: () {
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => SimpulGraphPage()));
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.edit_note_outlined),
-          title: const Text('Editor Catatan (Simpul)'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => SimpulNoteEditorPage(
-                  vault: settings.vaultPath,
-                  powerSaverEnabled: settings.powerSaver,
-                  resourceStats: true,
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.hub_outlined),
+            title: const Text('Graf Vault (Simpul)'),
+            onTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => SimpulGraphPage()));
+            },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: const Icon(Icons.edit_note_outlined),
+            title: const Text('Editor Catatan (Simpul)'),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SimpulNoteEditorPage(
+                    vault: settings.vaultPath,
+                    powerSaverEnabled: settings.powerSaver,
+                    resourceStats: true,
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          ),
         ListTile(
           leading: const Icon(Icons.settings_outlined),
           title: const Text('Settings'),

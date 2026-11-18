@@ -1367,6 +1367,54 @@
   $('#btn-refresh-pane-runs')?.addEventListener('click', loadPaneRuns);
   $('#btn-close-pane')?.addEventListener('click', () => setMultipane(false));
 
+  // GUI-P2-01 parity: Simple/Advanced mode — Simple menyembunyikan tab
+  // modul teknis dari navigasi (progressive disclosure), kemampuan runtime
+  // dan API tidak berubah. Preferensi disimpan di localStorage.
+  const btnModeAdvanced = $('#btn-mode-advanced');
+  const kSimpleModeKey = 'agent_ui_simple';
+
+  function simpleModeOn() {
+    try {
+      return localStorage.getItem(kSimpleModeKey) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function setAdvancedMode(advanced) {
+    if (!btnModeAdvanced) return;
+    try {
+      localStorage.setItem(kSimpleModeKey, advanced ? '0' : '1');
+    } catch {
+      /* penyimpanan opsional — mode tetap berlaku untuk sesi ini */
+    }
+    btnModeAdvanced.textContent = advanced ? 'Mode: Advanced' : 'Mode: Simple';
+    btnModeAdvanced.setAttribute('aria-pressed', String(advanced));
+    document.querySelectorAll('.tabs button').forEach((item) => {
+      if (String(item.dataset.advanced || '') !== 'true') return;
+      item.classList.toggle('advanced-hidden', !advanced);
+    });
+    const active = document.querySelector('.tabs button.active');
+    if (!advanced &&
+        active &&
+        String(active.dataset.advanced || '') === 'true') {
+      switchTab('chat');
+    }
+  }
+
+  btnModeAdvanced?.addEventListener('click', () =>
+    setAdvancedMode(
+      btnModeAdvanced.getAttribute('aria-pressed') === 'false'));
+  // Default Advanced (paritas Flutter); Simple hanya bila tersimpan.
+  const storedSimpleMode = (() => {
+    try {
+      return localStorage.getItem(kSimpleModeKey);
+    } catch {
+      return null;
+    }
+  })();
+  if (btnModeAdvanced) setAdvancedMode(storedSimpleMode !== '1');
+
   async function createJobFromWeb() {
     const cronEl = $('#jobNewCron');
     const promptEl = $('#jobNewPrompt');
@@ -1639,6 +1687,10 @@
   function paletteItems() {
     const items = [];
     for (const item of document.querySelectorAll('.tabs button')) {
+      if (typeof item.classList?.contains === 'function' &&
+          item.classList.contains('advanced-hidden')) {
+        continue;
+      }
       items.push({ tab: String(item.dataset.tab || ''), label: String(item.textContent || item.dataset.tab || '') });
     }
     return items;
