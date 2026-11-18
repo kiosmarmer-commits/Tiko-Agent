@@ -15,6 +15,7 @@ class AppSettings {
     this.autoLockMinutes = 0,
     this.powerSaver = false,
     this.multiPane = false,
+    this.advancedMode = true,
   });
 
   final ThemeMode themeMode;
@@ -32,6 +33,11 @@ class AppSettings {
   /// the same routes and APIs stay available in single-pane mode.
   final bool multiPane;
 
+  /// GUI-P2-01: Simple mode menyembunyikan modul teknis dari navigasi
+  /// (progressive disclosure) tanpa mengubah kemampuan runtime. Default
+  /// true (Advanced) agar perilaku lama tidak berubah diam-diam.
+  final bool advancedMode;
+
   static const _kThemeMode = 'ui.themeMode';
   static const _kAccent = 'ui.accent';
   static const _kOllamaHost = 'ui.ollamaHost';
@@ -39,6 +45,7 @@ class AppSettings {
   static const _kAutoLock = 'ui.autoLockMinutes';
   static const _kPowerSaver = 'ui.powerSaver';
   static const _kMultiPane = 'ui.multiPane';
+  static const _kAdvancedMode = 'ui.advancedMode';
 
   static const accents = [
     Color(0xFF2A9D8F),
@@ -56,6 +63,7 @@ class AppSettings {
     int? autoLockMinutes,
     bool? powerSaver,
     bool? multiPane,
+    bool? advancedMode,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -65,6 +73,7 @@ class AppSettings {
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
       powerSaver: powerSaver ?? this.powerSaver,
       multiPane: multiPane ?? this.multiPane,
+      advancedMode: advancedMode ?? this.advancedMode,
     );
   }
 
@@ -91,6 +100,7 @@ class AppSettings {
       autoLockMinutes: prefs.getInt(_kAutoLock) ?? 0,
       powerSaver: prefs.getBool(_kPowerSaver) ?? false,
       multiPane: prefs.getBool(_kMultiPane) ?? false,
+      advancedMode: prefs.getBool(_kAdvancedMode) ?? true,
     );
   }
 
@@ -103,5 +113,6 @@ class AppSettings {
     await prefs.setInt(_kAutoLock, autoLockMinutes);
     await prefs.setBool(_kPowerSaver, powerSaver);
     await prefs.setBool(_kMultiPane, multiPane);
+    await prefs.setBool(_kAdvancedMode, advancedMode);
   }
 }

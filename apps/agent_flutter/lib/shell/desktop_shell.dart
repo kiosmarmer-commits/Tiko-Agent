@@ -13,11 +13,15 @@ class DesktopShell extends StatelessWidget {
     required this.onSelect,
     required this.child,
     this.pendingApprovals = 0,
+    this.entries = kAppRoutes,
   });
 
   final AppRoute selected;
   final ValueChanged<AppRoute> onSelect;
   final Widget child;
+
+  /// Destinasi aktif — difilter per mode Simple/Advanced (GUI-P2-01).
+  final List<AppRouteInfo> entries;
 
   /// Jumlah approval pending (GUI-P0-06): ditampilkan sebagai badge pada
   /// destinasi Approvals agar state lintas client terlihat di nav.
@@ -25,19 +29,20 @@ class DesktopShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex =
-        kAppRoutes.indexWhere((entry) => entry.route == selected);
+    final selectedIndex = entries.indexWhere(
+      (entry) => entry.route == selected,
+    );
     // Perkiraan tinggi rail dengan label di bawah ikon; dipakai sebagai
     // tinggi intrinsik ketika tinggi jendela tidak memadai agar rail dapat
     // discroll, bukan overflow.
-    final railHeight = 48.0 + kAppRoutes.length * 80;
+    final railHeight = 48.0 + entries.length * 80;
     final rail = NavigationRail(
       backgroundColor: context.simpulPanel,
-      selectedIndex: selectedIndex.clamp(0, kAppRoutes.length - 1),
-      onDestinationSelected: (i) => onSelect(kAppRoutes[i].route),
+      selectedIndex: selectedIndex.clamp(0, entries.length - 1),
+      onDestinationSelected: (i) => onSelect(entries[i].route),
       labelType: NavigationRailLabelType.all,
       destinations: [
-        for (final entry in kAppRoutes)
+        for (final entry in entries)
           NavigationRailDestination(
             icon: _navIcon(entry, pendingApprovals),
             label: Text(entry.label),
@@ -46,12 +51,14 @@ class DesktopShell extends StatelessWidget {
     );
     return Row(
       children: [
-        LayoutBuilder(builder: (context, constraints) {
-          if (constraints.maxHeight >= railHeight) return rail;
-          return SingleChildScrollView(
-            child: SizedBox(height: railHeight, child: rail),
-          );
-        }),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxHeight >= railHeight) return rail;
+            return SingleChildScrollView(
+              child: SizedBox(height: railHeight, child: rail),
+            );
+          },
+        ),
         VerticalDivider(width: 1, color: context.simpulBorder),
         Expanded(child: child),
       ],

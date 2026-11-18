@@ -13,6 +13,7 @@ class MobileShell extends StatelessWidget {
     required this.onSelect,
     required this.child,
     this.pendingApprovals = 0,
+    this.entries = kAppRoutes,
   });
 
   /// Currently selected primary route, or `null` when the More page is open.
@@ -23,12 +24,16 @@ class MobileShell extends StatelessWidget {
   /// Jumlah approval pending (GUI-P0-06): badge pada destinasi Approvals.
   final int pendingApprovals;
 
+  /// Destinasi aktif — difilter per mode Simple/Advanced (GUI-P2-01).
+  final List<AppRouteInfo> entries;
+
   @override
   Widget build(BuildContext context) {
-    final primary = kMobilePrimaryRoutes;
+    final primary = mobilePrimaryRoutes(entries);
     final moreIndex = primary.length;
-    final currentIndex =
-        selected == null ? moreIndex : primary.indexWhere((e) => e.route == selected!);
+    final currentIndex = selected == null
+        ? moreIndex
+        : primary.indexWhere((e) => e.route == selected!);
     return Column(
       children: [
         Expanded(child: child),

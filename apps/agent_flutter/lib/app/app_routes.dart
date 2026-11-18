@@ -3,7 +3,27 @@ import 'package:flutter/material.dart';
 /// Single route map (GUI-P0-01): desktop rail, mobile bottom bar and the
 /// mobile More page all derive their destinations from [kAppRoutes] so labels
 /// and structure cannot drift between Android, desktop and web.
-enum AppRoute { chat, dashboard, approvals, sessions, tasks, skills, bots, providers, plugins, channels, automations, security, audit, artifacts, runs, memory, events, logs, settings }
+enum AppRoute {
+  chat,
+  dashboard,
+  approvals,
+  sessions,
+  tasks,
+  skills,
+  bots,
+  providers,
+  plugins,
+  channels,
+  automations,
+  security,
+  audit,
+  artifacts,
+  runs,
+  memory,
+  events,
+  logs,
+  settings,
+}
 
 class AppRouteInfo {
   const AppRouteInfo(
@@ -121,6 +141,28 @@ const List<AppRouteInfo> kAppRoutes = [
 
 const String kMobileMoreLabel = 'More';
 
+/// GUI-P2-01: Simple mode keeps the everyday control center (chat, satu
+/// halaman status, approval, sesi, tasks, memory, settings); modul teknis
+/// (skills, bots, providers, tools/MCP/plugins, channels, automation,
+/// security, audit, artifacts, runs, events, logs, graf/editor) hanya
+/// muncul pada Advanced mode. Kemampuan runtime tidak berubah — ini murni
+/// progressive disclosure di layer navigasi.
+const Set<AppRoute> kSimpleRoutes = {
+  AppRoute.chat,
+  AppRoute.dashboard,
+  AppRoute.approvals,
+  AppRoute.sessions,
+  AppRoute.tasks,
+  AppRoute.memory,
+  AppRoute.settings,
+};
+
+/// Route map yang terlihat sesuai mode: [advanced] = false hanya
+/// menyisakan [kSimpleRoutes] dalam urutan [kAppRoutes].
+List<AppRouteInfo> visibleRoutes({required bool advanced}) => advanced
+    ? kAppRoutes
+    : kAppRoutes.where((entry) => kSimpleRoutes.contains(entry.route)).toList();
+
 extension AppRoutePresentation on AppRoute {
   AppRouteInfo get info =>
       kAppRoutes.firstWhere((entry) => entry.route == this);
@@ -134,3 +176,8 @@ extension AppRoutePresentation on AppRoute {
 /// entry that groups the remaining routes.
 List<AppRouteInfo> get kMobilePrimaryRoutes =>
     kAppRoutes.where((entry) => entry.primaryOnMobile).toList();
+
+/// Variant yang menghormati mode Simple/Advanced (GUI-P2-01) — shell mobile
+/// memakai ini agar bottom bar selalu konsisten dengan daftar route aktif.
+List<AppRouteInfo> mobilePrimaryRoutes(List<AppRouteInfo> entries) =>
+    entries.where((entry) => entry.primaryOnMobile).toList();

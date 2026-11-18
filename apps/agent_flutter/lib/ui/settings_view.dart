@@ -274,6 +274,17 @@ class _SettingsViewState extends State<SettingsView> {
                 onChanged: (value) =>
                     _update(settings.copyWith(multiPane: value)),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.tune),
+                title: const Text('Mode Advanced (GUI-P2-01)'),
+                subtitle: Text(
+                  'Simple: Chat, Dashboard, Approvals, Sessions, Tasks, Memory, Settings saja. Advanced: semua modul.',
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
+                ),
+                value: settings.advancedMode,
+                onChanged: (value) =>
+                    _update(settings.copyWith(advancedMode: value)),
+              ),
             ],
           ),
         ),

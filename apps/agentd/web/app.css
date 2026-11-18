@@ -144,6 +144,11 @@ code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 6px; colo
 #cmd-list { margin: 8px 0; padding: 0; }
 #cmd-list li[data-selected="true"] button { font-weight: 700; }
 
+/* GUI-P2-01: Simple mode — sembunyikan tab modul teknis dari navigasi. */
+.tabs button.advanced-hidden { display: none; }
+#btn-mode-advanced { padding: 6px 12px; font-size: 12px; }
+#btn-mode-advanced[aria-pressed="false"] { border-color: var(--accent-strong); color: var(--accent); }
+
 /* GUI-P2-03: multi-pane workspace pada tab chat — sessions + inspector. */
 .chat-panes { display: flex; gap: 14px; align-items: stretch; }
 #pane-chat { flex: 1 1 auto; min-width: 0; }
