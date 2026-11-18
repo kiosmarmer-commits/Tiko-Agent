@@ -286,6 +286,7 @@ class _AgentAppState extends State<AgentApp> {
         providers: providerSnapshot,
         pluginSnapshot: pluginSnapshot,
         channelSnapshot: channelSnapshot,
+        daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
         onRefresh: refreshAdmin,
@@ -499,6 +500,7 @@ class _AgentAppState extends State<AgentApp> {
           onConnect: updateConnection,
           onSettingsChanged: _applySettings,
           daemonCard: _DaemonStatusCard(),
+          daemonStatus: status,
         );
     }
   }
@@ -1229,6 +1231,7 @@ class _MorePage extends StatelessWidget {
     required this.providers,
     required this.pluginSnapshot,
     required this.channelSnapshot,
+    required this.daemonStatus,
     required this.availableSessions,
     required this.online,
     required this.onRefresh,
@@ -1249,6 +1252,7 @@ class _MorePage extends StatelessWidget {
   final ProvidersSnapshot? providers;
   final PluginsToolsSnapshot? pluginSnapshot;
   final ChannelsSnapshot? channelSnapshot;
+  final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
   final Future<void> Function() onRefresh;
@@ -1500,6 +1504,7 @@ class _MorePage extends StatelessWidget {
                   onConnect: onConnect,
                   onSettingsChanged: onSettingsChanged,
                   daemonCard: _DaemonStatusCard(),
+                  daemonStatus: daemonStatus,
                 ),
               ),
             ));

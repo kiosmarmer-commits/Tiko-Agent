@@ -18,6 +18,7 @@ class SettingsView extends StatefulWidget {
     required this.onConnect,
     required this.onSettingsChanged,
     this.daemonCard,
+    this.daemonStatus,
   });
 
   final AppSettings settings;
@@ -28,6 +29,10 @@ class SettingsView extends StatefulWidget {
   final void Function(AppSettings) onSettingsChanged;
   final Widget? daemonCard;
 
+  /// Status daemon dari `GET /v1/status` (GUI-P1-08): ditampilkan
+  /// read-only — config daemon immutable saat hidup (ubah config + restart).
+  final Map<String, dynamic>? daemonStatus;
+
   @override
   State<SettingsView> createState() => _SettingsViewState();
 }
@@ -36,6 +41,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final _formKey = GlobalKey<FormState>();
   late final baseC = TextEditingController(text: widget.baseUrl);
   late final tokC = TextEditingController(text: widget.token);
+  bool _tokenVisible = false;
 
   @override
   void dispose() {
@@ -55,6 +61,8 @@ class _SettingsViewState extends State<SettingsView> {
     return ListView(
       padding: const EdgeInsets.all(SimpulTheme.xl),
       children: [
+        _scopeCaption(context,
+            'Perangkat \u2014 tersimpan lokal di perangkat ini (shared_preferences)'),
         _sectionTitle(context, 'Tampilan'),
         _panel(
           brightness,
@@ -102,6 +110,8 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ),
         const SizedBox(height: SimpulTheme.xxl),
+        _scopeCaption(context,
+            'Kredensial \u2014 hanya di memori sesi, tidak pernah dipersist'),
         _sectionTitle(context, 'Koneksi'),
         _panel(
           brightness,
@@ -135,13 +145,22 @@ class _SettingsViewState extends State<SettingsView> {
                 const SizedBox(height: SimpulTheme.l),
                 TextFormField(
                   controller: tokC,
-                  obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  obscureText: !_tokenVisible,
+                  decoration: InputDecoration(
                     labelText: 'Bearer token',
-                    border: OutlineInputBorder(),
-                    helperText: 'Hanya dipakai di sesi ini; tidak disimpan ke penyimpanan perangkat.',
+                    border: const OutlineInputBorder(),
+                    helperText: 'Hanya di memori sesi; tidak disimpan ke '
+                        'penyimpanan perangkat.',
+                    suffixIcon: IconButton(
+                      tooltip: _tokenVisible ? 'Sembunyikan' : 'Tampilkan',
+                      onPressed: () =>
+                          setState(() => _tokenVisible = !_tokenVisible),
+                      icon: Icon(_tokenVisible
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined),
+                    ),
                   ),
                   validator: (value) => (value ?? '').trim().isEmpty
                       ? 'Bearer token wajib diisi.'
@@ -166,6 +185,7 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ),
         const SizedBox(height: SimpulTheme.xxl),
+        _scopeCaption(context, 'Perangkat \u2014 tersimpan lokal'),
         _sectionTitle(context, 'Perilaku'),
         _panel(
           brightness,
@@ -244,13 +264,52 @@ class _SettingsViewState extends State<SettingsView> {
         ),
         if (widget.daemonCard != null) ...[
           const SizedBox(height: SimpulTheme.xxl),
+          _scopeCaption(context,
+              'Daemon \u2014 status runtime, read-only (config immutable: ubah config + restart)'),
           _sectionTitle(context, 'Daemon'),
           widget.daemonCard!,
         ],
+        if (widget.daemonStatus != null) ...[
+          const SizedBox(height: SimpulTheme.xxl),
+          _scopeCaption(context, 'Daemon \u2014 status runtime, read-only'),
+          _sectionTitle(context, 'Daemon \u2014 status runtime'),
+          _panel(
+            brightness,
+            child: Column(
+              children: [
+                for (final row in _daemonStatusRows(widget.daemonStatus!))
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.info_outline, size: 18),
+                    title: Text(row.key),
+                    subtitle: Text(row.value,
+                        style: TextStyle(
+                            color: SimpulTheme.mutedText(brightness))),
+                  ),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.lock_outline, size: 18),
+                  title: const Text('Konfigurasi daemon'),
+                  subtitle: Text(
+                    'Config immutable saat daemon hidup \u2014 ubah file config '
+                    'lalu restart; override provider per sesi ada di '
+                    'halaman Providers.',
+                    style:
+                        TextStyle(color: SimpulTheme.mutedText(brightness)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: SimpulTheme.xl),
         Text(
-          'Pengaturan tersimpan lokal per perangkat (shared_preferences) dan '
-          'dipakai oleh desktop, web, dan Android.',
+          'GUI-P1-08: tiga scope terpisah \u2014 preferensi perangkat '
+          '(tersimpan lokal), kredensial (memori sesi saja), dan status '
+          'daemon (read-only dari API). Bearer token tidak pernah ditulis ke '
+          'shared_preferences atau localStorage.',
           style: TextStyle(
             color: SimpulTheme.mutedText(brightness),
             height: 1.5,
@@ -332,4 +391,40 @@ class _SettingsViewState extends State<SettingsView> {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       );
+
+  /// Caption scope (GUI-P1-08): memisahkan preferensi perangkat,
+  /// kredensial, dan status daemon.
+  Widget _scopeCaption(BuildContext context, String text) => Padding(
+        padding: const EdgeInsets.only(bottom: SimpulTheme.s),
+        child: Row(
+          children: [
+            const Icon(Icons.rule_outlined, size: 14),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: SimpulTheme.mutedText(Theme.of(context).brightness),
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// Rows read-only untuk section "Daemon — status runtime" (GUI-P1-08),
+/// diambil dari payload `GET /v1/status` yang sudah tersedia.
+List<MapEntry<String, String>> _daemonStatusRows(
+    Map<String, dynamic> status) {
+  String value(Object? key) => '${status[key] ?? '-'}';
+  return [
+    MapEntry('Versi', value('version')),
+    MapEntry('Provider default', value('provider')),
+    MapEntry('Backend memori', value('memory')),
+    MapEntry('Safe mode', '${status['safe_mode'] == true}'),
+    MapEntry('Sandbox', value('sandbox')),
+    MapEntry('Profil resource', value('resource_profile')),
+  ];
 }

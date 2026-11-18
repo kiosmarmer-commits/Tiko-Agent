@@ -82,4 +82,89 @@ void main() {
     await tester.pump();
     expect(latest.themeMode, ThemeMode.light);
   });
+
+  testWidgets('GUI-P1-08: scope terpisah — caption perangkat/kredensial/daemon',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsView(
+            settings: AppSettings(),
+            baseUrl: 'http://127.0.0.1:8787',
+            token: 'tok',
+            online: false,
+            onConnect: ({required base, required tok}) {},
+            onSettingsChanged: (_) {},
+            daemonStatus: {
+              'ok': true,
+              'version': '1.2.3',
+              'provider': 'mock-1',
+              'memory': 'sqlite',
+              'safe_mode': true,
+              'sandbox': 'process',
+              'resource_profile': 'laptop',
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Perangkat'), findsWidgets);
+    expect(find.textContaining('Kredensial'), findsOneWidget);
+
+    await tester.dragUntilVisible(
+      find.text('Versi'),
+      find.byType(ListView),
+      const Offset(0, -250),
+    );
+    await tester.pump();
+
+    await tester.dragUntilVisible(
+      find.text('Konfigurasi daemon'),
+      find.byType(ListView),
+      const Offset(0, -300),
+    );
+    await tester.pump();
+
+    expect(find.text('Konfigurasi daemon'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pump();
+
+    expect(find.textContaining('read-only'), findsWidgets);
+    expect(find.text('Daemon \u2014 status runtime'), findsOneWidget);
+    expect(find.text('1.2.3'), findsOneWidget);
+    expect(find.text('mock-1'), findsOneWidget);
+    expect(find.text('true'), findsOneWidget);
+    expect(find.textContaining('Config immutable'), findsOneWidget);
+  });
+
+  testWidgets('GUI-P1-08: toggle visibilitas bearer token', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsView(
+            settings: AppSettings(),
+            baseUrl: 'http://127.0.0.1:8787',
+            token: 'secret-token-123',
+            online: false,
+            onConnect: ({required base, required tok}) {},
+            onSettingsChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.visibility_outlined));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
+    expect(find.text('secret-token-123'), findsOneWidget);
+  });
 }
