@@ -307,12 +307,14 @@ class TeamOrchestrator {
   }) async {
     final blackboard = Blackboard();
     final results = <TaskResult>[];
-    for (final wave in graph.waves()) {
+    final waves = graph.waves();
+    int waveIndex = 0;
+    for (final wave in waves) {
       if (cancelToken?.isCancelled == true) {
         // Cancelled before this wave: every remaining node is skipped and
         // recorded as a cancelled result so dependents never run on stale
         // or missing upstream data.
-        for (final id in graph.waves().skip(results.length).expand((w) => w)) {
+        for (final id in waves.skip(waveIndex).expand((w) => w)) {
           results.add(TaskResult(
             taskId: id,
             agentId: _resolveAgent(byIdOf(graph, id)).id,
@@ -326,6 +328,7 @@ class TeamOrchestrator {
       final waveResults = await _runWave(wave, graph, blackboard,
           cancelToken: cancelToken);
       results.addAll(waveResults);
+      waveIndex++;
     }
     final synthesis = await _synthesize(goal, results);
     return TeamRunResult(

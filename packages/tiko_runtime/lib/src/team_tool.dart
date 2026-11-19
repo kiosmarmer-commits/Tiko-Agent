@@ -2,8 +2,10 @@ import 'package:agent_core/agent_core.dart';
 
 /// Runs one prompt as a specific team member and returns the final text.
 /// The host injects this so the tool stays decoupled from TikoRuntime.
+/// [systemPrompt] is the agent's system instruction, [userPrompt] is the task.
 typedef TeamTurnRunner = Future<String> Function(
-  String prompt,
+  String systemPrompt,
+  String userPrompt,
   AgentSpec agent,
 );
 
@@ -144,10 +146,7 @@ class AgentTeamTool implements Tool {
 
     final orchestrator = TeamOrchestrator(
       executor: (agent, node, blackboard) async {
-        final prompt = agent.systemPrompt.isEmpty
-            ? node.prompt
-            : '${agent.systemPrompt}\n\n${node.prompt}';
-        return runner(prompt, agent);
+        return runner(agent.systemPrompt, node.prompt, agent);
       },
       registry: defaultRegistry,
     );

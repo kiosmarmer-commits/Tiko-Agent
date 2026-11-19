@@ -1153,10 +1153,10 @@ class TikoRuntime {
     // nested runtime turn per team member.
     if (rt.registry.get('agent_team') == null) {
       rt.registry.register(AgentTeamTool(
-        runner: (prompt, agent) async {
+        runner: (systemPrompt, userPrompt, agent) async {
           final eco = rt.resourceProfile == 'eco';
           final outcome = await rt.chatWithStatus(
-            prompt,
+            userPrompt,
             sessionId:
                 'team:${agent.id}:${DateTime.now().microsecondsSinceEpoch}',
             channel: 'team',
@@ -1175,6 +1175,10 @@ class TikoRuntime {
               maxToolCalls: eco ? 12 : cfg.maxToolCalls,
               preferredTier: modelTierToRouterTier(agent.modelTier),
             ),
+            // P1-2: Pass systemPrompt as personaPrompt so it's treated as
+            // system message, not user message. This ensures the agent's
+            // instructions are not overridden by user task content.
+            personaPrompt: systemPrompt.isEmpty ? null : systemPrompt,
           );
           return outcome.text;
         },
@@ -1692,6 +1696,7 @@ class TikoRuntime {
     void Function(String delta)? onTextDelta,
     bool internalCommand = false,
     String? interruptNote,
+    String? personaPrompt,
   }) async {
     final inputPreview = _sanitizer.output(
       text.length > 240 ? '${text.substring(0, 240)}…' : text,
@@ -1714,6 +1719,7 @@ class TikoRuntime {
         onTextDelta: onTextDelta,
         internalCommand: internalCommand,
         interruptNote: interruptNote,
+        personaPrompt: personaPrompt,
         turnEntry: entry,
       );
       turnInspector.finish(
@@ -1745,6 +1751,7 @@ class TikoRuntime {
     void Function(String delta)? onTextDelta,
     bool internalCommand = false,
     String? interruptNote,
+    String? personaPrompt,
     InspectedRun? turnEntry,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
@@ -1888,7 +1895,9 @@ class TikoRuntime {
           skillRegistry: skills,
           expander: ContextExpander(workspaceRoot: workspace),
           toolFilter: toolFilter,
-          personaPrompt: personaPrompt,
+          // P1-2: Use the explicit personaPrompt parameter if provided,
+          // otherwise fall back to the bot's persona.
+          personaPrompt: personaPrompt ?? botStore.botFor(sessionId)?.persona,
           reflectionEngine: reflectionEngine,
           ragPipeline: ragPipeline,
           layeredMemory: layeredMemory,
