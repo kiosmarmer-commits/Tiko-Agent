@@ -314,8 +314,9 @@ class WebSearchTool implements Tool {
         // (e.g., network errors, 5xx errors). Configuration errors (403, 401) should not fallback.
         if (!e.fallbackEligible) {
           // Configuration error - don't try other providers
+          // Include all collected errors in the final error message
           throw _SearchFailure(
-            '[$providerId] ${e.message}',
+            errors.join('\n'),
             fallbackEligible: false,
           );
         }
