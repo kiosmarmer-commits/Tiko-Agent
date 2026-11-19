@@ -12,7 +12,10 @@ void main() {
   });
 
   test('web_search fails gracefully without SearXNG', () async {
-    final tool = WebSearchTool(searxngBaseUrl: 'http://127.0.0.1:9');
+    final tool = WebSearchTool(
+      searxngBaseUrl: 'http://127.0.0.1:9',
+      ddgsEnabled: false, // Disable DDGS to test SearXNG-only behavior
+    );
     final session = Session(id: 's', channel: 'cli', userKey: 'u');
     final r = await tool.run({
       'query': 'test',

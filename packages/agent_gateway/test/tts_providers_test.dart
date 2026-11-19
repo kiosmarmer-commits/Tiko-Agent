@@ -100,8 +100,8 @@ void main() {
     );
   });
 
-  test('TtsProviderCatalog matches the 10 Hermes-parity providers', () {
-    expect(TtsProviderCatalog.ids.length, 10);
+  test('TtsProviderCatalog matches the 11 Hermes-parity providers', () {
+    expect(TtsProviderCatalog.ids.length, 11);
     expect(TtsProviderCatalog.ids, containsAll([
       'edge-tts',
       'elevenlabs',
@@ -110,6 +110,7 @@ void main() {
       'mistral-voxtral',
       'google-gemini',
       'xai',
+      'deepinfra',
       'neutts',
       'kittentts',
       'piper',
