@@ -52,6 +52,7 @@
             <p class="subheading">Tanyakan sesuatu atau minta Tiko menjalankan tugas.</p>
           </div>
           <button type="button" id="btn-multipane" aria-pressed="false" title="Multi-pane (GUI-P2-03)">Multi-pane</button>
+          <button type="button" id="btn-voice-reply" aria-pressed="false" title="Bacakan balasan agent dengan TTS browser (Voice UI)">Suara: off</button>
         </div>
         <div id="chat-panes" class="chat-panes">
         <div id="pane-chat">
@@ -68,6 +69,7 @@
         </div>
         <form id="chatForm" class="composer">
           <label class="sr-only" for="input">Pesan untuk Tiko</label>
+          <button type="button" id="btn-voice-mic" class="secondary" aria-pressed="false" title="Dikte suara (Voice UI)">Mikrofon</button>
           <input id="input" type="text" placeholder="Tulis pesan…" autocomplete="off" />
           <button type="submit" id="sendBtn" class="primary" title="Kirim pesan">Kirim</button>
         </form>

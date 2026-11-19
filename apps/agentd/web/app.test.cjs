@@ -122,6 +122,7 @@ function createHarness() {
     'pane-inspector', 'pane-runs-list', 'btn-refresh-pane-runs',
     'btn-multipane', 'btn-close-pane',
     'btn-mode-advanced',
+    'btn-voice-mic', 'btn-voice-reply',
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)]));
   elements.confirmBox.classList.add('hidden');
@@ -326,7 +327,7 @@ function createHarness() {
     },
   };
   vm.runInNewContext(source, context, { filename: 'app.js' });
-  return { elements, tabs, sections, calls, storage, session, timers, document };
+  return { elements, tabs, sections, calls, storage, session, timers, document, window: context.window };
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -1041,4 +1042,95 @@ test('GUI-P2-01: palette tidak menawarkan tab tersembunyi pada Simple mode', asy
   h.elements['cmd-input'].dispatch('input');
   assert.equal(h.elements['cmd-list'].children.length, 1);
   assert.equal(h.elements['cmd-list'].children[0].dataset.tab, 'sessions');
+});
+
+class FakeSpeechRecognition {
+  static instances = [];
+  constructor() {
+    this.lang = '';
+    this.interimResults = false;
+    this.started = false;
+    this.stopped = false;
+    this.onresult = null;
+    this.onend = null;
+    this.onerror = null;
+    FakeSpeechRecognition.instances.push(this);
+  }
+  start() {
+    if (this.started) throw new Error('already started');
+    this.started = true;
+  }
+  stop() {
+    this.stopped = true;
+    this.started = false;
+    this.onend?.();
+  }
+  emitResult(transcript) {
+    this.onresult?.({ results: [[{ transcript }]] });
+  }
+}
+
+class FakeSpeechSynthesis {
+  constructor() {
+    this.spoken = [];
+    this.cancelled = 0;
+  }
+  cancel() {
+    this.cancelled += 1;
+  }
+  speak(utterance) {
+    this.spoken.push(utterance);
+  }
+}
+
+test('Voice UI: tombol mic memulai Web Speech API dan mengisi input dari hasil', () => {
+  const h = createHarness();
+  h.window.SpeechRecognition = FakeSpeechRecognition;
+  FakeSpeechRecognition.instances = [];
+
+  h.elements['btn-voice-mic'].dispatch('click');
+  assert.equal(FakeSpeechRecognition.instances.length, 1);
+  const rec = FakeSpeechRecognition.instances[0];
+  assert.equal(rec.lang, 'id-ID');
+  assert.equal(rec.interimResults, true);
+  assert.equal(rec.started, true);
+  assert.equal(h.elements['btn-voice-mic'].attributes['aria-pressed'], 'true');
+
+  rec.emitResult('halo dari mikrofon');
+  assert.equal(h.elements['input'].value, 'halo dari mikrofon');
+
+  rec.onend();
+  assert.equal(h.elements['btn-voice-mic'].attributes['aria-pressed'], 'false');
+  assert.equal(h.elements['btn-voice-mic'].classList.contains('listening'), false);
+});
+
+test('Voice UI: toggle Suara menyimpan preferensi dan membacakan balasan akhir', () => {
+  const h = createHarness();
+  const synth = new FakeSpeechSynthesis();
+  h.window.speechSynthesis = synth;
+  h.window.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+  FakeSpeechRecognition.instances = [];
+
+  assert.equal(h.elements['btn-voice-reply'].textContent, 'Suara: off');
+  h.elements['btn-voice-reply'].dispatch('click');
+  assert.equal(h.storage.get('agent_ui_voice_reply'), '1');
+  assert.equal(h.elements['btn-voice-reply'].textContent, 'Suara: aktif');
+
+  const msg = h.document.createElement('div');
+  msg.className = 'msg assistant';
+  msg.textContent = 'Halo, saya Tiko.';
+  h.elements['messages'].appendChild(msg);
+
+  h.document.dispatchEvent('tiko:turn-finished');
+  assert.equal(synth.spoken.length, 1);
+  assert.equal(synth.spoken[0].text, 'Halo, saya Tiko.');
+  assert.equal(synth.spoken[0].lang, 'id-ID');
+
+  h.document.dispatchEvent('tiko:turn-finished');
+  assert.equal(synth.spoken.length, 2);
+  assert.equal(synth.cancelled >= 2, true);
 });

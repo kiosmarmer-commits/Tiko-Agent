@@ -32,6 +32,7 @@ import 'ui/settings_view.dart';
 import 'ui/theme.dart';
 import 'ui/tasks_view.dart';
 import 'ui/events_view.dart';
+import 'ui/voice_service.dart';
 import 'ui/graph_view.dart';
 import 'ui/note_editor.dart';
 import 'ui/status_view.dart';
@@ -137,6 +138,7 @@ class _AgentAppState extends State<AgentApp> {
   bool auditLoading = false;
   String? auditError;
   List<MemoryFact> memories = [];
+  final VoiceService voice = VoiceService();
   bool loadingAdmin = false;
   bool adminRefreshInFlight = false;
   int adminRefreshGeneration = 0;
@@ -453,6 +455,8 @@ class _AgentAppState extends State<AgentApp> {
     statusTimer?.cancel();
     eventFeed?.dispose();
     chat.dispose();
+    unawaited(voice.stopSpeaking());
+    voice.dispose();
     client.close();
     super.dispose();
   }
@@ -603,6 +607,8 @@ class _AgentAppState extends State<AgentApp> {
         final chatPage = _ChatPage(
           chat: chat,
           sessionKey: sessionKey,
+          voice: voice,
+          voiceReply: settings.voiceReply,
           multiPane: settings.multiPane,
           inspectorVisible: inspectorVisible,
           onToggleInspector: _toggleInspector,
@@ -939,12 +945,16 @@ class _ChatPage extends StatefulWidget {
   const _ChatPage({
     required this.chat,
     required this.sessionKey,
+    required this.voice,
+    this.voiceReply = false,
     this.multiPane = false,
     this.inspectorVisible = false,
     this.onToggleInspector,
   });
   final ChatController chat;
   final String sessionKey;
+  final VoiceService voice;
+  final bool voiceReply;
   final bool multiPane;
   final bool inspectorVisible;
   final VoidCallback? onToggleInspector;
@@ -978,6 +988,34 @@ class _ChatPageState extends State<_ChatPage> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  /// Voice UI: setelah turn selesai, bacakan balasan assistant terakhir
+  /// bila preferensi "balasan suara" aktif.
+  Future<void> _onSend(String text) async {
+    await widget.chat.send(text, sessionKey: widget.sessionKey);
+    if (!mounted || !widget.voiceReply) return;
+    final reply = VoiceService.speakableReply(widget.chat.messages);
+    if (reply == null) return;
+    await widget.voice.speak(reply);
+  }
+
+  /// Voice UI: tombol "dengarkan" per pesan assistant; bila sedang berbicara,
+  /// tap menghentikan TTS.
+  void _speakOrStop(String text) {
+    final voice = widget.voice;
+    if (voice.speaking) {
+      unawaited(voice.stopSpeaking());
+      return;
+    }
+    unawaited(
+      voice.speak(text).catchError((Object error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('TTS tidak tersedia: $error')));
+      }),
+    );
   }
 
   @override
@@ -1028,38 +1066,72 @@ class _ChatPageState extends State<_ChatPage> {
                       itemBuilder: (context, i) {
                         final message = chat.messages[i];
                         final user = message['role'] == 'user';
+                        final speakable = user
+                            ? null
+                            : VoiceService.speakableReply([message]);
                         return Align(
                           alignment: user
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            constraints: const BoxConstraints(maxWidth: 640),
-                            decoration: BoxDecoration(
-                              color: user
-                                  ? context.simpulUserBubble
-                                  : context.simpulBotBubble,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: context.simpulBorder),
-                            ),
-                            child: message['role'] == 'assistant'
-                                ? GenUiMessageView(
-                                    text: (message['text'] ?? '').toString(),
-                                    onAction: (actionId, values) {
-                                      unawaited(
-                                        chat.sendUiAction(
-                                          actionId,
-                                          values,
-                                          sessionKey: widget.sessionKey,
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : SelectableText(
-                                    (message['text'] ?? '').toString(),
-                                    style: const TextStyle(height: 1.4),
+                          child: Column(
+                            crossAxisAlignment: user
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 640,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: user
+                                      ? context.simpulUserBubble
+                                      : context.simpulBotBubble,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: context.simpulBorder,
                                   ),
+                                ),
+                                child: message['role'] == 'assistant'
+                                    ? GenUiMessageView(
+                                        text: (message['text'] ?? '')
+                                            .toString(),
+                                        onAction: (actionId, values) {
+                                          unawaited(
+                                            chat.sendUiAction(
+                                              actionId,
+                                              values,
+                                              sessionKey: widget.sessionKey,
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : SelectableText(
+                                        (message['text'] ?? '').toString(),
+                                        style: const TextStyle(height: 1.4),
+                                      ),
+                              ),
+                              if (speakable != null && speakable.isNotEmpty)
+                                TextButton.icon(
+                                  key: Key('btn-speak-msg-$i'),
+                                  onPressed: () => _speakOrStop(speakable),
+                                  icon: Icon(
+                                    widget.voice.speaking
+                                        ? Icons.stop
+                                        : Icons.volume_up_outlined,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    'Dengarkan',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.simpulMuted,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },
@@ -1094,9 +1166,7 @@ class _ChatPageState extends State<_ChatPage> {
                   ],
                 ),
               ),
-            _Composer(
-              onSend: (text) => chat.send(text, sessionKey: widget.sessionKey),
-            ),
+            _Composer(onSend: _onSend, voice: widget.voice),
           ],
         );
       },
@@ -1105,8 +1175,9 @@ class _ChatPageState extends State<_ChatPage> {
 }
 
 class _Composer extends StatefulWidget {
-  const _Composer({required this.onSend});
+  const _Composer({required this.onSend, this.voice});
   final Future<void> Function(String) onSend;
+  final VoiceService? voice;
   @override
   State<_Composer> createState() => _ComposerState();
 }
@@ -1114,6 +1185,44 @@ class _Composer extends StatefulWidget {
 class _ComposerState extends State<_Composer> {
   final c = TextEditingController();
   bool busy = false;
+  VoiceService? _ownedVoice;
+
+  VoiceService get voice => widget.voice ?? _ownedVoice!;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.voice == null) _ownedVoice = VoiceService();
+  }
+
+  /// Voice UI: toggle dikte; hasil final STT mengganti isi text field agar
+  /// pengguna masih bisa menyunting sebelum mengirim.
+  Future<void> _toggleMic() async {
+    try {
+      await voice.toggleListening(
+        onFinal: (text) {
+          if (!mounted || text.trim().isEmpty) return;
+          c.text = text.trim();
+        },
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Suara tidak tersedia: $error')));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ownedVoice
+      ?..stopListening()
+      ..stopSpeaking()
+      ..dispose();
+    c.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit(String value) async {
     final text = value.trim();
@@ -1135,12 +1244,6 @@ class _ComposerState extends State<_Composer> {
   }
 
   @override
-  void dispose() {
-    c.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -1148,34 +1251,55 @@ class _ComposerState extends State<_Composer> {
         color: context.simpulPanel,
         border: Border(top: BorderSide(color: context.simpulBorder)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: c,
-              minLines: 1,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Pesan ke Tiko…',
-                border: OutlineInputBorder(),
-                isDense: true,
+      child: AnimatedBuilder(
+        animation: voice,
+        builder: (context, _) {
+          return Row(
+            children: [
+              IconButton(
+                key: const Key('btn-voice-mic'),
+                tooltip: voice.listening
+                    ? 'Hentikan dikte'
+                    : 'Dikte suara (GUI Voice UI)',
+                onPressed: _toggleMic,
+                icon: Icon(
+                  voice.listening ? Icons.mic : Icons.mic_none,
+                  color: voice.listening ? context.simpulDanger : null,
+                ),
               ),
-              onSubmitted: (value) => _submit(value),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            tooltip: 'Kirim pesan',
-            onPressed: busy ? null : () => _submit(c.text),
-            icon: busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send),
-          ),
-        ],
+              Expanded(
+                child: TextField(
+                  controller: c,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: voice.listening
+                        ? 'Mendengarkan… (bicara sekarang)'
+                        : 'Pesan ke Tiko…',
+                    helperText: voice.listening && voice.partial.isNotEmpty
+                        ? voice.partial
+                        : null,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (value) => _submit(value),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: 'Kirim pesan',
+                onPressed: busy ? null : () => _submit(c.text),
+                icon: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
