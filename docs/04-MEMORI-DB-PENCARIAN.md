@@ -1,8 +1,9 @@
 # 04 — Memori, Database dan Pencarian
 
-> **Catatan status:** dokumen referensi ini berawal dari snapshot historis `69b6da421bf2a4682dce19e05d1ea608607250be`. Baseline GitHub `main` yang terakhir diverifikasi pada 10 November adalah `dfa7a0ecbd830fd9ecaa50f37145bb27351f5711`; bundle implementasi lokal sesudah baseline itu dijelaskan di `STATUS-2026-11-10.md` dan belum lolos Dart/Flutter CI. Gunakan source sebagai kontrak implementasi dan dokumen ini sebagai panduan arsitektur, bukan bukti validasi bundle.
+> **Catatan status:** Dokumen ini diperbarui untuk mencerminkan status terkini (commit 4c3789a, 19 Nov 2026). Gunakan source sebagai kontrak implementasi dan dokumen ini sebagai panduan arsitektur.
 
-**Snapshot:** `69b6da421bf2a4682dce19e05d1ea608607250be`.
+**Last Updated:** 19 November 2026
+**Commit:** 4c3789a6f37baa38f3dd820e7868feb5832d530e
 
 ## 1. Backend aktual
 
@@ -28,7 +29,7 @@ Versi migrasi 5 menambahkan provenance/confidence/ttl/state pada `facts`; versi 
 
 SQLite backend menggunakan FTS5/BM25 dan candidate vektor bila embedding/index aktif, lalu Reciprocal Rank Fusion (RRF) dengan `k = 60`; helper mengambil top-8 secara default. ContextBuilder memasukkan hingga top-5 memory hits yang relevan ke prompt. JSON fallback mempunyai pencarian lexical/BM25-like serta vector path yang bergantung konfigurasi.
 
-Runtime selalu membuat `BruteForceVectorIndex`; embedding nonaktif secara default dan hanya dibuat bila `memory.embed.enabled` aktif. Jangan tulis bahwa `sqlite-vec` adalah backend default atau sudah terhubung ke runtime. Penggunaan sqlite-vec adalah opsi/riset terpisah sampai wiring dan test platform membuktikannya.
+Runtime membuat `BruteForceVectorIndex` sebagai fallback awal, tetapi **jika SQLite tersedia, runtime membuat `SqliteVecIndex(sqlite.db)` sebagai durable vector index default**. Embedding nonaktif secara default dan hanya diaktifkan bila `memory.embed.enabled` aktif. SqliteVecIndex memungkinkan vectors survive restart tanpa warm-up rebuild pass, dan query path falls back ke cosine brute-force over the table jika sqlite-vec extension tidak tersedia.
 
 ## 4. Kebijakan memory
 
@@ -77,6 +78,5 @@ search:
 ## 10. Batasan
 
 - SQLite FTS5 bergantung build/library SQLite native di device; JSON fallback bukan jaminan performa atau kesetaraan query.
-- Brute-force vector retrieval dapat menjadi bottleneck pada jumlah vektor besar; benchmark target nyata masih diperlukan.
-- Belum ada klaim sqlite-vec native lintas Termux/Android/iOS.
+- SqliteVecIndex adalah durable vector index default saat SQLite tersedia; brute-force fallback digunakan jika sqlite-vec extension tidak tersedia.
 - SearXNG perlu mengaktifkan format JSON di `settings.yml`; HTTP 403 bukan pemicu Tavily fallback.

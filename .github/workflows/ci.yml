@@ -359,6 +359,7 @@ jobs:
         shell: bash
         run: flutter build ${{ matrix.platform }} --release --dart-define=AGENTD_BIN=${{ github.workspace }}/agentd-bundle/${{ matrix.agentd_out }}
       - name: Generate build provenance attestation for agentd (SLSA)
+        if: false  # TODO: Re-enable when SLSA is stable
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: agentd-bundle/${{ matrix.agentd_out }}

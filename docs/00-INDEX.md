@@ -1,10 +1,10 @@
 # Indeks Dokumentasi Tiko Agent
 
-- **Baseline GitHub yang diperiksa:** `main` — `dfa7a0ecbd830fd9ecaa50f37145bb27351f5711` (`fix bug build error`).
-- **CI baseline:** run [42687414796](https://github.com/kiosmarmer-commits/Tiko-Agent/actions/runs/42687414796) berhasil pada kedua job (Dart workspace/CLI dan Flutter/Web).
-- **Bundle implementasi lanjutan:** perubahan provider routing, SMTP timeout, MCP GET SSE/protocol header/config, regression tests dan dokumentasi di atas baseline `dfa7a0e`; perubahan ini belum dikirim ke GitHub dan belum tervalidasi Dart/Flutter karena SDK tidak tersedia di lingkungan penyusunan.
-- **Status:** CI hijau hanya membuktikan baseline `dfa7a0e`, bukan bundle lanjutan. Gunakan `STATUS-2026-11-10.md` sebagai sumber status terkini bundle.
+- **Baseline GitHub yang diperiksa:** `main` — `4c3789a6f37baa38f3dd820e7868feb5832d530e` (Fix P1 bugs).
+- **CI baseline:** run [44502798458](https://github.com/kiosmarmer-commits/Tiko-Agent/actions/runs/44502798458) - Dart tests lulus, Flutter builds lulus (Android/Linux/Windows/macOS app).
+- **Status:** Semua perubahan sudah di-push ke GitHub dan lulus Dart/Flutter CI.
 - **Bahasa:** Indonesia.
+- **Last Updated:** 19 November 2026
 
 ## Urutan baca
 

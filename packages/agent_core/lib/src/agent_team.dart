@@ -23,7 +23,7 @@ class AgentSpec {
     required this.id,
     required this.role,
     required this.systemPrompt,
-    this.toolAllowlist = const [],
+    this.toolAllowlist,
     this.modelTier = 'standard',
     this.maxTurns = 8,
   });
@@ -32,9 +32,11 @@ class AgentSpec {
   final AgentRole role;
   final String systemPrompt;
 
-  /// Empty means the member inherits the host tool registry; otherwise the
-  /// host must restrict this member to the listed tool names.
-  final List<String> toolAllowlist;
+  /// Null means deny all (no tools); empty list or non-null means the member
+  /// is restricted to the listed tool names; host must enforce this restriction.
+  /// P2-2: Changed from default empty list (inherit all) to null (deny all) for
+  /// better security by default.
+  final List<String>? toolAllowlist;
   final String modelTier;
   final int maxTurns;
 

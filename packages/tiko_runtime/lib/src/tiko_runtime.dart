@@ -1165,8 +1165,12 @@ class TikoRuntime {
             // never sees tools outside its list, and each role runs on its
             // own iteration budget (maxTurns) and model tier (modelTier)
             // instead of the host defaults.
-            toolFilter:
-                agent.toolAllowlist.isEmpty ? null : Set.of(agent.toolAllowlist),
+            // P2-2: toolAllowlist is now nullable - null means deny all
+            toolFilter: agent.toolAllowlist == null
+                ? const <String>{}  // Empty set = deny all
+                : agent.toolAllowlist!.isEmpty
+                    ? null  // Empty list = inherit all (legacy behavior)
+                    : Set.of(agent.toolAllowlist!),
             configOverride: AgentConfig(
               maxIterations: agent.maxTurns,
               maxTokensPerTask:
