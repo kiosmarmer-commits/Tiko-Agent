@@ -587,7 +587,6 @@ class HttpApiServer {
   /// WebSocket event schema version (P2-6). Increment when event structure changes.
   static const _wsSchemaVersion = '1.0';
   int _wsEventCounter = 0;
-  final _wsEventLock = Object();
 
   /// Bounded idempotency cache for POST /v1/messages.
   static const _idempotencyLimit = 256;
