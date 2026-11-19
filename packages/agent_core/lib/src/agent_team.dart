@@ -40,14 +40,19 @@ class AgentSpec {
   final String modelTier;
   final int maxTurns;
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'role': role.name,
-        'system_prompt': systemPrompt,
-        'tool_allowlist': toolAllowlist,
-        'model_tier': modelTier,
-        'max_turns': maxTurns,
-      };
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'id': id,
+      'role': role.name,
+      'system_prompt': systemPrompt,
+      'model_tier': modelTier,
+      'max_turns': maxTurns,
+    };
+    if (toolAllowlist != null) {
+      map['tool_allowlist'] = toolAllowlist;
+    }
+    return map;
+  }
 
   factory AgentSpec.fromJson(Map<String, dynamic> json) => AgentSpec(
         id: json['id'] as String? ?? '',
@@ -56,10 +61,11 @@ class AgentSpec {
           orElse: () => AgentRole.custom,
         ),
         systemPrompt: json['system_prompt'] as String? ?? '',
-        toolAllowlist: (json['tool_allowlist'] as List<dynamic>?)
+        toolAllowlist: json.containsKey('tool_allowlist')
+            ? (json['tool_allowlist'] as List<dynamic>?)
                 ?.map((e) => e.toString())
-                .toList() ??
-            const [],
+                .toList()
+            : null,
         modelTier: json['model_tier'] as String? ?? 'standard',
         maxTurns: json['max_turns'] as int? ?? 8,
       );
