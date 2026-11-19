@@ -149,6 +149,17 @@ void main() {
     final spec2 = AgentSpec.fromJson(spec.toJson());
     expect(spec2.id, 'critic');
     expect(spec2.role, AgentRole.critic);
+    expect(spec2.toolAllowlist, isNull);  // P2-2: null by default
+
+    // Test with explicit tool allowlist
+    const specWithTools = AgentSpec(
+      id: 'coder',
+      role: AgentRole.coder,
+      systemPrompt: 'code',
+      toolAllowlist: ['read_file', 'write_file'],
+    );
+    final specWithTools2 = AgentSpec.fromJson(specWithTools.toJson());
+    expect(specWithTools2.toolAllowlist, ['read_file', 'write_file']);
 
     const node = TaskNode(id: 't1', prompt: 'p', agentId: 'critic',
         dependsOn: ['t0']);
