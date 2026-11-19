@@ -28,13 +28,13 @@ void main() {
         () {
       final runner = SandboxRunner(kind: SandboxKind.none);
       
-      try {
-        runner.run(['echo', 'hello']);
-        fail('Expected UnsupportedError to be thrown');
-      } catch (e) {
-        expect(e, isA<UnsupportedError>());
-        expect(e.toString(), contains('sandbox tidak tersedia'));
-      }
+      expect(
+        () => runner.run(['echo', 'hello']),
+        throwsA(predicate((e) => 
+          e is UnsupportedError && 
+          e.toString().contains('sandbox tidak tersedia')
+        )),
+      );
     });
 
     test('SandboxRunner with docker kind does not throw on construction',
