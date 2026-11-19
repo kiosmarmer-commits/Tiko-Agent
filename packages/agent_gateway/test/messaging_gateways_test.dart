@@ -26,7 +26,7 @@ void main() {
         text: 'Hello from Teams',
       );
 
-      await untilCalled(subscription.onData);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(messages.length, 1);
       expect(messages[0].text, 'Hello from Teams');
       expect(messages[0].channel, 'teams');
@@ -91,7 +91,7 @@ void main() {
         },
       );
 
-      await untilCalled(subscription.onData);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(messages.length, 1);
       expect(messages[0].text, 'Hello from LINE');
       expect(messages[0].channel, 'line');
@@ -157,7 +157,7 @@ void main() {
         text: 'Hello from SMS',
       );
 
-      await untilCalled(subscription.onData);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(messages.length, 1);
       expect(messages[0].text, 'Hello from SMS');
       expect(messages[0].channel, 'sms');
@@ -226,7 +226,7 @@ void main() {
         },
       );
 
-      await untilCalled(subscription.onData);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(messages.length, 1);
       expect(messages[0].text, 'Hello from Mattermost');
       expect(messages[0].channel, 'mattermost');
