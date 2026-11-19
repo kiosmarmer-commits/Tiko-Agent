@@ -1,4 +1,5 @@
 // Test to verify all gateway imports work correctly
+import 'package:agent_core/agent_core.dart';
 import 'package:agent_gateway/agent_gateway.dart';
 import 'package:test/test.dart';
 

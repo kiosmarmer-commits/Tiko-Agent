@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
@@ -25,7 +26,13 @@ class SmsGateway implements Gateway {
   })  : _provider = 'twilio',
         _accountSid = accountSid,
         _authToken = authToken,
-        _endpoint = 'https://api.twilio.com/2010-04-01/Accounts/$accountSid/Messages.json';
+        _endpoint = 'https://api.twilio.com/2010-04-01/Accounts/$accountSid/Messages.json',
+        _region = '',
+        _accessKey = '',
+        _secretKey = '',
+        _apiKey = '',
+        _method = 'POST',
+        _bodyFormat = 'form';
 
   /// Create an SMS gateway with AWS SNS.
   SmsGateway.awsSns({
@@ -39,7 +46,12 @@ class SmsGateway implements Gateway {
         _region = region,
         _accessKey = accessKey,
         _secretKey = secretKey,
-        _endpoint = 'https://sns.$region.amazonaws.com';
+        _endpoint = 'https://sns.$region.amazonaws.com',
+        _accountSid = '',
+        _authToken = '',
+        _apiKey = '',
+        _method = 'POST',
+        _bodyFormat = 'json';
 
   /// Create an SMS gateway with a generic HTTP API.
   SmsGateway.generic({
@@ -54,7 +66,12 @@ class SmsGateway implements Gateway {
         _endpoint = endpointUrl,
         _apiKey = apiKey,
         _method = method ?? 'POST',
-        _bodyFormat = bodyFormat;
+        _bodyFormat = bodyFormat ?? 'json',
+        _accountSid = '',
+        _authToken = '',
+        _region = '',
+        _accessKey = '',
+        _secretKey = '';
 
   final String fromNumber;
   final http.Client? httpClient;
@@ -64,18 +81,18 @@ class SmsGateway implements Gateway {
   final String _endpoint;
 
   // Twilio
-  final String? _accountSid;
-  final String? _authToken;
+  final String _accountSid;
+  final String _authToken;
 
   // AWS SNS
-  final String? _region;
-  final String? _accessKey;
-  final String? _secretKey;
+  final String _region;
+  final String _accessKey;
+  final String _secretKey;
 
   // Generic
-  final String? _apiKey;
-  final String? _method;
-  final String? _bodyFormat;
+  final String _apiKey;
+  final String _method;
+  final String _bodyFormat;
 
   final _inbound = StreamController<InboundMessage>.broadcast();
 
@@ -188,13 +205,13 @@ class SmsGateway implements Gateway {
       'text': text,
     };
 
+    final uri = Uri.parse(_endpoint);
     final response = await client
-        .request(
-          _method!,
-          Uri.parse(_endpoint),
+        .post(
+          uri,
           headers: {
             'Content-Type': 'application/json',
-            if (_apiKey != null) 'Authorization': 'Bearer $_apiKey',
+            if (_apiKey != null && _apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
           },
           body: _bodyFormat == 'json' ? jsonEncode(payload) : payload,
         )
