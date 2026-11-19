@@ -6,15 +6,31 @@ import 'package:http/io_client.dart' as io;
 
 import 'ssrf.dart';
 
-/// web_search via SearXNG with an optional Tavily fallback (AGD-04 §7).
+/// web_search via multiple providers with fallback chain (AGD-04 §7).
+/// Supports: SearXNG, Tavily, DDGS (DuckDuckGo), Brave, Exa, Firecrawl
 class WebSearchTool implements Tool {
   WebSearchTool({
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
     this.tavilyApiKey,
     this.tavilyBaseUrl = 'https://api.tavily.com',
+    this.ddgsEnabled = true,
+    this.braveApiKey,
+    this.braveBaseUrl = 'https://api.bravesoftware.com',
+    this.exaApiKey,
+    this.exaBaseUrl = 'https://api.exa.ai',
+    this.firecrawlApiKey,
+    this.firecrawlBaseUrl = 'https://api.firecrawl.dev',
     this.maxResults = 8,
     this.fetchTop = 3,
     this.fetchMaxChars = 2500,
+    this.providerOrder = const [
+      'searxng',
+      'tavily',
+      'ddgs',
+      'brave',
+      'exa',
+      'firecrawl',
+    ],
     http.Client? client,
     SsrfGuard? ssrf,
   }) : _client = client,
@@ -22,12 +38,32 @@ class WebSearchTool implements Tool {
 
   final String searxngBaseUrl;
 
-  /// Tavily API key (`tvly-...`). Null/empty berarti fallback nonaktif.
+  /// Tavily API key (`tvly-...`). Null/empty berarti provider nonaktif.
   final String? tavilyApiKey;
   final String tavilyBaseUrl;
+
+  /// DDGS (DuckDuckGo Search) - gratis, tanpa API key
+  final bool ddgsEnabled;
+
+  /// Brave Search API key. Null/empty berarti provider nonaktif.
+  final String? braveApiKey;
+  final String braveBaseUrl;
+
+  /// Exa Search API key. Null/empty berarti provider nonaktif.
+  final String? exaApiKey;
+  final String exaBaseUrl;
+
+  /// Firecrawl API key. Null/empty berarti provider nonaktif.
+  final String? firecrawlApiKey;
+  final String firecrawlBaseUrl;
+
   final int maxResults;
   final int fetchTop;
   final int fetchMaxChars;
+
+  /// Urutan pencobaan provider (fallback chain)
+  final List<String> providerOrder;
+
   final http.Client? _client;
   final SsrfGuard _ssrf;
 
@@ -39,9 +75,10 @@ class WebSearchTool implements Tool {
   ToolSpec get spec => const ToolSpec(
     name: 'web_search',
     description:
-        'Cari di web lewat SearXNG dengan cadangan Tavily bila terpasang. '
-        'Mengembalikan judul, URL, cuplikan; opsional mengunduh isi singkat '
-        'dari N hasil teratas.',
+        'Cari di web lewat multiple provider: SearXNG, Tavily, DDGS (DuckDuckGo), '
+        'Brave, Exa, Firecrawl. Mengembalikan judul, URL, cuplikan; '
+        'opsional mengunduh isi singkat dari N hasil teratas. '
+        'Provider aktif bergantung pada konfigurasi dan ketersediaan API key.',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -75,29 +112,58 @@ class WebSearchTool implements Tool {
     final categories = (args['categories'] as String?)?.trim() ?? 'general';
     final doFetch = args['fetch_pages'] != false;
 
-    final baseUri = Uri.tryParse(searxngBaseUrl);
-    final isLocalSearx =
-        baseUri != null &&
-        (baseUri.host == '127.0.0.1' ||
-            baseUri.host == 'localhost' ||
-            baseUri.host == '::1');
-    final baseCheck = await _ssrf.checkUrl(searxngBaseUrl);
-    if (baseCheck != null && !isLocalSearx) {
-      return ToolResult(
+    final client = _client ?? io.IOClient(_ssrf.pinnedHttpClient());
+    
+    // Build list of active providers based on configuration
+    final activeProviders = <String>[];
+    for (final providerId in providerOrder) {
+      switch (providerId) {
+        case 'searxng':
+          activeProviders.add(providerId);
+          break;
+        case 'tavily':
+          if ((tavilyApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'ddgs':
+          if (ddgsEnabled) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'brave':
+          if ((braveApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'exa':
+          if ((exaApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'firecrawl':
+          if ((firecrawlApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      }
+    }
+
+    if (activeProviders.isEmpty) {
+      return const ToolResult(
         callId: '',
-        content: 'SearXNG base URL ditolak: $baseCheck',
+        content: 'Tidak ada provider pencarian yang aktif. '
+            'Konfigurasi setidaknya satu provider.',
         isError: true,
       );
     }
 
-    final tavilyKey = (tavilyApiKey ?? '').trim();
-    final client = _client ?? io.IOClient(_ssrf.pinnedHttpClient());
     try {
       final (hits, engine) = await _acquireHits(
         client,
         query,
         categories,
-        tavilyKey,
+        activeProviders,
       );
       if (hits.isEmpty) {
         return const ToolResult(callId: '', content: 'Tidak ada hasil.');
@@ -229,26 +295,64 @@ class WebSearchTool implements Tool {
     http.Client client,
     String query,
     String categories,
-    String tavilyKey,
+    List<String> activeProviders,
   ) async {
-    try {
-      return (await _searchSearxng(client, query, categories), 'searxng');
-    } on _SearchFailure catch (searxError) {
-      if (!searxError.fallbackEligible || tavilyKey.isEmpty) {
-        rethrow;
-      }
+    final errors = <String>[];
+    
+    for (final providerId in activeProviders) {
       try {
-        return (
-          await _searchTavily(client, query, categories, tavilyKey),
-          'tavily',
+        final hits = await _searchWithProvider(
+          client,
+          query,
+          categories,
+          providerId,
         );
-      } on _SearchFailure catch (tavilyError) {
-        throw _SearchFailure(
-          'SearXNG gagal: ${searxError.message}\n'
-          'Tavily gagal: ${tavilyError.message}',
-          fallbackEligible: false,
-        );
+        return (hits, providerId);
+      } on _SearchFailure catch (e) {
+        errors.add('[$providerId] ${e.message}');
+        // Only continue to next provider if this failure is eligible for fallback
+        // (e.g., network errors, 5xx errors). Configuration errors (403, 401) should not fallback.
+        if (!e.fallbackEligible) {
+          // Configuration error - don't try other providers
+          // Include all collected errors in the final error message
+          throw _SearchFailure(
+            errors.join('\n'),
+            fallbackEligible: false,
+          );
+        }
+        // Continue to next provider in fallback chain
+        continue;
       }
+    }
+    
+    // All providers failed with fallback-eligible errors
+    throw _SearchFailure(
+      'Semua provider gagal:\n${errors.join('\\n')}',
+      fallbackEligible: false,
+    );
+  }
+
+  Future<List<({String title, String url, String content})>> _searchWithProvider(
+    http.Client client,
+    String query,
+    String categories,
+    String providerId,
+  ) async {
+    switch (providerId) {
+      case 'searxng':
+        return _searchSearxng(client, query, categories);
+      case 'tavily':
+        return _searchTavily(client, query, categories, tavilyApiKey!);
+      case 'ddgs':
+        return _searchDDGS(client, query);
+      case 'brave':
+        return _searchBrave(client, query);
+      case 'exa':
+        return _searchExa(client, query);
+      case 'firecrawl':
+        return _searchFirecrawl(client, query);
+      default:
+        throw _SearchFailure('Provider $providerId tidak dikenal', fallbackEligible: false);
     }
   }
 
@@ -348,6 +452,200 @@ class WebSearchTool implements Tool {
     return _hitsFrom(json);
   }
 
+  Future<List<({String title, String url, String content})>> _searchDDGS(
+    http.Client client,
+    String query,
+  ) async {
+    // DDGS (DuckDuckGo Search) - no API key required
+    // Uses ddgs Python package API endpoint
+    final uri = Uri.parse('https://api.duckduckgo.com/');
+    final http.Response res;
+    try {
+      res = await client
+          .get(
+            uri.replace(
+              queryParameters: {
+                'q': query,
+                'format': 'json',
+                'no_redirect': '1',
+                'no_html': '1',
+              },
+            ),
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'agent_dart/0.1',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'DDGS error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'DDGS HTTP ${res.statusCode}',
+        fallbackEligible: res.statusCode >= 500,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFromDDGS(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchBrave(
+    http.Client client,
+    String query,
+  ) async {
+    // Brave Search API
+    final braveCheck = await _ssrf.checkUrl(braveBaseUrl);
+    if (braveCheck != null) {
+      throw _SearchFailure(
+        'Brave base URL ditolak: $braveCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$braveBaseUrl/api/v1/search/web');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${braveApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'count': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Brave error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Brave auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Brave HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchExa(
+    http.Client client,
+    String query,
+  ) async {
+    // Exa Search API
+    final exaCheck = await _ssrf.checkUrl(exaBaseUrl);
+    if (exaCheck != null) {
+      throw _SearchFailure(
+        'Exa base URL ditolak: $exaCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$exaBaseUrl/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${exaApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'numResults': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Exa error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Exa auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Exa HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchFirecrawl(
+    http.Client client,
+    String query,
+  ) async {
+    // Firecrawl Search API
+    final firecrawlCheck = await _ssrf.checkUrl(firecrawlBaseUrl);
+    if (firecrawlCheck != null) {
+      throw _SearchFailure(
+        'Firecrawl base URL ditolak: $firecrawlCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$firecrawlBaseUrl/v1/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${firecrawlApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'limit': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Firecrawl error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Firecrawl auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Firecrawl HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
   static List<({String title, String url, String content})> _hitsFrom(
     Map<String, dynamic> json,
   ) {
@@ -360,6 +658,28 @@ class WebSearchTool implements Tool {
         url: (raw['url'] as String?) ?? '',
         content: (raw['content'] as String?) ?? '',
       ));
+    }
+    return hits;
+  }
+
+  static List<({String title, String url, String content})> _hitsFromDDGS(
+    Map<String, dynamic> json,
+  ) {
+    // DDGS (DuckDuckGo) API response format
+    // Results are in 'RelatedTopics' array
+    final results = json['RelatedTopics'] as List<dynamic>? ?? [];
+    final hits = <({String title, String url, String content})>[];
+    for (final raw in results) {
+      if (raw is! Map<String, dynamic>) continue;
+      final title = (raw['Text'] as String?) ?? (raw['Name'] as String?) ?? '(tanpa judul)';
+      // Handle nested Icon.URL safely
+      final icon = raw['Icon'] as Map<String, dynamic>?;
+      final iconUrl = icon?['URL'] as String?;
+      final url = (raw['FirstURL'] as String?) ?? iconUrl ?? '';
+      final content = (raw['Text'] as String?) ?? '';
+      if (url.isNotEmpty) {
+        hits.add((title: title, url: url, content: content));
+      }
     }
     return hits;
   }

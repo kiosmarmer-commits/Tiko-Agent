@@ -281,14 +281,13 @@ Future<void> main(List<String> args) async {
     SttClient? stt;
     final whisper = Platform.environment['WHISPER_BIN'];
     final sttKey = Platform.environment['STT_API_KEY'];
+    final sttBase = Platform.environment['STT_API_BASE'];
     if ((whisper != null && whisper.isNotEmpty) ||
         (sttKey != null && sttKey.isNotEmpty)) {
       stt = SttClient(
         whisperBin: whisper,
-        apiBaseUrl: sttKey != null
-            ? (Platform.environment['STT_API_BASE'] ?? 'https://api.openai.com/v1')
-            : null,
-        apiKey: sttKey,
+        openaiApiKey: sttKey,
+        openaiBaseUrl: sttBase ?? 'https://api.openai.com/v1',
       );
     }
     tg = TelegramGateway(token: token, allowedUserIds: allow, stt: stt);

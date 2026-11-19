@@ -58,6 +58,10 @@ Future<http.Response> _searxDown(http.Request request) async {
 WebSearchTool _tool({http.Client? client, String? key}) => WebSearchTool(
   searxngBaseUrl: 'http://127.0.0.1:8080',
   tavilyApiKey: key,
+  ddgsEnabled: false, // Disable DDGS for deterministic testing
+  braveApiKey: null,
+  exaApiKey: null,
+  firecrawlApiKey: null,
   fetchTop: 0,
   ssrf: _NoopSsrf(),
   client: client,
