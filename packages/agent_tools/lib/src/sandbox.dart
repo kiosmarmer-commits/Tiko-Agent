@@ -177,12 +177,12 @@ class SandboxRunner {
   /// FR-02 dispatcher: maps a command's risk index to the least-privilege
   /// sandbox that can safely run it.
   ///
-  /// - risk < 0.2 → local isolation (bubblewrap, else docker)
-  /// - 0.2 ≤ risk < 0.7 → docker container
-  /// - risk ≥ 0.7 → remote ssh host when configured, else docker
-  ///
-  /// `SandboxKind.none` is NEVER returned: when no backend is available the
-  /// caller must refuse execution (fail-closed).
+  /// - risk < 0.2 → local isolation (bubblewrap, else docker, else none)
+  /// - 0.2 ≤ risk < 0.7 → docker container (else bubblewrap, else none)
+  /// - risk ≥ 0.7 → remote ssh host (if configured), else daytona, else modal, else docker, else none
+  /// When no sandbox backend is available, returns a runner with `SandboxKind.none`.
+  /// The runner will throw [UnsupportedError] on any execution attempt (fail-closed).
+  /// Callers must check [SandboxRunner.kind] or catch the exception.
   static Future<SandboxRunner> dispatchFor(
     String command, {
     String workspacePath = '.',
