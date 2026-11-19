@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../ui/theme.dart';
+import 'memory_graph_view.dart';
 import 'page_header.dart';
 
 /// Memory Explorer lanjutan (GUI-P1-12): empat tab — Fakta (kurasi kurir
@@ -76,10 +77,12 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
 
   void _toast(String message, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: error ? context.simpulDanger : null,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? context.simpulDanger : null,
+      ),
+    );
   }
 
   Future<void> _saveCurated(String file) async {
@@ -87,9 +90,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
     if (save == null) return;
     final error = await save(
       file,
-      file == 'user'
-          ? _userTextController.text
-          : _memoryTextController.text,
+      file == 'user' ? _userTextController.text : _memoryTextController.text,
     );
     if (error != null) {
       _toast(error, error: true);
@@ -110,26 +111,37 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(
-              16, 16, 16, 16 + MediaQuery.viewInsetsOf(sheetContext).bottom),
+            16,
+            16,
+            16,
+            16 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Tambah entri lapisan',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'Tambah entri lapisan',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 key: const Key('layer-select'),
                 initialValue: 'semantic',
                 decoration: const InputDecoration(
-                    labelText: 'Lapisan', border: OutlineInputBorder()),
+                  labelText: 'Lapisan',
+                  border: OutlineInputBorder(),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'episodic', child: Text('episodic')),
                   DropdownMenuItem(value: 'semantic', child: Text('semantic')),
                   DropdownMenuItem(
-                      value: 'procedural', child: Text('procedural')),
+                    value: 'procedural',
+                    child: Text('procedural'),
+                  ),
                 ],
-                onChanged: (v) => setSheetState(() => layerCtl.text = v ?? 'semantic'),
+                onChanged: (v) =>
+                    setSheetState(() => layerCtl.text = v ?? 'semantic'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -137,15 +149,18 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                 controller: textCtl,
                 maxLines: 4,
                 decoration: const InputDecoration(
-                    labelText: 'Teks', border: OutlineInputBorder()),
+                  labelText: 'Teks',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('layer-tags'),
                 controller: tagsCtl,
                 decoration: const InputDecoration(
-                    labelText: 'Tag (pisahkan koma)',
-                    border: OutlineInputBorder()),
+                  labelText: 'Tag (pisahkan koma)',
+                  border: OutlineInputBorder(),
+                ),
               ),
               StatefulBuilder(
                 builder: (sheetContext, setSliderState) => Row(
@@ -157,8 +172,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                         value: importance,
                         divisions: 10,
                         label: importance.toStringAsFixed(1),
-                        onChanged: (v) =>
-                            setSliderState(() => importance = v),
+                        onChanged: (v) => setSliderState(() => importance = v),
                       ),
                     ),
                     Text(importance.toStringAsFixed(1)),
@@ -214,7 +228,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
     final layers = widget.layers;
     final rag = widget.rag;
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         children: [
           PageHeader(
@@ -234,8 +248,10 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
           if (widget.error != null)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(widget.error!,
-                  style: TextStyle(color: context.simpulDanger)),
+              child: Text(
+                widget.error!,
+                style: TextStyle(color: context.simpulDanger),
+              ),
             ),
           TabBar(
             isScrollable: true,
@@ -245,6 +261,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
               Tab(text: 'Kurasi'),
               Tab(text: 'Lapisan'),
               Tab(text: 'RAG'),
+              Tab(text: 'Timeline'),
             ],
           ),
           Expanded(
@@ -254,6 +271,16 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                 _buildCurated(context, cur),
                 _buildLayers(context, layers),
                 _buildRag(context, rag),
+                MemoryGraphTimeline(
+                  entries: layers?.entries ?? const [],
+                  online: widget.online,
+                  loading: widget.loading,
+                  truncated: layers?.truncated ?? false,
+                  total: layers?.total ?? 0,
+                  onDelete: widget.onDeleteLayer == null
+                      ? null
+                      : (id) => _deleteLayer(id),
+                ),
               ],
             ),
           ),
@@ -265,17 +292,24 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
   Widget _buildFacts(BuildContext context) {
     if (widget.memories.isEmpty) {
       return Center(
-          child: Text('Kosong', style: TextStyle(color: context.simpulMuted)));
+        child: Text('Kosong', style: TextStyle(color: context.simpulMuted)),
+      );
     }
     return ListView.builder(
       itemCount: widget.memories.length,
       itemBuilder: (context, i) {
         final memory = widget.memories[i];
         return ListTile(
-          title: Text(memory.text,
-              maxLines: 4, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${memory.id} \u00b7 ${memory.kind}',
-              maxLines: 2, overflow: TextOverflow.ellipsis),
+          title: Text(
+            memory.text,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${memory.id} \u00b7 ${memory.kind}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
           trailing: widget.onDelete == null
               ? null
               : IconButton(
@@ -287,16 +321,18 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                       builder: (dialogContext) => AlertDialog(
                         title: const Text('Hapus memori?'),
                         content: const Text(
-                            'Fakta ini akan dihapus dari penyimpanan Tiko.'),
+                          'Fakta ini akan dihapus dari penyimpanan Tiko.',
+                        ),
                         actions: [
                           TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, false),
-                              child: const Text('Batal')),
+                            onPressed: () =>
+                                Navigator.pop(dialogContext, false),
+                            child: const Text('Batal'),
+                          ),
                           FilledButton(
-                              onPressed: () =>
-                                  Navigator.pop(dialogContext, true),
-                              child: const Text('Hapus')),
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            child: const Text('Hapus'),
+                          ),
                         ],
                       ),
                     );
@@ -311,10 +347,15 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
   Widget _buildCurated(BuildContext context, CuratedMemoryInfo? cur) {
     if (cur == null) {
       return Center(
-          child: Text('Belum ada snapshot \u2014 tekan refresh.',
-              style: TextStyle(color: context.simpulMuted)));
+        child: Text(
+          'Belum ada snapshot \u2014 tekan refresh.',
+          style: TextStyle(color: context.simpulMuted),
+        ),
+      );
     }
-    final ratio = cur.budget <= 0 ? 0.0 : (cur.used / cur.budget).clamp(0.0, 1.0);
+    final ratio = cur.budget <= 0
+        ? 0.0
+        : (cur.used / cur.budget).clamp(0.0, 1.0);
     final over = cur.budget > 0 && cur.used >= cur.budget;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -322,11 +363,13 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
         Row(
           children: [
             Text(
-                '${cur.memory.chars + cur.user.chars}/${cur.budget} karakter',
-                key: const Key('curated-budget'),
-                style: TextStyle(
-                    fontSize: 12,
-                    color: over ? context.simpulDanger : context.simpulMuted)),
+              '${cur.memory.chars + cur.user.chars}/${cur.budget} karakter',
+              key: const Key('curated-budget'),
+              style: TextStyle(
+                fontSize: 12,
+                color: over ? context.simpulDanger : context.simpulMuted,
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: LinearProgressIndicator(
@@ -338,8 +381,10 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
           ],
         ),
         const SizedBox(height: 16),
-        const Text('MEMORY.md',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        const Text(
+          'MEMORY.md',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 6),
         TextField(
           key: const Key('memory-curated-mem'),
@@ -347,7 +392,9 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
           maxLines: null,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
           decoration: const InputDecoration(
-              border: OutlineInputBorder(), hintText: 'Fakta kurasi'),
+            border: OutlineInputBorder(),
+            hintText: 'Fakta kurasi',
+          ),
         ),
         Align(
           alignment: Alignment.centerRight,
@@ -358,8 +405,10 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
             label: const Text('Simpan'),
           ),
         ),
-        const Text('USER.md',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        const Text(
+          'USER.md',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 6),
         TextField(
           key: const Key('memory-curated-user'),
@@ -367,7 +416,9 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
           maxLines: null,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
           decoration: const InputDecoration(
-              border: OutlineInputBorder(), hintText: 'Profil pengguna'),
+            border: OutlineInputBorder(),
+            hintText: 'Profil pengguna',
+          ),
         ),
         Align(
           alignment: Alignment.centerRight,
@@ -385,8 +436,11 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
   Widget _buildLayers(BuildContext context, LayersSnapshot? layers) {
     if (layers == null) {
       return Center(
-          child: Text('Belum ada snapshot \u2014 tekan refresh.',
-              style: TextStyle(color: context.simpulMuted)));
+        child: Text(
+          'Belum ada snapshot \u2014 tekan refresh.',
+          style: TextStyle(color: context.simpulMuted),
+        ),
+      );
     }
     return Stack(
       children: [
@@ -399,17 +453,24 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                 spacing: 12,
                 children: [
                   for (final e in layers.stats.entries)
-                    Text('${e.key}: ${e.value.count} entri',
-                        style: TextStyle(
-                            fontSize: 12, color: context.simpulMuted)),
+                    Text(
+                      '${e.key}: ${e.value.count} entri',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.simpulMuted,
+                      ),
+                    ),
                 ],
               ),
             ),
             Expanded(
               child: layers.entries.isEmpty
                   ? Center(
-                      child: Text('Belum ada entri berlapis.',
-                          style: TextStyle(color: context.simpulMuted)))
+                      child: Text(
+                        'Belum ada entri berlapis.',
+                        style: TextStyle(color: context.simpulMuted),
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: layers.entries.length,
                       itemBuilder: (context, i) =>
@@ -436,8 +497,11 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
   Widget _buildRag(BuildContext context, RagSourcesInfo? rag) {
     if (rag == null) {
       return Center(
-          child: Text('Belum ada snapshot \u2014 tekan refresh.',
-              style: TextStyle(color: context.simpulMuted)));
+        child: Text(
+          'Belum ada snapshot \u2014 tekan refresh.',
+          style: TextStyle(color: context.simpulMuted),
+        ),
+      );
     }
     return ListView(
       key: const Key('rag-list'),
@@ -452,13 +516,17 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
         for (final doc in rag.docs)
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            title: Text(doc.docId,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: Text(
+              doc.docId,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             subtitle: Text(
-                '${doc.chunks} chunk \u00b7 ${doc.chars} karakter'
-                '${doc.preview.isEmpty ? '' : '\n${doc.preview}'}',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis),
+              '${doc.chunks} chunk \u00b7 ${doc.chars} karakter'
+              '${doc.preview.isEmpty ? '' : '\n${doc.preview}'}',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
     );
@@ -474,11 +542,13 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
         content: const Text('Entri akan dihapus dari memori berlapis.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Batal')),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Hapus')),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Hapus'),
+          ),
         ],
       ),
     );
@@ -509,26 +579,31 @@ class _LayerTile extends StatelessWidget {
       tilePadding: const EdgeInsets.symmetric(horizontal: 16),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       leading: Icon(_layerColor[entry.layer] ?? Icons.lightbulb_outline),
-      title: Text(entry.text.isEmpty ? '(tanpa teks)' : entry.text,
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text('$layerLabel \u00b7 ${(entry.importance * 100).round()}%'
-          '${entry.tags.isEmpty ? '' : ' \u00b7 ${entry.tags.join(',')}'}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: context.simpulMuted, fontSize: 12)),
+      title: Text(
+        entry.text.isEmpty ? '(tanpa teks)' : entry.text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        '$layerLabel \u00b7 ${(entry.importance * 100).round()}%'
+        '${entry.tags.isEmpty ? '' : ' \u00b7 ${entry.tags.join(',')}'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: context.simpulMuted, fontSize: 12),
+      ),
       children: [
         Align(
           alignment: Alignment.centerLeft,
-          child: Text(entry.text,
-              style: const TextStyle(fontSize: 12, height: 1.4)),
+          child: Text(
+            entry.text,
+            style: const TextStyle(fontSize: 12, height: 1.4),
+          ),
         ),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            'dibuat ${entry.createdAt}${entry.lastAccessedAt.isEmpty
-                ? ''
-                : ' \u00b7 akses ${entry.accessCount}x'}'
+            'dibuat ${entry.createdAt}${entry.lastAccessedAt.isEmpty ? '' : ' \u00b7 akses ${entry.accessCount}x'}'
             '${entry.ownerKey.isEmpty ? '' : ' \u00b7 owner ${entry.ownerKey}'}'
             '${entry.sourceSession.isEmpty ? '' : ' \u00b7 sesi ${entry.sourceSession}'}',
             style: TextStyle(color: context.simpulMuted, fontSize: 11),
@@ -548,8 +623,8 @@ class _LayerTile extends StatelessWidget {
   }
 
   String get layerLabel => switch (entry.layer) {
-        'episodic' => 'episodik',
-        'procedural' => 'prosedral',
-        _ => 'semantik',
-      };
+    'episodic' => 'episodik',
+    'procedural' => 'prosedral',
+    _ => 'semantik',
+  };
 }

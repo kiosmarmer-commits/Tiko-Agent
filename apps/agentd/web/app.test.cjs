@@ -115,6 +115,7 @@ function createHarness() {
     'btn-layer-search', 'btn-layer-reset',
     'layer-new-layer', 'layer-new-tags', 'layer-new-importance', 'layer-new-text',
     'btn-layer-create', 'rag-list', 'btn-load-rag',
+    'btn-load-mem-graph', 'mem-graph-list',
     'cmd-palette', 'cmd-input', 'cmd-list',
     'chat-panes', 'pane-chat',
     'pane-sessions', 'pane-session-list', 'btn-refresh-pane-sessions',
@@ -883,6 +884,37 @@ test('Hapus entri berlapis mengirim DELETE /v1/memory/layers/:id', async () => {
   const removeBtn = li.children.find((btn) => btn.type === 'button' && btn.textContent === 'Hapus');
   removeBtn.dataset.layerId = 'lay-1';
   h.elements['layer-list'].dispatch('click', { target: removeBtn });
+  await tick();
+  await tick();
+  const call = h.calls.find((c) => c.url.includes('/v1/memory/layers/lay-1') && c.options.method === 'DELETE');
+  assert.ok(call);
+});
+
+test('GUI-P2-05: timeline memori memuat /v1/memory/layers?limit=200 dan merender grup tanggal', async () => {
+  const h = createHarness();
+  h.elements['btn-load-mem-graph'].dispatch('click');
+  await tick();
+  await tick();
+  const load = h.calls.find((c) => c.url.includes('/v1/memory/layers') && c.url.includes('limit=200'));
+  assert.ok(load);
+  const items = h.elements['mem-graph-list'].children;
+  assert.ok(items.length >= 3);
+  assert.ok(items[0].textContent.includes('2026-11-18 · 2 entri'));
+  assert.ok(items[1].children[0].textContent.includes('[SEMANTIC] Tiko agent'));
+  assert.ok(items[1].children[1].textContent.includes('akses 2x'));
+  assert.ok(items[1].children[1].textContent.includes('#tiko'));
+});
+
+test('GUI-P2-05: tombol hapus pada timeline memanggil DELETE /v1/memory/layers/:id', async () => {
+  const h = createHarness();
+  h.elements['btn-load-mem-graph'].dispatch('click');
+  await tick();
+  await tick();
+  const items = h.elements['mem-graph-list'].children;
+  const li = items.find((item) => item.children[0] && item.children[0].textContent.includes('[SEMANTIC] Tiko agent'));
+  const removeBtn = li.children.find((btn) => btn.type === 'button' && btn.textContent === 'Hapus');
+  assert.ok(removeBtn);
+  h.elements['mem-graph-list'].dispatch('click', { target: removeBtn });
   await tick();
   await tick();
   const call = h.calls.find((c) => c.url.includes('/v1/memory/layers/lay-1') && c.options.method === 'DELETE');
