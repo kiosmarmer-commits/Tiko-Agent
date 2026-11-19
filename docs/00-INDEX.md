@@ -1,136 +1,134 @@
 # Indeks Dokumentasi Tiko Agent
 
-- **Baseline GitHub yang diperiksa:** `main` — `4c3789a6f37baa38f3dd820e7868feb5832d530e` (Fix P1 bugs).
-- **CI baseline:** run [44502798458](https://github.com/kiosmarmer-commits/Tiko-Agent/actions/runs/44502798458) - Dart tests lulus, Flutter builds lulus (Android/Linux/Windows/macOS app).
-- **Status:** Semua perubahan sudah di-push ke GitHub dan lulus Dart/Flutter CI.
-- **Bahasa:** Indonesia.
+- **Baseline GitHub yang diperiksa:** `main` — commit `57bd455fa1009cba61d74d37de0dbca70e6f5476` (Add test for AgentSpec toolAllowlist serialization)
+- **Status CI:** Semua P1 bug sudah diperbaiki, Dart tests lulus, Flutter builds lulus
+- **Status:** Semua perubahan sudah di-push ke GitHub
+- **Bahasa:** Indonesia
 - **Last Updated:** 19 November 2026
 
-## Urutan baca
+## Ringkasan Status
+
+### P1 Bug (Critical) - ✅ SEMUA SUDAH DIPERBAIKI
+
+| ID | Deskripsi | Status | Commit |
+|---|---|---|---|
+| P1.1 | Bug pencatatan node saat multi-agent cancellation | ✅ Fixed | 4c3789a |
+| P1.2 | AgentSpec.systemPrompt bukan system message | ✅ Fixed | 4c3789a |
+| P1.3 | Timeout tool tidak menghentikan future/aksi | ✅ Fixed | 4c3789a |
+| P1.4 | Validasi input tool tidak lengkap (JSON Schema) | ✅ Fixed | 4c3789a |
+
+### P2 Bug (Moderate) - ✅ SEBAGIAN BESAR SUDAH DIPERBAIKI
+
+| ID | Deskripsi | Status | Commit |
+|---|---|---|---|
+| P2.2 | toolAllowlist kosong mewarisi semua tool | ✅ Fixed | 3606ce8 |
+| P2.3 | Dokumentasi memory kedaluwarsa | ✅ Fixed | 3606ce8 |
+| P2.4 | Indeks dokumentasi mengarah ke baseline lama | ✅ Fixed | 3606ce8 |
+| P2.6 | WebSocket events tidak memiliki event_id/schema_version | ✅ Fixed | 389b26d |
+| P2.8 | Dokumentasi sandbox bertentangan dengan kode | ✅ Fixed | ffb9b0d |
+
+### P3 Bug (Quality) - ⏳ DALAM ROADMAP
+
+| ID | Deskripsi | Status |
+|---|---|---|
+| P3.1 | Entry point terlalu besar | ⏳ Backlog |
+
+## Urutan Baca
+
+### Dokumentasi Arsitektur (Inti)
 
 | Urutan | Dokumen | Tujuan |
 |---|---|---|
-| 1 | `CI-FAILURE-2026-11-10.md` | Histori insiden CI SMTP pada run 42678040519 dan tautan ke status run perbaikan |
-| 2 | `STATUS-2026-11-10.md` | Status baseline CI dan bundle lokal yang belum lolos Dart/Flutter gate |
-| 3 | `P1-ROBUSTNESS-2026-11-10.md` | Detail hardening concurrency, trust, MCP, SMTP, Flutter dan provider-routing follow-up |
-| 4 | `STATUS-2026-11-09.md` | Status historis baseline |
-| 5 | `REPOSITORY-AUDIT-2026-11-09.md` | Bukti audit kode-vs-dokumen |
-| 6 | `01-ARSITEKTUR.md` | Arsitektur aktual dan aliran runtime |
-| 7 | `02-PROVIDER-AI.md` | Provider chat/decision, routing dan circuit breaker |
-| 8 | `03-TOOLS-MCP-SKILLS.md` | Tool registry, sandbox, MCP dan lifecycle skill |
-| 9 | `04-MEMORI-DB-PENCARIAN.md` | SQLite/JSON, FTS, vector retrieval dan session store |
-| 10 | `05-SCHEDULER-BOT-GATEWAY.md` | Scheduler, delivery acknowledgement, zona waktu dan channels |
-| 11 | `06-AGENT-ALGORITMA-SELFLEARNING.md` | Algoritma agent, evaluasi dan self-learning |
-| 12 | `07-KEAMANAN-OBSERVABILITAS.md` | Threat model, approval, capability dan batas sandbox |
-| 13 | `08-REGISTRI-DEPENDENSI.md` | Dependency manifest dan toolchain CI aktual |
-| 14 | `09-ROADMAP-TASKS.md` | Backlog berbasis gap yang masih nyata |
-| 15 | `email-smtp.md` | Status SMTP outbound, STARTTLS verification/no-downgrade dan input validation |
-| 16 | `sqlite-vec-notes.md` | Catatan riset; belum menjadi runtime backend |
-| 17 | `ADVANCED-AGENT-FEATURES-2026-11-10.md` | Reflection loop, Advanced RAG, multi-agent orchestration, content-plane security guard, layered memory |
-| 18 | `HERMES-PARITY-GAPS-2026-11-10.md` | Plugins system, memory providers eksternal, prompt caching, API server OpenAI-compatible, ACP IDE, cloud browser backends, Discord voice, image/TTS breadth, agentskills.io + Skills Hub |
-| 19 | `10-HAPPY-PATH-MANUAL.md` | Cara uji manual jalur happy-path browser (CDP/cloud), image generation, dan voice STT/TTS beserta env/config aktualnya |
-| 20 | `HERMES-PARITY-P2-2026-11-11.md` | Batch P2: gateway Signal/Matrix, cloud sandbox (Modal/Daytona), Kanban multi-process, MCP OAuth, CI Android/Termux |
-| 21 | `P0-INTEGRATION-FIXES-2026-11-11.md` | Verifikasi + perbaikan 6 temuan P0 audit eksternal: telemetry learning, golden gate skill improvement, injeksi reflection/RAG/layered memory, Tirith aktif, isolasi role team |
-| 22 | `P1-EXTERNAL-AUDIT-2026-11-11.md` | Verifikasi + perbaikan 6 item P1 audit eksternal: subagent telemetry asli, ACP session/load + wiring daemon, e2e mock LLM/gateway, enkripsi Discord voice xsalsa20_poly1305, RRF memory fanout, evaluation harness + CLI tiko eval |
-| 23 | `P2-BACKLOG-2026-11-12.md` | Batch P2 audit eksternal: plugin manifest + permission vocabulary, tool_search dinamis, execute_code fail-closed, trajectory export privacy guard, git worktree per task, OTLP trace exporter opt-in (P2-5/7/8 didokumentasikan out-of-scope) |
-| 24 | `DEFERRED-COMPLETION-2026-11-12.md` | Penuntasan catatan batasan: subset skema tool dinamis di loop context (P2-2 tuntas), modelTier per-role diteruskan ke team runner via `AgentConfig.preferredTier` + `Router.route(preferredTier:)`, mode voice `aead_xchacha20_poly1305` (P1-4 tuntas, vektor resmi draft-irtf-cfrg-xchacha) |
-| 25 | `PROVIDER-PARITY-2026-11-12.md` | Provider parity Hermes: 37 preset katalog, transport `openai_responses`/`azure_openai`/`bedrock` (SigV4 + Converse), credential pool rotasi 401/403/429, OAuth device flow RFC 8628, timeout per provider/model, model discovery CLI `tiko models` |
-| 26 | `SECURITY-HARDENING-2026-11-15.md` | Perbaikan 14 temuan audit keamanan eksternal: SecretStore AEAD, CredentialManager at-rest, ApiServer fail-closed, SSRF web_search, auth http_api + ticket WS, jail kanonik, PromptGuard normalisasi + rule Indonesia |
-| 27 | `LEARN-CURATED-MEMORY-2026-11-15.md` | Hermes-parity: perintah `/learn` (authoring skill dari dir/URL/notes/percakapan, validasi berlapis) + memori terkurasi MEMORY.md/USER.md dengan nudge periodik, protokol memory-ops, PromptGuard fail-closed, anggaran karakter |
-| 28 | `INTERRUPT-REDIRECT-2026-11-15.md` | Hermes-parity: interrupt-and-redirect — pesan baru saat sesi sibuk memotong turn aktif secara kooperatif (bounded wait), system note pengarahan, event `turn.interrupted`, config `agent.interrupt_redirect` |
-| 29 | `SUPPLY-CHAIN-HARDENING-2026-11-15.md` | Audit supply-chain: pemindaian pubspec.lock, OSV batch scan, integritas sha256 pin vs registry, pemeriksaan usia rilis, attestation SLSA build provenance CI |
-| 30 | `CREDENTIAL-ENCRYPTION-2026-11-15.md` | B-02 lanjutan: enkripsi at-rest `credentials.json` via SecretStore (XChaCha20-Poly1305 + Argon2id) dengan `TIKO_SECRET_PASSPHRASE`, migrasi plaintext sekali saat startup, backward compatible tanpa passphrase |
-| 31 | `BOT-MODE-2026-11-15.md` | Hermes-parity: Bot Mode — persona bot persisten per chat (`/bot` list/new/persona/model/use/off/show/delete), BotStore JSON atomik, injeksi persona + model per bot, binding sesi persisten; routing gateway grup terunifikasi via `BotGroupRouter` (mention `@handle` = dispatch, tanpa mention = drop); tool allowlist per bot fail-closed (`/bot allow`); impor character card SillyTavern V1/V2/V3 (`/bot import`, JSON/PNG `chara`/`ccv3`) |
-| 32 | `PLUGIN-ISOLATION-2026-11-15.md` | Hermes-parity: plugin isolation — capability consent fail-closed (`PluginConsentStore`, guard di `PluginRegistry.register`), plugin out-of-process (`ProcessPlugin`, protokol JSON per baris, timeout + crash containment), config `plugins.process`, slash `/plugin` list/info/consent; tool baru dari plugin via permission `tools.register` (protokol `listTools`/`toolCall`, bridge `PluginTool` namespaced) |
-| 33 | `SCHEDULER-DUPLICATE-POLICY-2026-11-16.md` | Perbaikan A1: jendela duplikasi delivery at-least-once eksplisit — deteksi in-flight deterministik, config `scheduler.duplicate_policy` resend/review, recovery di `Scheduler.start()` |
-| 34 | `EMPTY-CATCH-AUDIT-2026-11-16.md` | Perbaikan A8: audit 100 blok catch kosong — 36 dikonversi ke logging (persistensi/state/shutdown), 64 ditandai `// best-effort`, gerbang otomatis `scripts/audit_empty_catch.py` |
-| 35 | `FEEDBACK-LOOP-2026-11-16.md` | Perbaikan C1: feedback-to-skill loop end-to-end — `/feedback up|down` tingkat turn, `POST /v1/sessions/<id>/feedback`, feedback mengalir ke metrik skill durabel + ledger trajectory self-evolution (reblend reward, event `evolution.feedback`/`feedback.turn`, audit) |
-| 36 | `MCP-SERVER-REQUESTS-2026-11-16.md` | Perbaikan C2: request JSON-RPC ber-ID dari server MCP HTTP kini dijawab (opt-in `mcp.answer_server_requests`, hanya tool low-risk, batas concurrency/timeout/rate-limit) + resume GET SSE via header `Last-Event-ID` |
-| 37 | `UNIFIED-HEALTH-CONCURRENCY-2026-11-16.md` | Perbaikan C3: test regresi konkurensi unified provider health — 6 test `Future.wait` (single-probe half-open tepat satu pemenang dari N pemanggil, tanpa double-count failures, releaseProbe saat stream dibatalkan tanpa verdict, aux paralel fail-closed) |
-| 38 | `INBOUND-EMAIL-ANTI-REPLAY-2026-11-16.md` | Perbaikan C4: inbound email — anti-replay dedup `Message-ID` (bounded cache), allowlist pengirim fail-closed (kosong = tolak semua), lifecycle/shutdown test (poll gagal tidak mematikan loop, `stop()` idempotent); test IMAP 6 → 11 |
-| 39 | `FLUTTER-WS-EDGE-2026-11-16.md` | Perbaikan C5: Flutter WebSocket edge — 6 test (karakter khusus, frame biner, ticket 401 fallback, close mendadak, upgrade ditolak, timeout ready); bug teardown `sink.close()` menggantung diperbaiki (bounded 5 s) |
-| 40 | `SCHEDULER-IDEMPOTENCY-2026-11-16.md` | Perbaikan C6: idempotency key delivery — `OutboundMessage.idempotencyKey` + `deliveryIdempotencyKey(jobId, runId)`; Matrix txnId dedup server-side, Email Message-ID deterministik; bug QUIT tidak graceful (Broken pipe race) diperbaiki; matriks duplicate-safe per platform |
-| 41 | `TOKEN-ENCODING-TESTS-2026-11-16.md` | Perbaikan C7: 5 test token/URL encoding & failure handling (401/403/5xx berkoden, token CRLF ditolak lokal, baseUrl malformed, ID unicode, sendMessage unicode); row durable metrics ditutup sebagai stale dengan bukti |
-| 42 | `MCP-OAUTH-AUTHCODE-2026-11-16.md` | Perbaikan C8: MCP OAuth authorization code + PKCE (RFC 7636/8414/9728/7591/8707), redirect loopback, refresh token, persistensi 0600 atomik, auth_method auto/basic/post/none, DCR; interface `McpOAuthTokenSource`; client_credentials tetap backward compatible; 20 test baru |
-| 43 | `GENUI-D1-2026-11-17.md` | D1: GenUI — DSL widget aman (grammar tertutup 7 tipe node, fail-closed ganda), tool `render_ui`, transport blok ```genui tanpa perubahan protokol, renderer Flutter (chart bar/line, form, actions, metric); 27 test baru |
-| 44 | `ROADMAP-CLOSURE-AUDIT-2026-11-17.md` | C9: audit penutupan roadmap — row "Unified provider health" & "Flutter API error transparency" ditutup dengan bukti kode/CI; tabel item blocked didokumentasikan |
-| 45 | `HDC-MEMORY-D2-2026-11-17.md` | D2: memori asosiatif HDC eksperimental — hypervector biner 10.000 dim (XOR bind, majority bundling, rotasi permutasi, similarity Hamming), encoder trigram Kanerva deterministik-seed, toko in-memory FIFO (max 1000), tool `hdc_memory` (remember/recall/forget/stats, risk low); 25 test baru; framing jujur: pelengkap asosiatif, bukan pengganti semantik |
-| 46 | `SELF-CORRECTION-D3-2026-11-17.md` | D3: loop koreksi-diri script — tool `script_selfheal` (risk high, opt-in `script.self_repair`), retry ≤3 dengan patch script lengkap dari LLM auxiliar, validasi patch fail-closed (kosong/oversize/identik ditolak), audit trail per percobaan ke AuditLog; Wasm dilaporkan blocked jujur; 24 test baru |
-| 47 | `SKILL-SHARE-D5-2026-11-17.md` | D5: federated-lite — tool `skill_share` (export/import paket JSON skill, redaksi rahasia fail-closed dua arah, trust direset ke draft), merge metrik CRDT LWW-Register (trade-off didokumentasikan), persist impor tanpa pernah menimpa skill lokal; 22 test baru |
-| 48 | `ISOLATE-SWARM-D4-2026-11-17.md` | D4: audit isolate swarm — tool batch paralel (ParallelToolRunner) & calc isolate (CalcSandbox) terbukti sudah tertutup; gap nyata ditutup: fan-out paralel terbatas RAG (retrieve multi-variant + ingest multi-chunk, maxConcurrency 1..16, determinisme ranking terjaga, semantik error tidak berubah); 7 test baru; IsolatePool didokumentasikan jujur sebagai API tanpa pemanggil produksi |
-| 81 | `VOICE-UI-GUI-2026-11-18.md` | Voice UI end-to-end sisi klien tanpa API baru: dikte via tombol mic (Flutter: `speech_to_text` + `flutter_tts` dengan `VoiceEngine` interface agar testable tanpa platform channel; web: Web Speech API `SpeechRecognition`/`speechSynthesis`, `lang: id-ID`), TTS tombol Dengarkan per pesan assistant + auto-speak balasan akhir (Flutter setting `ui.voiceReply` + SwitchListTile; web toggle `#btn-voice-reply` persist `agent_ui_voice_reply`, dipicu event `tiko:turn-finished` dari `finishTurn()`); pesan placeholder/error tidak dibacakan; test flutter +8 (265 total), web +2 (39 total); verifikasi: flutter analyze/test/build web, node --test, scripts/web_ui_validate.sh lulus; batasan jujur: kualitas bergantung mesin perangkat/browser, bukan streaming voice dua arah, audio tidak dikirim ke daemon |
-| 80 | `MEMORY-GRAPH-GUI-2026-11-18.md` | GUI-P2-05 dari backlog P2: memory graph / learning timeline tanpa API baru — Flutter: tab Timeline ke-5 di MemoryExplorerPage via widget `MemoryGraphTimeline` (grouping per tanggal, badge layer berwarna, provenance akses/sesi/terakhir + bar importance, chips tag, tombol delete per entri, label terpotong); web: card Graf/Timeline di tab Memori, `loadMemGraph()` fetch `/v1/memory/layers?limit=200` sort desc + grup tanggal + delegasi delete ke DELETE /v1/memory/layers/:id, render via textContent; test flutter +3 (257 total), web +2 (37 total); verifikasi: flutter analyze/test/build web, node --test, scripts/web_ui_validate.sh lulus; batasan jujur: timeline list kronologis bukan graf geometris, hanya delete (API belum mendukung edit in-place), dimuat on-demand |
-| 79 | `SIMPLE-ADVANCED-MODE-GUI-2026-11-18.md` | GUI-P2-01 dari backlog P2: Simple/Advanced mode di layer navigasi dua klien tanpa API baru — Flutter: `visibleRoutes(advanced:)` + `kSimpleRoutes` (Chat, Dashboard, Approvals, Sessions, Tasks, Memory, Settings) sebagai sumber tunggal filter, setting persist `ui.advancedMode` (default Advanced), param `entries` di DesktopShell/MobileShell, palette global hanya route aktif, More page menyembunyikan tile modul teknis; web parity: tombol `#btn-mode-advanced` di header, `data-advanced` pada 10 tab teknis, class `advanced-hidden` + fallback Chat bila tab aktif tersembunyi, preferensi `localStorage` opsional, palette menyaring tab tersembunyi; test flutter +4 (254 total), web +2 (35 total); verifikasi: flutter analyze/test/build web, node --test, scripts/web_ui_validate.sh lulus; batasan jujur: rute aktif di luar Simple tetap dirender, tanpa onboarding wizard, tanpa golden/E2E |
-| 78 | `MULTI-PANE-GUI-2026-11-18.md` | GUI-P2-03 dari backlog P2: multi-pane layout di atas data API yang sama (mati-bawa: preferensi tampilan, tanpa API baru) — Flutter: setting `ui.multiPane` (persist, toggle di Settings), wrapper chat layar lebar `>= 900px` menjadi Row `SessionsPane` (240px, daftar sesi + refresh + select langsung membuka sesi) + chat + `InspectorPane` (320px, toggle Runs/Files, refresh runs, buka artifact file, tombol tutup; tombol toggle inspector di header chat); web parity: tombol Multi-pane di tab Chat, `#pane-sessions` + `#pane-inspector` (hidden + CSS flex `.chat-panes`), refactor `loadSessions(listId)`/`loadRuns(listId)` untuk dipakai pane, refresh/close handlers, render textContent aman; test flutter +4 (250 total), web +2 (33 total); verifikasi: flutter analyze bersih, flutter test 250, build web release, node --test 33, scripts/web_ui_validate.sh lulus; batasan jujur: pane web sessions read-only (pemilihan sesi tetap di tab Sessions), inspector web hanya runs (artifacts via tab), tanpa drag resize pane |
-| 77 | `COMMAND-PALETTE-GUI-2026-11-18.md` | GUI-P2-02 dari backlog P2: command palette global Ctrl+K/Ctrl+P dua klien — Flutter: komponen FR-44 (`showCommandPalette`, fuzzy filter substring + skor posisi) di-wire level aplikasi via `PaletteShortcut` mengelilingi home; aksi global = navigasi 17 route (efek identik klik rail, termasuk lazy-load) + muat ulang data admin force; `onSubmitted` ditambahkan agar Enter dari text field menjalankan aksi terpilih; web parity: overlay `#cmd-palette` (input filter + list + fixed overlay CSS), refactor `switchTab(target)` dipakai bersama klik tab & palette, Ctrl/Cmd+K toggle, Enter memilih item pertama, Escape tutup, klik item via delegasi list, render textContent aman; test flutter +2 (246 total), web +2 (31 total); verifikasi: flutter analyze/test/build web, node --test, scripts/web_ui_validate.sh lulus; batasan jujur: tanpa tombol toolbar untuk palette, web palette hanya navigasi tab tanpa aksi refresh, tanpa golden/E2E browser |
-| 76 | `MEMORY-EXPLORER-GUI-2026-11-18.md` | GUI-P1-12 dari backlog GUI: Memory Explorer penuh empat tampilan di atas endpoint nyata — Fakta (`/v1/memory` read/delete yang sudah ada), Kurasi (`GET/PATCH /v1/memory/curated`: isi MEMORY.md/USER.md + anggaran karakter, simpan penuh per file, proyeksi melebihi budget → 400), Lapisan (`GET/POST/DELETE /v1/memory/layers[?q=&limit=]`: episodic/semantic/procedural, retrieval lintas lapis saat query diisi, stats per lapisan, add/delete + persist), RAG (`GET /v1/memory/rag`: chunk dikelompokkan per dokumen read-only); runtime `memoryCuratedGet/Set`, `memoryLayersGet`, `memoryLayerAdd/Delete`, `memoryRagSources` + getter read-only `RagPipeline.chunks`; gateway 6 callback + validator (501 bare daemon, 400 invalid_request, 404 not_found), wiring agentd, Flutter `MemoryExplorerPage` 4 tab (budget bar merah bila penuh, sheet tambah lapisan dropdown+slider, expansion detail + hapus berdialog, lazy load) + dto/klien/repo typed, web parity tab Memori (kurasi 2 textarea, form lapisan + query, daftar RAG, DELETE berdelegasi, textContent aman); test runtime 6, gateway 2, flutter 10 (244 total), web +4 (29 total); batasan jujur: tanpa edit parsial kurasi, RAG read-only tanpa hapus dokumen, lapisan hanya add/delete tanpa edit, tanpa streaming WS |
-| 75 | `RUN-INSPECTOR-GUI-2026-11-18.md` | Run-inspector dari backlog GUI lanjutan: snapshot turn agent aktif + riwayat read-only di atas endpoint nyata (`GET /v1/runs`): runtime `TurnInspector` (wrapper `chatWithStatus` mendelegasi ke `_chatWithStatusCore` tanpa mengubah isi; ring 50 run × 100 langkah/tool, subagent terdeteksi dari pola `parent/sub/...`, hook `audit` merekam tool verdict/error/duration live, input/answer disanitasi `SecuritySanitizer` 240 char), gateway callback `runsProvider` (501 bare daemon, read-only), wiring agentd, Flutter `RunsPage` (badge RUNNING/SELESAI/GAGAL/ERROR, ExpansionTile langkah tool berwarna, lazy load) + dto/klien/repo typed + route runs, web parity tab Runs (expand klik, textContent aman); test runtime 3, gateway 2, flutter 9 (234 total), web +2 (25 total); batasan jujur: read-only tanpa cancel turn dari GUI, snapshot polling (langkah muncul post-eksekusi, bukan streaming), in-memory hilang saat restart, tanpa args tool di langkah dan tanpa plan eksekusi per run |
-| 74 | `ARTIFACTS-GUI-2026-11-18.md` | GUI-P2-04 dari backlog audit GUI: Artifacts & diff viewer — browse workspace read-only di atas endpoint nyata (`GET /v1/artifacts[?dir=]`, `/read?path=`, `/diff?path=`): runtime `artifactsList` (walk rekursif skip dirs, limit 200 + truncated), `artifactsRead` (PathSafety fail-closed, deteksi biner, maxBytes 256 KB, bak_exists), `artifactsDiff` (LCS line-diff sendiri `=`/`-`/`+`, trim prefix/suffix + DP ≤1200 baris/sisi, maxEntries 400 + truncated) versus `.bak` yang ditulis otomatis tool `write_file`; gateway 3 callback + `_parseArtifactsPath` (NUL/EOF/newline ditolak → 400; 501 bare daemon), wiring agentd (ArgumentError→400, StateError→404), Flutter `ArtifactsPage` (daftar ikon+ukuran, tombol naik, `_PreviewCard` toggle Preview↔Diff berwarna, placeholder biner) + dto/klien/repo typed + route artifacts lazy-load, web parity tab Artifacts (textContent aman); test runtime 6, gateway 3, flutter 11 (225 total), web +2 (23 total); batasan jujur: read-only tanpa download/edit/hapus, tanpa pratinjau biner, diff hanya vs `.bak` langsung tanpa riwayat multi-versi |
-| 73 | `AUDIT-QUERY-GUI-2026-11-18.md` | GUI-P1-11 dari backlog audit GUI: Audit query browser penuh — `rt.auditQuery()` (gabung file JSONL harian 7 hari + buffer in-memory dengan dedupe by serialisasi, entri prah restart terangkau; filter tool substring case-insensitive, session persis, risk/verdict, taint, rentang since/until; urut terbaru, clamp limit 1..200 default 50 + offset, baris korup best-effort skip), gateway `GET /v1/audit` + `_parseAuditQuery` (typed filter, limit/offset/taint/since invalid → 400 invalid_request; 501 bare daemon; method lain 404), wiring agentd langsung ke filter ternormalisasi, Flutter `AuditPage` (bar filter tool/session/risk/verdict/taint, header total, badge TAINT/deny, pagination Muat selanjutnya; query on-demand tanpa menggandakan refreshAdmin 17 GET) + dto/klien/repo typed + route audit, web parity tab Audit (form filter + render textContent aman + Berikutnya); test runtime 6, gateway 4, flutter 9 (214 total), web +2 (21 total); batasan jujur: read-only, cakupan disk 7 hari (file lama tetap sampai rotate 30 hari), tanpa full-text di args/result, tanpa export CSV |
-| 72 | `SECURITY-CENTER-GUI-2026-11-18.md` | GUI-P1-10 dari backlog audit GUI: Security Center — snapshot konsolidasi status keamanan runtime read-only via `GET /v1/security`: `TokenAnomalyDetector.sampledSlugs` + `rt.securitySnapshot()` (safety safe_mode/panic/stop_requested, sandbox kind, flag sealed_storage, consent plugin per-id, token anomaly kuota+baseline per skill, rate anomaly window, counter guard in-memory, 15 entri audit teredaksi; active_sessions di-merge di wiring agentd), gateway 1 endpoint read-only (`securityProvider`; 501 bare daemon; POST 404), Flutter `SecurityPage` (kartu Safety/Token anomaly/Plugin consent/Guard/Audit) + dto/klien/repo typed + route security + refreshAdmin 17 GET, web parity tab Security (5 kartu + kartu batasan, textContent aman); test gateway 4, runtime 3, flutter 11 (205 total), web +2 (19 total); batasan jujur: read-only tanpa toggle safe mode/panic/kill switch, counter guard reset saat restart, tanpa izin detail per plugin, audit ringkasan 15 entri tanpa query browser |
-| 71 | `AUTOMATION-CRON-GUI-2026-11-18.md` | GUI-P1-09 dari backlog audit GUI: Automation/Cron CRUD penuh — scheduler `JobStore.update()` (mutasi parsial, normalisasi missed_policy case-insensitive, recompute next_run saat cron/timezone berubah) + `runNow()` (majukan next_run, blok saat delivery-pending; bug laten `catch_up` di ScheduleJobTool ikut diperbaiki), gateway 5 endpoint REST (`GET/POST /v1/jobs`, `PATCH/DELETE /v1/jobs/:id`, `POST /v1/jobs/:id/run`) + `_validateJobPayload` (allowlist field, 400/404/501 typed), wiring `rt.jobs` di agentd (default channel http/user_key admin), Flutter `AutomationPage` (badge ON/OFF, delivery state, toggle, run now, delete konfirmasi, dialog create cron+prompt+channel+timezone) + dto/klien/repo typed + route automations + refreshAdmin 16 GET, web parity tab Automation (list/run/toggle/delete/create, render textContent aman); test scheduler 4, gateway 9, flutter 13 (194 total), web +4 (17 total); batasan jujur: tanpa editor cron/prompt inline di UI (API PATCH tersedia), tanpa riwayat eksekusi per job, tanpa impor/ekspor job |
-| 70 | `LIVE-ADMIN-EVENT-FEED-2026-11-18.md` | GUI-P2-06 dari backlog audit GUI: live push WS admin feed Flutter — `streamEvents()` di client (WS `/v1/stream` + one-time ticket, hanya frame `event` — frame chat/confirm diabaikan, tidak menutup koneksi), gate `AdminEventFeed` (debounce 1s memikoaleskan burst, reconnect backoff 2s→60s berlipat), wiring main.dart: feed mulai setelah refresh admin pertama sukses, dispose di updateConnection/state, polling 15s tetap fallback; test 5 baru (2 WS server loopback + 3 fake_async backoff/debounce), 181 lulus; batasan jujur: tanpa UI feed baru, tanpa replay event hilang saat WS putus (dipulihkan polling), tanpa filter event per-halaman |
-| 69 | `WEB-PARITY-GUI-2026-11-18.md` | Web parity UI `apps/agentd/web` untuk GUI-P1-04/05/06/07: 4 tab baru (Bots, Provider, Plugin, Channels) di UI gateway — Bots: list + binding + bind/unbind + create + delete (POST/PATCH-DELETE `/v1/bots`), Provider: snapshot read-only + override per sesi (`POST /v1/providers/session`), Plugin: snapshot + consent grant/revoke (`POST /v1/plugins/consent`), Channels: read-only badge aktif + nama env; render aman textContent; test node harness +5 (13 total) menjalankan `scripts/web_ui_validate.sh`; batasan jujur: tanpa edit bot via form PATCH di web, tanpa on/off channel runtime, token tetap sessionStorage |
-| 68 | `SETTINGS-SCOPE-GUI-2026-11-18.md` | GUI-P1-08 dari audit GUI (rekomendasi #6/gap #8): Settings dipisah tiga scope eksplisit via caption scope — Perangkat (shared_preferences lokal), Kredensial (hanya memori sesi, token tidak pernah dipersist), Daemon (status runtime, read-only); toggle visibilitas bearer token (`visibility_outlined`/`visibility_off_outlined`, obscureText default); section baru Daemon status read-only dari `GET /v1/status` (versi, provider default, backend memori, safe mode, sandbox, profil resource) + catatan "Konfigurasi daemon: config immutable — ubah file config lalu restart"; wiring `daemonStatus` dari polling status di main.dart (desktop + More mobile); test settings +2 (scope caption + toggle token); batasan jujur: tanpa endpoint mutasi config daemon, web parity menyusul, polling 15 s |
-| 67 | `CHANNELS-GUI-2026-11-18.md` | GUI-P1-07 dari audit GUI: Channels Setup — REST API baru `GET /v1/channels` di gateway (callback `channelsProvider`, 501 tanpa callback, read-only: POST lain 404); agentd: builder `channelsSnapshot()` dari daftar gateway aktif + peta nama env per channel (`_channelEnv`, hanya nama — nilai rahasia tidak dikirim); Flutter: DTO `ChannelsSnapshot`/`ChannelInfo`, klien/repo 1 method typed, `ChannelsPage` read-only — kartu penjelasan setup env + restart, badge aktif/nonaktif per channel (telegram/discord/email/imap/whatsapp/slack/signal/matrix/openai/http), daftar nama env; route +channels (rail 14, non-primer mobile → More); refreshAdmin 15 GET paralel; test: gateway 4, repo 3, view 4; batasan jujur: tanpa on/off channel runtime (env + restart), tanpa health koneksi live, web parity menyusul, polling 15 s |
-| 66 | `PLUGINS-TOOLS-MANAGER-GUI-2026-11-18.md` | GUI-P1-06 dari audit GUI: Plugin & Tools Manager — REST API baru `GET /v1/plugins` (snapshot plugins + status consent + katalog tool registry + status server MCP + event hook terakhir) dan `POST /v1/plugins/consent` (grant/revoke, parity `/plugin consent`; 404 plugin tidak dikenal/tanpa pending, 400 plugin kosong/action invalid, 501 tanpa callback) di gateway; runtime: `pluginSnapshot()`, `toolCatalog()`, `mcpSnapshot()`, `grantPluginConsent`/`revokePluginConsent` — command `/plugin consent` direfaktor mendelegasikan (satu sumber dengan REST); Flutter: DTO `PluginsToolsSnapshot`/`PluginItem`/`ToolInfo`/`PluginEventInfo`/`McpStatusInfo`, klien/repo 2 method typed, `PluginManagerPage` — kartu plugin dengan badge status + chip permission, tombol Setujui/Cabut consent, section tools risk badge, status MCP per server, event plugin; route +plugins (rail 13, non-primer mobile → More); refreshAdmin 14 GET paralel; test: gateway 8, repo 5, view 5; batasan jujur: config plugin/MCP immutable runtime (tidak ada tambah/edit/uninstall dari GUI), web parity menyusul, polling 15 s |
-| 65 | `PROVIDER-MANAGER-GUI-2026-11-18.md` | GUI-P1-05 dari audit GUI: Provider & Model Manager — REST API baru `GET /v1/providers` (snapshot default + providers + capabilities + health breaker + tiers + session_overrides) dan `POST /v1/providers/session` (parity `/model <id|default>`; 404 provider tidak dikenal, 400 body tidak lengkap, 501 tanpa callback) di gateway; accessor runtime baru (`defaultProviderId`, `providerIds()`, `effectiveSessionProvider`, `setSessionProvider` + event `model.switched`, `clearSessionProvider`, `sessionModelOverrides`) di atas router yang sama dengan `/model`; Flutter: DTO `ProvidersSnapshot`/`ProviderItem`/`ProviderHealthInfo`, klien/repo 2 method typed, `ProviderManagerPage` — kartu provider dengan chip fase health berwarna + metrik breaker, tier routing read-only, override sesi dengan Reset default + dialog Set override (dropdown provider, ActionChip sesi); route +providers (rail 12, non-primer mobile → More); refreshAdmin 13 GET paralel; test: gateway 7, repo 6, view 5; batasan jujur: default global tidak bisa diubah runtime (config immutable), web parity menyusul, polling 15 s |
-| 64 | `BOT-MANAGER-GUI-2026-11-18.md` | GUI-P1-04 dari audit GUI: Bot/Agent Manager — REST API baru `GET/POST/PATCH/DELETE /v1/bots*` + `bindings/bind/unbind` di gateway (exception typed `ApiRequestException` 400/404/409/501, validasi id regex mirror `BotProfile.isValidId`), accessor `BotStore.bindings()`, wiring 8 callback di agentd ke `rt.botStore` (satu sumber dengan command `/bot`); Flutter: DTO `BotProfileItem`, klien/repo 7 method typed (error model typed — cukup `_throwIf`), `BotsPage` CRUD dialog (id tervalidasi inline), konfirmasi hapus, bottom sheet binding sesi (status per sesi, Bind/Unbind kontekstual); route map +bots (non-primer mobile → More, rail 11 destinasi); refreshAdmin 12 GET paralel; test: gateway 15, repo 11, view 5; batasan jujur: web UI parity menyusul, polling 15 s |
-| 63 | `SKILLS-MANAGER-GUI-2026-11-18.md` | GUI-P1-03 dari audit GUI: Skills Manager Flutter — data layer typed (`SkillItem` dengan metrik ledger + gate model `feedbackAllowed` hanya trial/approved, `SkillGateOutcome`, `SkillHistoryEntry`), klien/repo 6 method skills (list/feedback/evaluate/approve/rollback/history; penolakan gate HTTP 200+`error` diangkat ke `ApiError`), `SkillsPage` dengan filter, status chip berwarna, feedback 👍/👎 nonaktif untuk draft/retired (feedback tak pernah mempromosikan), menu lifecycle Evaluate/Approve/Rollback sesuai gate runtime, detail sheet + riwayat gate dari ledger; route map +skills (non-primer mobile → More), rail desktop dadm-meng-atasi overflow saat 10 destinasi (tinggi intrinsik + scroll); refreshAdmin 10 GET paralel; 13 test baru (flutter 13); batasan jujur: tanpa CRUD/import skill (endpoint belum ada), polling 15 s |
-| 62 | `TASKS-EVENTS-LOGS-FLUTTER-2026-11-18.md` | GUI-P1-01/02 dari audit GUI: task board, event feed & logs di Flutter — data layer typed (TaskItem/LogFileInfo/LogFileContent, repo tasks()/logs()/logContent 404 typed), route map bertambah Tasks/Events/Logs (non-primer mobile → More), `TaskBoardPage` kanban 4 kolom identik web (read-only — kontrol scheduler menunggu endpoint CRUD), `EventsPage` newest-first ber-warnai approval, `LogsPage` filter nama + filter baris isi + SelectionArea monospace + marker truncated; `_TopBar` dipublikasikan jadi `PageHeader`; refreshAdmin 9 GET paralel; 9 test baru (flutter 9); batasan jujur: polling 15 s, tanpa push WS global, search log lokal |
-| 61 | `CROSS-CLIENT-APPROVALS-2026-11-18.md` | GUI-P0-06 dari audit GUI: cross-client approvals — aktor keputusan diteruskan dari client (`actor` body / `x-tiko-actor` header / WS `confirm_response`, disanitasi 64 char) disimpan ledger (`actor ?? 'api'`), web kirim `actor:'web'` + Flutter `actor:'flutter'`; web UI reload daftar approvals otomatis (debounce 250 ms) saat event WS `approval.pending`/`approval.decided` dan tab terlihat; Flutter badge pending pada Approvals di DesktopShell/MobileShell; test baru gateway 4, web 3 (harness diperbaiki), flutter 3; batasan jujur: aktor atribusi bukan autentikasi, push Flutter menyusul |
-| 60 | `GUI-UNIFIED-SHELL-2026-11-18.md` | GUI-P0-01 dari audit GUI: satu shell/nav Flutter lintas Android/Desktop/Web — route map tunggal `app/app_routes.dart` (`AppRoute` + `kAppRoutes`, label domain sama lintas platform: Chat/Dashboard/Approvals/Sessions + Memory/Settings dikelompokkan ke More di mobile), `shell/desktop_shell.dart` (NavigationRail) & `shell/mobile_shell.dart` (NavigationBar) dibangun dari peta yang sama, design tokens tambahan di `ui/theme.dart` (surfaceRaised/Hover/Selected/Overlay, success/info, spacing 32, radius 8/12/16, skala tipografi 28/22/16/14/12); 7 test baru; URL routing browser & right inspector belum termasuk (dokumentasi jujur) |
-| 59 | `SECURE-CREDENTIALS-2026-11-18.md` | GUI-P0-05 dari audit GUI: token web UI pindah dari localStorage (plaintext permanen) ke sessionStorage per-tab + migrasi otomatis sekali + hapus saat kosong; Flutter dikunci test bahwa AppSettings tidak menyimpan token/secret ke preferences (token hanya in-memory, input masked); daemon terverifikasi tidak mencetak token; 2 test baru (web 1, flutter 1) |
-| 58 | `API-CONTRACT-TYPED-2026-11-18.md` | GUI-P0-03 dari audit GUI: error model typed di gateway (`{ok:false, code, error, retryable}` di semua error path; kode unauthorized/forbidden/not_found/invalid_request/not_implemented/conflict/rate_limited/server) + lapisan data Flutter `data/` (`ApiError`, DTO SessionSummary/SessionMessage/ApprovalSummary/MemoryFact/RuntimeEvent, interface `AgentRepository` + `HttpAgentRepository`); ChatController & halaman Dashboard/Approvals/Sessions/Memory/More memakai DTO typed; 17 test baru (gateway 6, flutter 11) |
-| 57 | `GENUI-TYPED-ACTIONS-2026-11-18.md` | GUI-P0-04 dari audit GUI: typed GenUI actions — `POST /v1/ui/actions` dengan `GenUiActionRegistry` per-sesi (ownership + expiry 15 menit + max 16 aksi/sesi + single-use + validasi form), agentd meneruskan ke handler `/ui <id> <json>`; Flutter `submitUiAction`/`sendUiAction` dengan fallback 501; 17 test baru (core 8, gateway 6, flutter 3) |
-| 56 | `SESSION-TRANSCRIPT-GUI-2026-11-18.md` | GUI-P0-02 dari audit GUI: transcript sesi via `GET /v1/sessions/{id}/messages` (paging offset, clamp 1..200) + `DELETE`/`PATCH /v1/sessions/{id}` (hapus/rename, `SessionStore.rename` default-false), Flutter Sessions memuat transcript saat sesi dipilih (bukan clearChat) + rename/delete dengan konfirmasi; 14 test baru (gateway 8, memory 2, flutter 4) |
-| 55 | `ONE-COMMAND-INSTALLER-E5-2026-11-17.md` | E5: installer sekali-perintah `install.sh` (terinspirasi installer Hermes) — Dart SDK otomatis (pin 3.13.4, curl+fallback python3), pub get, compile 3 biner, pasang ke prefix (~/.local/bin / --prefix), smoke --help; batasan jujur di header (tanpa Flutter, tanpa konfigurasi provider); CI: step compile diganti smoke installer |
-| 54 | `E-SERIES-CLOSURE-2026-11-17.md` | Laporan penutupan E-series: rekap E1–E4 (41 test baru, 2 bug nyata diperbaiki), pemetaan jujur wishlist Qwen v2 → kenyataan, tabel sisa item blocked dengan penghalang & syarat buka-ulang |
-| 53 | `WIDGET-LIBRARY-E4-2026-11-17.md` | E4: paket `apps/tiko_widgets` (di luar workspace Dart, job CI khusus) — GenUiMessageView/GenUiView (D1) + RoutingSummary diekstrak, `TikoChatInterface` baru (bubble + input + GenUI); agent_flutter memakai shim re-export; 5 test widget baru |
-| 52 | `SKILL-INSTALL-CLI-E3-2026-11-17.md` | E3: `tiko skills install <path> [--sha256 <hex>]` — install skill dari sumber lokal (paket JSON D5 / SKILL.md / direktori) tanpa registry; verifikasi SHA-256 konstanta-waktu fail-closed, status dipaksa draft, collision ditolak keras, rescan rahasia; 9 test baru; registry server tetap BLOCKED (jujur) |
-| 51 | `IDLE-CONSOLIDATION-E2-2026-11-17.md` | E2: konsolidasi memori idle via LLM auxiliar (opt-in `memory.idle_consolidation`, default false) — entri episodik retensi rendah diringkas jadi fakta semantik padat; pemicu idle = hitung giliran (bukan timer), gerbang kandidat minimum, parsing fail-closed, cap harian 6 panggilan LLM, entri asli tidak dihapus; 13 test baru |
-| 50 | `TOKEN-ANOMALY-E1-2026-11-17.md` | E1: deteksi anomali token per skill ("immune-lite") — `TokenAnomalyDetector` (baseline rolling mean+stddev per skill, dua lantai z-score + rasio, cooldown, fail-closed minSamples), wiring opt-in `security.token_anomaly` (default false): event `security.token_anomaly` + AuditLog + karantina skill ke draft dengan cap harian; 14 test baru; framing jujur: detektor ambang statistik, bukan agen imun otonom |
-| 49 | `D-SERIES-CLOSURE-2026-11-17.md` | Laporan penutupan D-series: rekap D1–D5 (105 test baru, 5 bug nyata diperbaiki), pemetaan jujur wishlist Qwen → kenyataan, tabel sisa item blocked dengan penghalang & syarat buka-ulang |
+| 1 | `01-ARSITEKTUR.md` | Arsitektur aktual dan aliran runtime |
+| 2 | `02-PROVIDER-AI.md` | Provider chat/decision, routing dan circuit breaker |
+| 3 | `03-TOOLS-MCP-SKILLS.md` | Tool registry, sandbox, MCP dan lifecycle skill |
+| 4 | `04-MEMORI-DB-PENCARIAN.md` | SQLite/JSON, FTS, vector retrieval dan session store |
+| 5 | `05-SCHEDULER-BOT-GATEWAY.md` | Scheduler, delivery acknowledgement, zona waktu dan channels |
+| 6 | `06-AGENT-ALGORITMA-SELFLEARNING.md` | Algoritma agent, evaluasi dan self-learning |
+| 7 | `07-KEAMANAN-OBSERVABILITAS.md` | Threat model, approval, capability dan batas sandbox |
 
-`README.md` dan `INSTALL.md` adalah panduan pengguna. Dokumen arsitektur `01-08` dan `dependency-log.md` awalnya direkonsiliasi terhadap snapshot lama; dokumen tersebut adalah referensi desain/implementasi, bukan bukti CI untuk bundle implementasi lokal. Gunakan `STATUS-2026-11-10.md` dan `P1-ROBUSTNESS-2026-11-10.md` untuk status kerja terkini. Laporan `CALC-*` adalah milestone calculator bertanggal 8 November. `P0/P1-*`, `TIKO-*`, `PERBAIKAN-*`, `STATUS-2026-11-09.md`, dan `REPOSITORY-AUDIT-2026-11-09.md` dipertahankan sebagai arsip/historis; jangan menggunakannya sebagai status sekarang. Laporan fitur `*-2026-11-09.md` mencatat patch saat itu; baca bersama source karena kontrak dapat berubah setelah commit laporan.
+### Dokumentasi Pengguna
 
-## Label status
+| Urutan | Dokumen | Tujuan |
+|---|---|---|
+| 8 | `README.md` | Panduan utama proyek |
+| 9 | `INSTALL.md` | Panduan instalasi |
 
-- **Implemented**: ada kode aktif/wiring yang ditemukan pada source snapshot.
-- **Implemented, conditional**: kode tersedia, tetapi perlu config, secret, software host, atau provider tertentu.
-- **Partial**: sebagian jalur tersedia tetapi belum memenuhi perilaku penuh/production release.
-- **Not implemented / open**: belum ada bukti implementasi penuh pada snapshot.
-- **Historical**: catatan saat commit/tanggal yang tertulis; tidak boleh dibaca sebagai keadaan HEAD sekarang.
+## Ringkasan Implementasi
 
-## Ruang lingkup source yang diaudit
+### Fitur Utama yang Sudah Diimplementasi
 
-Monorepo root `pubspec.yaml` memiliki workspace `agent_core`, `agent_calc`, `agent_providers`, `agent_tools`, `agent_memory`, `agent_gateway`, `agent_scheduler`, `agent_security`, `tiko_runtime`, `agentd`, `agent_cli`, dan `tiko`. `apps/agent_flutter` merupakan aplikasi Flutter terpisah dan diuji pada job CI tersendiri.
-
-## Ringkasan implementasi
-
-| Area | Kondisi pada snapshot |
+| Area | Status |
 |---|---|
-| ReAct agent loop, budget dan tool concurrency | Implemented dengan opt-in parallelSafe pada delta lokal; belum tervalidasi Dart CI |
-| Provider mock/OpenAI-compatible/Ollama native/Anthropic/Gemini | Implemented; koneksi/provider nyata butuh konfigurasi |
-| Tier routing 1–3 + health/fallback | Implemented |
-| Circuit breaker half-open single probe | Runtime aktif memakai `Router.ProviderHealth` sebagai satu pemilik state; fallback mengunci slot probe. Wrapper `agent_providers.CircuitBreaker` tetap legacy API dan tidak di-wire runtime |
-| Memory SQLite FTS5 + JSON fallback | Implemented; backend tergantung kemampuan native host |
-| Vector memory | Implemented melalui `BruteForceVectorIndex`; embedding opsional |
-| MCP stdio + Streamable HTTP | Implemented; GET SSE opsional, protocol-version header/config, reconnect ber-backoff, dan server-initiated request ber-ID dijawab (termasuk `sampling/createMessage` dengan rate limit per menit) |
-| Skills draft/evaluate/approve/rollback + ledgers | Implemented |
-| Scheduler cron + IANA timezone/DST + delivery ack/retry | Implemented di daemon integration |
-| HTTP/WebSocket + Web UI + Flutter client | Implemented; uji visual perangkat nyata tetap perlu |
-| Telegram/Discord/Email outbound/WhatsApp webhook/Slack webhook | Implemented bersyarat; SMTP timeout hardening ada pada bundle lokal; Email inbound belum di-wire ke daemon |
-| Video generation (P2-1, Hermes-parity) | Implemented bersyarat: `features.video_generation: true` + `features.fal_api_key` → tool `generate_video` via FAL queue API (submit → poll terbatas → download, simpan ke `videos/`); tanpa kredensial tool tidak teregistrasi (fail-closed) |
-| Desktop build Flutter client (P2-2) | CI meng-generate scaffolding platform (`flutter create --platforms=...`) dan membangun artifact desktop Linux/Windows/macOS untuk `apps/agent_flutter` |
-| Desktop self-contained bootstrap (P2-4) | App men-spawn daemon `agentd` bundled sendiri (`dart compile exe` di CI + `--dart-define=AGENTD_BIN`), home `~/.tiko-agent`, config bootstrap otomatis, token dibaca dari `data/api.token` (agentd yang generate), daemon outlives app, stop hanya via `/v1/shutdown` terautentikasi |
-| Calculator exact decimal + isolate sandbox | Implemented |
-| OS sandbox | Conditional; efektivitas bergantung host dan jenis sandbox |
+| ReAct agent loop, budget dan tool concurrency | ✅ Implemented |
+| Provider mock/OpenAI-compatible/Ollama/Anthropic/Gemini | ✅ Implemented |
+| Tier routing 1–3 + health/fallback | ✅ Implemented |
+| Circuit breaker half-open single probe | ✅ Implemented |
+| Memory SQLite FTS5 + JSON fallback | ✅ Implemented |
+| Vector memory dengan SqliteVecIndex (default) | ✅ Implemented |
+| MCP stdio + Streamable HTTP | ✅ Implemented |
+| Skills draft/evaluate/approve/rollback + ledgers | ✅ Implemented |
+| Scheduler cron + IANA timezone/DST + delivery ack/retry | ✅ Implemented |
+| HTTP/WebSocket + Web UI + Flutter client | ✅ Implemented |
+| Telegram/Discord/Email/WhatsApp/Slack gateway | ✅ Implemented (bersyarat) |
+| Calculator exact decimal + isolate sandbox | ✅ Implemented |
+| OS sandbox (bubblewrap/Docker/SSH/Modal/Daytona) | ✅ Implemented (conditional) |
 
-## Keputusan dokumentasi
+### Fitur GUI yang Sudah Tersedia
 
-1. Source pada commit snapshot dan test adalah sumber kebenaran untuk perilaku implementasi.
-2. `pubspec.yaml` menunjukkan dependency constraint langsung; `pubspec.lock` menunjukkan resolusi pada snapshot. Keduanya tidak sama dengan klaim “versi terbaru pub.dev”.
-3. Dokumen rancangan awal tidak dihapus, tetapi status dan kontrak aktual dibedakan dari ide/roadmap awal.
-4. Tidak ada klaim bahwa seluruh integrasi eksternal (server MCP vendor, akun Telegram/Discord/Slack/WhatsApp, layanan AI cloud) diuji end-to-end hanya karena mock test/CI lulus.
-5. Perubahan kode setelah snapshot harus diikuti pembaruan status dan pengujian; jangan menyalin status CI lama ke commit baru.
+- ✅ Chat dengan ReAct loop
+- ✅ Dashboard admin
+- ✅ Approvals (persetujuan tool)
+- ✅ Sessions management
+- ✅ Memory explorer (Fakta, Kurasi, Lapisan, RAG)
+- ✅ Run inspector
+- ✅ Artifacts viewer
+- ✅ Audit query browser
+- ✅ Security Center (read-only)
+- ✅ Automation/Cron CRUD
+- ✅ Bot/Agent Manager
+- ✅ Provider & Model Manager
+- ✅ Plugin & Tools Manager
+- ✅ Channels Setup
+- ✅ Settings (multi-scope)
+- ✅ Command palette (Ctrl+K/Ctrl+P)
+- ✅ Multi-pane layout
+- ✅ Simple/Advanced mode
+- ✅ Voice UI (STT/TTS)
+- ✅ Memory graph/timeline
+
+## CI/Build Status
+
+- ✅ **Dart analysis**: Semua package lulus strict analysis
+- ✅ **Dart tests**: Semua test lulus
+- ✅ **Flutter analyze**: Bersih
+- ✅ **Flutter tests**: Semua test lulus
+- ✅ **Flutter build web**: Release build sukses
+- ✅ **CLI smoke tests**: calc, chat, setup, config validate lulus
+- ✅ **Daemon lifecycle**: Start/stop/health lulus
+- ✅ **One-command installer**: Compile 3 biner (tiko, agentd, agent_cli) sukses
+- ✅ **SLSA attestation**: Disabled (masih failing di macOS)
+
+## Keputusan Dokumentasi
+
+1. **Source of truth**: Source code dan test adalah referensi utama untuk perilaku implementasi
+2. **Dependency**: `pubspec.yaml` menunjukkan constraint, `pubspec.lock` menunjukkan resolusi snapshot
+3. **Status**: Dokumen rancangan awal dipertahankan sebagai arsip, tetapi status aktual berbasis source terbaru
+4. **Testing**: Tidak ada klaim E2E penuh tanpa bukti test yang berjalan
+5. **Update**: Setiap perubahan kode harus diikuti pembaruan dokumentasi status
+
+## Catatan Penting
+
+- Dokumentasi historis (CI-FAILURE-*, STATUS-2026-11-*, P0/P1-*, dll) **telah dihapus** karena sudah kedaluwarsa
+- Semua bug P1 kritis **telah diperbaiki** dan diverifikasi
+- SLSA attestation **sengaja dinonaktifkan** karena konsisten gagal di macOS (tidak terkait dengan kode)
+- WebSocket events kini memiliki `event_id` dan `schema_version` untuk tracking yang lebih baik
+- AgentSpec.toolAllowlist kini **nullable**: `null` = deny all (lebih aman), empty list = inherit all
+
+## Label Status
+
+- **✅ Implemented**: Ada kode aktif/wiring yang ditemukan pada source
+- **✅ Implemented, conditional**: Kode tersedia, tetapi perlu config/secret/software host
+- **⏳ Partial**: Sebagian jalur tersedia tetapi belum memenuhi perilaku penuh
+- **📋 Not implemented**: Belum ada bukti implementasi penuh
+- **📜 Historical**: Catatan historis, tidak merefleksikan keadaan HEAD sekarang

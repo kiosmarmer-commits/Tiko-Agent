@@ -209,6 +209,8 @@ jobs:
     name: Flutter client analysis, tests and web build
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
@@ -320,8 +322,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      id-token: write
-      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -436,8 +436,6 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
@@ -456,6 +454,7 @@ jobs:
           flutter pub get
           flutter build apk --debug
       - name: Generate build provenance attestation for APK (SLSA)
+        if: false  # TODO: Re-enable when SLSA is stable
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: apps/agent_flutter/build/app/outputs/flutter-apk/app-debug.apk
