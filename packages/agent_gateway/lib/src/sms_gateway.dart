@@ -81,17 +81,26 @@ class SmsGateway implements Gateway {
   final String _endpoint;
 
   // Twilio
+  // Twilio
+  // ignore: unused_field
   final String _accountSid;
+  // ignore: unused_field
   final String _authToken;
 
   // AWS SNS
+  // ignore: unused_field
   final String _region;
+  // ignore: unused_field
   final String _accessKey;
+  // ignore: unused_field
   final String _secretKey;
 
   // Generic
+  // ignore: unused_field
   final String _apiKey;
+  // ignore: unused_field
   final String _method;
+  // ignore: unused_field
   final String _bodyFormat;
 
   final _inbound = StreamController<InboundMessage>.broadcast();
@@ -152,7 +161,7 @@ class SmsGateway implements Gateway {
   }
 
   Future<void> _sendTwilio(http.Client client, String to, String text) async {
-    final uri = _endpoint.replaceAll('\$accountSid', _accountSid!);
+    final uri = _endpoint.replaceAll('\$accountSid', _accountSid);
     
     final response = await client
         .post(
@@ -211,7 +220,7 @@ class SmsGateway implements Gateway {
           uri,
           headers: {
             'Content-Type': 'application/json',
-            if (_apiKey != null && _apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
+            if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
           },
           body: _bodyFormat == 'json' ? jsonEncode(payload) : payload,
         )
