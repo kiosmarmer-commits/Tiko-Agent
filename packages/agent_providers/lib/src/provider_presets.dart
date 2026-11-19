@@ -235,6 +235,43 @@ const Map<String, ProviderPreset> providerPresets = {
     baseUrl: 'https://opencode.ai/zen/v1',
     contextLength: 200000,
   ),
+  'opencode_go': ProviderPreset(
+    id: 'opencode_go',
+    baseUrl: 'https://opencode.ai/go/v1',
+    contextLength: 200000,
+  ),
+  'commandcode': ProviderPreset(
+    id: 'commandcode',
+    baseUrl: 'https://api.commandcode.ai/v1',
+    defaultModel: 'command-r-plus',
+    contextLength: 200000,
+  ),
+  'kilocode': ProviderPreset(
+    id: 'kilocode',
+    baseUrl: 'https://api.kilo.ai/v1',
+    defaultModel: 'kilo-code-70b',
+    contextLength: 131072,
+  ),
+  'tokenhub': ProviderPreset(
+    id: 'tokenhub',
+    baseUrl: 'https://api.tokenhub.ai/v1',
+    contextLength: 131072,
+  ),
+  'tokenplan': ProviderPreset(
+    id: 'tokenplan',
+    baseUrl: 'https://api.tokenplan.ai/v1',
+    contextLength: 131072,
+  ),
+  'ramprouter': ProviderPreset(
+    id: 'ramprouter',
+    baseUrl: 'https://api.ramp.ai/v1',
+    contextLength: 131072,
+  ),
+  'langchain_gateway': ProviderPreset(
+    id: 'langchain_gateway',
+    baseUrl: 'https://gateway.langchain.com/v1',
+    contextLength: 131072,
+  ),
 
   // Local / self-hosted
   'ollama_cloud': ProviderPreset(
