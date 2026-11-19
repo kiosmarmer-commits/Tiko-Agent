@@ -1840,15 +1840,16 @@ class TikoRuntime {
       );
       final boundBot = botStore.botFor(sessionId);
       if (!internalCommand && boundBot != null) {
-        if (boundBot.toolAllowlist.isEmpty) {
+        final bot = boundBot;
+        if (bot.toolAllowlist.isEmpty) {
           return ChatRunResult(
-            text: 'Bot "${boundBot.id}" belum memiliki tool allowlist — '
-                'turn ditolak fail-closed. Atur: /bot allow ${boundBot.id} '
+            text: 'Bot "${bot.id}" belum memiliki tool allowlist — '
+                'turn ditolak fail-closed. Atur: /bot allow ${bot.id} '
                 '<tool1,tool2> atau nonaktifkan: /bot off.',
             success: false,
           );
         }
-        final botFilter = Set.of(boundBot.toolAllowlist);
+        final botFilter = Set.of(bot.toolAllowlist);
         toolFilter = toolFilter == null
             ? botFilter
             : toolFilter.intersection(botFilter);
@@ -3125,7 +3126,8 @@ class TikoRuntime {
   /// gate matriks biasa. Sesi tanpa bot memakai gate biasa.
   PermissionGate _botGate(BotProfile? bot) {
     final base = buildGate();
-    if (bot == null || bot.toolAllowlist.isEmpty) return base;
+    if (bot == null) return base;
+    if (bot.toolAllowlist.isEmpty) return base;
     return _BotToolGate(base, Set.of(bot.toolAllowlist));
   }
 
@@ -3391,12 +3393,13 @@ class TikoRuntime {
             retryable: true,
           );
         }
-        final buf = StringBuffer('Bot ${bot.id} — "${bot.name}"\n'
-            'model: ${bot.model ?? 'default router'}\n'
-            'dibuat: ${bot.createdAt.toIso8601String()}\n'
+        final b = bot;
+        final buf = StringBuffer('Bot ${b.id} — "${b.name}"\n'
+            'model: ${b.model ?? 'default router'}\n'
+            'dibuat: ${b.createdAt.toIso8601String()}\n'
             'tool allowlist: '
-            '${bot.toolAllowlist.isEmpty ? '(kosong — turn ditolak fail-closed)' : bot.toolAllowlist.join(', ')}\n'
-            'persona:\n${bot.persona.isEmpty ? '(kosong)' : bot.persona}');
+            '${b.toolAllowlist.isEmpty ? '(kosong — turn ditolak fail-closed)' : b.toolAllowlist.join(', ')}\n'
+            'persona:\n${b.persona.isEmpty ? '(kosong)' : b.persona}');
         return ChatRunResult(text: buf.toString(), success: true);
 
       case 'delete':

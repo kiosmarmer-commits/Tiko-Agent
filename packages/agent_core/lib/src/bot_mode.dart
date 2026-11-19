@@ -181,7 +181,7 @@ class BotRouter {
       if (spec == null) {
         continue;
       }
-      if (!allowHostToolInheritance && spec.toolAllowlist.isEmpty) {
+      if (spec.toolAllowlist == null || (!allowHostToolInheritance && spec.toolAllowlist!.isEmpty)) {
         refused.add(handle);
         continue;
       }
