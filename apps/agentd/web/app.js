@@ -253,6 +253,62 @@
     return li;
   }
 
+  // GUI-P2-05 parity: memory graph / learning timeline — urutan kronologis
+  // entri memori berlapis dengan provenance; delete delegasi sama dengan
+  // daftar lapisan.
+  async function loadMemGraph() {
+    const list = $('#mem-graph-list');
+    if (!list) return;
+    list.replaceChildren(emptyItem('Memuat timeline memori\u2026'));
+    try {
+      const data = await api('/v1/memory/layers?limit=200');
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      list.replaceChildren();
+      if (!entries.length) {
+        list.appendChild(emptyItem('Belum ada entri untuk membuat timeline.'));
+        return;
+      }
+      const sorted = [...entries].sort(
+        (a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      let currentDate = '';
+      for (const entry of sorted) {
+        const dateKey = String(entry.created_at || '').slice(0, 10) || '(tanpa waktu)';
+        if (dateKey !== currentDate) {
+          currentDate = dateKey;
+          const header = document.createElement('li');
+          const count = sorted.filter(
+            (item) => (String(item.created_at || '').slice(0, 10) || '(tanpa waktu)') === dateKey).length;
+          header.className = 'hint';
+          header.textContent = dateKey + ' \u00b7 ' + count + ' entri';
+          list.appendChild(header);
+        }
+        const li = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = '[' + String(entry.layer || 'semantic').toUpperCase() + '] ' +
+          String(entry.text || '(tanpa teks)');
+        const meta = document.createElement('p');
+        meta.className = 'hint';
+        meta.textContent = 'dibuat ' + String(entry.created_at || '-') +
+          ' \u00b7 akses ' + Number(entry.access_count || 0) + 'x' +
+          (entry.source_session ? ' \u00b7 sesi ' + String(entry.source_session) : '') +
+          ' \u00b7 importance ' + String(entry.importance ?? 0) +
+          (Array.isArray(entry.tags) && entry.tags.length
+            ? ' \u00b7 ' + entry.tags.map((tag) => '#' + tag).join(' ') : '');
+        li.append(title, meta);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'secondary';
+        remove.textContent = 'Hapus';
+        remove.dataset.layerId = String(entry.id || '');
+        li.appendChild(remove);
+        list.appendChild(li);
+      }
+      if (data.truncated) list.appendChild(emptyItem('Hasil terpotong.'));
+    } catch (error) {
+      list.replaceChildren(emptyItem('Gagal memuat timeline: ' + error.message));
+    }
+  }
+
   async function createLayerFromWeb() {
     const layer = String($('#layer-new-layer')?.value || 'semantic');
     const text = String($('#layer-new-text')?.value || '').trim();
@@ -1802,6 +1858,12 @@
     loadLayers('');
   });
   $('#btn-layer-create')?.addEventListener('click', createLayerFromWeb);
+  $('#btn-load-mem-graph')?.addEventListener('click', loadMemGraph);
+  $('#mem-graph-list')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!target || !target.dataset || !target.dataset.layerId) return;
+    deleteLayer(target.dataset.layerId).then(() => loadMemGraph());
+  });
   $('#layer-list')?.addEventListener('click', (event) => {
     const target = event.target;
     if (!target || !target.dataset || !target.dataset.layerId) return;
