@@ -150,9 +150,10 @@ class BotRouter {
   final int maxHops;
   final int maxTurnsPerMessage;
 
-  /// [AgentSpec.toolAllowlist] being empty means the member inherits the
-  /// host tool registry. In a group chat that would let any member reach
-  /// host tools through a bot, so it is refused unless opted in.
+  /// [AgentSpec.toolAllowlist]: null = deny all, empty list = inherit host
+  /// tool registry (legacy), non-empty = only listed tools. In a group chat
+  /// that would let any member reach host tools through a bot, so it is
+  /// refused unless opted in (empty list) or explicitly allowed (non-null).
   final bool allowHostToolInheritance;
 
   BotRoute route({
