@@ -662,7 +662,10 @@ class WebSearchTool implements Tool {
     for (final raw in results) {
       if (raw is! Map<String, dynamic>) continue;
       final title = (raw['Text'] as String?) ?? (raw['Name'] as String?) ?? '(tanpa judul)';
-      final url = (raw['FirstURL'] as String?) ?? (raw['Icon']?.['URL'] as String?) ?? '';
+      // Handle nested Icon.URL safely
+      final icon = raw['Icon'] as Map<String, dynamic>?;
+      final iconUrl = icon?['URL'] as String?;
+      final url = (raw['FirstURL'] as String?) ?? iconUrl ?? '';
       final content = (raw['Text'] as String?) ?? '';
       if (url.isNotEmpty) {
         hits.add((title: title, url: url, content: content));
