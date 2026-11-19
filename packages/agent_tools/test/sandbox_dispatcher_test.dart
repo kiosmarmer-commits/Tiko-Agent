@@ -21,7 +21,7 @@ void main() {
       
       // Runner with none should throw UnsupportedError on execution
       expect(
-        () => runner.run('echo', ['hello']),
+        () => runner.run(['echo', 'hello']),
         throwsA(isA<UnsupportedError>()),
       );
     });
@@ -68,7 +68,7 @@ void main() {
       final runner = SandboxRunner(kind: SandboxKind.none);
       
       expect(
-        () => runner.startProcess('echo', ['hello']),
+        () => runner.startProcess(['echo', 'hello']),
         throwsA(isA<UnsupportedError>()),
       );
     });
