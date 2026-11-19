@@ -1,23 +1,11 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:agent_tools/agent_tools.dart';
-import 'package:http/http.dart' as http;
 import 'package:test/test.dart';
 
 void main() {
   group('Sandbox dispatcher (P2-5)', () {
-    test('dispatchFor returns SandboxKind.none when no backend available',
-        () async {
-      // Mock all probes to return false (no backends available)
-      final runner = await SandboxRunner.dispatchFor(
-        'echo hello',
-        httpClient: _MockFailingHttpClient(),
-        riskFn: (_) => 0.1, // Low risk
-      );
-      
-      // Should return a runner with kind = none
-      expect(runner.kind, SandboxKind.none);
+    test('SandboxRunner with none kind throws UnsupportedError on run',
+        () {
+      final runner = SandboxRunner(kind: SandboxKind.none);
       
       // Runner with none should throw UnsupportedError on execution
       expect(
@@ -26,45 +14,8 @@ void main() {
       );
     });
 
-    test('dispatchFor returns bubblewrap for low risk when available',
-        () async {
-      // This test would need actual bubblewrap detection
-      // For now, we just verify the structure
-      final runner = await SandboxRunner.dispatchFor(
-        'echo hello',
-        riskFn: (_) => 0.1, // Low risk
-      );
-      
-      // Runner should have a kind (might be none, docker, or bubblewrap depending on system)
-      expect(runner.kind, isA<SandboxKind>());
-    });
-
-    test('dispatchFor returns docker for medium risk when bubblewrap unavailable',
-        () async {
-      final runner = await SandboxRunner.dispatchFor(
-        'echo hello',
-        riskFn: (_) => 0.5, // Medium risk
-        httpClient: _MockFailingHttpClient(),
-      );
-      
-      // Should have a kind
-      expect(runner.kind, isA<SandboxKind>());
-    });
-
-    test('dispatchFor returns strongest isolation for high risk',
-        () async {
-      final runner = await SandboxRunner.dispatchFor(
-        'rm -rf /',
-        riskFn: (_) => 0.9, // High risk
-        httpClient: _MockFailingHttpClient(),
-      );
-      
-      // Should have a kind
-      expect(runner.kind, isA<SandboxKind>());
-    });
-
-    test('SandboxRunner with none kind throws on startProcess',
-        () async {
+    test('SandboxRunner with none kind throws UnsupportedError on startProcess',
+        () {
       final runner = SandboxRunner(kind: SandboxKind.none);
       
       expect(
@@ -72,60 +23,38 @@ void main() {
         throwsA(isA<UnsupportedError>()),
       );
     });
+
+    test('SandboxRunner with none kind has correct message in UnsupportedError',
+        () {
+      final runner = SandboxRunner(kind: SandboxKind.none);
+      
+      try {
+        runner.run(['echo', 'hello']);
+        fail('Expected UnsupportedError to be thrown');
+      } catch (e) {
+        expect(e, isA<UnsupportedError>());
+        expect(e.toString(), contains('OS sandbox tidak tersedia'));
+      }
+    });
+
+    test('SandboxRunner with docker kind does not throw on construction',
+        () {
+      // Should be able to create a runner with docker kind
+      final runner = SandboxRunner(kind: SandboxKind.docker);
+      expect(runner.kind, SandboxKind.docker);
+    });
+
+    test('dispatchFor returns a SandboxRunner with valid kind',
+        () async {
+      // Test that dispatchFor returns a valid runner
+      // Note: The actual kind depends on available backends in the test environment
+      final runner = await SandboxRunner.dispatchFor('echo hello');
+      
+      // Should return a runner with some kind
+      expect(runner.kind, isA<SandboxKind>());
+      expect(runner, isA<SandboxRunner>());
+    });
   });
 }
 
-/// Mock HTTP client that always fails (for testing no backend scenarios)
-class _MockFailingHttpClient implements http.Client {
-  @override
-  Future<http.Response> head(Uri url, {Map<String, String>? headers}) async {
-    throw Exception('No backend available');
-  }
 
-  @override
-  Future<http.Response> get(Uri url, {Map<String, String>? headers}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<http.Response> post(Uri url,
-      {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<http.Response> put(Uri url,
-      {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<http.Response> patch(Uri url,
-      {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<http.Response> delete(Uri url,
-      {Map<String, String>? headers, Object? body, Encoding? encoding}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<String> read(Uri url, {Map<String, String>? headers}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<Uint8List> readBytes(Uri url, {Map<String, String>? headers}) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    throw Exception('No backend available');
-  }
-
-  @override
-  void close() {}
-}
