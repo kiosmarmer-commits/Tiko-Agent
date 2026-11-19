@@ -584,6 +584,11 @@ class HttpApiServer {
   int get boundPort => _server?.port ?? port;
   final _wsClients = <WebSocket>{};
 
+  /// WebSocket event schema version (P2-6). Increment when event structure changes.
+  static const _wsSchemaVersion = '1.0';
+  int _wsEventCounter = 0;
+  final _wsEventLock = Object();
+
   /// Bounded idempotency cache for POST /v1/messages.
   static const _idempotencyLimit = 256;
   final _idempotencyCache = <String, Future<Map<String, dynamic>>>{};
@@ -763,14 +768,14 @@ class HttpApiServer {
               final ok = id.isNotEmpty &&
                   await (decideApproval?.call(id, allow, actor: actor) ??
                       Future.value(false));
-              ws.add(jsonEncode({'type': 'confirm_result', 'id': id, 'ok': ok}));
+              _sendWsEvent(ws, {'type': 'confirm_result', 'id': id, 'ok': ok});
               return;
             }
             final text = json['text'] as String? ?? '';
             final sessionKey = json['session_key'] as String? ?? 'ws:default';
             final userKey = json['user_key'] as String? ?? 'ws';
             if (text.isEmpty) return;
-            ws.add(jsonEncode({'type': 'typing'}));
+            _sendWsEvent(ws, {'type': 'typing'});
             final answer = await onMessage(
               InboundMessage(
                 channel: 'http',
@@ -779,11 +784,11 @@ class HttpApiServer {
                 text: text,
               ),
             );
-            ws.add(jsonEncode({'type': 'text', 'text': answer}));
-            ws.add(jsonEncode({'type': 'done'}));
+            _sendWsEvent(ws, {'type': 'text', 'text': answer});
+            _sendWsEvent(ws, {'type': 'done'});
             await ws.close();
           } catch (e) {
-            ws.add(jsonEncode({'type': 'error', 'message': e.toString()}));
+            _sendWsEvent(ws, {'type': 'error', 'message': e.toString()});
             await ws.close(WebSocketStatus.internalServerError, 'request failed');
           }
         },
@@ -1485,10 +1490,25 @@ class HttpApiServer {
   }
 
   void broadcast(Map<String, dynamic> event) {
-    final payload = jsonEncode(event);
+    final eventWithMetadata = <String, dynamic>{
+      'event_id': ++_wsEventCounter,
+      'schema_version': _wsSchemaVersion,
+      ...event,
+    };
+    final payload = jsonEncode(eventWithMetadata);
     for (final ws in _wsClients) {
       ws.add(payload);
     }
+  }
+
+  /// Send a WebSocket event to a single connection with metadata (P2-6).
+  void _sendWsEvent(WebSocket ws, Map<String, dynamic> event) {
+    final eventWithMetadata = <String, dynamic>{
+      'event_id': ++_wsEventCounter,
+      'schema_version': _wsSchemaVersion,
+      ...event,
+    };
+    ws.add(jsonEncode(eventWithMetadata));
   }
 
 }
