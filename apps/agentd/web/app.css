@@ -149,6 +149,12 @@ code { padding: 2px 5px; border: 1px solid var(--line); border-radius: 6px; colo
 #btn-mode-advanced { padding: 6px 12px; font-size: 12px; }
 #btn-mode-advanced[aria-pressed="false"] { border-color: var(--accent-strong); color: var(--accent); }
 
+/* Voice UI: dikte aktif + pembacaan balasan (suara) aktif. */
+#btn-voice-mic { padding: 8px 12px; font-size: 13px; }
+#btn-voice-mic[aria-pressed="true"] { border-color: #e9803c; color: #e9803c; }
+#btn-voice-reply { padding: 6px 12px; font-size: 12px; }
+#btn-voice-reply[aria-pressed="true"] { border-color: #368c82; color: #368c82; }
+
 /* GUI-P2-03: multi-pane workspace pada tab chat — sessions + inspector. */
 .chat-panes { display: flex; gap: 14px; align-items: stretch; }
 #pane-chat { flex: 1 1 auto; min-width: 0; }

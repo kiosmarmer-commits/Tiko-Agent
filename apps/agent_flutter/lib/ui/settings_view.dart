@@ -285,6 +285,17 @@ class _SettingsViewState extends State<SettingsView> {
                 onChanged: (value) =>
                     _update(settings.copyWith(advancedMode: value)),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.record_voice_over_outlined),
+                title: const Text('Balasan suara (Voice UI)'),
+                subtitle: Text(
+                  'Bacakan balasan Tiko dengan TTS perangkat; dikte tersedia via tombol mic.',
+                  style: TextStyle(color: SimpulTheme.mutedText(brightness)),
+                ),
+                value: settings.voiceReply,
+                onChanged: (value) =>
+                    _update(settings.copyWith(voiceReply: value)),
+              ),
             ],
           ),
         ),

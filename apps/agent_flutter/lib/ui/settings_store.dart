@@ -16,6 +16,7 @@ class AppSettings {
     this.powerSaver = false,
     this.multiPane = false,
     this.advancedMode = true,
+    this.voiceReply = false,
   });
 
   final ThemeMode themeMode;
@@ -38,6 +39,11 @@ class AppSettings {
   /// true (Advanced) agar perilaku lama tidak berubah diam-diam.
   final bool advancedMode;
 
+  /// Voice UI: bila aktif, balasan assistant terakhir dibacakan dengan TTS
+  /// perangkat setelah setiap turn chat selesai. Dikte tetap tersedia tanpa
+  /// setting ini.
+  final bool voiceReply;
+
   static const _kThemeMode = 'ui.themeMode';
   static const _kAccent = 'ui.accent';
   static const _kOllamaHost = 'ui.ollamaHost';
@@ -46,6 +52,7 @@ class AppSettings {
   static const _kPowerSaver = 'ui.powerSaver';
   static const _kMultiPane = 'ui.multiPane';
   static const _kAdvancedMode = 'ui.advancedMode';
+  static const _kVoiceReply = 'ui.voiceReply';
 
   static const accents = [
     Color(0xFF2A9D8F),
@@ -64,6 +71,7 @@ class AppSettings {
     bool? powerSaver,
     bool? multiPane,
     bool? advancedMode,
+    bool? voiceReply,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -74,6 +82,7 @@ class AppSettings {
       powerSaver: powerSaver ?? this.powerSaver,
       multiPane: multiPane ?? this.multiPane,
       advancedMode: advancedMode ?? this.advancedMode,
+      voiceReply: voiceReply ?? this.voiceReply,
     );
   }
 
@@ -101,6 +110,7 @@ class AppSettings {
       powerSaver: prefs.getBool(_kPowerSaver) ?? false,
       multiPane: prefs.getBool(_kMultiPane) ?? false,
       advancedMode: prefs.getBool(_kAdvancedMode) ?? true,
+      voiceReply: prefs.getBool(_kVoiceReply) ?? false,
     );
   }
 
@@ -114,5 +124,6 @@ class AppSettings {
     await prefs.setBool(_kPowerSaver, powerSaver);
     await prefs.setBool(_kMultiPane, multiPane);
     await prefs.setBool(_kAdvancedMode, advancedMode);
+    await prefs.setBool(_kVoiceReply, voiceReply);
   }
 }

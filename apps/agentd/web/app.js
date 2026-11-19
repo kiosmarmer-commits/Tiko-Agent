@@ -1423,6 +1423,146 @@
   $('#btn-refresh-pane-runs')?.addEventListener('click', loadPaneRuns);
   $('#btn-close-pane')?.addEventListener('click', () => setMultipane(false));
 
+  // Voice UI parity: dikte via Web Speech API (STT browser) + pembacaan
+  // balasan via speechSynthesis (TTS browser). Audio tidak dikirim ke
+  // daemon; preferensi hanya tata letak non-kredensial.
+  const btnVoiceMic = $('#btn-voice-mic');
+  const btnVoiceReply = $('#btn-voice-reply');
+  const kVoiceReplyKey = 'agent_ui_voice_reply';
+  let voiceReplyOn = false;
+  let micListening = false;
+  let recognition = null;
+
+  function setVoiceReply(on) {
+    voiceReplyOn = Boolean(on);
+    try {
+      localStorage.setItem(kVoiceReplyKey, voiceReplyOn ? '1' : '0');
+    } catch (error) {}
+    if (btnVoiceReply) {
+      btnVoiceReply.textContent = voiceReplyOn ? 'Suara: aktif' : 'Suara: off';
+      btnVoiceReply.setAttribute('aria-pressed', String(voiceReplyOn));
+    }
+  }
+
+  setVoiceReply((() => {
+    try {
+      return localStorage.getItem(kVoiceReplyKey) === '1';
+    } catch (error) {
+      return false;
+    }
+  })());
+
+  btnVoiceReply?.addEventListener('click', () => {
+    setVoiceReply(!voiceReplyOn);
+    if (!voiceReplyOn && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (error) {}
+    }
+  });
+
+  function setMicUi(on) {
+    micListening = on;
+    if (btnVoiceMic) {
+      btnVoiceMic.setAttribute('aria-pressed', String(on));
+      btnVoiceMic.classList.toggle('listening', on);
+    }
+    if (input) {
+      input.placeholder = on ? 'Mendengarkan… (bicara sekarang)' : 'Tulis pesan…';
+    }
+  }
+
+  function toggleMic() {
+    if (micListening) {
+      if (recognition) {
+        try {
+          recognition.stop();
+        } catch (error) {}
+      }
+      return;
+    }
+    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+    if (typeof Ctor !== 'function') {
+      addMsg('system', 'Dikte suara tidak didukung browser ini (butuh Web Speech API).');
+      return;
+    }
+    let rec;
+    try {
+      rec = new Ctor();
+    } catch (error) {
+      addMsg('system', 'Dikte suara gagal dijalankan: ' + error.message);
+      return;
+    }
+    rec.lang = 'id-ID';
+    rec.interimResults = true;
+    rec.onresult = (event) => {
+      let text = '';
+      for (const res of event.results) text += res[0].transcript;
+      if (input) input.value = text;
+    };
+    rec.onerror = () => {
+      addMsg('system', 'Dikte suara gagal dijalankan.');
+      setMicUi(false);
+    };
+    rec.onend = () => {
+      recognition = null;
+      setMicUi(false);
+    };
+    recognition = rec;
+    try {
+      rec.start();
+      setMicUi(true);
+    } catch (error) {
+      recognition = null;
+      addMsg('system', 'Dikte suara gagal dijalankan: ' + error.message);
+    }
+  }
+
+  btnVoiceMic?.addEventListener('click', () => toggleMic());
+
+  function speakText(text) {
+    const synth = window.speechSynthesis;
+    const Ctor = window.SpeechSynthesisUtterance;
+    if (!synth || typeof Ctor !== 'function') return;
+    try {
+      synth.cancel();
+      const utterance = new Ctor(String(text));
+      utterance.lang = 'id-ID';
+      synth.speak(utterance);
+    } catch (error) {}
+  }
+
+  function lastAssistantText() {
+    let last = null;
+    for (const child of msgs.children) {
+      if (child.classList && child.classList.contains('assistant')) last = child;
+    }
+    if (!last) return '';
+    const text = String(last.textContent || '').trim();
+    if (!text || text === 'Menulis…' || text === 'Menulis' || text === '(selesai)' || text.startsWith('Gagal:')) {
+      return '';
+    }
+    return text;
+  }
+
+  function maybeSpeakLastAssistant() {
+    if (!voiceReplyOn) return;
+    const text = lastAssistantText();
+    if (text) speakText(text);
+  }
+
+  function emitTurnFinished() {
+    try {
+      document.dispatchEvent(new Event('tiko:turn-finished'));
+    } catch (error) {
+      try {
+        document.dispatchEvent('tiko:turn-finished');
+      } catch (ignored) {}
+    }
+  }
+
+  document.addEventListener('tiko:turn-finished', maybeSpeakLastAssistant);
+
   // GUI-P2-01 parity: Simple/Advanced mode — Simple menyembunyikan tab
   // modul teknis dari navigasi (progressive disclosure), kemampuan runtime
   // dan API tidak berubah. Preferensi disimpan di localStorage.
@@ -1600,6 +1740,7 @@
     setBusy(false);
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
     socket = null;
+    emitTurnFinished();
   }
 
   function handleStreamMessage(raw) {
