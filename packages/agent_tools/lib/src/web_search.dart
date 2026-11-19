@@ -310,12 +310,21 @@ class WebSearchTool implements Tool {
         return (hits, providerId);
       } on _SearchFailure catch (e) {
         errors.add('[$providerId] ${e.message}');
+        // Only continue to next provider if this failure is eligible for fallback
+        // (e.g., network errors, 5xx errors). Configuration errors (403, 401) should not fallback.
+        if (!e.fallbackEligible) {
+          // Configuration error - don't try other providers
+          throw _SearchFailure(
+            '[$providerId] ${e.message}',
+            fallbackEligible: false,
+          );
+        }
         // Continue to next provider in fallback chain
         continue;
       }
     }
     
-    // All providers failed
+    // All providers failed with fallback-eligible errors
     throw _SearchFailure(
       'Semua provider gagal:\n${errors.join('\\n')}',
       fallbackEligible: false,
