@@ -160,4 +160,53 @@ void main() {
     expect(props.containsKey('model'), isTrue);
     expect(props.containsKey('duration_sec'), isTrue);
   });
+
+  test('factory xai membuat tool dengan spec yang valid', () {
+    final tool = VideoGenerationToolFactory.create(
+      provider: 'xai',
+      apiKey: 'k',
+      outputDirectory: tmpDir.path,
+    );
+    final spec = tool.spec;
+    expect(spec.name, 'generate_video');
+    expect(spec.risk, 'medium');
+    final props = spec.inputSchema['properties'] as Map;
+    expect(props.containsKey('prompt'), isTrue);
+  });
+
+  test('factory openrouter membuat tool dengan spec yang valid', () {
+    final tool = VideoGenerationToolFactory.create(
+      provider: 'openrouter',
+      apiKey: 'k',
+      outputDirectory: tmpDir.path,
+    );
+    final spec = tool.spec;
+    expect(spec.name, 'generate_video');
+    expect(spec.risk, 'medium');
+    final props = spec.inputSchema['properties'] as Map;
+    expect(props.containsKey('prompt'), isTrue);
+  });
+
+  test('factory deepinfra membuat tool dengan spec yang valid', () {
+    final tool = VideoGenerationToolFactory.create(
+      provider: 'deepinfra',
+      apiKey: 'k',
+      outputDirectory: tmpDir.path,
+    );
+    final spec = tool.spec;
+    expect(spec.name, 'generate_video');
+    expect(spec.risk, 'medium');
+    final props = spec.inputSchema['properties'] as Map;
+    expect(props.containsKey('prompt'), isTrue);
+  });
+
+  test('factory dengan provider tidak dikenal melempar error', () {
+    expect(
+      () => VideoGenerationToolFactory.create(
+        provider: 'unknown',
+        apiKey: 'k',
+      ),
+      throwsA(isA<ArgumentError>()),
+    );
+  });
 }

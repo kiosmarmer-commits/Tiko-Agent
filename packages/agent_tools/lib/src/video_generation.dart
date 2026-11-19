@@ -347,8 +347,9 @@ class VideoGenerationTool implements Tool {
 
   String get description =>
       'Generate a short video from a text prompt using AI video models '
-      '(FAL.ai: Veo, Kling, Wan, LTX, PixVerse, Hunyuan). Returns the saved '
-      'file path and provider URL.';
+      '(FAL.ai: Veo, Kling, Wan, LTX, PixVerse, Hunyuan; xAI Grok Video; '
+      'OpenRouter: Veo 3, Google Veo 2; DeepInfra: Veo 3, Kling V2, PixVerse V2). '
+      'Returns the saved file path and provider URL.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -502,6 +503,415 @@ class VideoGenerationTool implements Tool {
   Future<List<String>> listModels() => provider.listModels();
 }
 
+/// xAI (Grok) Video Generation provider.
+/// Uses xAI's video generation API (Grok Video).
+class XaiVideoGenerationProvider implements VideoProvider {
+  XaiVideoGenerationProvider({
+    required this.apiKey,
+    this.baseUrl = 'https://api.x.ai/v1',
+    this.config = const VideoGenerationConfig(),
+    http.Client? httpClient,
+  }) : _ownedClient = httpClient;
+
+  final String apiKey;
+  final String baseUrl;
+  final VideoGenerationConfig config;
+  final http.Client? _ownedClient;
+
+  http.Client get _client => _ownedClient ?? http.Client();
+
+  @override
+  String get name => 'xai';
+
+  @override
+  Future<List<String>> listModels() async => Future.value(const [
+        'grok-video-1',
+        'grok-video-1-fast',
+      ]);
+
+  @override
+  Future<VideoGenerationResult> generateVideo({
+    required String prompt,
+    String? model,
+    int? durationSec,
+    int? fps,
+    String? aspectRatio,
+    String? resolution,
+    int? seed,
+  }) async {
+    final started = DateTime.now();
+    final modelName = model ?? 'grok-video-1';
+    try {
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/video/generations'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': modelName,
+              'prompt': prompt,
+              if (durationSec != null) 'duration': durationSec,
+              if (aspectRatio != null) 'aspect_ratio': aspectRatio,
+              if (resolution != null) 'resolution': resolution,
+              if (seed != null) 'seed': seed,
+            }),
+          )
+          .timeout(config.pollInterval * config.maxPolls);
+
+      if (response.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'xAI API error: HTTP ${response.statusCode}',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final videoUrl = data['data']?['url']?.toString();
+
+      if (videoUrl == null || videoUrl.isEmpty) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'xAI response missing video URL',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final download = await _client.get(Uri.parse(videoUrl));
+      if (download.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'xAI video download failed: HTTP ${download.statusCode}',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      if (download.bodyBytes.length > config.maxVideoSize) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'Video exceeds maxVideoSize (${config.maxVideoSize} bytes)',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      return VideoGenerationResult(
+        success: true,
+        videoBytes: download.bodyBytes,
+        videoUrl: videoUrl,
+        model: modelName,
+        provider: name,
+        durationSec: durationSec,
+        fps: fps,
+        aspectRatio: aspectRatio,
+        resolution: resolution,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } catch (e) {
+      return VideoGenerationResult(
+        success: false,
+        error: 'xAI video generation failed: $e',
+        provider: name,
+        model: modelName,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } finally {
+      if (_ownedClient == null) _client.close();
+    }
+  }
+}
+
+/// OpenRouter Video Generation provider.
+/// Uses OpenRouter API for video generation.
+class OpenRouterVideoGenerationProvider implements VideoProvider {
+  OpenRouterVideoGenerationProvider({
+    required this.apiKey,
+    this.baseUrl = 'https://openrouter.ai/api/v1',
+    this.config = const VideoGenerationConfig(),
+    http.Client? httpClient,
+  }) : _ownedClient = httpClient;
+
+  final String apiKey;
+  final String baseUrl;
+  final VideoGenerationConfig config;
+  final http.Client? _ownedClient;
+
+  http.Client get _client => _ownedClient ?? http.Client();
+
+  @override
+  String get name => 'openrouter';
+
+  @override
+  Future<List<String>> listModels() async => Future.value(const [
+        'openai/veo-3',
+        'openai/veo-3-fast',
+        'google/veo-2',
+        'google/veo-2-fast',
+      ]);
+
+  @override
+  Future<VideoGenerationResult> generateVideo({
+    required String prompt,
+    String? model,
+    int? durationSec,
+    int? fps,
+    String? aspectRatio,
+    String? resolution,
+    int? seed,
+  }) async {
+    final started = DateTime.now();
+    final modelName = model ?? 'openai/veo-3';
+    try {
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/video/generations'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': modelName,
+              'prompt': prompt,
+              if (durationSec != null) 'duration': durationSec,
+              if (aspectRatio != null) 'aspect_ratio': aspectRatio,
+              if (resolution != null) 'resolution': resolution,
+              if (seed != null) 'seed': seed,
+            }),
+          )
+          .timeout(config.pollInterval * config.maxPolls);
+
+      if (response.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'OpenRouter API error: HTTP ${response.statusCode}',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final videoUrl = data['data']?['url']?.toString();
+
+      if (videoUrl == null || videoUrl.isEmpty) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'OpenRouter response missing video URL',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final download = await _client.get(Uri.parse(videoUrl));
+      if (download.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'OpenRouter video download failed: HTTP ${download.statusCode}',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      if (download.bodyBytes.length > config.maxVideoSize) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'Video exceeds maxVideoSize (${config.maxVideoSize} bytes)',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      return VideoGenerationResult(
+        success: true,
+        videoBytes: download.bodyBytes,
+        videoUrl: videoUrl,
+        model: modelName,
+        provider: name,
+        durationSec: durationSec,
+        fps: fps,
+        aspectRatio: aspectRatio,
+        resolution: resolution,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } catch (e) {
+      return VideoGenerationResult(
+        success: false,
+        error: 'OpenRouter video generation failed: $e',
+        provider: name,
+        model: modelName,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } finally {
+      if (_ownedClient == null) _client.close();
+    }
+  }
+}
+
+/// DeepInfra Video Generation provider.
+/// Uses DeepInfra API for video generation.
+class DeepInfraVideoGenerationProvider implements VideoProvider {
+  DeepInfraVideoGenerationProvider({
+    required this.apiKey,
+    this.baseUrl = 'https://api.deepinfra.com/v1',
+    this.config = const VideoGenerationConfig(),
+    http.Client? httpClient,
+  }) : _ownedClient = httpClient;
+
+  final String apiKey;
+  final String baseUrl;
+  final VideoGenerationConfig config;
+  final http.Client? _ownedClient;
+
+  http.Client get _client => _ownedClient ?? http.Client();
+
+  @override
+  String get name => 'deepinfra';
+
+  @override
+  Future<List<String>> listModels() async => Future.value(const [
+        'deepinfra/veo-3',
+        'deepinfra/veo-3-fast',
+        'deepinfra/kling-v2',
+        'deepinfra/pixverse-v2',
+      ]);
+
+  @override
+  Future<VideoGenerationResult> generateVideo({
+    required String prompt,
+    String? model,
+    int? durationSec,
+    int? fps,
+    String? aspectRatio,
+    String? resolution,
+    int? seed,
+  }) async {
+    final started = DateTime.now();
+    final modelName = model ?? 'deepinfra/veo-3';
+    try {
+      final response = await _client
+          .post(
+            Uri.parse('$baseUrl/video/generations'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': modelName,
+              'prompt': prompt,
+              if (durationSec != null) 'duration': durationSec,
+              if (aspectRatio != null) 'aspect_ratio': aspectRatio,
+              if (resolution != null) 'resolution': resolution,
+              if (seed != null) 'seed': seed,
+            }),
+          )
+          .timeout(config.pollInterval * config.maxPolls);
+
+      if (response.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'DeepInfra API error: HTTP ${response.statusCode}',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final videoUrl = data['data']?['url']?.toString();
+
+      if (videoUrl == null || videoUrl.isEmpty) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'DeepInfra response missing video URL',
+          provider: name,
+          model: modelName,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      final download = await _client.get(Uri.parse(videoUrl));
+      if (download.statusCode >= 400) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'DeepInfra video download failed: HTTP ${download.statusCode}',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      if (download.bodyBytes.length > config.maxVideoSize) {
+        return VideoGenerationResult(
+          success: false,
+          error: 'Video exceeds maxVideoSize (${config.maxVideoSize} bytes)',
+          provider: name,
+          model: modelName,
+          videoUrl: videoUrl,
+          prompt: prompt,
+          generationTime: DateTime.now().difference(started),
+        );
+      }
+
+      return VideoGenerationResult(
+        success: true,
+        videoBytes: download.bodyBytes,
+        videoUrl: videoUrl,
+        model: modelName,
+        provider: name,
+        durationSec: durationSec,
+        fps: fps,
+        aspectRatio: aspectRatio,
+        resolution: resolution,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } catch (e) {
+      return VideoGenerationResult(
+        success: false,
+        error: 'DeepInfra video generation failed: $e',
+        provider: name,
+        model: modelName,
+        prompt: prompt,
+        generationTime: DateTime.now().difference(started),
+      );
+    } finally {
+      if (_ownedClient == null) _client.close();
+    }
+  }
+}
+
 /// Factory for creating video generation tools.
 class VideoGenerationToolFactory {
   static Tool create({
@@ -514,6 +924,33 @@ class VideoGenerationToolFactory {
       case 'fal':
         return VideoGenerationTool(
           provider: FalVideoGenerationProvider(
+            apiKey: apiKey,
+            config: config,
+          ),
+          config: config,
+          outputDirectory: outputDirectory,
+        );
+      case 'xai':
+        return VideoGenerationTool(
+          provider: XaiVideoGenerationProvider(
+            apiKey: apiKey,
+            config: config,
+          ),
+          config: config,
+          outputDirectory: outputDirectory,
+        );
+      case 'openrouter':
+        return VideoGenerationTool(
+          provider: OpenRouterVideoGenerationProvider(
+            apiKey: apiKey,
+            config: config,
+          ),
+          config: config,
+          outputDirectory: outputDirectory,
+        );
+      case 'deepinfra':
+        return VideoGenerationTool(
+          provider: DeepInfraVideoGenerationProvider(
             apiKey: apiKey,
             config: config,
           ),
