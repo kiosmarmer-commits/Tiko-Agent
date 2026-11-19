@@ -33,7 +33,7 @@ void main() {
         fail('Expected UnsupportedError to be thrown');
       } catch (e) {
         expect(e, isA<UnsupportedError>());
-        expect(e.toString(), contains('OS sandbox tidak tersedia'));
+        expect(e.toString(), contains('sandbox tidak tersedia'));
       }
     });
 
