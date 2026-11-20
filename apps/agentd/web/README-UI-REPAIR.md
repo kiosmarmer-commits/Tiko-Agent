@@ -21,7 +21,7 @@ Palet, radius, dan gaya visual dashboard web diselaraskan dengan design token GU
 dart run apps/agentd/bin/agentd.dart --api
 ```
 
-Buka `http://127.0.0.1:8787/`, lalu masukkan token dari `data/api.token` pada tab Bantuan. Default daemon hanya bind ke loopback; pengaksesan jarak jauh memerlukan konfigurasi host, TLS, firewall, dan kebijakan Origin yang sesuai.
+Buka `http://127.0.0.1:8787/`. Saat UI dilayani langsung oleh agentd (same-origin), tidak perlu memasukkan token: cookie sesi `tiko_web_session` diterbitkan otomatis ketika index dimuat. Token Bearer tetap diterima dan hanya diperlukan untuk klien di luar origin daemon. Default daemon hanya bind ke loopback; pengaksesan jarak jauh memerlukan konfigurasi host, TLS, firewall, dan kebijakan Origin yang sesuai.
 
 ## Menyajikan Flutter Web (Jalur A fase 1)
 
@@ -33,7 +33,13 @@ Buka `http://127.0.0.1:8787/`, lalu masukkan token dari `data/api.token` pada ta
 
 Atribut penggabungan: API namespace (`/v1/*`), `/health`, dan `/webhooks/*` dikecualikan dari static serving; aset tetap tanpa auth karena digandengkan pada Host allowlist + bind loopback (B-08); guard traversal `..`/`%2e%2e` fail-closed dengan kode 400; semua respons statis diberi `X-Content-Type-Options: nosniff` dan `Cache-Control: no-cache`.
 
-Flutter Web yang dilayani agentd berjalan same-origin: `API_BASE` otomatis mengikuti origin halaman dan WebSocket memakai ticket sekali pakai `POST /v1/auth/ticket`; token HTTP API tetap dimasukkan pada tab Bantuan/Settings. Dashboard vanilla masih dipertahankan sebagai UI ringan fallback sampai fase 2 (retirement setelah paritas terverifikasi di browser).
+Flutter Web yang dilayani agentd berjalan same-origin: `API_BASE` otomatis mengikuti origin halaman dan WebSocket memakai ticket sekali pakai `POST /v1/auth/ticket` (diminta via cookie sesi, tanpa token). Dashboard vanilla masih dipertahankan sebagai UI ringan fallback sampai retirement setelah paritas Flutter Web terverifikasi di browser.
+
+### Sesi cookie same-origin dan auto-open (Jalur A fase 2)
+
+- Saat `_serveStatic` menyajikan `index.html`, respons memuat header `Set-Cookie: tiko_web_session=<acak>; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`. Nilai cookie acak 32 byte per proses daemon (ganti setelah restart).
+- `_auth` menerima Bearer **atau** cookie tersebut. Permintaan yang membawa header `Origin` hanya diterima jika origin-nya loopback (`127.0.0.1`, `localhost`, `::1`) atau host bind daemon — lapis kedua di atas browser yang tidak mengirim cookie `SameSite=Strict` untuk permintaan cross-site; bind loopback + Host allowlist tetap lapis pertama. Token API utama tidak pernah tersimpan di cookie.
+- Menjalankan daemon secara langsung (`dart run apps/agentd/bin/agentd.dart --api`) otomatis membuka browser ke UI bila webRoot ditemukan dan bind loopback. Spawn dari app Flutter desktop atau scheduler programatik menyetel `TIKO_NO_BROWSER=1` agar tidak ada tab ekstra; manual via `TIKO_NO_BROWSER=1` atau `TIKO_OPEN_BROWSER=0`.
 
 ## Implementasi UI yang tercakup pada source saat snapshot
 

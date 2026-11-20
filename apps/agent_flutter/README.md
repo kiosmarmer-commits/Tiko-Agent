@@ -26,7 +26,7 @@ cd apps/agent_flutter && flutter build web --release
 dart run apps/agentd/bin/agentd.dart --api
 ```
 
-Buka `http://127.0.0.1:8787/`; `_findWebRoot()` memprioritaskan `build/web` di atas dashboard vanilla (`apps/agentd/web`), dan `WEB_ROOT` env bisa meng-override. Pada web, `API_BASE` default mengikuti origin halaman (same-origin) dan WebSocket memakai ticket sekali pakai; token HTTP API tetap diisi melalui tab Settings/Bantuan.
+Buka `http://127.0.0.1:8787/`; `_findWebRoot()` memprioritaskan `build/web` di atas dashboard vanilla (`apps/agentd/web`), dan `WEB_ROOT` env bisa meng-override. Pada web, `API_BASE` default mengikuti origin halaman (same-origin) dan WebSocket memakai ticket sekali pakai; saat UI dilayani langsung oleh agentd, cookie sesi same-origin diterbitkan otomatis sehingga kolom token di Settings/Bantuan tidak perlu diisi (opsional, hanya untuk koneksi ke daemon lain). Browser dashboard juga terbuka otomatis saat menjalankan daemon langsung; matikan via env `TIKO_NO_BROWSER=1` atau `TIKO_OPEN_BROWSER=0`.
 
 ## Menjalankan
 

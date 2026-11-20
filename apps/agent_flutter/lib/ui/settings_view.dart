@@ -152,10 +152,12 @@ class _SettingsViewState extends State<SettingsView> {
                   enableSuggestions: false,
                   obscureText: !_tokenVisible,
                   decoration: InputDecoration(
-                    labelText: 'Bearer token',
+                    labelText: 'Bearer token (opsional)',
                     border: const OutlineInputBorder(),
                     helperText:
-                        'Hanya di memori sesi; tidak disimpan ke '
+                        'Tidak diperlukan saat UI ini dilayani langsung oleh '
+                        'daemon (sama-origin) — koneksi memakai sesi cookie '
+                        'otomatis. Hanya di memori sesi; tidak disimpan ke '
                         'penyimpanan perangkat.',
                     suffixIcon: IconButton(
                       tooltip: _tokenVisible ? 'Sembunyikan' : 'Tampilkan',
@@ -168,9 +170,7 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
                     ),
                   ),
-                  validator: (value) => (value ?? '').trim().isEmpty
-                      ? 'Bearer token wajib diisi.'
-                      : null,
+                  validator: null,
                 ),
                 const SizedBox(height: SimpulTheme.l),
                 SizedBox(

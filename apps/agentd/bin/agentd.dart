@@ -685,13 +685,14 @@ Future<void> main(List<String> args) async {
       return reply;
     }
 
+    final webRootDir = _findWebRoot();
     try {
       api = HttpApiServer(
         authToken: token,
         host: Platform.environment['API_HOST'] ?? '127.0.0.1',
         port: port,
         webhookEndpoint: webhooks,
-        webRoot: _findWebRoot(),
+        webRoot: webRootDir,
         onMessage: httpMessage,
         uiActionHandler: (sessionKey, actionId, values) async {
           uiActions.validateAndConsume(sessionKey, actionId, values);
@@ -1124,6 +1125,9 @@ Future<void> main(List<String> args) async {
       );
       await api.start();
       stdout.writeln('UI http://127.0.0.1:$port/');
+      if (webRootDir != null) {
+        _openLocalBrowser('http://127.0.0.1:$port/');
+      }
       stdout.writeln(
         'Token tersimpan di ${ApiTokenStore.pathFor(rt.dataDir)} (permission 600).',
       );
@@ -1367,6 +1371,25 @@ const Map<String, List<String>> _channelEnv = {
   'openai': ['OPENAI_API_PORT', 'OPENAI_API_KEY'],
   'http': ['API_HOST', 'API_PORT'],
 };
+
+/// Auto-open the web dashboard after the HTTP server starts (Jalur A fase 2).
+/// Hanya untuk bind loopback; daemon yang di-spawn app Flutter desktop /
+/// scheduler lain menyetel TIKO_NO_BROWSER=1 agar tidak ada tab ekstra.
+void _openLocalBrowser(String url) {
+  final env = Platform.environment;
+  if (env['TIKO_NO_BROWSER'] == '1' || env['TIKO_OPEN_BROWSER'] == '0') {
+    return;
+  }
+  final bind = (env['API_HOST'] ?? '127.0.0.1').toLowerCase();
+  if (bind != '127.0.0.1' && bind != 'localhost' && bind != '::1') return;
+  final command = Platform.isWindows
+      ? 'cmd'
+      : Platform.isMacOS
+          ? 'open'
+          : 'xdg-open';
+  final arguments = Platform.isWindows ? ['/c', 'start', '', url] : [url];
+  Process.run(command, arguments).ignore();
+}
 
 String? _findWebRoot() {
   // Jalur A fase 1: Flutter Web build (apps/agent_flutter/build/web)

@@ -134,6 +134,8 @@ class DaemonManager {
       env['API_TOKEN'] = configuredToken;
     }
     env['AGENT_UI'] = '1';
+    // Daemon programatik: jangan auto-buka browser web dashboard.
+    env['TIKO_NO_BROWSER'] = '1';
     env['API_PORT'] = '$apiPort';
     env['TIKO_CONFIG'] = p.absolute(
       workspaceRoot != null && p.isAbsolute(configPath)

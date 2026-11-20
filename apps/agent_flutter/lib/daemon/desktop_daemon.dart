@@ -173,7 +173,9 @@ providers:
       ..remove('API_TOKEN')
       ..['API_PORT'] = '$port'
       ..['TIKO_CONFIG'] = configPath
-      ..['AGENT_UI'] = '1';
+      ..['AGENT_UI'] = '1'
+      // Pengguna sedang di dalam app Flutter; jangan buka tab browser lagi.
+      ..['TIKO_NO_BROWSER'] = '1';
 
     Process? proc;
     try {

@@ -41,6 +41,7 @@
 | Google Home | Conditional via Home Assistant | Tidak ada direct Google Home API provider di repo |
 | Self-learning/reflection | Implemented with guards | Sintesis tetap dibatasi gate, score, dan approval |
 | Flutter client/widgets | Implemented/conditional | Memerlukan Flutter SDK dan daemon/API |
+| Web dashboard agentd (Jalur A) | Implemented/conditional | Flutter Web sebagai webRoot + cookie sesi same-origin + auto-open browser; butuh `flutter build web` untuk UI penuh, fallback dashboard vanilla |
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
 
 ## Kontrak dokumentasi
