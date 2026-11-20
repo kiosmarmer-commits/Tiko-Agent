@@ -138,12 +138,14 @@ class LinearMcpTool implements Tool {
         default:
           return ToolResult(
             callId: '',
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -176,6 +178,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issues': issues,
@@ -185,6 +188,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list issues: ${e.toString()}'}),
         isError: true,
@@ -198,6 +202,7 @@ class LinearMcpTool implements Tool {
       
       if (issueId == null || issueId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'issue_id is required'}),
           isError: true,
@@ -216,6 +221,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -224,6 +230,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get issue: ${e.toString()}'}),
         isError: true,
@@ -241,6 +248,7 @@ class LinearMcpTool implements Tool {
       
       if (title == null || title.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'title is required'}),
           isError: true,
@@ -290,6 +298,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -298,6 +307,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create issue: ${e.toString()}'}),
         isError: true,
@@ -316,6 +326,7 @@ class LinearMcpTool implements Tool {
       if (issueId == null || issueId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'issue_id is required'}),
           isError: true,
         );
@@ -329,6 +340,7 @@ class LinearMcpTool implements Tool {
       
       if (updates.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No fields to update'}),
           isError: true,
@@ -367,6 +379,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -375,6 +388,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to update issue: ${e.toString()}'}),
         isError: true,
@@ -399,6 +413,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'projects': projects,
@@ -408,6 +423,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list projects: ${e.toString()}'}),
         isError: true,
@@ -421,6 +437,7 @@ class LinearMcpTool implements Tool {
       
       if (projectId == null || projectId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'project_id is required'}),
           isError: true,
@@ -439,6 +456,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'project': project,
@@ -447,6 +465,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get project: ${e.toString()}'}),
         isError: true,
@@ -470,6 +489,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'teams': teams,
@@ -479,6 +499,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list teams: ${e.toString()}'}),
         isError: true,
@@ -492,6 +513,7 @@ class LinearMcpTool implements Tool {
       
       if (teamId == null || teamId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'team_id is required'}),
           isError: true,
@@ -510,6 +532,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'team': team,
@@ -518,6 +541,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get team: ${e.toString()}'}),
         isError: true,
@@ -541,6 +565,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'users': users,
@@ -550,6 +575,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list users: ${e.toString()}'}),
         isError: true,
@@ -563,6 +589,7 @@ class LinearMcpTool implements Tool {
       
       if (userId == null || userId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'user_id is required'}),
           isError: true,
@@ -581,6 +608,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'user': user,
@@ -589,6 +617,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get user: ${e.toString()}'}),
         isError: true,
@@ -603,6 +632,7 @@ class LinearMcpTool implements Tool {
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
@@ -621,6 +651,7 @@ class LinearMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -631,6 +662,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
