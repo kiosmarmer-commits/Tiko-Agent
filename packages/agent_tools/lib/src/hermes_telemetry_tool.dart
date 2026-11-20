@@ -29,12 +29,6 @@ class HermesTelemetryTool implements Tool {
   final String? agentId;
   final String? agentVersion;
 
-  @override
-  String get name => 'hermes_telemetry';
-
-  @override
-  String get description =>
-      'Hermes Telemetry tool for monitoring and analytics of AI agents.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -151,52 +145,55 @@ class HermesTelemetryTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'track_event':
-          return await _trackEvent(call);
+          return await _trackEvent(args, ctx);
         case 'track_llm_call':
-          return await _trackLlmCall(call);
+          return await _trackLlmCall(args, ctx);
         case 'track_tool_call':
-          return await _trackToolCall(call);
+          return await _trackToolCall(args, ctx);
         case 'track_error':
-          return await _trackError(call);
+          return await _trackError(args, ctx);
         case 'track_session_start':
-          return await _trackSessionStart(call);
+          return await _trackSessionStart(args, ctx);
         case 'track_session_end':
-          return await _trackSessionEnd(call);
+          return await _trackSessionEnd(args, ctx);
         case 'set_user':
-          return await _setUser(call);
+          return await _setUser(args, ctx);
         case 'set_metadata':
-          return await _setMetadata(call);
+          return await _setMetadata(args, ctx);
         case 'increment_counter':
-          return await _incrementCounter(call);
+          return await _incrementCounter(args, ctx);
         case 'record_duration':
-          return await _recordDuration(call);
+          return await _recordDuration(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackEvent(ToolCall call) async {
+  Future<ToolResult> _trackEvent(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final eventName = call.args['event_name'] as String?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final eventName = args['event_name'] as String?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       if (eventName == null || eventName.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'event_name is required'}),
           isError: true,
         );
@@ -217,6 +214,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'event': eventName,
@@ -225,22 +223,24 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track event: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackLlmCall(ToolCall call) async {
+  Future<ToolResult> _trackLlmCall(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final model = call.args['model'] as String?;
-      final promptTokens = call.args['prompt_tokens'] as num?;
-      final completionTokens = call.args['completion_tokens'] as num?;
-      final totalTokens = call.args['total_tokens'] as num?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final model = args['model'] as String?;
+      final promptTokens = args['prompt_tokens'] as num?;
+      final completionTokens = args['completion_tokens'] as num?;
+      final totalTokens = args['total_tokens'] as num?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       if (model == null || model.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'model is required'}),
           isError: true,
         );
@@ -267,6 +267,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'model': model,
@@ -276,21 +277,23 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track LLM call: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackToolCall(ToolCall call) async {
+  Future<ToolResult> _trackToolCall(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final toolName = call.args['tool_name'] as String?;
-      final toolInput = call.args['tool_input'] as Map<String, dynamic>?;
-      final toolOutput = call.args['tool_output'] as Map<String, dynamic>?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final toolName = args['tool_name'] as String?;
+      final toolInput = args['tool_input'] as Map<String, dynamic>?;
+      final toolOutput = args['tool_output'] as Map<String, dynamic>?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       if (toolName == null || toolName.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'tool_name is required'}),
           isError: true,
         );
@@ -316,6 +319,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'tool': toolName,
@@ -324,21 +328,23 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track tool call: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackError(ToolCall call) async {
+  Future<ToolResult> _trackError(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final errorType = call.args['error_type'] as String?;
-      final errorMessage = call.args['error_message'] as String?;
-      final errorStack = call.args['error_stack'] as String?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final errorType = args['error_type'] as String?;
+      final errorMessage = args['error_message'] as String?;
+      final errorStack = args['error_stack'] as String?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       if (errorType == null || errorType.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'error_type is required'}),
           isError: true,
         );
@@ -364,6 +370,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'error_type': errorType,
@@ -372,16 +379,17 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track error: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackSessionStart(ToolCall call) async {
+  Future<ToolResult> _trackSessionStart(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final sessionId = args['session_id'] as String?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       final requestBody = {
         'agentId': agentId,
@@ -401,6 +409,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'session_id': sessionId,
@@ -409,16 +418,17 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track session start: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _trackSessionEnd(ToolCall call) async {
+  Future<ToolResult> _trackSessionEnd(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String?;
-      final properties = call.args['properties'] as Map<String, dynamic>? ?? {};
+      final sessionId = args['session_id'] as String?;
+      final properties = args['properties'] as Map<String, dynamic>? ?? {};
       
       final requestBody = {
         'agentId': agentId,
@@ -438,6 +448,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'session_id': sessionId,
@@ -446,19 +457,21 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to track session end: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _setUser(ToolCall call) async {
+  Future<ToolResult> _setUser(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final userId = call.args['user_id'] as String?;
-      final userProperties = call.args['user_properties'] as Map<String, dynamic>? ?? {};
+      final userId = args['user_id'] as String?;
+      final userProperties = args['user_properties'] as Map<String, dynamic>? ?? {};
       
       if (userId == null || userId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'user_id is required'}),
           isError: true,
         );
@@ -478,6 +491,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'set',
           'user_id': userId,
@@ -486,18 +500,20 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to set user: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _setMetadata(ToolCall call) async {
+  Future<ToolResult> _setMetadata(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final metadata = call.args['metadata'] as Map<String, dynamic>?;
+      final metadata = args['metadata'] as Map<String, dynamic>?;
       
       if (metadata == null || metadata.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'metadata is required'}),
           isError: true,
         );
@@ -516,6 +532,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'set',
           'metadata': metadata,
@@ -524,19 +541,21 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to set metadata: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _incrementCounter(ToolCall call) async {
+  Future<ToolResult> _incrementCounter(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final counterName = call.args['counter_name'] as String?;
-      final incrementBy = call.args['increment_by'] as num? ?? 1;
+      final counterName = args['counter_name'] as String?;
+      final incrementBy = args['increment_by'] as num? ?? 1;
       
       if (counterName == null || counterName.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'counter_name is required'}),
           isError: true,
         );
@@ -557,6 +576,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'incremented',
           'counter': counterName,
@@ -566,25 +586,28 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to increment counter: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _recordDuration(ToolCall call) async {
+  Future<ToolResult> _recordDuration(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final durationName = call.args['duration_name'] as String?;
-      final durationMs = call.args['duration_ms'] as num?;
+      final durationName = args['duration_name'] as String?;
+      final durationMs = args['duration_ms'] as num?;
       
       if (durationName == null || durationName.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'duration_name is required'}),
           isError: true,
         );
       }
       if (durationMs == null) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'duration_ms is required'}),
           isError: true,
         );
@@ -605,6 +628,7 @@ class HermesTelemetryTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'recorded',
           'name': durationName,
@@ -614,6 +638,7 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to record duration: ${e.toString()}'}),
         isError: true,
       );
