@@ -32,12 +32,6 @@ class BrowserCdpTool implements Tool {
 
   CdpSession? _session;
 
-  @override
-  String get name => 'browser_cdp';
-
-  @override
-  String get description =>
-      'Direct Chrome DevTools Protocol tool for low-level browser automation. '
       'Allows executing raw CDP commands for advanced browser control.';
 
   @override
@@ -82,9 +76,9 @@ class BrowserCdpTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'open':
@@ -97,6 +91,7 @@ class BrowserCdpTool implements Tool {
           );
           await _session!.open();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'opened', 'session_id': _session!.sessionId}),
             isError: false,
           );
@@ -107,6 +102,7 @@ class BrowserCdpTool implements Tool {
             _session = null;
           }
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'closed'}),
             isError: false,
           );
@@ -114,15 +110,17 @@ class BrowserCdpTool implements Tool {
         case 'execute_cdp':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final method = call.args['method'] as String?;
-          final params = call.args['params'] as Map<String, dynamic>? ?? {};
+          final method = args['method'] as String?;
+          final params = args['params'] as Map<String, dynamic>? ?? {};
           
           if (method == null || method.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'method is required'}),
               isError: true,
             );
@@ -130,6 +128,7 @@ class BrowserCdpTool implements Tool {
           
           final result = await _session!.sendCommand(method, params);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'result': result}),
             isError: false,
           );
@@ -137,19 +136,22 @@ class BrowserCdpTool implements Tool {
         case 'navigate':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final url = call.args['url'] as String?;
+          final url = args['url'] as String?;
           if (url == null || url.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'url is required'}),
               isError: true,
             );
           }
           await _session!.navigate(url);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'navigated', 'url': url}),
             isError: false,
           );
@@ -157,12 +159,14 @@ class BrowserCdpTool implements Tool {
         case 'get_content':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final content = await _session!.getContent();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'content': content}),
             isError: false,
           );
@@ -170,19 +174,22 @@ class BrowserCdpTool implements Tool {
         case 'evaluate':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final expression = call.args['expression'] as String?;
+          final expression = args['expression'] as String?;
           if (expression == null || expression.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'expression is required'}),
               isError: true,
             );
           }
           final result = await _session!.evaluate(expression);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'result': result}),
             isError: false,
           );
@@ -190,24 +197,28 @@ class BrowserCdpTool implements Tool {
         case 'screenshot':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final screenshot = await _session!.screenshot();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'screenshot': screenshot}),
             isError: false,
           );
 
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
