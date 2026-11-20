@@ -24,12 +24,6 @@ class DeepWikiMcpTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
-  String get name => 'deepwiki_mcp';
-
-  @override
-  String get description =>
-      'DeepWiki MCP server for accessing knowledge graph and structured information.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -77,42 +71,45 @@ class DeepWikiMcpTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'search':
-          return await _search(call);
+          return await _search(args, ctx);
         case 'get_entity':
-          return await _getEntity(call);
+          return await _getEntity(args, ctx);
         case 'get_relationships':
-          return await _getRelationships(call);
+          return await _getRelationships(args, ctx);
         case 'query':
-          return await _query(call);
+          return await _query(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _search(ToolCall call) async {
+  Future<ToolResult> _search(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final query = call.args['query'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
-      final offset = call.args['offset'] as num? ?? 0;
-      final filters = call.args['filters'] as Map<String, dynamic>?;
+      final query = args['query'] as String?;
+      final limit = args['limit'] as num? ?? 10;
+      final offset = args['offset'] as num? ?? 0;
+      final filters = args['filters'] as Map<String, dynamic>?;
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
         );
@@ -137,6 +134,7 @@ class DeepWikiMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -149,18 +147,20 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getEntity(ToolCall call) async {
+  Future<ToolResult> _getEntity(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final entityId = call.args['entity_id'] as String? ?? call.args['query'] as String?;
+      final entityId = args['entity_id'] as String? ?? args['query'] as String?;
       
       if (entityId == null || entityId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'entity_id or query is required'}),
           isError: true,
         );
@@ -175,6 +175,7 @@ class DeepWikiMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'entity': data['entity'],
@@ -184,19 +185,21 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get entity: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getRelationships(ToolCall call) async {
+  Future<ToolResult> _getRelationships(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final entityId = call.args['entity_id'] as String? ?? call.args['query'] as String?;
-      final limit = call.args['limit'] as num? ?? 50;
+      final entityId = args['entity_id'] as String? ?? args['query'] as String?;
+      final limit = args['limit'] as num? ?? 50;
       
       if (entityId == null || entityId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'entity_id or query is required'}),
           isError: true,
         );
@@ -211,6 +214,7 @@ class DeepWikiMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'entity_id': entityId,
@@ -221,19 +225,21 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get relationships: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _query(ToolCall call) async {
+  Future<ToolResult> _query(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final query = call.args['query'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
+      final query = args['query'] as String?;
+      final limit = args['limit'] as num? ?? 10;
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
         );
@@ -253,6 +259,7 @@ class DeepWikiMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -262,6 +269,7 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to query: ${e.toString()}'}),
         isError: true,
       );
