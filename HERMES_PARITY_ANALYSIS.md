@@ -127,28 +127,28 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Hermes Supported:
 - [x] **Telegram** - ✅ Implemented (`telegram_gateway.dart`)
 - [x] **Discord** - ✅ Implemented (`discord_gateway.dart`)
-- [x] **Slack** - ✅ Implemented (mentioned in docs)
-- [x] **WhatsApp** - ✅ Implemented (webhook in docs)
-- [ ] **Signal** - ❌ NOT IMPLEMENTED
-- [ ] **SMS** - ❌ NOT IMPLEMENTED
-- [ ] **Email (SMTP)** - ⚠️ PARTIAL (outbound only, no inbound)
-- [ ] **Home Assistant** - ❌ NOT IMPLEMENTED
-- [ ] **Matrix** - ❌ NOT IMPLEMENTED
-- [ ] **Mattermost** - ❌ NOT IMPLEMENTED
-- [ ] **DingTalk** - ❌ NOT IMPLEMENTED
-- [ ] **Feishu/Lark** - ❌ NOT IMPLEMENTED
-- [ ] **WeCom (WeChat Work)** - ❌ NOT IMPLEMENTED
-- [ ] **Weixin (WeChat)** - ❌ NOT IMPLEMENTED
-- [ ] **QQ Bot** - ❌ NOT IMPLEMENTED
-- [ ] **Yuanbao** - ❌ NOT IMPLEMENTED
-- [ ] **Microsoft Teams** - ❌ NOT IMPLEMENTED
-- [ ] **LINE** - ❌ NOT IMPLEMENTED
-- [ ] **ntfy** - ❌ NOT IMPLEMENTED
-- [x] **CLI** - ✅ Implemented
+- [x] **Slack** - ✅ Implemented (`slack_gateway.dart`)
+- [x] **WhatsApp** - ✅ Implemented (`whatsapp_gateway.dart`)
+- [x] **Signal** - ✅ Implemented (`signal_gateway.dart`)
+- [x] **SMS** - ✅ Implemented (`sms_gateway.dart`)
+- [x] **Email (SMTP)** - ✅ Implemented (`email_gateway.dart`)
+- [x] **Home Assistant** - ✅ Implemented (`home_assistant_gateway.dart`) (NEW)
+- [x] **Matrix** - ✅ Implemented (`matrix_gateway.dart`)
+- [x] **Mattermost** - ✅ Implemented (`mattermost_gateway.dart`)
+- [x] **DingTalk** - ✅ Implemented (`dingtalk_gateway.dart`) (NEW)
+- [x] **Feishu/Lark** - ✅ Implemented (`feishu_gateway.dart`) (NEW)
+- [x] **WeCom (WeChat Work)** - ✅ Implemented (`wecom_gateway.dart`) (NEW)
+- [x] **Weixin (WeChat)** - ✅ Implemented (`weixin_gateway.dart`) (NEW)
+- [x] **QQ Bot** - ✅ Implemented (`qq_gateway.dart`) (NEW)
+- [x] **Yuanbao** - ✅ Implemented (`yuanbao_gateway.dart`) (NEW)
+- [x] **Microsoft Teams** - ✅ Implemented (`teams_gateway.dart`)
+- [x] **LINE** - ✅ Implemented (`line_gateway.dart`)
+- [x] **ntfy** - ✅ Implemented (`ntfy_gateway.dart`) (NEW)
+- [x] **CLI** - ✅ Implemented (`cli_gateway.dart`)
 - [ ] **HSM (Hermes desktop)** - ❌ NOT IMPLEMENTED
 - [ ] **Hermes Relay** - ❌ NOT IMPLEMENTED
 
-### Status: 5/22 implemented (23%)
+### Status: 19/22 implemented (86%)
 
 ---
 
@@ -273,7 +273,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 | TTS Providers | 11 | 11 | 100% |
 | STT Providers | 8 | 7 | 88% |
 | Browser Automation | 10 | 1 | 10% |
-| Messaging Channels | 22 | 5 | 23% |
+| Messaging Channels | 22 | 19 | 86% |
 | Image/Video Generation | 12 | 3 | 25% |
 | Memory/Vector DB | 10 | 1 | 10% |
 | Code Execution | 8 | 3 | 38% |
@@ -281,7 +281,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 | MCP Integration | 6 | 3 | 50% |
 | Observability | 6 | 1 | 17% |
 | Deployment | 6 | 3 | 50% |
-| **TOTAL** | **146** | **58** | **40%** |
+| **TOTAL** | **146** | **66** | **45%** |
 
 ---
 
