@@ -7,7 +7,8 @@ import 'package:http/io_client.dart' as io;
 import 'ssrf.dart';
 
 /// web_search via multiple providers with fallback chain (AGD-04 §7).
-/// Supports: SearXNG, Tavily, DDGS (DuckDuckGo), Brave, Exa, Firecrawl
+/// Supports: SearXNG, Tavily, DDGS (DuckDuckGo), Brave, Exa, Firecrawl,
+/// Perplexity, Keenable, xAI (Grok), OpenAI Codex, Nous Portal
 class WebSearchTool implements Tool {
   WebSearchTool({
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
@@ -20,6 +21,16 @@ class WebSearchTool implements Tool {
     this.exaBaseUrl = 'https://api.exa.ai',
     this.firecrawlApiKey,
     this.firecrawlBaseUrl = 'https://api.firecrawl.dev',
+    this.perplexityApiKey,
+    this.perplexityBaseUrl = 'https://api.perplexity.ai',
+    this.keenableApiKey,
+    this.keenableBaseUrl = 'https://api.keenable.ai',
+    this.xaiApiKey,
+    this.xaiBaseUrl = 'https://api.x.ai',
+    this.openaiCodexApiKey,
+    this.openaiCodexBaseUrl = 'https://api.openai.com',
+    this.nousPortalApiKey,
+    this.nousPortalBaseUrl = 'https://api.nousresearch.com',
     this.maxResults = 8,
     this.fetchTop = 3,
     this.fetchMaxChars = 2500,
@@ -30,6 +41,11 @@ class WebSearchTool implements Tool {
       'brave',
       'exa',
       'firecrawl',
+      'perplexity',
+      'keenable',
+      'xai',
+      'openai_codex',
+      'nous_portal',
     ],
     http.Client? client,
     SsrfGuard? ssrf,
@@ -57,6 +73,26 @@ class WebSearchTool implements Tool {
   final String? firecrawlApiKey;
   final String firecrawlBaseUrl;
 
+  /// Perplexity Search API key. Null/empty berarti provider nonaktif.
+  final String? perplexityApiKey;
+  final String perplexityBaseUrl;
+
+  /// Keenable Search API key. Null/empty berarti provider nonaktif.
+  final String? keenableApiKey;
+  final String keenableBaseUrl;
+
+  /// xAI (Grok) Search API key. Null/empty berarti provider nonaktif.
+  final String? xaiApiKey;
+  final String xaiBaseUrl;
+
+  /// OpenAI Codex Search API key. Null/empty berarti provider nonaktif.
+  final String? openaiCodexApiKey;
+  final String openaiCodexBaseUrl;
+
+  /// Nous Portal Tool Gateway API key. Null/empty berarti provider nonaktif.
+  final String? nousPortalApiKey;
+  final String nousPortalBaseUrl;
+
   final int maxResults;
   final int fetchTop;
   final int fetchMaxChars;
@@ -76,7 +112,8 @@ class WebSearchTool implements Tool {
     name: 'web_search',
     description:
         'Cari di web lewat multiple provider: SearXNG, Tavily, DDGS (DuckDuckGo), '
-        'Brave, Exa, Firecrawl. Mengembalikan judul, URL, cuplikan; '
+        'Brave, Exa, Firecrawl, Perplexity, Keenable, xAI (Grok), OpenAI Codex, '
+        'Nous Portal. Mengembalikan judul, URL, cuplikan; '
         'opsional mengunduh isi singkat dari N hasil teratas. '
         'Provider aktif bergantung pada konfigurasi dan ketersediaan API key.',
     inputSchema: {
@@ -143,6 +180,31 @@ class WebSearchTool implements Tool {
           break;
         case 'firecrawl':
           if ((firecrawlApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      case 'perplexity':
+          if ((perplexityApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      case 'keenable':
+          if ((keenableApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      case 'xai':
+          if ((xaiApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      case 'openai_codex':
+          if ((openaiCodexApiKey ?? '').trim().isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+      case 'nous_portal':
+          if ((nousPortalApiKey ?? '').trim().isNotEmpty) {
             activeProviders.add(providerId);
           }
           break;
@@ -351,6 +413,16 @@ class WebSearchTool implements Tool {
         return _searchExa(client, query);
       case 'firecrawl':
         return _searchFirecrawl(client, query);
+      case 'perplexity':
+        return _searchPerplexity(client, query);
+      case 'keenable':
+        return _searchKeenable(client, query);
+      case 'xai':
+        return _searchXai(client, query);
+      case 'openai_codex':
+        return _searchOpenaiCodex(client, query);
+      case 'nous_portal':
+        return _searchNousPortal(client, query);
       default:
         throw _SearchFailure('Provider $providerId tidak dikenal', fallbackEligible: false);
     }
@@ -639,6 +711,261 @@ class WebSearchTool implements Tool {
     if (res.statusCode >= 400) {
       throw _SearchFailure(
         'Firecrawl HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchPerplexity(
+    http.Client client,
+    String query,
+  ) async {
+    // Perplexity Search API
+    final perplexityCheck = await _ssrf.checkUrl(perplexityBaseUrl);
+    if (perplexityCheck != null) {
+      throw _SearchFailure(
+        'Perplexity base URL ditolak: $perplexityCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$perplexityBaseUrl/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${perplexityApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'numResults': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Perplexity error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Perplexity auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Perplexity HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchKeenable(
+    http.Client client,
+    String query,
+  ) async {
+    // Keenable Search API
+    final keenableCheck = await _ssrf.checkUrl(keenableBaseUrl);
+    if (keenableCheck != null) {
+      throw _SearchFailure(
+        'Keenable base URL ditolak: $keenableCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$keenableBaseUrl/v1/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${keenableApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'limit': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Keenable error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Keenable auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Keenable HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchXai(
+    http.Client client,
+    String query,
+  ) async {
+    // xAI (Grok) Search API
+    final xaiCheck = await _ssrf.checkUrl(xaiBaseUrl);
+    if (xaiCheck != null) {
+      throw _SearchFailure(
+        'xAI base URL ditolak: $xaiCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$xaiBaseUrl/v1/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${xaiApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'max_results': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'xAI Search error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'xAI auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'xAI HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchOpenaiCodex(
+    http.Client client,
+    String query,
+  ) async {
+    // OpenAI Codex Search API
+    final codexCheck = await _ssrf.checkUrl(openaiCodexBaseUrl);
+    if (codexCheck != null) {
+      throw _SearchFailure(
+        'OpenAI Codex base URL ditolak: $codexCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$openaiCodexBaseUrl/v1/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${openaiCodexApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'max_results': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'OpenAI Codex error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'OpenAI Codex auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'OpenAI Codex HTTP ${res.statusCode}',
+        fallbackEligible: false,
+      );
+    }
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return _hitsFrom(json);
+  }
+
+  Future<List<({String title, String url, String content})>> _searchNousPortal(
+    http.Client client,
+    String query,
+  ) async {
+    // Nous Portal Tool Gateway Search API
+    final portalCheck = await _ssrf.checkUrl(nousPortalBaseUrl);
+    if (portalCheck != null) {
+      throw _SearchFailure(
+        'Nous Portal base URL ditolak: $portalCheck',
+        fallbackEligible: false,
+      );
+    }
+    final uri = Uri.parse('$nousPortalBaseUrl/v1/search');
+    final http.Response res;
+    try {
+      res = await client
+          .post(
+            uri,
+            headers: {
+              'Authorization': 'Bearer ${nousPortalApiKey!}',
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'query': query,
+              'limit': maxResults,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw _SearchFailure(
+        'Nous Portal error: $e',
+        fallbackEligible: true,
+      );
+    }
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      throw _SearchFailure(
+        'Nous Portal auth ditolak (HTTP ${res.statusCode}) - periksa API key',
+        fallbackEligible: false,
+      );
+    }
+    if (res.statusCode >= 400) {
+      throw _SearchFailure(
+        'Nous Portal HTTP ${res.statusCode}',
         fallbackEligible: false,
       );
     }

@@ -114,8 +114,9 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'mistral': ProviderPreset(
     id: 'mistral',
-    baseUrl: 'https://api.mistral.ai/v1',
-    defaultModel: 'mistral-large-latest',
+    baseUrl: 'https://api.mistral.ai',
+    defaultModel: 'mistral-tiny',
+    transport: 'mistral',
     contextLength: 131072,
   ),
   'xai': ProviderPreset(
@@ -144,8 +145,9 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'minimax': ProviderPreset(
     id: 'minimax',
-    baseUrl: 'https://api.minimax.io/v1',
-    defaultModel: 'MiniMax-Text-01',
+    baseUrl: 'https://api.minimax.chat',
+    defaultModel: 'abab6-chat',
+    transport: 'minimax',
     contextLength: 1000192,
   ),
   'minimax_cn': ProviderPreset(

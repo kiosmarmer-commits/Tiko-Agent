@@ -1,5 +1,7 @@
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_providers/agent_providers.dart';
+import 'package:agent_providers/src/mistral_provider.dart';
+import 'package:agent_providers/src/minimax_provider.dart';
 
 import 'tiko_config.dart';
 
@@ -175,6 +177,33 @@ class ProviderFactory {
         return GeminiProvider(
           apiKey: key,
           model: model ?? 'gemini-2.0-flash',
+        );
+      case 'mistral':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (mistral) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return MistralProvider(
+          apiKey: key,
+          model: model ?? 'mistral-tiny',
+          baseUrl: baseUrl ?? 'https://api.mistral.ai',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'minimax':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (minimax) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return MiniMaxProvider(
+          apiKey: key,
+          model: model ?? 'abab6-chat',
+          baseUrl: baseUrl ?? 'https://api.minimax.chat',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+          groupId: c.groupId,
         );
       default:
         throw ArgumentError('Tipe provider tidak didukung: ${c.type}');

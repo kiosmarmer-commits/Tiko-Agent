@@ -54,6 +54,12 @@ List<Tool> createBuiltinTools({
   bool enableIdeIntegration = false,
   String? ideIntegrationWorkingDirectory,
   String ideType = 'vscode',
+  // New search provider API keys
+  String? perplexityApiKey,
+  String? keenableApiKey,
+  String? xaiApiKey,
+  String? openaiCodexApiKey,
+  String? nousPortalApiKey,
 }) {
   final root = workspaceRoot ?? Directory.current.path;
   final guard = ssrf ?? SsrfGuard();
@@ -108,6 +114,11 @@ List<Tool> createBuiltinTools({
       WebSearchTool(
         searxngBaseUrl: searxngBaseUrl,
         tavilyApiKey: tavilyApiKey,
+        perplexityApiKey: perplexityApiKey,
+        keenableApiKey: keenableApiKey,
+        xaiApiKey: xaiApiKey,
+        openaiCodexApiKey: openaiCodexApiKey,
+        nousPortalApiKey: nousPortalApiKey,
         ssrf: guard,
       ),
     if (enableImageGeneration && imageProvider != null)
