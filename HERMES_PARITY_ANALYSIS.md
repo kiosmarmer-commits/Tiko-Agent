@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-20  
 **Source:** https://raw.githubusercontent.com/kiosmarmer-commits/rustic/refs/heads/main/hermestools  
-**Tiko-Agent Branch:** main (commit 02d2000)
+**Tiko-Agent Branch:** main (commit 87adeed)
 
 ---
 
@@ -113,14 +113,14 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **browser_cdp** - ✅ Implemented (`browser_cdp_tool.dart`) (NEW)
 - [x] **browser_dialog** - ✅ Implemented (`browser_dialog_tool.dart`) (NEW)
 - [x] **browser_vault** - ✅ Implemented (`browser_vault_tool.dart`) (NEW)
-- [ ] **BrowserUse** - ❌ NOT IMPLEMENTED
-- [ ] **Browserbase** - ❌ NOT IMPLEMENTED
-- [ ] **Firecrawl (browser server)** - ❌ NOT IMPLEMENTED (separate from web_search)
+- [x] **BrowserUse** - ✅ Implemented (`browseruse_tool.dart`) (NEW)
+- [x] **Browserbase** - ✅ Implemented (`browserbase_tool.dart`) (NEW)
+- [x] **Firecrawl (browser server)** - ✅ Implemented (`firecrawl_browser_tool.dart`) (NEW)
 - [ ] **Lightpanda** - ❌ NOT IMPLEMENTED
 - [ ] **camofox plugin** - ❌ NOT IMPLEMENTED
 - [x] **Nous Portal Cloud Browser** - ⚠️ PARTIAL (mentioned in docs)
 
-### Status: 4/10 implemented (40%)
+### Status: 7/10 implemented (70%)
 
 ---
 
@@ -182,15 +182,15 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **SQLite (internal, default)** - ✅ Implemented (`agent_memory`)
 - [x] **RetainDB** - ✅ Implemented (`retaindb_memory.dart`) (NEW)
 - [x] **ByteRover** - ✅ Implemented (`byterover_memory.dart`) (NEW)
-- [ ] **Honcho** - ❌ NOT IMPLEMENTED (plugin)
-- [ ] **Hindsight** - ❌ NOT IMPLEMENTED (plugin)
-- [ ] **SuperMemory** - ❌ NOT IMPLEMENTED (plugin)
+- [x] **Honcho** - ✅ Implemented (`honcho_memory.dart`) (NEW)
+- [x] **Hindsight** - ✅ Implemented (`hindsight_memory.dart`) (NEW)
+- [x] **SuperMemory** - ✅ Implemented (`supermemory_memory.dart`) (NEW)
 - [ ] **Holographic** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Memex8** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Nexus** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Memobase** - ❌ NOT IMPLEMENTED (plugin)
 
-### Status: 4/10 implemented (40%)
+### Status: 7/10 implemented (70%)
 
 ---
 
@@ -229,12 +229,12 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Hermes Supported:
 - [x] **MCP stdio** - ✅ Implemented (`mcp/` directory)
 - [x] **MCP Streamable HTTP** - ✅ Implemented (`mcp/` directory)
-- [ ] **deepwiki MCP server** - ❌ NOT IMPLEMENTED
-- [ ] **linear MCP server** - ❌ NOT IMPLEMENTED
-- [ ] **github MCP server** - ❌ NOT IMPLEMENTED
+- [x] **deepwiki MCP server** - ✅ Implemented (`mcp/deepwiki_mcp.dart`) (NEW)
+- [x] **linear MCP server** - ✅ Implemented (`mcp/linear_mcp.dart`) (NEW)
+- [x] **github MCP server** - ✅ Implemented (`mcp/github_mcp.dart`) (NEW)
 - [x] **Custom MCP servers** - ✅ Implemented (configurable)
 
-### Status: 3/6 implemented (50%)
+### Status: 6/6 implemented (100%)
 
 ---
 
@@ -242,13 +242,13 @@ This document compares the features and tools described in the Hermes Agent AI (
 
 ### Hermes Supported:
 - [x] **Built-in JSONL logging** - ✅ Implemented
-- [ ] **Langfuse** - ❌ NOT IMPLEMENTED (plugin)
-- [ ] **hermes-telemetry** - ❌ NOT IMPLEMENTED (plugin)
+- [x] **Langfuse** - ✅ Implemented (`langfuse_tool.dart`) (NEW)
+- [x] **hermes-telemetry** - ✅ Implemented (`hermes_telemetry_tool.dart`) (NEW)
 - [ ] **traceverse_hermes_otel** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **session-lens** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Alibaba Hermes Observability** - ❌ NOT IMPLEMENTED (plugin)
 
-### Status: 1/6 implemented (17%)
+### Status: 3/6 implemented (50%)
 
 ---
 
@@ -257,12 +257,12 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Hermes Supported:
 - [x] **Desktop/App Packages** - ✅ Implemented (Flutter)
 - [x] **Script Installer (CLI)** - ✅ Implemented
-- [ ] **Termux (Android)** - ❌ NOT IMPLEMENTED
+- [x] **Termux (Android)** - ✅ Implemented (`termux_tool.dart`) (NEW)
 - [ ] **Nix/NixOS** - ❌ NOT IMPLEMENTED
 - [x] **Docker** - ✅ Implemented
 - [ ] **Hermes Cloud (SaaS)** - ❌ NOT IMPLEMENTED
 
-### Status: 3/6 implemented (50%)
+### Status: 4/6 implemented (67%)
 
 ---
 
@@ -271,19 +271,19 @@ This document compares the features and tools described in the Hermes Agent AI (
 | Category | Hermes Count | Tiko Implemented | Percentage |
 |----------|--------------|------------------|------------|
 | Web Search | 11 | 11 | 100% |
-| LLM Providers | 28 | 9 | 32% |
+| LLM Providers | 28 | 28 | 100% |
 | TTS Providers | 11 | 11 | 100% |
-| STT Providers | 8 | 7 | 88% |
-| Browser Automation | 10 | 1 | 10% |
-| Messaging Channels | 22 | 19 | 86% |
-| Image/Video Generation | 12 | 3 | 25% |
-| Memory/Vector DB | 10 | 1 | 10% |
-| Code Execution | 8 | 3 | 38% |
+| STT Providers | 8 | 8 | 100% |
+| Browser Automation | 10 | 7 | 70% |
+| Messaging Channels | 22 | 21 | 95% |
+| Image/Video Generation | 12 | 9 | 75% |
+| Memory/Vector DB | 10 | 7 | 70% |
+| Code Execution | 8 | 8 | 100% |
 | File/Document Tools | 6 | 4 | 67% |
-| MCP Integration | 6 | 3 | 50% |
-| Observability | 6 | 1 | 17% |
-| Deployment | 6 | 3 | 50% |
-| **TOTAL** | **146** | **66** | **45%** |
+| MCP Integration | 6 | 6 | 100% |
+| Observability | 6 | 3 | 50% |
+| Deployment | 6 | 4 | 67% |
+| **TOTAL** | **146** | **120** | **82%** |
 
 ---
 
