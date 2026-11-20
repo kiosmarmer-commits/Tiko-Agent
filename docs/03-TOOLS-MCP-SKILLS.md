@@ -1,8 +1,8 @@
 # 03 — Tools, Sandbox, MCP dan Skills
 
-> **Catatan status:** referensi ini berawal dari snapshot historis; baseline `main` terakhir diperiksa adalah `dfa7a0ecbd830fd9ecaa50f37145bb27351f5711`. Delta provider/MCP terbaru dijelaskan di `STATUS-2026-11-10.md` dan belum lolos Dart CI. Status CI hijau pada baseline tidak mencakup delta lokal.
+> **Catatan status:** dokumen ini adalah panduan tools, MCP, sandbox, dan skills. Source dan test pada commit `73bbec5` adalah kontrak implementasi; status CI harus dibaca dari GitHub Actions.
 
-**Snapshot:** `69b6da421bf2a4682dce19e05d1ea608607250be`.
+**Snapshot:** `73bbec5` (20 November 2026).
 
 ## 1. Tool contract dan registry
 

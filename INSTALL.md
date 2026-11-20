@@ -132,7 +132,28 @@ flutter test
 flutter build web --release
 ```
 
-## 6. Validasi lengkap
+## 6. Smart home dan gateway tambahan
+
+Provider smart-home berada di `packages/agent_gateway` dan menggunakan kontrak
+seragam `SmartHomeProvider`. Saat ini tersedia:
+
+- Home Assistant REST + WebSocket;
+- Tuya Cloud OpenAPI dengan HMAC-SHA256;
+- SONOFF/eWeLink CUBE/iHost REST + SSE.
+
+Google Home digunakan melalui Home Assistant. Hubungkan perangkat Google Home
+ke Home Assistant, lalu berikan URL dan access token Home Assistant kepada
+`HomeAssistantSmartHomeProvider`. Tuya memerlukan `clientId`, `clientSecret`,
+dan access token dari cloud region yang benar. eWeLink memerlukan URL lokal
+CUBE/iHost dan access token.
+
+Provider tersebut sudah memiliki API library dan contract test, tetapi belum
+otomatis muncul sebagai command/tool user-facing di `agentd`. Jangan menganggap
+import class provider sebagai wiring runtime penuh. Ikuti
+`docs/08-PEDOMAN-PENGEMBANGAN.md` jika ingin menambahkan registry, config, tool,
+atau UI untuk provider tersebut.
+
+## 7. Validasi lengkap
 
 Dari root repository:
 
@@ -142,7 +163,7 @@ bash scripts/validate.sh
 
 Workflow CI melakukan strict Dart analysis, test seluruh workspace member yang memiliki test, smoke CLI/config/daemon, compile entrypoint, dan Flutter analyze/test/web build. `scripts/validate.sh` menjalankan Flutter validation juga; jalankan `scripts/flutter_validate.sh` tersendiri bila hanya ingin menguji client.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Gejala | Pemeriksaan |
 |---|---|

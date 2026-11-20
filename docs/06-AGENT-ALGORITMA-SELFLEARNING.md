@@ -1,8 +1,8 @@
 # 06 — Algoritma Agent, Evaluasi dan Self-learning
 
-> **Catatan status:** dokumen referensi ini berawal dari snapshot historis `69b6da421bf2a4682dce19e05d1ea608607250be`. Baseline GitHub `main` yang terakhir diverifikasi pada 10 November adalah `dfa7a0ecbd830fd9ecaa50f37145bb27351f5711`; bundle implementasi lokal sesudah baseline itu dijelaskan di `STATUS-2026-11-10.md` dan belum lolos Dart/Flutter CI. Gunakan source sebagai kontrak implementasi dan dokumen ini sebagai panduan arsitektur, bukan bukti validasi bundle.
+> **Catatan status:** dokumen ini adalah panduan algoritma agent, evaluasi, dan self-learning. Source dan test pada commit `73bbec5` adalah kontrak implementasi; perubahan formula wajib mengikuti pedoman pengembangan.
 
-**Snapshot:** `69b6da421bf2a4682dce19e05d1ea608607250be`.
+**Snapshot:** `73bbec5` (20 November 2026).
 
 Dokumen ini memisahkan algoritma yang ditemukan pada source dari mekanisme yang baru berupa rencana/konfigurasi opsional. Rumus di bawah merujuk default implementasi, bukan jaminan kualitas model.
 

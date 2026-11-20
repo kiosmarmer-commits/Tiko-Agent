@@ -1,9 +1,9 @@
 # 04 — Memori, Database dan Pencarian
 
-> **Catatan status:** Dokumen ini diperbarui untuk mencerminkan status terkini (commit 4c3789a, 19 Nov 2026). Gunakan source sebagai kontrak implementasi dan dokumen ini sebagai panduan arsitektur.
+> **Catatan status:** Dokumen ini adalah panduan memory dan retrieval. Gunakan source dan test pada commit `73bbec5` sebagai kontrak implementasi.
 
-**Last Updated:** 19 November 2026
-**Commit:** 4c3789a6f37baa38f3dd820e7868feb5832d530e
+**Last Updated:** 20 November 2026
+**Commit:** `73bbec5`
 
 ## 1. Backend aktual
 
