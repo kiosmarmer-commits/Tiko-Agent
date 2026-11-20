@@ -144,7 +144,7 @@ void main() {
   test('serve process speaks MCP over stdio', () async {
     final process = await Process.start(
       Platform.resolvedExecutable,
-      ['run', 'bin/simpul.dart', 'serve', vault],
+      ['run', 'apps/simpul/bin/simpul.dart', 'serve', vault],
       workingDirectory: Directory.current.path,
     );
     final lines = process.stdout

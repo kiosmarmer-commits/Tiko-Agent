@@ -75,9 +75,9 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'deepseek': ProviderPreset(
     id: 'deepseek',
-    baseUrl: 'https://api.deepseek.com',
+    baseUrl: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
-    transport: 'deepseek',
+    transport: 'chat_completions',
     contextLength: 65536,
   ),
   'anthropic': ProviderPreset(
@@ -313,5 +313,4 @@ ProviderPreset? findProviderPreset(String id) {
 
 /// All preset ids accepted as `type:` values in config.
 Set<String> get providerPresetIds => providerPresets.keys.toSet();
-
 

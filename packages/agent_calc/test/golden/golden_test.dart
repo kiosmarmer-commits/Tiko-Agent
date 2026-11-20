@@ -10,7 +10,9 @@ const _engine = CalcEngine();
 /// diuji - dibaca dari fixtures/golden_verified.json, dibandingkan
 /// sebagai string desimal persis.
 void main() {
-  final file = File('fixtures/golden_verified.json');
+  final localFile = File('fixtures/golden_verified.json');
+  final workspaceFile = File('packages/agent_calc/fixtures/golden_verified.json');
+  final file = localFile.existsSync() ? localFile : workspaceFile;
   if (!file.existsSync()) {
     test('fixture golden_verified.json harus ada', () {
       fail('fixture tidak ditemukan: ${file.path}');
