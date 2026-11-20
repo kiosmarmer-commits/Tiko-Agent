@@ -30,12 +30,6 @@ class BrowserVaultTool implements Tool {
   CdpSession? _session;
   final _vault = <String, String>{};
 
-  @override
-  String get name => 'browser_vault';
-
-  @override
-  String get description =>
-      'Browser vault tool for secure credential management in web automation.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -79,9 +73,9 @@ class BrowserVaultTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'open':
@@ -93,6 +87,7 @@ class BrowserVaultTool implements Tool {
           );
           await _session!.open();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'opened', 'session_id': _session!.sessionId}),
             isError: false,
           );
@@ -103,29 +98,33 @@ class BrowserVaultTool implements Tool {
             _session = null;
           }
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'closed'}),
             isError: false,
           );
 
         case 'store':
-          final key = call.args['key'] as String?;
-          final value = call.args['value'] as String?;
+          final key = args['key'] as String?;
+          final value = args['value'] as String?;
           if (key == null || key.isEmpty || value == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'key and value are required'}),
               isError: true,
             );
           }
           _vault[key] = value;
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'stored', 'key': key}),
             isError: false,
           );
 
         case 'retrieve':
-          final key = call.args['key'] as String?;
+          final key = args['key'] as String?;
           if (key == null || key.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'key is required'}),
               isError: true,
             );
@@ -133,31 +132,36 @@ class BrowserVaultTool implements Tool {
           final value = _vault[key];
           if (value == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'key not found'}),
               isError: true,
             );
           }
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'key': key, 'value': value}),
             isError: false,
           );
 
         case 'delete':
-          final key = call.args['key'] as String?;
+          final key = args['key'] as String?;
           if (key == null || key.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'key is required'}),
               isError: true,
             );
           }
           _vault.remove(key);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'deleted', 'key': key}),
             isError: false,
           );
 
         case 'list':
           return ToolResult(
+            callId: '',
             content: jsonEncode({
               'status': 'listed',
               'keys': _vault.keys.toList(),
@@ -168,12 +172,13 @@ class BrowserVaultTool implements Tool {
         case 'fill_form':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final url = call.args['url'] as String?;
-          final formData = call.args['form_data'] as Map<String, dynamic>? ?? {};
+          final url = args['url'] as String?;
+          final formData = args['form_data'] as Map<String, dynamic>? ?? {};
           
           if (url != null && url.isNotEmpty) {
             await _session!.navigate(url);
@@ -205,6 +210,7 @@ class BrowserVaultTool implements Tool {
           }
           
           return ToolResult(
+            callId: '',
             content: jsonEncode({
               'status': 'form_filled',
               'fields': formData.keys.toList(),
@@ -214,12 +220,14 @@ class BrowserVaultTool implements Tool {
 
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
