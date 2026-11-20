@@ -111,8 +111,8 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Hermes Supported:
 - [x] **browser_exec (CDP to Chromium)** - ✅ Implemented (`browser_tool.dart`, `cdp_browser.dart`)
 - [x] **browser_cdp** - ✅ Implemented (`browser_cdp_tool.dart`) (NEW)
-- [ ] **browser_dialog** - ❌ NOT IMPLEMENTED
-- [ ] **browser_vault** - ❌ NOT IMPLEMENTED
+- [x] **browser_dialog** - ✅ Implemented (`browser_dialog_tool.dart`) (NEW)
+- [x] **browser_vault** - ✅ Implemented (`browser_vault_tool.dart`) (NEW)
 - [ ] **BrowserUse** - ❌ NOT IMPLEMENTED
 - [ ] **Browserbase** - ❌ NOT IMPLEMENTED
 - [ ] **Firecrawl (browser server)** - ❌ NOT IMPLEMENTED (separate from web_search)
@@ -120,7 +120,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [ ] **camofox plugin** - ❌ NOT IMPLEMENTED
 - [x] **Nous Portal Cloud Browser** - ⚠️ PARTIAL (mentioned in docs)
 
-### Status: 2/10 implemented (20%)
+### Status: 4/10 implemented (40%)
 
 ---
 
