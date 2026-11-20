@@ -36,9 +36,9 @@ class XaiVideoProvider implements VideoProvider {
     required String prompt,
     String? model,
     String? negativePrompt,
-    int? width,
-    int? height,
-    int? duration,
+    
+    
+    int? durationSec,
     int? steps,
     double? guidanceScale,
     int? seed,
@@ -90,9 +90,9 @@ class XaiVideoProvider implements VideoProvider {
         videoUrl: videoUrl,
         model: modelId,
         provider: name,
-        width: width,
-        height: height,
-        duration: duration,
+        
+        
+        durationSec: duration,
         prompt: prompt,
         generationTime: DateTime.now().difference(started),
       );

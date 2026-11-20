@@ -262,6 +262,23 @@ class CdpSession {
   Future<String> readText() =>
       evaluate('document.body ? document.body.innerText : ""');
 
+
+  /// Executes a raw CDP command.
+  Future<Map<String, dynamic>> sendCommand(String method, [Map<String, dynamic>? params]) async {
+    return send(method, params ?? {});
+  }
+
+  /// Gets the page content (HTML).
+  Future<String> getContent() async {
+    return evaluate('document.documentElement.outerHTML');
+  }
+
+  /// Takes a screenshot of the page.
+  Future<String> screenshot() async {
+    final resp = await send('Page.captureScreenshot', {'format': 'png'});
+    return resp['data'] as String;
+  }
+
   Future<void> close() async {
     final ws = _ws;
     _ws = null;
