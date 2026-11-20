@@ -454,7 +454,7 @@ jobs:
             dart test "$dir/test"
           done
       - name: Verify forced JSON memory fallback (TIKO_FORCE_JSON_MEMORY=1)
-        run: dart test packages/tiko_runtime/test/eco_memory_backend_test.dart
+        run: TIKO_FORCE_JSON_MEMORY=1 dart test packages/tiko_runtime/test/eco_memory_backend_test.dart
 
   android-apk:
     name: Flutter Android debug APK build
