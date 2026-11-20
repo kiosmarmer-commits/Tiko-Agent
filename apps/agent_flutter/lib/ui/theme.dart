@@ -58,6 +58,11 @@ abstract final class SimpulTheme {
   static const radiusSmall = 8.0;
   static const radius = 12.0;
   static const radiusLarge = 16.0;
+  static const radiusPill = 24.0;
+
+  // High-contrast body text (flat design keeps hierarchy on surfaces).
+  static const textHigh = Color(0xFFE6E8EB);
+  static const textHighLight = Color(0xFF1A1D23);
 
   static Color surface(Brightness brightness) =>
       brightness == Brightness.dark ? panel : panelLight;
@@ -100,6 +105,34 @@ abstract final class SimpulTheme {
   static Color infoColor(Brightness brightness) =>
       brightness == Brightness.dark ? info : infoLight;
 
+  static Color bodyText(Brightness brightness) =>
+      brightness == Brightness.dark ? textHigh : textHighLight;
+
+  static TextTheme textTheme(Brightness brightness) =>
+      const TextTheme(
+        titleLarge: pageTitle,
+        titleMedium: sectionTitle,
+        bodyMedium: body,
+        bodySmall: caption,
+        labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ).apply(
+        bodyColor: bodyText(brightness),
+        displayColor: bodyText(brightness),
+      );
+
+  static OutlineInputBorder _inputBorder(
+    Brightness brightness, {
+    Color? color,
+    double width = 1,
+  }) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(radius),
+        borderSide: BorderSide(
+          color: color ?? outline(brightness),
+          width: width,
+        ),
+      );
+
   static ThemeData theme(Brightness brightness, Color accentColor) {
     final scheme = ColorScheme.fromSeed(
       seedColor: accentColor,
@@ -107,13 +140,224 @@ abstract final class SimpulTheme {
     ).copyWith(
       primary: accentColor,
       surface: surface(brightness),
+      outline: outline(brightness),
+      outlineVariant: outline(brightness),
+      onSurface: bodyText(brightness),
+      onSurfaceVariant: mutedText(brightness),
     );
+    final border = outline(brightness);
+    final onSelect = selected(brightness);
     return ThemeData(
       brightness: brightness,
       scaffoldBackgroundColor: background(brightness),
       colorScheme: scheme,
-      dividerColor: outline(brightness),
+      dividerColor: border,
+      dividerTheme: DividerThemeData(
+        color: border,
+        thickness: 1,
+        space: 1,
+      ),
       useMaterial3: true,
+      splashFactory: InkSparkle.splashFactory,
+      textTheme: textTheme(brightness),
+      iconTheme: IconThemeData(color: mutedText(brightness)),
+      appBarTheme: AppBarTheme(
+        backgroundColor: background(brightness),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleTextStyle: pageTitle.copyWith(color: bodyText(brightness)),
+      ),
+      cardTheme: CardThemeData(
+        color: raised(brightness),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLarge),
+          side: BorderSide(color: border),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: raised(brightness),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLarge),
+          side: BorderSide(color: border),
+        ),
+        titleTextStyle: pageTitle.copyWith(color: bodyText(brightness)),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: brightness == Brightness.dark
+            ? surfaceHover
+            : surfaceHoverLight,
+        contentTextStyle: body.copyWith(color: bodyText(brightness)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(color: border),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor:
+            brightness == Brightness.dark ? surfaceHover : surfaceHoverLight,
+        hintStyle: TextStyle(color: mutedText(brightness)),
+        helperStyle: TextStyle(color: mutedText(brightness)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: xl,
+          vertical: l,
+        ),
+        border: _inputBorder(brightness),
+        enabledBorder: _inputBorder(brightness),
+        focusedBorder: _inputBorder(
+          brightness,
+          color: accentColor,
+          width: 1.5,
+        ),
+        errorBorder: _inputBorder(
+          brightness,
+          color: dangerColor(brightness),
+        ),
+        focusedErrorBorder: _inputBorder(
+          brightness,
+          color: dangerColor(brightness),
+          width: 1.5,
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accentColor,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          minimumSize: const Size(0, 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radius),
+          ),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: raised(brightness),
+          foregroundColor: bodyText(brightness),
+          elevation: 0,
+          minimumSize: const Size(0, 40),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radius),
+            side: BorderSide(color: border),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: bodyText(brightness),
+          minimumSize: const Size(0, 40),
+          side: BorderSide(color: border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radius),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: accentColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusSmall),
+          ),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface(brightness),
+        elevation: 0,
+        height: 64,
+        indicatorColor: onSelect,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? bodyText(brightness)
+                : mutedText(brightness),
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? bodyText(brightness)
+                : mutedText(brightness),
+          ),
+        ),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: onSelect,
+        selectedIconTheme: IconThemeData(color: bodyText(brightness)),
+        unselectedIconTheme: IconThemeData(color: mutedText(brightness)),
+        selectedLabelTextStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: bodyText(brightness),
+        ),
+        unselectedLabelTextStyle:
+            TextStyle(color: mutedText(brightness), fontSize: 12),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: raised(brightness),
+        side: BorderSide(color: border),
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(color: bodyText(brightness), fontSize: 12),
+        padding: const EdgeInsets.symmetric(horizontal: l, vertical: 2),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: mutedText(brightness),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusSmall),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: raised(brightness),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(color: border),
+        ),
+        textStyle: TextStyle(color: bodyText(brightness), fontSize: 14),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: brightness == Brightness.dark
+              ? surfaceHover
+              : surfaceHoverLight,
+          borderRadius: BorderRadius.circular(radiusSmall),
+          border: Border.all(color: border),
+        ),
+        textStyle: TextStyle(
+          color: bodyText(brightness),
+          fontSize: 12,
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: accentColor,
+        unselectedLabelColor: mutedText(brightness),
+        indicatorColor: accentColor,
+        dividerColor: border,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: accentColor,
+        linearTrackColor: hover(brightness),
+        circularTrackColor: hover(brightness),
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thickness: WidgetStateProperty.all(6),
+        radius: const Radius.circular(radiusPill),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.hovered)
+              ? mutedText(brightness)
+              : border,
+        ),
+      ),
     );
   }
 

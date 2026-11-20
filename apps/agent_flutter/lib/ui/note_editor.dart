@@ -487,11 +487,13 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
               children: [
                 Text(name, style: const TextStyle(fontSize: 12)),
                 if (tab.dirty)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
                     child: CircleAvatar(
                       radius: 3,
-                      backgroundColor: Colors.orangeAccent,
+                      backgroundColor: SimpulTheme.warning(
+                        Theme.of(context).brightness,
+                      ),
                     ),
                   ),
                 GestureDetector(
@@ -591,12 +593,14 @@ class _SimpulNoteEditorPageState extends State<SimpulNoteEditorPage> {
                 onPressed: editor == null ? null : _save,
               ),
               if (dirty)
-                const Positioned(
+                Positioned(
                   right: 10,
                   top: 10,
                   child: CircleAvatar(
                     radius: 4,
-                    backgroundColor: Colors.orangeAccent,
+                    backgroundColor: SimpulTheme.warning(
+                      Theme.of(context).brightness,
+                    ),
                   ),
                 ),
             ],

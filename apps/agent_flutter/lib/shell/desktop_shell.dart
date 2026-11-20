@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../app/app_routes.dart';
 import '../ui/theme.dart';
 
-/// Wide-layout shell (desktop / wide browser): navigation rail on the left,
-/// workspace content on the right. Destinations come from the shared route
-/// map so every platform shows the same navigation domain.
+/// Wide-layout shell (desktop / wide browser): flat navigation rail on the
+/// left, workspace content on the right. Destinations come from the shared
+/// route map so every platform shows the same navigation domain.
 class DesktopShell extends StatelessWidget {
   const DesktopShell({
     super.key,
@@ -20,7 +20,7 @@ class DesktopShell extends StatelessWidget {
   final ValueChanged<AppRoute> onSelect;
   final Widget child;
 
-  /// Destinasi aktif — difilter per mode Simple/Advanced (GUI-P2-01).
+  /// Destinasi aktif - difilter per mode Simple/Advanced (GUI-P2-01).
   final List<AppRouteInfo> entries;
 
   /// Jumlah approval pending (GUI-P0-06): ditampilkan sebagai badge pada
@@ -35,12 +35,42 @@ class DesktopShell extends StatelessWidget {
     // Perkiraan tinggi rail dengan label di bawah ikon; dipakai sebagai
     // tinggi intrinsik ketika tinggi jendela tidak memadai agar rail dapat
     // discroll, bukan overflow.
-    final railHeight = 48.0 + entries.length * 80;
+    final railHeight = 96.0 + entries.length * 88;
     final rail = NavigationRail(
-      backgroundColor: context.simpulPanel,
+      backgroundColor: Colors.transparent,
       selectedIndex: selectedIndex.clamp(0, entries.length - 1),
       onDestinationSelected: (i) => onSelect(entries[i].route),
       labelType: NavigationRailLabelType.all,
+      leading: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 20, 0, 8),
+        child: Column(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: context.simpulAccent,
+                borderRadius: BorderRadius.circular(SimpulTheme.radius),
+              ),
+              child: const Icon(
+                Icons.smart_toy_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Tiko',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: context.simpulMuted,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
       destinations: [
         for (final entry in entries)
           NavigationRailDestination(

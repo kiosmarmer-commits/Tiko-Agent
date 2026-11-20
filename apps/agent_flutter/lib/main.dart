@@ -1053,11 +1053,37 @@ class _ChatPageState extends State<_ChatPage> {
             ),
             Expanded(
               child: chat.messages.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Mulai percakapan dengan Tiko',
-                        style: TextStyle(color: context.simpulMuted),
-                      ),
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: context.simpulAccent,
+                            borderRadius:
+                                BorderRadius.circular(SimpulTheme.radiusLarge),
+                          ),
+                          child: const Icon(
+                            Icons.smart_toy_outlined,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Mulai percakapan dengan Tiko',
+                          style: TextStyle(color: context.simpulMuted),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tool berisiko akan meminta approval Anda',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.simpulMuted,
+                          ),
+                        ),
+                      ],
                     )
                   : ListView.builder(
                       controller: _scrollController,
@@ -1081,17 +1107,25 @@ class _ChatPageState extends State<_ChatPage> {
                             children: [
                               Container(
                                 margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(14),
                                 constraints: const BoxConstraints(
-                                  maxWidth: 640,
+                                  maxWidth: 760,
                                 ),
                                 decoration: BoxDecoration(
                                   color: user
                                       ? context.simpulUserBubble
                                       : context.simpulBotBubble,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: context.simpulBorder,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(
+                                      SimpulTheme.radiusLarge,
+                                    ),
+                                    topRight: const Radius.circular(
+                                      SimpulTheme.radiusLarge,
+                                    ),
+                                    bottomLeft:
+                                        Radius.circular(user ? SimpulTheme.radiusLarge : 4),
+                                    bottomRight:
+                                        Radius.circular(user ? 4 : SimpulTheme.radiusLarge),
                                   ),
                                 ),
                                 child: message['role'] == 'assistant'
@@ -1110,7 +1144,7 @@ class _ChatPageState extends State<_ChatPage> {
                                       )
                                     : SelectableText(
                                         (message['text'] ?? '').toString(),
-                                        style: const TextStyle(height: 1.4),
+                                        style: SimpulTheme.body,
                                       ),
                               ),
                               if (speakable != null && speakable.isNotEmpty)
@@ -1140,28 +1174,32 @@ class _ChatPageState extends State<_ChatPage> {
             if (chat.pendingConfirm != null)
               Container(
                 width: double.infinity,
-                color: context.simpulPanel,
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                decoration: BoxDecoration(
+                  color: context.simpulPanel,
+                  border: Border(top: BorderSide(color: context.simpulBorder)),
+                ),
+                child: Row(
                   children: [
-                    Text(
-                      'Konfirmasi: ${chat.pendingConfirm!.prompt}',
-                      style: TextStyle(color: context.simpulWarn),
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 20,
+                      color: context.simpulWarn,
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => chat.respondConfirm(true),
-                          child: const Text('Izinkan'),
-                        ),
-                        TextButton(
-                          onPressed: () => chat.respondConfirm(false),
-                          child: const Text('Tolak'),
-                        ),
-                      ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Konfirmasi: ${chat.pendingConfirm!.prompt}',
+                        style: TextStyle(color: context.simpulWarn),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => chat.respondConfirm(true),
+                      child: const Text('Izinkan'),
+                    ),
+                    TextButton(
+                      onPressed: () => chat.respondConfirm(false),
+                      child: const Text('Tolak'),
                     ),
                   ],
                 ),
@@ -1246,60 +1284,79 @@ class _ComposerState extends State<_Composer> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: context.simpulPanel,
         border: Border(top: BorderSide(color: context.simpulBorder)),
       ),
-      child: AnimatedBuilder(
-        animation: voice,
-        builder: (context, _) {
-          return Row(
-            children: [
-              IconButton(
-                key: const Key('btn-voice-mic'),
-                tooltip: voice.listening
-                    ? 'Hentikan dikte'
-                    : 'Dikte suara (GUI Voice UI)',
-                onPressed: _toggleMic,
-                icon: Icon(
-                  voice.listening ? Icons.mic : Icons.mic_none,
-                  color: voice.listening ? context.simpulDanger : null,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: AnimatedBuilder(
+            animation: voice,
+            builder: (context, _) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: context.simpulSurfaceHover,
+                  borderRadius: BorderRadius.circular(SimpulTheme.radiusPill),
+                  border: Border.all(color: context.simpulBorder),
                 ),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: c,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: voice.listening
-                        ? 'Mendengarkan… (bicara sekarang)'
-                        : 'Pesan ke Tiko…',
-                    helperText: voice.listening && voice.partial.isNotEmpty
-                        ? voice.partial
-                        : null,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (value) => _submit(value),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                tooltip: 'Kirim pesan',
-                onPressed: busy ? null : () => _submit(c.text),
-                icon: busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-              ),
-            ],
-          );
-        },
+                child: Row(
+                  children: [
+                    IconButton(
+                      key: const Key('btn-voice-mic'),
+                      tooltip: voice.listening
+                          ? 'Hentikan dikte'
+                          : 'Dikte suara (GUI Voice UI)',
+                      onPressed: _toggleMic,
+                      icon: Icon(
+                        voice.listening ? Icons.mic : Icons.mic_none,
+                        color: voice.listening ? context.simpulDanger : null,
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: c,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: InputDecoration(
+                          hintText: voice.listening
+                              ? 'Mendengarkan… (bicara sekarang)'
+                              : 'Pesan ke Tiko…',
+                          helperText: voice.listening && voice.partial.isNotEmpty
+                              ? voice.partial
+                              : null,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isDense: true,
+                        ),
+                        onSubmitted: (value) => _submit(value),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton.filled(
+                      tooltip: 'Kirim pesan',
+                      onPressed: busy ? null : () => _submit(c.text),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -2444,16 +2501,16 @@ class _Card extends StatelessWidget {
             : 280.0;
         return Container(
           width: width,
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: context.simpulPanel,
-            borderRadius: BorderRadius.circular(12),
+            color: context.simpulSurfaceRaised,
+            borderRadius: BorderRadius.circular(SimpulTheme.radiusLarge),
             border: Border.all(color: context.simpulBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(title, style: SimpulTheme.sectionTitle),
               const SizedBox(height: 8),
               child,
             ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:simpul_core/simpul_core.dart';
 
+import 'theme.dart';
+
 /// Computed index status snapshot (NFR-O03). Pure computation over a scan
 /// result so it can be unit-tested without I/O.
 class IndexStatusSummary {
@@ -110,7 +112,7 @@ Widget _row(String label, String value, {bool danger = false}) {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: danger ? const Color(0xFFB3261E) : null,
+            color: danger ? SimpulTheme.dangerLight : null,
           ),
         ),
       ],

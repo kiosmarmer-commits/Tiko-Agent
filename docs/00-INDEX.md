@@ -19,6 +19,7 @@
 | 7 | [06-AGENT-ALGORITMA-SELFLEARNING.md](06-AGENT-ALGORITMA-SELFLEARNING.md) | Loop, evaluasi, self-learning |
 | 8 | [07-KEAMANAN-OBSERVABILITAS.md](07-KEAMANAN-OBSERVABILITAS.md) | Security dan telemetry |
 | 9 | [08-PEDOMAN-PENGEMBANGAN.md](08-PEDOMAN-PENGEMBANGAN.md) | Prosedur perubahan aman |
+| 10 | [09-DESAIN-GUI.md](09-DESAIN-GUI.md) | Token UI, gaya flat modern, paritas lintas platform |
 
 ## Status implementasi
 
