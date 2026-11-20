@@ -137,12 +137,14 @@ class GitHubMcpTool implements Tool {
         default:
           return ToolResult(
             callId: '',
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -166,6 +168,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'repositories': repos,
@@ -175,6 +178,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list repositories: ${e.toString()}'}),
         isError: true,
@@ -189,6 +193,7 @@ class GitHubMcpTool implements Tool {
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
@@ -206,6 +211,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'repository': data,
@@ -214,6 +220,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get repository: ${e.toString()}'}),
         isError: true,
@@ -230,6 +237,7 @@ class GitHubMcpTool implements Tool {
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
@@ -251,6 +259,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issues': issues,
@@ -260,6 +269,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list issues: ${e.toString()}'}),
         isError: true,
@@ -276,12 +286,14 @@ class GitHubMcpTool implements Tool {
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (issueNumber == null) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'issue_number is required'}),
           isError: true,
@@ -299,6 +311,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -307,6 +320,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get issue: ${e.toString()}'}),
         isError: true,
@@ -326,12 +340,14 @@ class GitHubMcpTool implements Tool {
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (title == null || title.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'title is required'}),
           isError: true,
@@ -356,6 +372,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -364,6 +381,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create issue: ${e.toString()}'}),
         isError: true,
@@ -382,12 +400,14 @@ class GitHubMcpTool implements Tool {
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (issueNumber == null) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'issue_number is required'}),
           isError: true,
@@ -400,6 +420,7 @@ class GitHubMcpTool implements Tool {
       
       if (requestBody.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No fields to update'}),
           isError: true,
@@ -417,6 +438,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -425,6 +447,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to update issue: ${e.toString()}'}),
         isError: true,
@@ -441,6 +464,7 @@ class GitHubMcpTool implements Tool {
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
@@ -462,6 +486,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'pull_requests': prs,
@@ -471,6 +496,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list pull requests: ${e.toString()}'}),
         isError: true,
@@ -487,12 +513,14 @@ class GitHubMcpTool implements Tool {
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (prNumber == null) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'pr_number is required'}),
           isError: true,
@@ -510,6 +538,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'pull_request': data,
@@ -518,6 +547,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get pull request: ${e.toString()}'}),
         isError: true,
@@ -533,6 +563,7 @@ class GitHubMcpTool implements Tool {
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
@@ -550,6 +581,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'contents': contents,
@@ -560,6 +592,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to list contents: ${e.toString()}'}),
         isError: true,
@@ -576,12 +609,14 @@ class GitHubMcpTool implements Tool {
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (path == null || path.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'path is required'}),
           isError: true,
@@ -599,6 +634,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'content': data,
@@ -608,6 +644,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get content: ${e.toString()}'}),
         isError: true,
@@ -622,6 +659,7 @@ class GitHubMcpTool implements Tool {
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
@@ -643,6 +681,7 @@ class GitHubMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -653,6 +692,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
