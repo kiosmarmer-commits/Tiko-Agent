@@ -38,3 +38,4 @@ export 'src/progressive_stream.dart';
 export 'src/webhook_signature.dart';
 export 'src/webhook_endpoint.dart';
 export 'src/skill_api.dart';
+export 'src/resilient_gateway.dart';

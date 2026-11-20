@@ -35,7 +35,8 @@ Future<void> main(List<String> args) async {
   }
   final useTelegram =
       args.contains('--telegram') || Platform.environment['TG_TOKEN'] != null;
-  final useApi = args.contains('--api') ||
+  final useApi =
+      args.contains('--api') ||
       args.contains('--ui') ||
       Platform.environment['API_TOKEN'] != null ||
       Platform.environment['AGENT_UI'] == '1';
@@ -53,7 +54,8 @@ Future<void> main(List<String> args) async {
   final lock = RuntimeLock('${rt.dataDir}/tiko.lock');
   final portOverrideText = Platform.environment['API_PORT'];
   final portOverride = int.tryParse(portOverrideText ?? '');
-  if (useApi && portOverrideText != null &&
+  if (useApi &&
+      portOverrideText != null &&
       (portOverride == null || portOverride < 1 || portOverride > 65535)) {
     stderr.writeln('API_PORT harus berupa integer 1 sampai 65535.');
     await rt.close();
@@ -63,7 +65,11 @@ Future<void> main(List<String> args) async {
 
   // Instance lock (do not kill other processes)
   try {
-    await lock.acquire(profile: rt.config.profile, version: tikoVersion, port: port);
+    await lock.acquire(
+      profile: rt.config.profile,
+      version: tikoVersion,
+      port: port,
+    );
   } on LockHeldException catch (e) {
     stderr.writeln('$e');
     await rt.close();
@@ -96,7 +102,9 @@ Future<void> main(List<String> args) async {
       ),
       sessionLoader: (sid) => _loadAcpSession(rt, sid),
     );
-    stdout.writeln('agentd ACP siap (stdio) \u2014 SIGINT/SIGTERM untuk berhenti');
+    stdout.writeln(
+      'agentd ACP siap (stdio) \u2014 SIGINT/SIGTERM untuk berhenti',
+    );
     final acpServe = acp.serve();
     ProcessSignal.sigint.watch().listen((_) => acp.stop());
     try {
@@ -110,7 +118,8 @@ Future<void> main(List<String> args) async {
 
   try {
     final mcpCount = await rt.startMcp();
-    if (mcpCount > 0) stdout.writeln('$mcpCount MCP tool(s) aktif dalam sandbox OS');
+    if (mcpCount > 0)
+      stdout.writeln('$mcpCount MCP tool(s) aktif dalam sandbox OS');
   } catch (error) {
     stderr.writeln('MCP startup gagal secara fail-closed: $error');
   }
@@ -122,11 +131,13 @@ Future<void> main(List<String> args) async {
   final apiToken = !useApi
       ? null
       : (configuredToken == null || configuredToken.isEmpty
-          ? _randomToken()
-          : configuredToken);
+            ? _randomToken()
+            : configuredToken);
   if (apiToken != null) {
     if (apiToken.length < 32) {
-      stderr.writeln('API_TOKEN terlalu pendek; minimal 32 karakter (128-bit).');
+      stderr.writeln(
+        'API_TOKEN terlalu pendek; minimal 32 karakter (128-bit).',
+      );
       await rt.close();
       await lock.release();
       exit(1);
@@ -134,7 +145,9 @@ Future<void> main(List<String> args) async {
     try {
       await ApiTokenStore.write(rt.dataDir, apiToken);
     } catch (error) {
-      stderr.writeln('Token API tidak dapat disimpan dengan permission aman: $error');
+      stderr.writeln(
+        'Token API tidak dapat disimpan dengan permission aman: $error',
+      );
       await rt.close();
       await lock.release();
       exit(1);
@@ -165,6 +178,10 @@ Future<void> main(List<String> args) async {
     stdout.writeln('Bot Mode aktif: ${rt.botStore.list().length} bot');
   }
   final gateways = <Gateway>[];
+  void addGateway(Gateway gateway) {
+    gateways.add(ResilientGateway(gateway));
+  }
+
   TelegramGateway? tg;
   DiscordGateway? discord;
   EmailGateway? email;
@@ -190,7 +207,7 @@ Future<void> main(List<String> args) async {
       applicationId: Platform.environment['DISCORD_APP_ID'],
       registerSlash: Platform.environment['DISCORD_SLASH'] != '0',
     );
-    gateways.add(discord);
+    addGateway(discord);
     if (discordBot != null && discordBot.isNotEmpty) {
       await discord.start();
       stdout.writeln('Discord aktif');
@@ -214,7 +231,7 @@ Future<void> main(List<String> args) async {
       username: Platform.environment['SMTP_USER'],
       password: Platform.environment['SMTP_PASS'],
     );
-    gateways.add(email);
+    addGateway(email);
     stdout.writeln('Email SMTP aktif');
   }
 
@@ -291,7 +308,7 @@ Future<void> main(List<String> args) async {
       );
     }
     tg = TelegramGateway(token: token, allowedUserIds: allow, stt: stt);
-    gateways.add(tg);
+    addGateway(tg);
     await tg.start();
     stdout.writeln('Telegram aktif');
   }
@@ -302,10 +319,14 @@ Future<void> main(List<String> args) async {
   final waVerifyToken = Platform.environment['WHATSAPP_VERIFY_TOKEN'];
   final waAppSecret = Platform.environment['WHATSAPP_APP_SECRET'];
   WhatsAppGateway? wa;
-  if (waPhoneId != null && waPhoneId.isNotEmpty &&
-      waAccessToken != null && waAccessToken.isNotEmpty &&
-      waVerifyToken != null && waVerifyToken.isNotEmpty &&
-      waAppSecret != null && waAppSecret.isNotEmpty) {
+  if (waPhoneId != null &&
+      waPhoneId.isNotEmpty &&
+      waAccessToken != null &&
+      waAccessToken.isNotEmpty &&
+      waVerifyToken != null &&
+      waVerifyToken.isNotEmpty &&
+      waAppSecret != null &&
+      waAppSecret.isNotEmpty) {
     final appSecret = waAppSecret;
     final gateway = WhatsAppGateway(
       phoneNumberId: waPhoneId,
@@ -318,7 +339,7 @@ Future<void> main(List<String> args) async {
       ),
     );
     wa = gateway;
-    gateways.add(_WhatsAppReplyGateway(gateway));
+    addGateway(_WhatsAppReplyGateway(gateway));
     stdout.writeln('WhatsApp webhook aktif');
   } else if ((waPhoneId != null && waPhoneId.isNotEmpty) ||
       (waAccessToken != null && waAccessToken.isNotEmpty)) {
@@ -333,7 +354,8 @@ Future<void> main(List<String> args) async {
   final slackBotToken = Platform.environment['SLACK_BOT_TOKEN'];
   final slackSigningSecret = Platform.environment['SLACK_SIGNING_SECRET'];
   SlackGateway? slackGw;
-  if (slackSigningSecret != null && slackSigningSecret.isNotEmpty &&
+  if (slackSigningSecret != null &&
+      slackSigningSecret.isNotEmpty &&
       (slackWebhookUrl != null && slackWebhookUrl.isNotEmpty ||
           slackBotToken != null && slackBotToken.isNotEmpty)) {
     final slack = SlackGateway(
@@ -341,7 +363,7 @@ Future<void> main(List<String> args) async {
       botToken: slackBotToken,
     );
     slackGw = slack;
-    gateways.add(_SlackReplyGateway(slack));
+    addGateway(_SlackReplyGateway(slack));
     stdout.writeln('Slack webhook aktif');
   } else if (slackSigningSecret != null && slackSigningSecret.isNotEmpty) {
     stdout.writeln(
@@ -372,7 +394,7 @@ Future<void> main(List<String> args) async {
       account: signalAccount,
       allowedSenders: signalAllow,
     );
-    gateways.add(signal);
+    addGateway(signal);
     await signal.start();
     stdout.writeln('Signal aktif');
   }
@@ -399,7 +421,7 @@ Future<void> main(List<String> args) async {
       accessToken: matrixToken,
       allowedRooms: matrixAllow,
     );
-    gateways.add(matrix);
+    addGateway(matrix);
     await matrix.start();
     stdout.writeln('Matrix aktif');
   }
@@ -468,10 +490,12 @@ Future<void> main(List<String> args) async {
 
   Future<void> handleMessage(InboundMessage m, {Gateway? replyVia}) async {
     if (!rateLimiter.allow(m.userKey)) {
-      await replyVia?.send(OutboundMessage(
-        sessionKey: m.sessionKey,
-        text: 'Rate limit — coba lagi nanti.',
-      ));
+      await replyVia?.send(
+        OutboundMessage(
+          sessionKey: m.sessionKey,
+          text: 'Rate limit — coba lagi nanti.',
+        ),
+      );
       return;
     }
 
@@ -491,15 +515,16 @@ Future<void> main(List<String> args) async {
     }
 
     Future<bool> Function(ToolCall call, Session session, String approvalId)?
-        confirm;
+    confirm;
     if (tg != null && m.channel == 'telegram') {
       confirm = (call, sess, approvalId) => tg!.requestConfirm(
-            sessionKey: m.sessionKey,
-            requesterKey: m.userKey,
-            prompt: 'Izinkan *${call.name}*?\n`${call.args}`\n'
-                'ID approval: `$approvalId` '
-                '(bisa juga disetujui dari web/Flutter atau `tiko approve`)',
-          );
+        sessionKey: m.sessionKey,
+        requesterKey: m.userKey,
+        prompt:
+            'Izinkan *${call.name}*?\n`${call.args}`\n'
+            'ID approval: `$approvalId` '
+            '(bisa juga disetujui dari web/Flutter atau `tiko approve`)',
+      );
     } else if (m.channel == 'cli' && stdin.hasTerminal) {
       confirm = (call, sess, approvalId) async {
         stdout.writeln(
@@ -520,9 +545,12 @@ Future<void> main(List<String> args) async {
     // of the previous turn with `/feedback <slug> up|down` (or 👍/👎).
     final feedbackReply = await maybeHandleFeedbackCommand(m);
     if (feedbackReply != null) {
-      await (gw?.send(OutboundMessage(sessionKey: m.sessionKey, text: feedbackReply)) ??
+      await (gw?.send(
+            OutboundMessage(sessionKey: m.sessionKey, text: feedbackReply),
+          ) ??
           Future.value());
-      if (gw == null && m.channel == 'cli') stdout.writeln('assistant> $feedbackReply');
+      if (gw == null && m.channel == 'cli')
+        stdout.writeln('assistant> $feedbackReply');
       return;
     }
 
@@ -548,7 +576,10 @@ Future<void> main(List<String> args) async {
       final channelId = m.sessionKey.startsWith('discord:')
           ? m.sessionKey.substring('discord:'.length)
           : m.sessionKey;
-      final live = DiscordLiveMessage(botToken: gw.botToken!, channelId: channelId);
+      final live = DiscordLiveMessage(
+        botToken: gw.botToken!,
+        channelId: channelId,
+      );
       streamer = ProgressiveStreamer(
         create: live.create,
         update: live.update,
@@ -604,14 +635,18 @@ Future<void> main(List<String> args) async {
       // Idempotency key deterministik (jobId+runId): gateway yang platformnya
       // mendukung dedup (Matrix txnId, SMTP Message-ID) dapat mengenali
       // kirim ulang at-least-once dan tidak menggandakan pesan.
-      await target.send(OutboundMessage(
-        sessionKey: sessionKey,
-        text: text,
-        idempotencyKey: deliveryIdempotencyKey(job.id, runId),
-      ));
+      await target.send(
+        OutboundMessage(
+          sessionKey: sessionKey,
+          text: text,
+          idempotencyKey: deliveryIdempotencyKey(job.id, runId),
+        ),
+      );
     },
   );
-  stdout.writeln('Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)');
+  stdout.writeln(
+    'Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)',
+  );
 
   final webhooks = (wa != null || slackGw != null)
       ? WebhookEndpoint(
@@ -663,32 +698,38 @@ Future<void> main(List<String> args) async {
           final text = values.isEmpty
               ? '/ui $actionId'
               : '/ui $actionId ${jsonEncode(values)}';
-          final answer = await httpMessage(InboundMessage(
-            channel: 'http',
-            userKey: 'ui-action',
-            sessionKey: sessionKey,
-            text: text,
-          ));
+          final answer = await httpMessage(
+            InboundMessage(
+              channel: 'http',
+              userKey: 'ui-action',
+              sessionKey: sessionKey,
+              text: text,
+            ),
+          );
           return {'ok': true, 'text': answer};
         },
         listSessions: () async {
           final list = await rt.sessions.list();
           return list
-              .map((s) => {
-                    'id': s.id,
-                    'channel': s.channel,
-                    'title': s.title,
-                    'updated_at': s.updatedAt.toIso8601String(),
-                    'turns': s.turns,
-                  })
+              .map(
+                (s) => {
+                  'id': s.id,
+                  'channel': s.channel,
+                  'title': s.title,
+                  'updated_at': s.updatedAt.toIso8601String(),
+                  'turns': s.turns,
+                },
+              )
               .toList();
         },
         sessionMessages: (id, {required int limit, required int offset}) async {
           // recent(limit + offset) returns the most recent window oldest
           // first; dropping the last `offset` messages yields the page that
           // ends `offset` messages before the newest one.
-          final window = await rt.sessions
-              .recent(id, limit: ((limit + offset).clamp(1, 400)).toInt());
+          final window = await rt.sessions.recent(
+            id,
+            limit: ((limit + offset).clamp(1, 400)).toInt(),
+          );
           if (offset >= window.length) return <Map<String, dynamic>>[];
           final ending = window.sublist(0, window.length - offset);
           final start = ending.length > limit ? ending.length - limit : 0;
@@ -715,8 +756,11 @@ Future<void> main(List<String> args) async {
         listApprovals: () async =>
             (await rt.approvals.all()).map((a) => a.toJson()).toList(),
         decideApproval: (id, allow, {actor}) async {
-          final r = await rt.decideApproval(id,
-              approve: allow, actor: actor ?? 'api');
+          final r = await rt.decideApproval(
+            id,
+            approve: allow,
+            actor: actor ?? 'api',
+          );
           return r != null;
         },
         onShutdown: () async {
@@ -738,14 +782,12 @@ Future<void> main(List<String> args) async {
           files.sort((a, b) => b.path.compareTo(a.path));
           return [
             for (final f in files)
-              {
-                'name': _baseName(f.path),
-                'bytes': await f.length(),
-              },
+              {'name': _baseName(f.path), 'bytes': await f.length()},
           ];
         },
         logContentProvider: (name) async {
-          if (!name.startsWith('audit-') || !name.endsWith('.jsonl')) return null;
+          if (!name.startsWith('audit-') || !name.endsWith('.jsonl'))
+            return null;
           final file = File('${logsDirectory.path}/$name');
           if (!await file.exists()) return null;
           const maxBytes = 64 * 1024;
@@ -754,7 +796,10 @@ Future<void> main(List<String> args) async {
           final raf = await file.open();
           try {
             await raf.setPosition(start);
-            var content = utf8.decode(await raf.read(maxBytes), allowMalformed: true);
+            var content = utf8.decode(
+              await raf.read(maxBytes),
+              allowMalformed: true,
+            );
             if (start > 0) {
               final nl = content.indexOf('\n');
               if (nl >= 0) content = content.substring(nl + 1);
@@ -784,10 +829,14 @@ Future<void> main(List<String> args) async {
             model: body['model'] as String?,
             greeting: (body['greeting'] as String?) ?? '',
           );
-          final allowlist = (body['tool_allowlist'] as List?)?.cast<String>().toList();
+          final allowlist = (body['tool_allowlist'] as List?)
+              ?.cast<String>()
+              .toList();
           if (allowlist == null || allowlist.isEmpty) return profile.toJson();
-          final updated = await rt.botStore
-              .update(id, (b) => b.copyWith(toolAllowlist: allowlist));
+          final updated = await rt.botStore.update(
+            id,
+            (b) => b.copyWith(toolAllowlist: allowlist),
+          );
           return updated.toJson();
         },
         updateBot: (id, body) async {
@@ -799,7 +848,9 @@ Future<void> main(List<String> args) async {
             model: body['model'] as String?,
             clearModel: body.containsKey('model') && body['model'] == null,
             greeting: body['greeting'] as String?,
-            toolAllowlist: (body['tool_allowlist'] as List?)?.cast<String>().toList(),
+            toolAllowlist: (body['tool_allowlist'] as List?)
+                ?.cast<String>()
+                .toList(),
           );
           final saved = await rt.botStore.update(id, (_) => updated);
           return saved.toJson();
@@ -833,12 +884,16 @@ Future<void> main(List<String> args) async {
                   'id': id,
                   if (rt.providerById(id) != null)
                     'capabilities': {
-                      'tool_calling':
-                          rt.providerById(id)!.capabilities.toolCalling,
+                      'tool_calling': rt
+                          .providerById(id)!
+                          .capabilities
+                          .toolCalling,
                       'vision': rt.providerById(id)!.capabilities.vision,
                       'streaming': rt.providerById(id)!.capabilities.streaming,
-                      'max_context':
-                          rt.providerById(id)!.capabilities.maxContext,
+                      'max_context': rt
+                          .providerById(id)!
+                          .capabilities
+                          .maxContext,
                     },
                   'health': health[id],
                 },
@@ -908,8 +963,8 @@ Future<void> main(List<String> args) async {
               channel: (body['channel'] as String?)?.trim() ?? 'http',
               userKey: (body['user_key'] as String?)?.trim() ?? 'admin',
               missedPolicy: _missedPolicy(body['missed_policy'] as String?),
-              timezone: ((body['timezone'] as String?)?.trim().isNotEmpty ??
-                      false)
+              timezone:
+                  ((body['timezone'] as String?)?.trim().isNotEmpty ?? false)
                   ? (body['timezone'] as String).trim()
                   : 'UTC',
             );
@@ -1069,7 +1124,9 @@ Future<void> main(List<String> args) async {
       );
       await api.start();
       stdout.writeln('UI http://127.0.0.1:$port/');
-      stdout.writeln('Token tersimpan di ${ApiTokenStore.pathFor(rt.dataDir)} (permission 600).');
+      stdout.writeln(
+        'Token tersimpan di ${ApiTokenStore.pathFor(rt.dataDir)} (permission 600).',
+      );
     } on SocketException catch (e) {
       stderr.writeln(
         'Gagal bind port $port: $e\n'
@@ -1078,7 +1135,9 @@ Future<void> main(List<String> args) async {
       await api?.stop();
       await rt.close();
       for (final gateway in gateways) {
-        try { await gateway.close(); } catch (_) {} // best-effort
+        try {
+          await gateway.close();
+        } catch (_) {} // best-effort
       }
       await lock.release();
       exit(1);
@@ -1087,7 +1146,9 @@ Future<void> main(List<String> args) async {
       await api?.stop();
       await rt.close();
       for (final gateway in gateways) {
-        try { await gateway.close(); } catch (_) {} // best-effort
+        try {
+          await gateway.close();
+        } catch (_) {} // best-effort
       }
       await lock.release();
       exit(1);
@@ -1107,7 +1168,9 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
     if (openAiKey.length < 32) {
-      stderr.writeln('OPENAI_API_KEY terlalu pendek; minimal 32 karakter (128-bit).');
+      stderr.writeln(
+        'OPENAI_API_KEY terlalu pendek; minimal 32 karakter (128-bit).',
+      );
       await rt.close();
       await lock.release();
       exit(1);
@@ -1135,13 +1198,15 @@ Future<void> main(List<String> args) async {
 
   final subs = <StreamSubscription>[];
   for (final gw in gateways) {
-    subs.add(gw.inbound.listen((m) {
-      unawaited(handleMessage(m, replyVia: gw));
-    }));
+    subs.add(
+      gw.inbound.listen((m) {
+        unawaited(handleMessage(m, replyVia: gw));
+      }),
+    );
   }
 
-  final interactive = !useApi &&
-      (forceCli || (stdin.hasTerminal && gateways.isEmpty));
+  final interactive =
+      !useApi && (forceCli || (stdin.hasTerminal && gateways.isEmpty));
 
   if (interactive) {
     stdout.writeln('CLI: /quit /doctor /status');
@@ -1164,12 +1229,14 @@ Future<void> main(List<String> args) async {
         );
         continue;
       }
-      await handleMessage(InboundMessage(
-        channel: 'cli',
-        userKey: 'local',
-        sessionKey: 'cli:local',
-        text: text,
-      ));
+      await handleMessage(
+        InboundMessage(
+          channel: 'cli',
+          userKey: 'local',
+          sessionKey: 'cli:local',
+          text: text,
+        ),
+      );
     }
   } else {
     stdout.writeln('Daemon siap — SIGINT/SIGTERM untuk berhenti');
@@ -1218,7 +1285,10 @@ Future<void> main(List<String> args) async {
   exit(clean ? 0 : 1);
 }
 
-Future<List<AcpHistoryEntry>?> _loadAcpSession(TikoRuntime rt, String sid) async {
+Future<List<AcpHistoryEntry>?> _loadAcpSession(
+  TikoRuntime rt,
+  String sid,
+) async {
   final key = 'acp:$sid';
   final all = await rt.sessions.list();
   if (!all.any((s) => s.id == key)) return null;
@@ -1360,6 +1430,7 @@ class _SlackReplyGateway implements Gateway {
   @override
   Future<void> close() async {}
 }
+
 class _CollectGateway implements Gateway {
   _CollectGateway(this.completer);
   final Completer<String> completer;
