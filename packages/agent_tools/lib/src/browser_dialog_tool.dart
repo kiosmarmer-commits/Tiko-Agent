@@ -29,12 +29,6 @@ class BrowserDialogTool implements Tool {
 
   CdpSession? _session;
 
-  @override
-  String get name => 'browser_dialog';
-
-  @override
-  String get description =>
-      'Browser dialog tool for handling alerts, confirms, and prompts in web automation.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -68,9 +62,9 @@ class BrowserDialogTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'open':
@@ -82,6 +76,7 @@ class BrowserDialogTool implements Tool {
           );
           await _session!.open();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'opened', 'session_id': _session!.sessionId}),
             isError: false,
           );
@@ -92,6 +87,7 @@ class BrowserDialogTool implements Tool {
             _session = null;
           }
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'closed'}),
             isError: false,
           );
@@ -99,12 +95,13 @@ class BrowserDialogTool implements Tool {
         case 'set_dialog_handler':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final handler = call.args['handler'] as String? ?? 'accept';
-          final text = call.args['text'] as String?;
+          final handler = args['handler'] as String? ?? 'accept';
+          final text = args['text'] as String?;
           
           // Set up dialog handler via CDP
           await _session!.sendCommand('Page.setInterceptFileChooserDialog', {'enabled': true});
@@ -112,6 +109,7 @@ class BrowserDialogTool implements Tool {
           // For simplicity, we'll handle the most common case
           // In a real implementation, you'd set up event listeners
           return ToolResult(
+            callId: '',
             content: jsonEncode({
               'status': 'handler_set',
               'handler': handler,
@@ -123,6 +121,7 @@ class BrowserDialogTool implements Tool {
         case 'get_dialog_state':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
@@ -130,6 +129,7 @@ class BrowserDialogTool implements Tool {
           // Get current dialog state
           // This would normally listen for Page.javascriptDialogOpening event
           return ToolResult(
+            callId: '',
             content: jsonEncode({
               'status': 'no_dialog',
               'message': 'No active dialog detected',
@@ -139,12 +139,14 @@ class BrowserDialogTool implements Tool {
 
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
