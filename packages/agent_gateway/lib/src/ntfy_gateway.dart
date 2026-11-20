@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
@@ -109,11 +108,6 @@ class NtfyGateway implements Gateway {
   @override
   Future<void> sendTyping(String sessionKey) async {
     // ntfy doesn't support typing indicators
-  }
-
-  @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // ntfy doesn't support streaming
   }
 
   @override

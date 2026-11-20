@@ -63,8 +63,10 @@ class DingTalkGateway implements Gateway {
     }
     final stringToSign = '$timestamp\n$secret';
     final bytes = utf8.encode(stringToSign);
-    final digest = Hmac(sha256, bytes);
-    return base64.encode(digest.bytes);
+    final digest = Hmac(sha256, utf8.encode(secret!))
+        .convert(bytes)
+        .bytes;
+    return base64.encode(digest);
   }
 
   @override
@@ -185,11 +187,6 @@ class DingTalkGateway implements Gateway {
   @override
   Future<void> sendTyping(String sessionKey) async {
     // DingTalk doesn't support typing indicators
-  }
-
-  @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // DingTalk doesn't support streaming
   }
 
   @override

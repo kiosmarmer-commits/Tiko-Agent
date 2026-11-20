@@ -146,11 +146,6 @@ class YuanbaoGateway implements Gateway {
   }
 
   @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // Yuanbao doesn't support streaming
-  }
-
-  @override
   Future<void> close() async {
     await _inbound.close();
   }

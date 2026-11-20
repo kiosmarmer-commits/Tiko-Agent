@@ -207,11 +207,6 @@ class FeishuGateway implements Gateway {
   }
 
   @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // Feishu doesn't support streaming
-  }
-
-  @override
   Future<void> close() async {
     await _inbound.close();
   }

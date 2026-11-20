@@ -75,12 +75,14 @@ class HomeAssistantGateway implements Gateway {
           'message': m.text,
           'title': title,
           'target': target,
-          ...data,
+          ...?data,
         },
       };
 
-      // Remove null values
-      payload['data'].removeWhere((key, value) => value == null);
+      // Remove null values from data
+      (payload['data'] as Map<String, dynamic>).removeWhere(
+        (key, value) => value == null,
+      );
 
       final url = Uri.parse('$_baseUrl/api/services/notify/send');
 
@@ -182,11 +184,6 @@ class HomeAssistantGateway implements Gateway {
   @override
   Future<void> sendTyping(String sessionKey) async {
     // Home Assistant doesn't support typing indicators
-  }
-
-  @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // Home Assistant doesn't support streaming
   }
 
   @override

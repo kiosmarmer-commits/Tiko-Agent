@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart';
 
 /// WeCom (企业微信) gateway for sending messages to WeChat Work.
 ///
@@ -122,7 +121,7 @@ class WeComGateway implements Gateway {
       };
 
       // Remove empty values
-      payload.removeWhere((key, value) => value == null || value == '');
+      payload.removeWhere((key, value) => value == '');
 
       final url = Uri.parse(
         'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token',
@@ -173,7 +172,7 @@ class WeComGateway implements Gateway {
       };
 
       // Remove empty values
-      payload.removeWhere((key, value) => value == null || value == '');
+      payload.removeWhere((key, value) => value == '');
 
       final url = Uri.parse(
         'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token',
@@ -202,11 +201,6 @@ class WeComGateway implements Gateway {
   @override
   Future<void> sendTyping(String sessionKey) async {
     // WeCom doesn't support typing indicators
-  }
-
-  @override
-  Future<void> sendStreamChunk(String sessionKey, String chunk) async {
-    // WeCom doesn't support streaming
   }
 
   @override
