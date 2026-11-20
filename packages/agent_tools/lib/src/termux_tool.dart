@@ -34,8 +34,8 @@ class TermuxTool implements Tool {
             'text': {'type': 'string', 'description': 'Text for clipboard/toast/notification'},
             'title': {'type': 'string', 'description': 'Title for notification'},
             'duration': {'type': 'number', 'description': 'Duration in ms for vibrate'},
-            'recursive': {'type': 'boolean', 'description': 'Recursive flag', 'default': False},
-            'force': {'type': 'boolean', 'description': 'Force flag', 'default': False},
+            'recursive': {'type': 'boolean', 'description': 'Recursive flag', 'default': false},
+            'force': {'type': 'boolean', 'description': 'Force flag', 'default': false},
           },
           'required': ['action'],
         },
@@ -81,7 +81,7 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'command is required'}), isError: true);
     }
-    final result = await Process.run('sh', ['-c', command], timeout: timeout);
+    final result = await Process.run('sh', ['-c', command]);
     return ToolResult(
       callId: '',
       content: jsonEncode({'status': 'executed', 'command': command, 'exit_code': result.exitCode, 'stdout': result.stdout.toString(), 'stderr': result.stderr.toString()}),
@@ -95,7 +95,7 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'package is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'pkg', ['install', '-y', package], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['install', '-y', package]);
     return ToolResult(
       callId: '',
       content: jsonEncode({'status': 'installed', 'package': package, 'exit_code': result.exitCode}),
@@ -110,7 +110,7 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'package is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'pkg', ['uninstall', '-y', if (force) '-f', package], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['uninstall', '-y', if (force) '-f', package]);
     return ToolResult(
       callId: '',
       content: jsonEncode({'status': 'uninstalled', 'package': package, 'exit_code': result.exitCode}),
@@ -119,7 +119,7 @@ class TermuxTool implements Tool {
   }
 
   Future<ToolResult> _listPackages(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run(termuxPrefix + 'pkg', ['list-installed'], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['list-installed']);
     final packages = result.stdout.toString().split('\n').where((line) => line.trim().isNotEmpty).toList();
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'listed', 'packages': packages, 'count': packages.length}), isError: result.exitCode != 0);
@@ -131,26 +131,26 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'package is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'pkg', ['show', package], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['show', package]);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'checked', 'package': package, 'installed': result.exitCode == 0}), isError: false);
   }
 
   Future<ToolResult> _updatePackages(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run(termuxPrefix + 'pkg', ['update'], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['update']);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'updated', 'exit_code': result.exitCode}), isError: result.exitCode != 0);
   }
 
   Future<ToolResult> _upgradePackages(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run(termuxPrefix + 'pkg', ['upgrade', '-y'], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'pkg', ['upgrade', '-y']);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'upgraded', 'exit_code': result.exitCode}), isError: result.exitCode != 0);
   }
 
   Future<ToolResult> _listFiles(Map<String, dynamic> args, ToolContext ctx) async {
     final path = args['path'] as String? ?? '.';
-    final result = await Process.run('ls', ['-la', path], timeout: timeout);
+    final result = await Process.run('ls', ['-la', path]);
     final files = result.stdout.toString().split('\n').where((line) => line.trim().isNotEmpty).toList();
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'listed', 'path': path, 'files': files, 'count': files.length}), isError: result.exitCode != 0);
@@ -232,13 +232,13 @@ class TermuxTool implements Tool {
   }
 
   Future<ToolResult> _listDevices(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run('termux-deviceinfo', ['list'], timeout: timeout);
+    final result = await Process.run('termux-deviceinfo', ['list']);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'listed', 'devices': result.stdout.toString()}), isError: result.exitCode != 0);
   }
 
   Future<ToolResult> _getInfo(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run('termux-info', [], timeout: timeout);
+    final result = await Process.run('termux-info', []);
     final info = <String, String>{};
     final lines = result.stdout.toString().split('\n');
     for (final line in lines) {
@@ -259,13 +259,13 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'text is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'clipboard-set', [text], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'clipboard-set', [text]);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'set', 'text': text}), isError: result.exitCode != 0);
   }
 
   Future<ToolResult> _getClipboard(Map<String, dynamic> args, ToolContext ctx) async {
-    final result = await Process.run(termuxPrefix + 'clipboard-get', [], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'clipboard-get', []);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'retrieved', 'text': result.stdout.toString()}), isError: result.exitCode != 0);
   }
@@ -276,14 +276,14 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'text is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'toast', [text], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'toast', [text]);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'shown', 'text': text}), isError: result.exitCode != 0);
   }
 
   Future<ToolResult> _vibrate(Map<String, dynamic> args, ToolContext ctx) async {
     final duration = args['duration'] as num? ?? 1000;
-    final result = await Process.run(termuxPrefix + 'vibrate', ['-d', duration.toString()], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'vibrate', ['-d', duration.toString()]);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'vibrated', 'duration_ms': duration}), isError: result.exitCode != 0);
   }
@@ -295,7 +295,7 @@ class TermuxTool implements Tool {
       return ToolResult(
         callId: '',content: jsonEncode({'error': 'text is required'}), isError: true);
     }
-    final result = await Process.run(termuxPrefix + 'notification', ['--title', title, '--content', text], timeout: timeout);
+    final result = await Process.run(termuxPrefix + 'notification', ['--title', title, '--content', text]);
     return ToolResult(
       callId: '',content: jsonEncode({'status': 'shown', 'title': title, 'text': text}), isError: result.exitCode != 0);
   }
