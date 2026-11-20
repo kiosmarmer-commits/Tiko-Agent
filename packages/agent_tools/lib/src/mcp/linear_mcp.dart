@@ -25,12 +25,6 @@ class LinearMcpTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
-  String get name => 'linear_mcp';
-
-  @override
-  String get description =>
-      'Linear MCP server for accessing Linear project management data.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -114,52 +108,54 @@ class LinearMcpTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'list_issues':
-          return await _listIssues(call);
+          return await _listIssues(args, ctx);
         case 'get_issue':
-          return await _getIssue(call);
+          return await _getIssue(args, ctx);
         case 'create_issue':
-          return await _createIssue(call);
+          return await _createIssue(args, ctx);
         case 'update_issue':
-          return await _updateIssue(call);
+          return await _updateIssue(args, ctx);
         case 'list_projects':
-          return await _listProjects(call);
+          return await _listProjects(args, ctx);
         case 'get_project':
-          return await _getProject(call);
+          return await _getProject(args, ctx);
         case 'list_teams':
-          return await _listTeams(call);
+          return await _listTeams(args, ctx);
         case 'get_team':
-          return await _getTeam(call);
+          return await _getTeam(args, ctx);
         case 'list_users':
-          return await _listUsers(call);
+          return await _listUsers(args, ctx);
         case 'get_user':
-          return await _getUser(call);
+          return await _getUser(args, ctx);
         case 'search':
-          return await _search(call);
+          return await _search(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listIssues(ToolCall call) async {
+  Future<ToolResult> _listIssues(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final limit = call.args['limit'] as num? ?? 10;
-      final offset = call.args['offset'] as num? ?? 0;
-      final team = call.args['team'] as String?;
+      final limit = args['limit'] as num? ?? 10;
+      final offset = args['offset'] as num? ?? 0;
+      final team = args['team'] as String?;
       
       final queryParams = <String, String>{};
       if (team != null && team.isNotEmpty) {
@@ -179,6 +175,7 @@ class LinearMcpTool implements Tool {
       final issues = data['data']?['issues']?['nodes'] ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issues': issues,
@@ -188,18 +185,20 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list issues: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getIssue(ToolCall call) async {
+  Future<ToolResult> _getIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final issueId = call.args['issue_id'] as String?;
+      final issueId = args['issue_id'] as String?;
       
       if (issueId == null || issueId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'issue_id is required'}),
           isError: true,
         );
@@ -216,6 +215,7 @@ class LinearMcpTool implements Tool {
       final issue = data['data']?['issue'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -224,22 +224,24 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createIssue(ToolCall call) async {
+  Future<ToolResult> _createIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final title = call.args['title'] as String?;
-      final description = call.args['description'] as String?;
-      final team = call.args['team'] as String?;
-      final priority = call.args['priority'] as num?;
-      final assignee = call.args['assignee'] as String?;
+      final title = args['title'] as String?;
+      final description = args['description'] as String?;
+      final team = args['team'] as String?;
+      final priority = args['priority'] as num?;
+      final assignee = args['assignee'] as String?;
       
       if (title == null || title.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'title is required'}),
           isError: true,
         );
@@ -287,6 +289,7 @@ class LinearMcpTool implements Tool {
       final issue = data['data']?['issueCreate']?['issue'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -295,22 +298,24 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _updateIssue(ToolCall call) async {
+  Future<ToolResult> _updateIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final issueId = call.args['issue_id'] as String?;
-      final title = call.args['title'] as String?;
-      final description = call.args['description'] as String?;
-      final priority = call.args['priority'] as num?;
-      final assignee = call.args['assignee'] as String?;
+      final issueId = args['issue_id'] as String?;
+      final title = args['title'] as String?;
+      final description = args['description'] as String?;
+      final priority = args['priority'] as num?;
+      final assignee = args['assignee'] as String?;
       
       if (issueId == null || issueId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'issue_id is required'}),
           isError: true,
         );
@@ -324,6 +329,7 @@ class LinearMcpTool implements Tool {
       
       if (updates.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No fields to update'}),
           isError: true,
         );
@@ -360,6 +366,7 @@ class LinearMcpTool implements Tool {
       final issue = data['data']?['issueUpdate']?['issue'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': issue,
@@ -368,16 +375,17 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to update issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listProjects(ToolCall call) async {
+  Future<ToolResult> _listProjects(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final limit = call.args['limit'] as num? ?? 10;
-      final offset = call.args['offset'] as num? ?? 0;
+      final limit = args['limit'] as num? ?? 10;
+      final offset = args['offset'] as num? ?? 0;
       
       final response = await _makeRequest(
         'GET',
@@ -390,6 +398,7 @@ class LinearMcpTool implements Tool {
       final projects = data['data']?['projects']?['nodes'] ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'projects': projects,
@@ -399,18 +408,20 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list projects: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getProject(ToolCall call) async {
+  Future<ToolResult> _getProject(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final projectId = call.args['project_id'] as String?;
+      final projectId = args['project_id'] as String?;
       
       if (projectId == null || projectId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'project_id is required'}),
           isError: true,
         );
@@ -427,6 +438,7 @@ class LinearMcpTool implements Tool {
       final project = data['data']?['project'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'project': project,
@@ -435,15 +447,16 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get project: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listTeams(ToolCall call) async {
+  Future<ToolResult> _listTeams(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final limit = call.args['limit'] as num? ?? 10;
+      final limit = args['limit'] as num? ?? 10;
       
       final response = await _makeRequest(
         'GET',
@@ -456,6 +469,7 @@ class LinearMcpTool implements Tool {
       final teams = data['data']?['teams']?['nodes'] ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'teams': teams,
@@ -465,18 +479,20 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list teams: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getTeam(ToolCall call) async {
+  Future<ToolResult> _getTeam(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final teamId = call.args['team_id'] as String?;
+      final teamId = args['team_id'] as String?;
       
       if (teamId == null || teamId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'team_id is required'}),
           isError: true,
         );
@@ -493,6 +509,7 @@ class LinearMcpTool implements Tool {
       final team = data['data']?['team'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'team': team,
@@ -501,15 +518,16 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get team: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listUsers(ToolCall call) async {
+  Future<ToolResult> _listUsers(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final limit = call.args['limit'] as num? ?? 10;
+      final limit = args['limit'] as num? ?? 10;
       
       final response = await _makeRequest(
         'GET',
@@ -522,6 +540,7 @@ class LinearMcpTool implements Tool {
       final users = data['data']?['users']?['nodes'] ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'users': users,
@@ -531,18 +550,20 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list users: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getUser(ToolCall call) async {
+  Future<ToolResult> _getUser(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final userId = call.args['user_id'] as String?;
+      final userId = args['user_id'] as String?;
       
       if (userId == null || userId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'user_id is required'}),
           isError: true,
         );
@@ -559,6 +580,7 @@ class LinearMcpTool implements Tool {
       final user = data['data']?['user'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'user': user,
@@ -567,19 +589,21 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get user: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _search(ToolCall call) async {
+  Future<ToolResult> _search(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final query = call.args['query'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
+      final query = args['query'] as String?;
+      final limit = args['limit'] as num? ?? 10;
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
         );
@@ -596,6 +620,7 @@ class LinearMcpTool implements Tool {
       final results = data['data']?['search']?['nodes'] ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -606,6 +631,7 @@ class LinearMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
       );
