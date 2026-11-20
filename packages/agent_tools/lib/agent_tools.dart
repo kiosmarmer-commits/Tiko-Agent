@@ -37,6 +37,8 @@ export 'src/path_safety.dart';
 export 'src/checkpoint.dart';
 export 'src/cdp_browser.dart';
 export 'src/browser_cdp_tool.dart';
+export 'src/browser_dialog_tool.dart';
+export 'src/browser_vault_tool.dart';
 export 'src/openai_api.dart';
 export 'src/acp_agent.dart';
 export 'src/skills_hub.dart';
