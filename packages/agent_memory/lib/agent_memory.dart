@@ -19,3 +19,4 @@ export 'src/agent_migration.dart';
 export 'src/rag_tools.dart';
 export 'src/memory_layer_tools.dart';
 export 'src/hdc_memory.dart';
+export 'src/retaindb_memory.dart';
