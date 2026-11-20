@@ -310,6 +310,14 @@ jobs:
             echo "::error::flutter build web gagal (exit $brc)"
             grep -E '(Error|error:|Target kernel_snapshot failed)' "$bout" | head -10 | sed 's/^/::error ::/' || true
           fi
+          echo '== web build usable as WEB_ROOT smoke =='
+          # Jalur A fase 1: build/web harus dapat melayani agentd (index + entrypoint JS).
+          for f in build/web/index.html build/web/main.dart.js; do
+            if [[ ! -s "$f" ]]; then
+              fail=1
+              echo "::error::artefak WEB_ROOT hilang: $f"
+            fi
+          done
           if [[ -s "$tfl" ]]; then cp "$tfl" "$GITHUB_WORKSPACE/.ci-flutter-testfailures.txt"; fi
           exit $fail
       - name: Surface flutter test failures 1-10

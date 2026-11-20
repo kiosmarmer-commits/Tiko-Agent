@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'agent_api_client.dart';
@@ -40,10 +41,12 @@ import 'ui/status_view.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   var token = const String.fromEnvironment('API_TOKEN', defaultValue: '');
-  var base = const String.fromEnvironment(
-    'API_BASE',
-    defaultValue: 'http://127.0.0.1:8787',
-  );
+  var base = const String.fromEnvironment('API_BASE');
+  if (base.isEmpty) {
+    // Jalur A fase 1: saat dilayani agentd (same-origin), pakai origin
+    // halaman; di luar web, fallback ke daemon loopback default.
+    base = kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8787';
+  }
   // Self-contained desktop bootstrap (Hermes-parity): spawn/reuse the bundled
   // agentd daemon so the app works without a manually started daemon. Falls
   // back to the dart-define connection settings when bootstrap does not apply

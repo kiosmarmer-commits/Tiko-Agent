@@ -61,6 +61,7 @@ Semua literal warna/spacing/radius/typography di `apps/agent_flutter` wajib bera
 - Satu pohon widget dipakai semua platform; hanya shell yang berganti: NavigationRail (lebar ≥900px) vs NavigationBar (sempit). Karena semua warna berasal dari `Brightness`, Android/Web/Desktop otomatis konsisten.
 - Mode Simple/Advanced tetap memfilter route (`GUI-P2-01`); desain tidak menambah/mengurangi destinasi.
 - Badge approval pending (`GUI-P0-06`) tetap pada destinasi Approvals di kedua shell.
+- Konsolidasi web (Jalur A): `HttpApiServer` melayani hasil `flutter build web` sebagai `webRoot` (prioritas over dashboard vanilla `apps/agentd/web`), sehingga semua permukaan web memakai token yang sama. Palet CSS dashboard vanilla diselaraskan via CSS variables di `apps/agentd/web/app.css`; fase 2 merencanakan retirement UI vanilla setelah paritas Flutter Web terverifikasi di browser.
 
 ## 5. Aturan perubahan
 
