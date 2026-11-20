@@ -159,20 +159,20 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Image Generation:
 - [x] **FAL.ai** - ✅ Implemented (`image_generation.dart`)
 - [x] **OpenAI DALL·E** - ✅ Implemented (`image_providers.dart`)
-- [ ] **xAI (Grok) Image** - ❌ NOT IMPLEMENTED
-- [ ] **Krea** - ❌ NOT IMPLEMENTED
-- [ ] **DeepInfra** - ❌ NOT IMPLEMENTED
-- [ ] **OpenRouter** - ❌ NOT IMPLEMENTED
-- [ ] **Meta Model API** - ❌ NOT IMPLEMENTED
-- [ ] **Stable Diffusion via ComfyUI** - ❌ NOT IMPLEMENTED
+- [x] **xAI (Grok) Image** - ✅ Implemented (`xai_image_provider.dart`) (NEW)
+- [x] **Krea** - ✅ Implemented (`krea_image_provider.dart`) (NEW)
+- [x] **DeepInfra** - ✅ Implemented (`deepinfra_image_provider.dart`) (NEW)
+- [x] **OpenRouter** - ✅ Implemented (`openrouter_image_provider.dart`) (NEW)
+- [x] **Meta Model API** - ✅ Implemented (`meta_image_provider.dart`) (NEW)
+- [x] **Stable Diffusion via ComfyUI** - ✅ Implemented (`comfyui_provider.dart`) (NEW)
 
 ### Video Generation:
-- [ ] **xAI (Grok) Video** - ❌ NOT IMPLEMENTED
+- [x] **xAI (Grok) Video** - ✅ Implemented (`xai_video_provider.dart`) (NEW)
 - [x] **FAL Video** - ✅ Implemented (`video_generation.dart`)
-- [ ] **OpenRouter Video** - ❌ NOT IMPLEMENTED
-- [ ] **DeepInfra Video** - ❌ NOT IMPLEMENTED
+- [x] **OpenRouter Video** - ✅ Implemented (`openrouter_video_provider.dart`) (NEW)
+- [x] **DeepInfra Video** - ✅ Implemented (`deepinfra_video_provider.dart`) (NEW)
 
-### Status: 3/12 implemented (25%)
+### Status: 9/12 implemented (75%)
 
 ---
 
