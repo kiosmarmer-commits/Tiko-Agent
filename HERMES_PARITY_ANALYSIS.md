@@ -202,11 +202,11 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **SSH** - ✅ Implemented (`sandbox.dart`)
 - [x] **Modal** - ✅ Implemented (`sandbox.dart`)
 - [x] **Daytona** - ✅ Implemented (`sandbox.dart`)
-- [ ] **Vercel Sandbox** - ❌ NOT IMPLEMENTED
-- [ ] **Singularity/Apptainer** - ❌ NOT IMPLEMENTED (plugin)
-- [ ] **Sprites (Fly.io)** - ❌ NOT IMPLEMENTED (plugin)
+- [x] **Vercel Sandbox** - ✅ Implemented (`sandbox.dart`) (NEW)
+- [x] **Singularity/Apptainer** - ✅ Implemented (`sandbox.dart`) (NEW)
+- [x] **Sprites (Fly.io)** - ✅ Implemented (`sandbox.dart`) (NEW)
 
-### Status: 5/8 implemented (63%)
+### Status: 8/8 implemented (100%)
 
 ---
 
