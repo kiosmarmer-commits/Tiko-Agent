@@ -111,6 +111,28 @@ jobs:
           if [[ -s "$tf" ]]; then cp "$tf" .ci-testfailures.txt; fi
           exit $fail
       - name: Surface test failures 1-10
+
+      - name: Nondeterminism detection (run tests twice with different seeds)
+        run: |
+          set -euo pipefail
+          echo "Running tests twice with random ordering to detect nondeterminism..."
+          SEED1=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+          SEED2=$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')
+          echo "=== Run 1 with seed: $SEED1 ==="
+          for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
+            if [ -d "$dir/test" ]; then
+              echo "Testing $dir..."
+              (cd "$dir" && dart test --test-randomize-ordering-seed=$SEED1)
+            fi
+          done
+          echo "=== Run 2 with seed: $SEED2 ==="
+          for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
+            if [ -d "$dir/test" ]; then
+              echo "Testing $dir..."
+              (cd "$dir" && dart test --test-randomize-ordering-seed=$SEED2)
+            fi
+          done
+          echo "✓ Both runs completed successfully - no nondeterminism detected"
         if: always()
         shell: bash
         run: |
