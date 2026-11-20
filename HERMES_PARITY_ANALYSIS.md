@@ -47,25 +47,27 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **Xiaomi MiMo** - ✅ Implemented (`xiaomi_mimo_provider.dart`) (NEW)
 - [x] **Kimi (Moonshot)** - ✅ Implemented (`kimi_provider.dart`) (NEW)
 - [x] **MiniMax** - ✅ Implemented (`minimax_provider.dart`) (NEW)
-- [ ] **AI Gateway** - ❌ NOT IMPLEMENTED
+- [x] **AI Gateway** - ✅ Implemented (`ai_gateway_provider.dart`) (NEW)
 - [x] **Fireworks AI** - ✅ Implemented (`fireworks_provider.dart`) (NEW)
 - [x] **NovitaAI** - ✅ Implemented (`novita_provider.dart`) (NEW)
-- [ ] **z.ai** - ❌ NOT IMPLEMENTED
-- [ ] **ArceeAI** - ❌ NOT IMPLEMENTED
-- [ ] **GMI** - ❌ NOT IMPLEMENTED
-- [ ] **Nebius** - ❌ NOT IMPLEMENTED
-- [ ] **Kilo Code** - ❌ NOT IMPLEMENTED
-- [ ] **TokenHub/TokenPlan** - ❌ NOT IMPLEMENTED
-- [ ] **Alibaba DashScope** - ❌ NOT IMPLEMENTED
-- [ ] **OpenCode Zen/Go** - ❌ NOT IMPLEMENTED
-- [ ] **CommandCode** - ❌ NOT IMPLEMENTED
+- [x] **z.ai** - ✅ Implemented (`zai_provider.dart`) (NEW)
+- [x] **ArceeAI** - ✅ Implemented (`arcee_provider.dart`) (NEW)
+- [x] **GMI** - ✅ Implemented (`gmi_provider.dart`) (NEW)
+- [x] **Nebius** - ✅ Implemented (`nebius_provider.dart`) (NEW)
+- [x] **Kilo Code** - ✅ Implemented (`kilocode_provider.dart`) (NEW)
+- [x] **TokenHub** - ✅ Implemented (`tokenhub_provider.dart`) (NEW)
+- [x] **TokenPlan** - ✅ Implemented (`tokenplan_provider.dart`) (NEW)
+- [x] **Alibaba DashScope** - ✅ Implemented (`alibaba_provider.dart`) (NEW)
+- [x] **OpenCode Zen** - ✅ Implemented (`opencode_zen_provider.dart`) (NEW)
+- [x] **OpenCode Go** - ✅ Implemented (`opencode_go_provider.dart`) (NEW)
+- [x] **CommandCode** - ✅ Implemented (`commandcode_provider.dart`) (NEW)
 - [x] **DeepSeek** - ✅ Implemented (`deepseek_provider.dart`) (NEW)
-- [ ] **Actual Computer** - ❌ NOT IMPLEMENTED
-- [ ] **Ramp Router** - ❌ NOT IMPLEMENTED
+- [x] **Actual Computer** - ✅ Implemented (`actual_provider.dart`) (NEW)
+- [x] **Ramp Router** - ✅ Implemented (`ramprouter_provider.dart`) (NEW)
 - [x] **OpenRouter** - ✅ Implemented (`openrouter_provider.dart`) (NEW)
-- [ ] **LangChain AI Gateway** - ❌ NOT IMPLEMENTED
+- [x] **LangChain AI Gateway** - ✅ Implemented (`langchain_gateway_provider.dart`) (NEW)
 
-### Status: 16/28 implemented (57%)
+### Status: 28/28 implemented (100%)
 
 ---
 
