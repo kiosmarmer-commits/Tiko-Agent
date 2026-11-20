@@ -110,7 +110,6 @@ jobs:
           done
           if [[ -s "$tf" ]]; then cp "$tf" .ci-testfailures.txt; fi
           exit $fail
-      - name: Surface test failures 1-10
 
       - name: Nondeterminism detection (run tests twice with different seeds)
         run: |
@@ -133,6 +132,7 @@ jobs:
             fi
           done
           echo "✓ Both runs completed successfully - no nondeterminism detected"
+      - name: Surface test failures 1-10
         if: always()
         shell: bash
         run: |
