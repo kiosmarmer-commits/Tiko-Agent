@@ -35,7 +35,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 ## 2. LLM / AI Model Providers
 
 ### Hermes Supported Providers:
-- [ ] **Nous Portal (OpenRouter)** - ❌ NOT IMPLEMENTED
+- [x] **Nous Portal (OpenRouter)** - ✅ Implemented (`nous_portal_provider.dart`) (NEW)
 - [x] **OpenAI** - ✅ Implemented (`openai_compat.dart`)
 - [x] **Anthropic (Claude)** - ✅ Implemented (`anthropic_compat.dart`)
 - [x] **Google Gemini / Vertex AI** - ✅ Implemented (`gemini_compat.dart`)
@@ -44,12 +44,12 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **Hugging Face** - ⚠️ PARTIAL (can be configured via openai_compat)
 - [x] **Ollama** - ✅ Implemented (`ollama_native.dart`, `ollama_embed.dart`)
 - [x] **Mistral** - ✅ Implemented (`mistral_provider.dart`) (NEW)
-- [ ] **Xiaomi MiMo** - ❌ NOT IMPLEMENTED
-- [ ] **Kimi (Moonshot)** - ❌ NOT IMPLEMENTED
+- [x] **Xiaomi MiMo** - ✅ Implemented (`xiaomi_mimo_provider.dart`) (NEW)
+- [x] **Kimi (Moonshot)** - ✅ Implemented (`kimi_provider.dart`) (NEW)
 - [x] **MiniMax** - ✅ Implemented (`minimax_provider.dart`) (NEW)
 - [ ] **AI Gateway** - ❌ NOT IMPLEMENTED
-- [ ] **Fireworks AI** - ❌ NOT IMPLEMENTED
-- [ ] **NovitaAI** - ❌ NOT IMPLEMENTED
+- [x] **Fireworks AI** - ✅ Implemented (`fireworks_provider.dart`) (NEW)
+- [x] **NovitaAI** - ✅ Implemented (`novita_provider.dart`) (NEW)
 - [ ] **z.ai** - ❌ NOT IMPLEMENTED
 - [ ] **ArceeAI** - ❌ NOT IMPLEMENTED
 - [ ] **GMI** - ❌ NOT IMPLEMENTED
@@ -59,13 +59,13 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [ ] **Alibaba DashScope** - ❌ NOT IMPLEMENTED
 - [ ] **OpenCode Zen/Go** - ❌ NOT IMPLEMENTED
 - [ ] **CommandCode** - ❌ NOT IMPLEMENTED
-- [ ] **DeepSeek** - ❌ NOT IMPLEMENTED
+- [x] **DeepSeek** - ✅ Implemented (`deepseek_provider.dart`) (NEW)
 - [ ] **Actual Computer** - ❌ NOT IMPLEMENTED
 - [ ] **Ramp Router** - ❌ NOT IMPLEMENTED
-- [ ] **OpenRouter** - ❌ NOT IMPLEMENTED (separate from Nous Portal)
+- [x] **OpenRouter** - ✅ Implemented (`openrouter_provider.dart`) (NEW)
 - [ ] **LangChain AI Gateway** - ❌ NOT IMPLEMENTED
 
-### Status: 9/28 implemented (32%)
+### Status: 16/28 implemented (57%)
 
 ---
 
@@ -98,9 +98,9 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **ElevenLabs ASR** - ✅ Implemented in `stt.dart`
 - [x] **DeepInfra ASR** - ✅ Implemented in `stt.dart`
 - [x] **local (Whisper lokal)** - ✅ Implemented in `stt.dart`
-- [ ] **local_command** - ❌ NOT IMPLEMENTED
+- [x] **local_command** - ✅ Implemented in (`stt.dart`) (NEW)
 
-### Status: 7/8 implemented (88%)
+### Status: 8/8 implemented (100%)
 
 ---
 
@@ -108,7 +108,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 
 ### Hermes Supported:
 - [x] **browser_exec (CDP to Chromium)** - ✅ Implemented (`browser_tool.dart`, `cdp_browser.dart`)
-- [ ] **browser_cdp** - ❌ NOT IMPLEMENTED (separate tool)
+- [x] **browser_cdp** - ✅ Implemented (`browser_cdp_tool.dart`) (NEW)
 - [ ] **browser_dialog** - ❌ NOT IMPLEMENTED
 - [ ] **browser_vault** - ❌ NOT IMPLEMENTED
 - [ ] **BrowserUse** - ❌ NOT IMPLEMENTED
@@ -118,7 +118,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [ ] **camofox plugin** - ❌ NOT IMPLEMENTED
 - [x] **Nous Portal Cloud Browser** - ⚠️ PARTIAL (mentioned in docs)
 
-### Status: 1/10 implemented (10%)
+### Status: 2/10 implemented (20%)
 
 ---
 
@@ -145,10 +145,10 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [x] **LINE** - ✅ Implemented (`line_gateway.dart`)
 - [x] **ntfy** - ✅ Implemented (`ntfy_gateway.dart`) (NEW)
 - [x] **CLI** - ✅ Implemented (`cli_gateway.dart`)
-- [ ] **HSM (Hermes desktop)** - ❌ NOT IMPLEMENTED
-- [ ] **Hermes Relay** - ❌ NOT IMPLEMENTED
+- [x] **HSM (Hermes desktop)** - ✅ Implemented (`hsm_gateway.dart`) (NEW)
+- [x] **Hermes Relay** - ✅ Implemented (`hermes_relay_gateway.dart`) (NEW)
 
-### Status: 19/22 implemented (86%)
+### Status: 21/22 implemented (95%)
 
 ---
 
@@ -188,7 +188,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [ ] **Nexus** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Memobase** - ❌ NOT IMPLEMENTED (plugin)
 
-### Status: 1/10 implemented (10%)
+### Status: 2/10 implemented (20%)
 
 ---
 
