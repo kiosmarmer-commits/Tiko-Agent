@@ -1289,16 +1289,14 @@ class IdeIntegrationTool implements Tool {
   }
 
   Future<ToolResult> _handleRegisterCommands(Map<String, dynamic> args) async {
-    // This would register commands in the IDE
-    // For now, just return success
-
     return ToolResult(
       callId: '',
       content: jsonEncode({
-        'success': true,
+        'success': false,
         'action': 'registerCommands',
-        'message': 'Commands registered',
+        'message': 'IDE command registration requires an ACP client adapter',
       }),
+      isError: true,
     );
   }
 

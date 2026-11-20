@@ -71,16 +71,12 @@ class WeixinGateway implements Gateway {
         'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$appId&secret=$appSecret',
       );
 
-      final response = await client
-          .get(url)
-          .timeout(timeout);
+      final response = await client.get(url).timeout(timeout);
 
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (responseData['errcode'] != null) {
-        throw StateError(
-          'Weixin token error: ${responseData['errmsg']}',
-        );
+        throw StateError('Weixin token error: ${responseData['errmsg']}');
       }
 
       _accessToken = responseData['access_token'] as String;
@@ -109,9 +105,7 @@ class WeixinGateway implements Gateway {
       final payload = {
         'touser': openid,
         'msgtype': 'text',
-        'text': {
-          'content': m.text,
-        },
+        'text': {'content': m.text},
       };
 
       final url = Uri.parse(
@@ -129,9 +123,7 @@ class WeixinGateway implements Gateway {
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (responseData['errcode'] != null && responseData['errcode'] != 0) {
-        throw StateError(
-          'Weixin API error: ${responseData['errmsg']}',
-        );
+        throw StateError('Weixin API error: ${responseData['errmsg']}');
       }
     } finally {
       if (httpClient == null) client.close();
@@ -151,15 +143,22 @@ class WeixinGateway implements Gateway {
       }
 
       // Parse text as news articles (format: "Title1: Content1\n\nTitle2: Content2")
-      final articles = _parseNewsText(m.text);
+      final articleUrl = m.meta['article_url'] as String?;
+      final parsedUrl = articleUrl == null ? null : Uri.tryParse(articleUrl);
+      if (parsedUrl == null ||
+          (parsedUrl.scheme != 'http' && parsedUrl.scheme != 'https') ||
+          parsedUrl.host.isEmpty) {
+        throw StateError(
+          'Weixin news requires metadata.article_url with an http(s) URL',
+        );
+      }
+      final articles = _parseNewsText(m.text, articleUrl: articleUrl!);
 
       // Build the news message payload
       final payload = {
         'touser': openid,
         'msgtype': 'news',
-        'news': {
-          'articles': articles,
-        },
+        'news': {'articles': articles},
       };
 
       final url = Uri.parse(
@@ -177,9 +176,7 @@ class WeixinGateway implements Gateway {
       final responseData = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (responseData['errcode'] != null && responseData['errcode'] != 0) {
-        throw StateError(
-          'Weixin API error: ${responseData['errmsg']}',
-        );
+        throw StateError('Weixin API error: ${responseData['errmsg']}');
       }
     } finally {
       if (httpClient == null) client.close();
@@ -188,7 +185,10 @@ class WeixinGateway implements Gateway {
 
   /// Parse text into news articles.
   /// Format: "Title: Content" separated by double newlines.
-  List<Map<String, String>> _parseNewsText(String text) {
+  List<Map<String, String>> _parseNewsText(
+    String text, {
+    required String articleUrl,
+  }) {
     final articles = <Map<String, String>>[];
     final parts = text.split('\n\n');
 
@@ -201,7 +201,7 @@ class WeixinGateway implements Gateway {
         articles.add({
           'title': title,
           'description': content,
-          'url': '', // URL is required but can be empty placeholder
+          'url': articleUrl,
           'picurl': '', // Pic URL is optional
         });
       } else {
@@ -209,7 +209,7 @@ class WeixinGateway implements Gateway {
         articles.add({
           'title': 'Notification',
           'description': part.trim(),
-          'url': '',
+          'url': articleUrl,
           'picurl': '',
         });
       }
@@ -220,7 +220,7 @@ class WeixinGateway implements Gateway {
       articles.add({
         'title': 'Notification',
         'description': text,
-        'url': '',
+        'url': articleUrl,
         'picurl': '',
       });
     }
