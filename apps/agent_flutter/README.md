@@ -13,6 +13,10 @@ Flutter client untuk daemon Tiko melalui HTTP API dan WebSocket. Client bukan ru
 | Sessions | Melihat session yang disediakan daemon |
 | Bantuan | Mengatur alamat API dan token serta opsi streaming |
 
+## Desain
+
+Semua warna, spacing, radius, dan typography GUI (Android/Web/Desktop) berasal dari design token terpusat `lib/ui/theme.dart` (`SimpulTheme`) dengan gaya flat modern sederhana. Rancangan lengkap, referensi, dan aturan perubahan token ada di [docs/09-DESAIN-GUI.md](../../docs/09-DESAIN-GUI.md).
+
 ## Menjalankan
 
 Mulai daemon dari root repository:

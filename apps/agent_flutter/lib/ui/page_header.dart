@@ -21,7 +21,7 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
       decoration: BoxDecoration(
         color: context.simpulPanel,
         border: Border(bottom: BorderSide(color: context.simpulBorder)),
@@ -42,8 +42,9 @@ class PageHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  style: SimpulTheme.pageTitle.copyWith(fontSize: 18),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
                   maxLines: 1,

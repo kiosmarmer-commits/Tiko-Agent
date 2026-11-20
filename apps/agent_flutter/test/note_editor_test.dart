@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_flutter/ui/note_editor.dart';
+import 'package:agent_flutter/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simpul_core/simpul_core.dart';
@@ -85,7 +86,9 @@ void main() {
     expect(find.byIcon(Icons.save_outlined), findsOneWidget);
     expect(
       find.byWidgetPredicate((w) =>
-          w is CircleAvatar && w.backgroundColor == Colors.orangeAccent),
+          w is CircleAvatar &&
+          w.backgroundColor ==
+              SimpulTheme.warning(Brightness.light)),
       findsOneWidget,
     );
   });
