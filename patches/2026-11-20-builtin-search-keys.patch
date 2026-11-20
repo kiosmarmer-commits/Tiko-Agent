@@ -1,0 +1,24 @@
+--- a/packages/agent_tools/lib/src/builtin.dart
++++ b/packages/agent_tools/lib/src/builtin.dart
+@@ -60,6 +60,10 @@
+   String? xaiApiKey,
+   String? openaiCodexApiKey,
+   String? nousPortalApiKey,
++  String? parallelApiKey,
++  String? braveApiKey,
++  String? exaApiKey,
++  String? firecrawlApiKey,
+ }) {
+   final root = workspaceRoot ?? Directory.current.path;
+   final guard = ssrf ?? SsrfGuard();
+@@ -114,6 +118,10 @@
+       WebSearchTool(
+         searxngBaseUrl: searxngBaseUrl,
+         tavilyApiKey: tavilyApiKey,
++        braveApiKey: braveApiKey,
++        exaApiKey: exaApiKey,
++        firecrawlApiKey: firecrawlApiKey,
++        parallelApiKey: parallelApiKey,
+         perplexityApiKey: perplexityApiKey,
+         keenableApiKey: keenableApiKey,
+         xaiApiKey: xaiApiKey,
