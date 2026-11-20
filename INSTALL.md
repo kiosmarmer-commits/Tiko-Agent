@@ -23,8 +23,11 @@ bash install.sh --help                   # daftar lengkap
 
 Yang dilakukan installer: pasang Dart SDK stabil (pin 3.13.4, sama dengan CI)
 ke `~/.tiko/dart-sdk` bila `dart` tidak ada/terlalu tua, `dart pub get`,
-compile `tiko`/`agentd`/`agent_cli` ke `build/`, pasang ke prefix, dan smoke
-test `--help`.
+compile `tiko`/`agentd`/`agent_cli` ke `build/`, pasang ke prefix, smoke
+test `--help`, dan memastikan prefix biner ada di PATH (set shell rc;
+lewati dengan `--no-path`). Bila `tiko: command not found` muncul setelah
+install, jalankan `source ~/.bashrc` (atau buka terminal baru) — installer
+telah menambahkan `export PATH="$HOME/.local/bin:$PATH"` ke shell rc.
 
 Yang **tidak** dilakukan (jujur): memasang Flutter SDK/membangun client
 Flutter, dan mengonfigurasi provider LLM — jalankan `tiko setup --provider
@@ -65,6 +68,17 @@ dart run apps/tiko/bin/tiko.dart setup --provider ollama
 ```
 
 Periksa `config/agent.yaml`, terutama `providers.chat`, `providers.default_chat`, `providers.tiers`, `decision`, `search`, `security`, `storage`, `api`, dan `mcp`. Setup awal dengan `--provider ollama` mengasumsikan Ollama tersedia pada alamat default `http://127.0.0.1:11434`.
+
+Pengaturan interaktif di terminal (tanpa mengedit YAML manual):
+
+```bash
+tiko settings               # menu panel: provider, model, base_url, API key
+                            # (SecretRef), mode keamanan, port, fitur vision
+```
+
+Di REPL chat, `/settings` membuka panel yang sama. Semua perubahan melalui
+`ConfigStore.setPath` — tervalidasi dan ber-revisi (`tiko config rollback
+<rev>` untuk mengembalikan).
 
 ## 3. Android / Termux
 
@@ -169,6 +183,7 @@ Workflow CI melakukan strict Dart analysis, test seluruh workspace member yang m
 
 | Gejala | Pemeriksaan |
 |---|---|
+| `tiko: command not found` | prefix biner belum di PATH: `source ~/.bashrc` atau buka terminal baru; installer menambahkan `export PATH="$HOME/.local/bin:$PATH"` ke shell rc (jalankan ulang `bash install.sh` bila belum) |
 | Konfigurasi ditolak | `tiko config validate`; secret harus berupa `env:NAMA_VAR`, bukan nilai mentah |
 | Provider tidak tersedia | Periksa `providers.default_chat`, `providers.chat`, endpoint, model, dan variabel secret |
 | API port dipakai proses lain | `tiko doctor`; cek `api.port` atau `API_PORT`; jangan membunuh PID yang tidak dikenal |

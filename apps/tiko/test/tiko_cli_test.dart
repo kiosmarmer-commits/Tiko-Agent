@@ -119,7 +119,7 @@ void main() {
       expect(chatCompleter('/', '/'), chatCommands);
       expect(chatCompleter('/q', '/q'), ['/quit']);
       expect(chatCompleter('/e', '/e'), ['/exit']);
-      expect(chatCompleter('/s', '/s'), ['/status']);
+      expect(chatCompleter('/s', '/s'), ['/status', '/settings']);
     });
 
     test('token tanpa kecocokan kosong', () {

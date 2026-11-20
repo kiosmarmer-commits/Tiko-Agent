@@ -7,6 +7,7 @@ import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:tiko_tui/tiko_tui.dart';
+import 'package:tiko/settings_menu.dart';
 import 'package:tiko/tiko_cli.dart';
 
 const _usage = '''
@@ -27,6 +28,8 @@ Perintah utama:
   version
 
 Config:
+  settings                   menu pengaturan interaktif (provider, model,
+                             keamanan, port) — bisa juga `/settings` di chat
   config show|validate
   config get <path>
   config set <path> <value>
@@ -114,7 +117,8 @@ Future<void> main(List<String> argv) async {
       configPath: configPath,
       safe: safe,
       // Doctor and config commands must remain available to repair a bad file.
-      allowInvalidConfig: cmd == 'doctor' || cmd == 'config',
+      allowInvalidConfig: cmd == 'doctor' || cmd == 'config' ||
+          cmd == 'settings',
     );
   } on ConfigValidationException catch (error) {
     stderr.writeln(error);
@@ -133,6 +137,23 @@ Future<void> main(List<String> argv) async {
   );
   final bus = EventBus();
   final skillsDir = p.join(rt.workspace, 'skills');
+
+  Future<TuiOutcome> openSettingsShortcut() async {
+    try {
+      await runSettingsMenu(
+        configPath: p.absolute(configPath),
+        revisionsDir: p.join(rt.dataDir, 'config_revisions'),
+        forceLineMode: true,
+      );
+    } on PromptAborted {
+      stdout.writeln();
+    }
+    return const TuiOutcome([
+      '(settings) ditutup. Perubahan config berlaku untuk perintah baru; '
+          'daemon aktif perlu `tiko daemon restart` agar memakai config '
+          'terbaru.',
+    ]);
+  }
 
   Future<bool> askUser(
     ToolCall call,
@@ -307,6 +328,18 @@ Future<void> main(List<String> argv) async {
       }
       final actualPort = started['port'] ?? rt.config.apiPort;
       stdout.writeln('UI: http://127.0.0.1:$actualPort/');
+      return;
+
+    case 'settings':
+      try {
+        await runSettingsMenu(
+          configPath: p.absolute(configPath),
+          revisionsDir: p.join(rt.dataDir, 'config_revisions'),
+        );
+      } on PromptAborted {
+        stdout.writeln();
+        stdout.writeln('Settings ditutup.');
+      }
       return;
 
     case 'config':
@@ -683,6 +716,9 @@ Future<void> main(List<String> argv) async {
                   if (input == '/quit' || input == '/exit') {
                     return const TuiOutcome([], exit: true);
                   }
+                  if (input == '/settings') {
+                    return await openSettingsShortcut();
+                  }
                   try {
                     return TuiOutcome(['tiko> ${await remote.chat(input)}']);
                   } catch (e) {
@@ -693,7 +729,7 @@ Future<void> main(List<String> argv) async {
                 historyStore: TuiHistoryStore(
                   p.join(rt.dataDir, 'tui-history.txt'),
                 ),
-                banner: ['tiko chat (remote daemon) — /quit keluar'],
+                banner: ['tiko chat (remote daemon) — /quit keluar, /settings'],
                 prompt: 'you> ',
               ).run();
               return;
@@ -716,6 +752,9 @@ Future<void> main(List<String> argv) async {
           if (input == '/quit' || input == '/exit') {
             return const TuiOutcome([], exit: true);
           }
+          if (input == '/settings') {
+            return await openSettingsShortcut();
+          }
           if (input == '/doctor') {
             return TuiOutcome([
               for (final c in await rt.doctor())
@@ -735,7 +774,7 @@ Future<void> main(List<String> argv) async {
         historyStore: TuiHistoryStore(
           p.join(rt.dataDir, 'tui-history.txt'),
         ),
-        banner: ['tiko chat — /quit keluar, /doctor, /status'],
+        banner: ['tiko chat — /quit keluar, /doctor, /status, /settings'],
         prompt: 'you> ',
       ).run();
       return;

@@ -6,6 +6,7 @@
 #   bash install.sh                       # install lengkap ke ~/.local/bin
 #   bash install.sh --prefix /opt/tiko    # lokasi biner kustom
 #   bash install.sh --skip-dart-install   # pakai dart yang sudah ada
+#   bash install.sh --no-path             # jangan ubah shell rc
 #
 # Yang dilakukan:
 #   1. (Opsional) Pasang Dart SDK stabil (pin 3.13.4, sama dengan CI) ke
@@ -14,6 +15,7 @@
 #   3. Compile biner release: tiko, agentd, agent_cli (dart compile exe).
 #   4. Pasang biner ke direktori prefix (default ~/.local/bin).
 #   5. Smoke test `--help` untuk tiap biner.
+#   6. Pastikan prefix biner ada di PATH (set shell rc, kecuali --no-path).
 #
 # Yang TIDAK dilakukan (jujur):
 #   - Tidak memasang Flutter SDK / membangun client Flutter (apps/agent_flutter
@@ -29,6 +31,7 @@ DART_MIN_MAJOR=3
 DART_MIN_MINOR=8
 PREFIX="${HOME}/.local/bin"
 SKIP_DART_INSTALL=0
+NO_PATH=0
 
 say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
@@ -39,6 +42,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --prefix) PREFIX="$2"; shift 2 ;;
     --skip-dart-install) SKIP_DART_INSTALL=1; shift ;;
+    --no-path) NO_PATH=1; shift ;;
     --help|-h)
       sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -187,16 +191,55 @@ for b in tiko agentd agent_cli; do
   ok "$b --help ok"
 done
 
-case ":$PATH:" in
-  *":${PREFIX}:"*) ok "${PREFIX} sudah ada di PATH" ;;
-  *) warn "${PREFIX} BELUM di PATH — tambahkan: export PATH=\"${PREFIX}:\$PATH\"" ;;
-esac
+ensure_prefix_path() {
+  case ":$PATH:" in
+    *":${PREFIX}:"*)
+      ok "${PREFIX} sudah ada di PATH"
+      return
+      ;;
+  esac
+  local rc target="" stamped=0
+  export PATH="${PREFIX}:${PATH}"
+  for rc in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
+    if [[ -f "$rc" ]] && grep -qs "Tiko-Agent bin prefix" "$rc"; then
+      stamped=1
+    fi
+  done
+  if [[ "$stamped" == 1 ]]; then
+    ok "PATH ${PREFIX} sudah terdaftar di shell rc"
+  else
+    for rc in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
+      if [[ -f "$rc" ]]; then target="$rc"; break; fi
+    done
+    if [[ -z "$target" ]]; then
+      target="${HOME}/.bashrc"
+      : > "$target"
+    fi
+    printf '\n# Tiko-Agent bin prefix\nexport PATH="%s:$PATH"\n' "$PREFIX" >> "$target"
+    warn "PATH biner ${PREFIX} ditambahkan ke ${target}"
+    warn "Jalankan: source ${target}  (atau buka terminal baru) agar 'tiko' dikenali"
+  fi
+  case ":$PATH:" in
+    *":${PREFIX}:"*) ok "PATH sesi berjalan memuat ${PREFIX}" ;;
+    *) warn "${PREFIX} tak kena ke PATH sesi berjalan" ;;
+  esac
+}
+
+if [[ "$NO_PATH" == 1 ]]; then
+  case ":$PATH:" in
+    *":${PREFIX}:"*) ok "${PREFIX} sudah ada di PATH" ;;
+    *) warn "--no-path: ${PREFIX} BELUM di PATH - atur sendiri: export PATH=\"${PREFIX}:\$PATH\"" ;;
+  esac
+else
+  ensure_prefix_path
+fi
 
 cat <<'EOF'
 
 Instalasi selesai. Langkah berikutnya:
 
   tiko setup --provider mock     # konfigurasi awal (tanpa LLM nyata)
+  tiko settings                  # menu pengaturan interaktif di terminal
   tiko doctor                    # periksa kesehatan runtime
   tiko chat                      # mulai percakapan
 
