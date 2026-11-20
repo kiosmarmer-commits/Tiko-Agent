@@ -11,6 +11,10 @@ Web UI disajikan oleh `HttpApiServer` milik `agentd` dari `apps/agentd/web/`. UI
 - **Sessions**: menampilkan daftar sesi.
 - **Bantuan**: mengatur API base URL dan token pada browser.
 
+## Desain
+
+Palet, radius, dan gaya visual dashboard web diselaraskan dengan design token GUI (`SimpulTheme`) di `apps/agent_flutter/lib/ui/theme.dart`; rancangan dan aturan flat modern ada di [docs/09-DESAIN-GUI.md](../../docs/09-DESAIN-GUI.md). Permukaan flat tanpa shadow/gradient kecuali scrim modal; warna baru wajib masuk `:root` sebagai CSS variable.
+
 ## Menjalankan
 
 ```bash
