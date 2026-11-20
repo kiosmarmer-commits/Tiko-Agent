@@ -17,10 +17,10 @@ class CloudBrowserSession {
   final String? viewUrl;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'cdpUrl': cdpUrl,
-        if (viewUrl != null) 'viewUrl': viewUrl,
-      };
+    'id': id,
+    'cdpUrl': cdpUrl,
+    if (viewUrl != null) 'viewUrl': viewUrl,
+  };
 }
 
 /// Contract for cloud browser providers (Browserbase, Browser Use, ...).
@@ -30,6 +30,93 @@ abstract class CloudBrowserBackend {
   Future<CloudBrowserSession> createSession();
 
   Future<void> closeSession(String id);
+}
+
+/// Generic HTTP/CDP backend for self-hosted browser services.
+///
+/// This covers providers whose API creates a remote browser session and
+/// returns a CDP URL, without baking an undocumented vendor protocol into the
+/// agent. The response may use `id`, `session_id`, `cdpUrl`, `cdp_url`,
+/// `connectUrl`, or `connect_url` fields.
+class HttpCdpBrowserBackend implements CloudBrowserBackend {
+  HttpCdpBrowserBackend({
+    required this.id,
+    required this.baseUrl,
+    this.createPath = '/sessions',
+    this.closePath = '/sessions/{id}',
+    this.apiKey,
+    this.authHeader = 'Authorization',
+    this.authPrefix = 'Bearer ',
+    this.createBody = const {},
+    http.Client? client,
+    this.timeout = const Duration(seconds: 30),
+  }) : _client = client ?? http.Client();
+
+  @override
+  final String id;
+  final String baseUrl;
+  final String createPath;
+  final String closePath;
+  final String? apiKey;
+  final String authHeader;
+  final String authPrefix;
+  final Map<String, dynamic> createBody;
+  final http.Client _client;
+  final Duration timeout;
+
+  Map<String, String> get _headers => {
+    'content-type': 'application/json',
+    if (apiKey != null && apiKey!.isNotEmpty) authHeader: '$authPrefix$apiKey',
+  };
+
+  Uri _uri(String path) => Uri.parse(
+    '${baseUrl.replaceFirst(RegExp(r'/+$'), '')}/${path.replaceFirst(RegExp(r'^/+'), '')}',
+  );
+
+  @override
+  Future<CloudBrowserSession> createSession() async {
+    final res = await _client
+        .post(_uri(createPath), headers: _headers, body: jsonEncode(createBody))
+        .timeout(timeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw BrowserBackendException(
+        '$id createSession gagal: HTTP ${res.statusCode} ${res.body}',
+      );
+    }
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final sessionId = (body['id'] ?? body['session_id'])?.toString();
+    final cdpUrl =
+        (body['cdpUrl'] ??
+                body['cdp_url'] ??
+                body['connectUrl'] ??
+                body['connect_url'])
+            ?.toString();
+    if (sessionId == null || cdpUrl == null || cdpUrl.isEmpty) {
+      throw BrowserBackendException(
+        '$id response tidak berisi session id dan CDP URL',
+      );
+    }
+    return CloudBrowserSession(
+      id: sessionId,
+      cdpUrl: cdpUrl,
+      viewUrl: (body['viewUrl'] ?? body['view_url'])?.toString(),
+    );
+  }
+
+  @override
+  Future<void> closeSession(String id) async {
+    final res = await _client
+        .delete(
+          _uri(closePath.replaceAll('{id}', Uri.encodeComponent(id))),
+          headers: _headers,
+        )
+        .timeout(timeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw BrowserBackendException(
+        '$id closeSession gagal: HTTP ${res.statusCode}',
+      );
+    }
+  }
 }
 
 /// Browserbase cloud browser (https://browserbase.com).
@@ -61,10 +148,7 @@ class BrowserbaseBackend implements CloudBrowserBackend {
     final res = await _client
         .post(
           Uri.parse('$baseUrl/v1/sessions'),
-          headers: {
-            'x-api-key': apiKey,
-            'content-type': 'application/json',
-          },
+          headers: {'x-api-key': apiKey, 'content-type': 'application/json'},
           body: jsonEncode({
             if (projectId != null) 'projectId': projectId,
             if (region != null) 'region': region,
@@ -146,8 +230,8 @@ class BrowserUseBackend implements CloudBrowserBackend {
     }
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final id = body['id']?.toString();
-    final cdpUrl =
-        (body['cdpUrl'] ?? body['cdp_url'] ?? body['connectUrl'])?.toString();
+    final cdpUrl = (body['cdpUrl'] ?? body['cdp_url'] ?? body['connectUrl'])
+        ?.toString();
     if (id == null || cdpUrl == null || cdpUrl.isEmpty) {
       throw BrowserBackendException(
         'Respons Browser Use tidak berisi id/cdp_url',
@@ -252,11 +336,9 @@ class CloudBrowserRouter {
   List<CloudBrowserBackend> get backends => List.unmodifiable(_backends);
 
   CloudBrowserBackend _backend(String id) => _backends.firstWhere(
-        (b) => b.id == id,
-        orElse: () => throw BrowserBackendException(
-          'Backend tidak dikenal: $id',
-        ),
-      );
+    (b) => b.id == id,
+    orElse: () => throw BrowserBackendException('Backend tidak dikenal: $id'),
+  );
 
   /// Acquires a ready CDP session, trying cloud backends first.
   Future<CloudBrowserHandle> acquire() async {

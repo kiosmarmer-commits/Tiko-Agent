@@ -6,6 +6,7 @@ import 'package:agent_core/agent_core.dart';
 import 'slack_gateway.dart';
 import 'webhook_signature.dart';
 import 'whatsapp_gateway.dart';
+import 'line_gateway.dart';
 
 /// Inbound webhook routes for the WhatsApp Cloud API and the Slack Events
 /// API, mounted on [HttpApiServer]. These requests come from external
@@ -18,12 +19,16 @@ class WebhookEndpoint {
     this.whatsappAppSecret,
     this.slack,
     this.slackSigningSecret,
+    this.line,
+    this.lineChannelSecret,
   });
 
   final WhatsAppGateway? whatsapp;
   final String? whatsappAppSecret;
   final SlackGateway? slack;
   final String? slackSigningSecret;
+  final LineGateway? line;
+  final String? lineChannelSecret;
   final Future<void> Function(InboundMessage message) onMessage;
 
   Future<void> handle(HttpRequest req, String path) async {
@@ -47,8 +52,51 @@ class WebhookEndpoint {
       }
       return;
     }
+    if (path == '/webhooks/line') {
+      if (req.method == 'POST') {
+        await _lineMessages(req);
+      } else {
+        req.response.statusCode = 405;
+        await req.response.close();
+      }
+      return;
+    }
     req.response.statusCode = 404;
     req.response.close();
+  }
+
+  Future<void> _lineMessages(HttpRequest req) async {
+    final gateway = line;
+    final secret = lineChannelSecret;
+    if (gateway == null || secret == null || secret.isEmpty) {
+      _deny(req, 403, 'line webhook not configured');
+      return;
+    }
+    final raw = await utf8.decoder.bind(req).join();
+    final signature = req.headers.value('x-line-signature') ?? '';
+    if (!LineGateway.verifySignature(secret, raw, signature)) {
+      _deny(req, 401, 'invalid signature');
+      return;
+    }
+    Map<String, dynamic> payload;
+    try {
+      payload = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      _deny(req, 400, 'invalid json');
+      return;
+    }
+    var accepted = 0;
+    final subscription = gateway.inbound.listen((message) async {
+      accepted++;
+      await onMessage(message);
+    });
+    try {
+      gateway.pushInbound(webhookData: payload);
+      await Future<void>.delayed(Duration.zero);
+    } finally {
+      await subscription.cancel();
+    }
+    _json(req, {'ok': true, 'accepted': accepted});
   }
 
   Future<void> _whatsappHandshake(HttpRequest req) async {
@@ -87,12 +135,14 @@ class WebhookEndpoint {
     }
     var accepted = 0;
     for (final m in gateway.parseWebhook(raw)) {
-      await onMessage(InboundMessage(
-        channel: 'whatsapp',
-        userKey: 'wa:${m['from']}',
-        sessionKey: 'wa:${m['from']}',
-        text: m['text'] ?? '',
-      ));
+      await onMessage(
+        InboundMessage(
+          channel: 'whatsapp',
+          userKey: 'wa:${m['from']}',
+          sessionKey: 'wa:${m['from']}',
+          text: m['text'] ?? '',
+        ),
+      );
       accepted++;
     }
     _json(req, {'ok': true, 'accepted': accepted});
@@ -131,12 +181,14 @@ class WebhookEndpoint {
     }
     final msg = gateway.parseEventMessage(payload);
     if (msg != null) {
-      await onMessage(InboundMessage(
-        channel: 'slack',
-        userKey: 'slack:${msg['userId']}',
-        sessionKey: 'slack:${msg['channelId']}',
-        text: msg['text'] ?? '',
-      ));
+      await onMessage(
+        InboundMessage(
+          channel: 'slack',
+          userKey: 'slack:${msg['userId']}',
+          sessionKey: 'slack:${msg['channelId']}',
+          text: msg['text'] ?? '',
+        ),
+      );
     }
     _json(req, {'ok': true});
   }
