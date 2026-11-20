@@ -24,6 +24,12 @@ class DeepWikiMcpTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
+  @override
+  String get name => 'deepwiki_mcp';
+
+  @override
+  String get description =>
+      'DeepWiki MCP server for accessing knowledge graph and structured information.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -87,14 +93,12 @@ class DeepWikiMcpTool implements Tool {
         default:
           return ToolResult(
             callId: '',
-            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -111,7 +115,6 @@ class DeepWikiMcpTool implements Tool {
       
       if (query == null || query.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
@@ -138,7 +141,6 @@ class DeepWikiMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -152,7 +154,6 @@ class DeepWikiMcpTool implements Tool {
     } catch (e) {
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
       );
@@ -165,7 +166,6 @@ class DeepWikiMcpTool implements Tool {
       
       if (entityId == null || entityId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'entity_id or query is required'}),
           isError: true,
@@ -182,7 +182,6 @@ class DeepWikiMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'success',
           'entity': data['entity'],
@@ -192,7 +191,6 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get entity: ${e.toString()}'}),
         isError: true,
@@ -207,7 +205,6 @@ class DeepWikiMcpTool implements Tool {
       
       if (entityId == null || entityId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'entity_id or query is required'}),
           isError: true,
@@ -224,7 +221,6 @@ class DeepWikiMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'success',
           'entity_id': entityId,
@@ -235,7 +231,6 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get relationships: ${e.toString()}'}),
         isError: true,
@@ -250,7 +245,6 @@ class DeepWikiMcpTool implements Tool {
       
       if (query == null || query.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
@@ -272,7 +266,6 @@ class DeepWikiMcpTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -282,7 +275,6 @@ class DeepWikiMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to query: ${e.toString()}'}),
         isError: true,

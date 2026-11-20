@@ -29,6 +29,12 @@ class BrowserDialogTool implements Tool {
 
   CdpSession? _session;
 
+  @override
+  String get name => 'browser_dialog';
+
+  @override
+  String get description =>
+      'Browser dialog tool for handling alerts, confirms, and prompts in web automation.';
 
   @override
   ToolSpec get spec => ToolSpec(

@@ -26,6 +26,12 @@ class LangfuseTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
+  @override
+  String get name => 'langfuse';
+
+  @override
+  String get description =>
+      'Langfuse observability tool for tracing and debugging AI applications.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -139,14 +145,12 @@ class LangfuseTool implements Tool {
         default:
           return ToolResult(
             callId: '',
-            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -177,7 +181,6 @@ class LangfuseTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'created',
           'trace_id': data['id'],
@@ -187,7 +190,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create trace: ${e.toString()}'}),
         isError: true,
@@ -202,7 +204,6 @@ class LangfuseTool implements Tool {
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
@@ -221,7 +222,6 @@ class LangfuseTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'trace_id': traceId,
@@ -230,7 +230,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to end trace: ${e.toString()}'}),
         isError: true,
@@ -248,7 +247,6 @@ class LangfuseTool implements Tool {
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
@@ -273,7 +271,6 @@ class LangfuseTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'created',
           'span_id': data['id'],
@@ -284,7 +281,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create span: ${e.toString()}'}),
         isError: true,
@@ -299,7 +295,6 @@ class LangfuseTool implements Tool {
       
       if (spanId == null || spanId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'span_id is required'}),
           isError: true,
@@ -318,7 +313,6 @@ class LangfuseTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'span_id': spanId,
@@ -327,7 +321,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to end span: ${e.toString()}'}),
         isError: true,
@@ -345,7 +338,6 @@ class LangfuseTool implements Tool {
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
@@ -370,7 +362,6 @@ class LangfuseTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'created',
           'event_id': data['id'],
@@ -381,7 +372,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create event: ${e.toString()}'}),
         isError: true,
@@ -399,7 +389,6 @@ class LangfuseTool implements Tool {
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
@@ -424,7 +413,6 @@ class LangfuseTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'created',
           'generation_id': data['id'],
@@ -435,7 +423,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create generation: ${e.toString()}'}),
         isError: true,
@@ -451,7 +438,6 @@ class LangfuseTool implements Tool {
       
       if (generationId == null || generationId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'generation_id is required'}),
           isError: true,
@@ -471,7 +457,6 @@ class LangfuseTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'generation_id': generationId,
@@ -480,7 +465,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to end generation: ${e.toString()}'}),
         isError: true,
@@ -499,14 +483,12 @@ class LangfuseTool implements Tool {
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
           callId: '',
-          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
       }
       if (message == null || message.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'message is required'}),
           isError: true,
@@ -531,7 +513,6 @@ class LangfuseTool implements Tool {
       
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'logged',
           'log_id': data['id'],
@@ -543,7 +524,6 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to log: ${e.toString()}'}),
         isError: true,

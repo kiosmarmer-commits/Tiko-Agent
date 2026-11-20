@@ -29,6 +29,12 @@ class HermesTelemetryTool implements Tool {
   final String? agentId;
   final String? agentVersion;
 
+  @override
+  String get name => 'hermes_telemetry';
+
+  @override
+  String get description =>
+      'Hermes Telemetry tool for monitoring and analytics of AI agents.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -173,14 +179,12 @@ class HermesTelemetryTool implements Tool {
         default:
           return ToolResult(
             callId: '',
-            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -195,7 +199,6 @@ class HermesTelemetryTool implements Tool {
       
       if (eventName == null || eventName.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'event_name is required'}),
           isError: true,
@@ -218,7 +221,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'event': eventName,
@@ -227,7 +229,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track event: ${e.toString()}'}),
         isError: true,
@@ -245,7 +246,6 @@ class HermesTelemetryTool implements Tool {
       
       if (model == null || model.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'model is required'}),
           isError: true,
@@ -274,7 +274,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'model': model,
@@ -284,7 +283,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track LLM call: ${e.toString()}'}),
         isError: true,
@@ -301,7 +299,6 @@ class HermesTelemetryTool implements Tool {
       
       if (toolName == null || toolName.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'tool_name is required'}),
           isError: true,
@@ -329,7 +326,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'tool': toolName,
@@ -338,7 +334,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track tool call: ${e.toString()}'}),
         isError: true,
@@ -355,7 +350,6 @@ class HermesTelemetryTool implements Tool {
       
       if (errorType == null || errorType.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'error_type is required'}),
           isError: true,
@@ -383,7 +377,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'error_type': errorType,
@@ -392,7 +385,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track error: ${e.toString()}'}),
         isError: true,
@@ -424,7 +416,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'session_id': sessionId,
@@ -433,7 +424,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track session start: ${e.toString()}'}),
         isError: true,
@@ -465,7 +455,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'tracked',
           'session_id': sessionId,
@@ -474,7 +463,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to track session end: ${e.toString()}'}),
         isError: true,
@@ -489,7 +477,6 @@ class HermesTelemetryTool implements Tool {
       
       if (userId == null || userId.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'user_id is required'}),
           isError: true,
@@ -511,7 +498,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'set',
           'user_id': userId,
@@ -520,7 +506,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to set user: ${e.toString()}'}),
         isError: true,
@@ -534,7 +519,6 @@ class HermesTelemetryTool implements Tool {
       
       if (metadata == null || metadata.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'metadata is required'}),
           isError: true,
@@ -555,7 +539,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'set',
           'metadata': metadata,
@@ -564,7 +547,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to set metadata: ${e.toString()}'}),
         isError: true,
@@ -579,7 +561,6 @@ class HermesTelemetryTool implements Tool {
       
       if (counterName == null || counterName.isEmpty) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'counter_name is required'}),
           isError: true,
@@ -602,7 +583,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'incremented',
           'counter': counterName,
@@ -612,7 +592,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to increment counter: ${e.toString()}'}),
         isError: true,
@@ -628,14 +607,12 @@ class HermesTelemetryTool implements Tool {
       if (durationName == null || durationName.isEmpty) {
         return ToolResult(
           callId: '',
-          callId: '',
           content: jsonEncode({'error': 'duration_name is required'}),
           isError: true,
         );
       }
       if (durationMs == null) {
         return ToolResult(
-          callId: '',
           callId: '',
           content: jsonEncode({'error': 'duration_ms is required'}),
           isError: true,
@@ -658,7 +635,6 @@ class HermesTelemetryTool implements Tool {
 
       return ToolResult(
         callId: '',
-        callId: '',
         content: jsonEncode({
           'status': 'recorded',
           'name': durationName,
@@ -668,7 +644,6 @@ class HermesTelemetryTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
-        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to record duration: ${e.toString()}'}),
         isError: true,
