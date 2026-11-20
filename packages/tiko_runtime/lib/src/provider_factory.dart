@@ -2,6 +2,13 @@ import 'package:agent_core/agent_core.dart';
 import 'package:agent_providers/agent_providers.dart';
 import 'package:agent_providers/src/mistral_provider.dart';
 import 'package:agent_providers/src/minimax_provider.dart';
+import 'package:agent_providers/src/openrouter_provider.dart';
+import 'package:agent_providers/src/deepseek_provider.dart';
+import 'package:agent_providers/src/fireworks_provider.dart';
+import 'package:agent_providers/src/novita_provider.dart';
+import 'package:agent_providers/src/nous_portal_provider.dart';
+import 'package:agent_providers/src/xiaomi_mimo_provider.dart';
+import 'package:agent_providers/src/kimi_provider.dart';
 
 import 'tiko_config.dart';
 
@@ -202,6 +209,97 @@ class ProviderFactory {
           apiKey: key,
           model: model ?? 'abab6-chat',
           baseUrl: baseUrl ?? 'https://api.minimax.chat',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'openrouter':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (openrouter) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return OpenRouterProvider(
+          apiKey: key,
+          model: model ?? 'openai/gpt-4o-mini',
+          baseUrl: baseUrl ?? 'https://openrouter.ai/api/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'deepseek':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (deepseek) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return DeepSeekProvider(
+          apiKey: key,
+          model: model ?? 'deepseek-chat',
+          baseUrl: baseUrl ?? 'https://api.deepseek.com',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'fireworks':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (fireworks) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return FireworksProvider(
+          apiKey: key,
+          model: model ?? 'accounts/fireworks/models/llama-v3p1-70b',
+          baseUrl: baseUrl ?? 'https://api.fireworks.ai/inference/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'novita':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (novita) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return NovitaProvider(
+          apiKey: key,
+          model: model ?? 'novita-llama-3.2-1B',
+          baseUrl: baseUrl ?? 'https://api.novita.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'nous_portal':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (nous_portal) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return NousPortalProvider(
+          apiKey: key,
+          model: model ?? 'nous-hermes-2-pro',
+          baseUrl: baseUrl ?? 'https://api.nousresearch.com/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'xiaomi_mimo':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (xiaomi_mimo) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return XiaomiMimoProvider(
+          apiKey: key,
+          model: model ?? 'MiMo-7B',
+          baseUrl: baseUrl ?? 'https://api.mimo.xiaomi.com/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'kimi':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (kimi) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return KimiProvider(
+          apiKey: key,
+          model: model ?? 'moonshot-v1-8k',
+          baseUrl: baseUrl ?? 'https://api.moonshot.cn/v1',
           requestTimeout: timeout ?? const Duration(seconds: 120),
         );
       default:

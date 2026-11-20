@@ -32,6 +32,8 @@ export 'src/wecom_gateway.dart';
 export 'src/weixin_gateway.dart';
 export 'src/qq_gateway.dart';
 export 'src/yuanbao_gateway.dart';
+export 'src/hermes_relay_gateway.dart';
+export 'src/hsm_gateway.dart';
 export 'src/progressive_stream.dart';
 export 'src/webhook_signature.dart';
 export 'src/webhook_endpoint.dart';

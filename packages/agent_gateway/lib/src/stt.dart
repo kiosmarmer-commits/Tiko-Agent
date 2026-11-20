@@ -4,10 +4,11 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 /// Speech-to-text providers with fallback chain.
-/// Supports: local whisper, OpenAI, Groq, Mistral, xAI, ElevenLabs, DeepInfra
+/// Supports: local whisper, local_command, OpenAI, Groq, Mistral, xAI, ElevenLabs, DeepInfra
 class SttClient {
   SttClient({
     this.whisperBin,
+    this.localCommand,
     this.openaiApiKey,
     this.openaiBaseUrl = 'https://api.openai.com/v1',
     this.groqApiKey,
@@ -23,6 +24,7 @@ class SttClient {
     this.model = 'whisper-1',
     this.providerOrder = const [
       'local',
+      'local_command',
       'groq',
       'openai',
       'mistral',
@@ -34,6 +36,7 @@ class SttClient {
   }) : _http = httpClient;
 
   final String? whisperBin;
+  final String? localCommand;
 
   // OpenAI
   final String? openaiApiKey;
@@ -75,6 +78,11 @@ class SttClient {
       switch (providerId) {
         case 'local':
           if (whisperBin != null && whisperBin!.isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'local_command':
+          if (localCommand != null && localCommand!.isNotEmpty) {
             activeProviders.add(providerId);
           }
           break;
@@ -142,6 +150,8 @@ class SttClient {
     switch (providerId) {
       case 'local':
         return _transcribeLocal(path);
+      case 'local_command':
+        return _transcribeLocalCommand(path);
       case 'openai':
         return _transcribeOpenAI(client, path);
       case 'groq':
@@ -173,6 +183,40 @@ class SttClient {
       }
     } catch (e) {
       stderr.writeln('stt: whisper lokal gagal: $e');
+    }
+    return null;
+  }
+
+  Future<String?> _transcribeLocalCommand(String path) async {
+    try {
+      // Parse the command to extract executable and arguments
+      // Format: "executable arg1 arg2 {file}"
+      // {file} will be replaced with the actual file path
+      final commandParts = localCommand!.split(' ');
+      final executable = commandParts[0];
+      final args = commandParts.sublist(1);
+      
+      // Replace {file} placeholder with actual path
+      final resolvedArgs = args.map((arg) => arg.replaceAll('{file}', path)).toList();
+      
+      final r = await Process.run(executable, [
+        ...resolvedArgs,
+        path,
+      ]).timeout(const Duration(seconds: 120));
+      
+      if (r.exitCode == 0) {
+        // Try to get output from stdout
+        final stdout = (r.stdout as String).trim();
+        if (stdout.isNotEmpty) return stdout;
+        
+        // Try to read from a file with .txt extension
+        final out = File('$path.txt');
+        if (await out.exists()) return (await out.readAsString()).trim();
+        
+        return stdout;
+      }
+    } catch (e) {
+      stderr.writeln('stt: local_command gagal: $e');
     }
     return null;
   }

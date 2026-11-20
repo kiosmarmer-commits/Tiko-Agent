@@ -32,14 +32,16 @@ const Map<String, ProviderPreset> providerPresets = {
   'openrouter': ProviderPreset(
     id: 'openrouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'anthropic/claude-sonnet-4',
-    contextLength: 200000,
+    defaultModel: 'openai/gpt-4o-mini',
+    transport: 'openrouter',
+    contextLength: 131072,
   ),
   'nous': ProviderPreset(
     id: 'nous',
     baseUrl: 'https://inference-api.nousresearch.com/v1',
-    defaultModel: 'Hermes-4-405B',
-    contextLength: 131072,
+    defaultModel: 'nous-hermes-2-pro',
+    transport: 'nous_portal',
+    contextLength: 32768,
   ),
   'ai_gateway': ProviderPreset(
     id: 'ai_gateway',
@@ -73,8 +75,9 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'deepseek': ProviderPreset(
     id: 'deepseek',
-    baseUrl: 'https://api.deepseek.com/v1',
+    baseUrl: 'https://api.deepseek.com',
     defaultModel: 'deepseek-chat',
+    transport: 'deepseek',
     contextLength: 65536,
   ),
   'anthropic': ProviderPreset(
@@ -133,9 +136,10 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'kimi': ProviderPreset(
     id: 'kimi',
-    baseUrl: 'https://api.moonshot.ai/v1',
-    defaultModel: 'kimi-k2-0905-preview',
-    contextLength: 256000,
+    baseUrl: 'https://api.moonshot.cn/v1',
+    defaultModel: 'moonshot-v1-8k',
+    transport: 'kimi',
+    contextLength: 32768,
   ),
   'kimi_cn': ProviderPreset(
     id: 'kimi_cn',
@@ -170,9 +174,10 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'xiaomi': ProviderPreset(
     id: 'xiaomi',
-    baseUrl: 'https://api.xiaomimimo.com/v1',
-    defaultModel: 'MiMo-2508',
-    contextLength: 262144,
+    baseUrl: 'https://api.mimo.xiaomi.com/v1',
+    defaultModel: 'MiMo-7B',
+    transport: 'xiaomi_mimo',
+    contextLength: 32768,
   ),
   'stepfun': ProviderPreset(
     id: 'stepfun',
@@ -191,14 +196,16 @@ const Map<String, ProviderPreset> providerPresets = {
   'fireworks': ProviderPreset(
     id: 'fireworks',
     baseUrl: 'https://api.fireworks.ai/inference/v1',
-    defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
-    contextLength: 131072,
+    defaultModel: 'accounts/fireworks/models/llama-v3p1-70b',
+    transport: 'fireworks',
+    contextLength: 32768,
   ),
   'novita': ProviderPreset(
     id: 'novita',
-    baseUrl: 'https://api.novita.ai/v3/openai',
-    defaultModel: 'meta-llama/llama-3.3-70b-instruct',
-    contextLength: 131072,
+    baseUrl: 'https://api.novita.ai/v1',
+    defaultModel: 'novita-llama-3.2-1B',
+    transport: 'novita',
+    contextLength: 32768,
   ),
   'nvidia': ProviderPreset(
     id: 'nvidia',
