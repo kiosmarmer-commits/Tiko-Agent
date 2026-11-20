@@ -10,12 +10,12 @@ Dokumentasi ini membedakan kode yang tersedia, kode yang terhubung ke runtime, d
 git clone https://github.com/kiosmarmer-commits/Tiko-Agent.git
 cd Tiko-Agent
 bash install.sh
-dart run apps/tiko/bin/tiko.dart setup --provider mock
-dart run apps/tiko/bin/tiko.dart config validate
-dart run apps/tiko/bin/tiko.dart chat
+tiko setup --provider mock
+tiko settings
+tiko chat
 ```
 
-`install.sh` memasang dependency Dart dan mengompilasi `tiko`, `agentd`, serta `agent_cli`. Instalasi ini tidak memasang Flutter, provider LLM, atau sandbox OS. Detail platform ada di [INSTALL.md](INSTALL.md).
+`install.sh` memasang dependency Dart, mengompilasi `tiko`, `agentd`, serta `agent_cli` ke `~/.local/bin`, dan mendaftarkan prefix ke PATH shell rc (bila `tiko: command not found`, jalankan `source ~/.bashrc` atau buka terminal baru). `tiko settings`/`/settings` di chat membuka menu pengaturan interaktif di terminal. Instalasi ini tidak memasang Flutter, provider LLM, atau sandbox OS. Detail platform ada di [INSTALL.md](INSTALL.md).
 
 ## Peta repository
 
