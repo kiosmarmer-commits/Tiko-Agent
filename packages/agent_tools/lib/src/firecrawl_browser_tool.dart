@@ -26,12 +26,6 @@ class FirecrawlBrowserTool implements Tool {
 
   String? _sessionId;
 
-  @override
-  String get name => 'firecrawl_browser';
-
-  @override
-  String get description =>
-      'Firecrawl Browser tool for web scraping and browser automation.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -106,60 +100,62 @@ class FirecrawlBrowserTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'create_session':
-          return await _createSession(call);
+          return await _createSession(args, ctx);
         case 'close_session':
-          return await _closeSession(call);
+          return await _closeSession(args, ctx);
         case 'navigate':
-          return await _navigate(call);
+          return await _navigate(args, ctx);
         case 'click':
-          return await _click(call);
+          return await _click(args, ctx);
         case 'type':
-          return await _type(call);
+          return await _type(args, ctx);
         case 'wait_for_selector':
-          return await _waitForSelector(call);
+          return await _waitForSelector(args, ctx);
         case 'get_text':
-          return await _getText(call);
+          return await _getText(args, ctx);
         case 'get_attribute':
-          return await _getAttribute(call);
+          return await _getAttribute(args, ctx);
         case 'execute_script':
-          return await _executeScript(call);
+          return await _executeScript(args, ctx);
         case 'take_screenshot':
-          return await _takeScreenshot(call);
+          return await _takeScreenshot(args, ctx);
         case 'get_html':
-          return await _getHtml(call);
+          return await _getHtml(args, ctx);
         case 'go_back':
-          return await _goBack(call);
+          return await _goBack(args, ctx);
         case 'go_forward':
-          return await _goForward(call);
+          return await _goForward(args, ctx);
         case 'reload':
-          return await _reload(call);
+          return await _reload(args, ctx);
         case 'get_title':
-          return await _getTitle(call);
+          return await _getTitle(args, ctx);
         case 'get_url':
-          return await _getUrl(call);
+          return await _getUrl(args, ctx);
         case 'scrape':
-          return await _scrape(call);
+          return await _scrape(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createSession(ToolCall call) async {
+  Future<ToolResult> _createSession(Map<String, dynamic> args, ToolContext ctx) async {
     try {
       final response = await _makeRequest(
         'POST',
@@ -174,6 +170,7 @@ class FirecrawlBrowserTool implements Tool {
       _sessionId = data['id'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'session_id': _sessionId,
@@ -183,17 +180,19 @@ class FirecrawlBrowserTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create session: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _closeSession(ToolCall call) async {
+  Future<ToolResult> _closeSession(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -205,30 +204,34 @@ class FirecrawlBrowserTool implements Tool {
       }
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'closed', 'session_id': sessionId}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to close session: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _navigate(ToolCall call) async {
+  Future<ToolResult> _navigate(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final url = call.args['url'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final url = args['url'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (url == null || url.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'url is required'}),
           isError: true,
         );
@@ -241,30 +244,34 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'navigated', 'url': url}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to navigate: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _click(ToolCall call) async {
+  Future<ToolResult> _click(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final selector = call.args['selector'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final selector = args['selector'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
         );
@@ -277,31 +284,35 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'clicked', 'selector': selector}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to click: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _type(ToolCall call) async {
+  Future<ToolResult> _type(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final selector = call.args['selector'] as String?;
-      final text = call.args['text'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final selector = args['selector'] as String?;
+      final text = args['text'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty || text == null) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'selector and text are required'}),
           isError: true,
         );
@@ -314,31 +325,35 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'typed', 'selector': selector, 'text': text}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to type: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _waitForSelector(ToolCall call) async {
+  Future<ToolResult> _waitForSelector(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final selector = call.args['selector'] as String?;
-      final timeoutMs = call.args['timeout'] as num? ?? 5000;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final selector = args['selector'] as String?;
+      final timeoutMs = args['timeout'] as num? ?? 5000;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
         );
@@ -354,30 +369,34 @@ class FirecrawlBrowserTool implements Tool {
       final found = data['found'] as bool? ?? false;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'waited', 'selector': selector, 'found': found}),
         isError: !found,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to wait for selector: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getText(ToolCall call) async {
+  Future<ToolResult> _getText(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final selector = call.args['selector'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final selector = args['selector'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
         );
@@ -393,31 +412,35 @@ class FirecrawlBrowserTool implements Tool {
       final text = data['text'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'selector': selector, 'text': text}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get text: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getAttribute(ToolCall call) async {
+  Future<ToolResult> _getAttribute(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final selector = call.args['selector'] as String?;
-      final attribute = call.args['attribute'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final selector = args['selector'] as String?;
+      final attribute = args['attribute'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty || attribute == null || attribute.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'selector and attribute are required'}),
           isError: true,
         );
@@ -433,30 +456,34 @@ class FirecrawlBrowserTool implements Tool {
       final value = data['value'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'selector': selector, 'attribute': attribute, 'value': value}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get attribute: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _executeScript(ToolCall call) async {
+  Future<ToolResult> _executeScript(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
-      final script = call.args['script'] as String?;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
+      final script = args['script'] as String?;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (script == null || script.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'script is required'}),
           isError: true,
         );
@@ -472,23 +499,26 @@ class FirecrawlBrowserTool implements Tool {
       final result = data['result'];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'executed', 'result': result}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to execute script: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _takeScreenshot(ToolCall call) async {
+  Future<ToolResult> _takeScreenshot(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -504,23 +534,26 @@ class FirecrawlBrowserTool implements Tool {
       final screenshot = data['screenshot'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'captured', 'screenshot': screenshot}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to take screenshot: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getHtml(ToolCall call) async {
+  Future<ToolResult> _getHtml(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -536,23 +569,26 @@ class FirecrawlBrowserTool implements Tool {
       final html = data['html'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'html': html}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get HTML: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _goBack(ToolCall call) async {
+  Future<ToolResult> _goBack(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -565,23 +601,26 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'navigated_back'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to go back: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _goForward(ToolCall call) async {
+  Future<ToolResult> _goForward(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -594,23 +633,26 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'navigated_forward'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to go forward: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _reload(ToolCall call) async {
+  Future<ToolResult> _reload(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -623,23 +665,26 @@ class FirecrawlBrowserTool implements Tool {
       );
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'reloaded'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to reload: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getTitle(ToolCall call) async {
+  Future<ToolResult> _getTitle(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -655,23 +700,26 @@ class FirecrawlBrowserTool implements Tool {
       final title = data['title'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'title': title}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get title: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getUrl(ToolCall call) async {
+  Future<ToolResult> _getUrl(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final sessionId = call.args['session_id'] as String? ?? _sessionId;
+      final sessionId = args['session_id'] as String? ?? _sessionId;
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -687,24 +735,27 @@ class FirecrawlBrowserTool implements Tool {
       final url = data['url'] as String?;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'url': url}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get URL: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _scrape(ToolCall call) async {
+  Future<ToolResult> _scrape(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final url = call.args['url'] as String?;
-      final options = call.args['scrape_options'] as Map<String, dynamic>?;
+      final url = args['url'] as String?;
+      final options = args['scrape_options'] as Map<String, dynamic>?;
       
       if (url == null || url.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'url is required for scrape'}),
           isError: true,
         );
@@ -733,6 +784,7 @@ class FirecrawlBrowserTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'scraped',
           'url': url,
@@ -743,6 +795,7 @@ class FirecrawlBrowserTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to scrape: ${e.toString()}'}),
         isError: true,
       );
