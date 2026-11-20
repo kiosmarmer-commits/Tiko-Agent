@@ -142,12 +142,14 @@ class FirecrawlBrowserTool implements Tool {
         default:
           return ToolResult(
             callId: '',
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
@@ -171,6 +173,7 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'session_id': _sessionId,
@@ -180,6 +183,7 @@ class FirecrawlBrowserTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to create session: ${e.toString()}'}),
         isError: true,
@@ -193,6 +197,7 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -205,11 +210,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'closed', 'session_id': sessionId}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to close session: ${e.toString()}'}),
         isError: true,
@@ -225,12 +232,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (url == null || url.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'url is required'}),
           isError: true,
@@ -245,11 +254,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'navigated', 'url': url}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to navigate: ${e.toString()}'}),
         isError: true,
@@ -265,12 +276,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
@@ -285,11 +298,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'clicked', 'selector': selector}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to click: ${e.toString()}'}),
         isError: true,
@@ -306,12 +321,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty || text == null) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'selector and text are required'}),
           isError: true,
@@ -326,11 +343,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'typed', 'selector': selector, 'text': text}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to type: ${e.toString()}'}),
         isError: true,
@@ -347,12 +366,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
@@ -370,11 +391,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'waited', 'selector': selector, 'found': found}),
         isError: !found,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to wait for selector: ${e.toString()}'}),
         isError: true,
@@ -390,12 +413,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'selector is required'}),
           isError: true,
@@ -413,11 +438,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'selector': selector, 'text': text}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get text: ${e.toString()}'}),
         isError: true,
@@ -434,12 +461,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (selector == null || selector.isEmpty || attribute == null || attribute.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'selector and attribute are required'}),
           isError: true,
@@ -457,11 +486,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'selector': selector, 'attribute': attribute, 'value': value}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get attribute: ${e.toString()}'}),
         isError: true,
@@ -477,12 +508,14 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
       }
       if (script == null || script.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'script is required'}),
           isError: true,
@@ -500,11 +533,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'executed', 'result': result}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to execute script: ${e.toString()}'}),
         isError: true,
@@ -518,6 +553,7 @@ class FirecrawlBrowserTool implements Tool {
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
@@ -535,11 +571,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'captured', 'screenshot': screenshot}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to take screenshot: ${e.toString()}'}),
         isError: true,
@@ -553,6 +591,7 @@ class FirecrawlBrowserTool implements Tool {
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
@@ -570,11 +609,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'html': html}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get HTML: ${e.toString()}'}),
         isError: true,
@@ -589,6 +630,7 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -602,11 +644,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'navigated_back'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to go back: ${e.toString()}'}),
         isError: true,
@@ -621,6 +665,7 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -634,11 +679,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'navigated_forward'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to go forward: ${e.toString()}'}),
         isError: true,
@@ -653,6 +700,7 @@ class FirecrawlBrowserTool implements Tool {
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
           callId: '',
+          callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
         );
@@ -666,11 +714,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'reloaded'}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to reload: ${e.toString()}'}),
         isError: true,
@@ -684,6 +734,7 @@ class FirecrawlBrowserTool implements Tool {
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
@@ -701,11 +752,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'title': title}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get title: ${e.toString()}'}),
         isError: true,
@@ -719,6 +772,7 @@ class FirecrawlBrowserTool implements Tool {
       
       if (sessionId == null || sessionId.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'No active session'}),
           isError: true,
@@ -736,11 +790,13 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({'status': 'retrieved', 'url': url}),
         isError: false,
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to get URL: ${e.toString()}'}),
         isError: true,
@@ -755,6 +811,7 @@ class FirecrawlBrowserTool implements Tool {
       
       if (url == null || url.isEmpty) {
         return ToolResult(
+          callId: '',
           callId: '',
           content: jsonEncode({'error': 'url is required for scrape'}),
           isError: true,
@@ -785,6 +842,7 @@ class FirecrawlBrowserTool implements Tool {
       
       return ToolResult(
         callId: '',
+        callId: '',
         content: jsonEncode({
           'status': 'scraped',
           'url': url,
@@ -795,6 +853,7 @@ class FirecrawlBrowserTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         callId: '',
         content: jsonEncode({'error': 'Failed to scrape: ${e.toString()}'}),
         isError: true,
