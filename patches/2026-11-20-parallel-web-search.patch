@@ -1,0 +1,142 @@
+--- a/packages/agent_tools/lib/src/web_search.dart
++++ b/packages/agent_tools/lib/src/web_search.dart
+@@ -8,7 +8,7 @@
+ 
+ /// web_search via multiple providers with fallback chain (AGD-04 §7).
+ /// Supports: SearXNG, Tavily, DDGS (DuckDuckGo), Brave, Exa, Firecrawl,
+-/// Perplexity, Keenable, xAI (Grok), OpenAI Codex, Nous Portal
++/// Parallel, Perplexity, Keenable, xAI (Grok), OpenAI Codex, Nous Portal
+ class WebSearchTool implements Tool {
+   WebSearchTool({
+     this.searxngBaseUrl = 'http://127.0.0.1:8080',
+@@ -21,6 +21,8 @@
+     this.exaBaseUrl = 'https://api.exa.ai',
+     this.firecrawlApiKey,
+     this.firecrawlBaseUrl = 'https://api.firecrawl.dev',
++    this.parallelApiKey,
++    this.parallelBaseUrl = 'https://api.parallel.ai',
+     this.perplexityApiKey,
+     this.perplexityBaseUrl = 'https://api.perplexity.ai',
+     this.keenableApiKey,
+@@ -41,6 +43,7 @@
+       'brave',
+       'exa',
+       'firecrawl',
++      'parallel',
+       'perplexity',
+       'keenable',
+       'xai',
+@@ -73,6 +76,10 @@
+   final String? firecrawlApiKey;
+   final String firecrawlBaseUrl;
+ 
++  /// Parallel Search API key. Null/empty berarti provider nonaktif.
++  final String? parallelApiKey;
++  final String parallelBaseUrl;
++
+   /// Perplexity Search API key. Null/empty berarti provider nonaktif.
+   final String? perplexityApiKey;
+   final String perplexityBaseUrl;
+@@ -112,7 +119,7 @@
+     name: 'web_search',
+     description:
+         'Cari di web lewat multiple provider: SearXNG, Tavily, DDGS (DuckDuckGo), '
+-        'Brave, Exa, Firecrawl, Perplexity, Keenable, xAI (Grok), OpenAI Codex, '
++        'Brave, Exa, Firecrawl, Parallel, Perplexity, Keenable, xAI (Grok), OpenAI Codex, '
+         'Nous Portal. Mengembalikan judul, URL, cuplikan; '
+         'opsional mengunduh isi singkat dari N hasil teratas. '
+         'Provider aktif bergantung pada konfigurasi dan ketersediaan API key.',
+@@ -183,6 +190,11 @@
+             activeProviders.add(providerId);
+           }
+           break;
++        case 'parallel':
++          if ((parallelApiKey ?? '').trim().isNotEmpty) {
++            activeProviders.add(providerId);
++          }
++          break;
+       case 'perplexity':
+           if ((perplexityApiKey ?? '').trim().isNotEmpty) {
+             activeProviders.add(providerId);
+@@ -413,6 +425,8 @@
+         return _searchExa(client, query);
+       case 'firecrawl':
+         return _searchFirecrawl(client, query);
++      case 'parallel':
++        return _searchParallel(client, query);
+       case 'perplexity':
+         return _searchPerplexity(client, query);
+       case 'keenable':
+@@ -718,6 +732,72 @@
+     return _hitsFrom(json);
+   }
+ 
++  Future<List<({String title, String url, String content})>> _searchParallel(
++    http.Client client,
++    String query,
++  ) async {
++    final parallelCheck = await _ssrf.checkUrl(parallelBaseUrl);
++    if (parallelCheck != null) {
++      throw _SearchFailure(
++        'Parallel base URL ditolak: $parallelCheck',
++        fallbackEligible: true,
++      );
++    }
++    final uri = Uri.parse('$parallelBaseUrl/v1/search');
++    final body = jsonEncode({
++      'mode': 'fast',
++      'objective': query,
++      'search_queries': [query],
++    });
++    final res = await client
++        .post(
++          uri,
++          headers: {
++            'Content-Type': 'application/json',
++            'x-api-key': parallelApiKey!,
++          },
++          body: body,
++        )
++        .timeout(const Duration(seconds: 25));
++    if (res.statusCode < 200 || res.statusCode >= 300) {
++      throw _SearchFailure(
++        'Parallel HTTP ${res.statusCode}: ${res.body.length > 200 ? res.body.substring(0, 200) : res.body}',
++        fallbackEligible: res.statusCode >= 500 || res.statusCode == 429,
++      );
++    }
++    final json = jsonDecode(res.body) as Map<String, dynamic>;
++    // Parallel returns results with url / title / excerpts (or content)
++    final results = json['results'] as List<dynamic>? ??
++        json['data'] as List<dynamic>? ??
++        [];
++    final hits = <({String title, String url, String content})>[];
++    for (final raw in results) {
++      if (raw is! Map<String, dynamic>) continue;
++      final title = (raw['title'] as String?) ??
++          (raw['name'] as String?) ??
++          '(tanpa judul)';
++      final url = (raw['url'] as String?) ??
++          (raw['link'] as String?) ??
++          '';
++      String content = '';
++      final excerpts = raw['excerpts'] ?? raw['excerpt'];
++      if (excerpts is List) {
++        content = excerpts.map((e) => e.toString()).join(' ');
++      } else if (excerpts is String) {
++        content = excerpts;
++      } else {
++        content = (raw['content'] as String?) ??
++            (raw['snippet'] as String?) ??
++            (raw['text'] as String?) ??
++            '';
++      }
++      if (url.isNotEmpty) {
++        hits.add((title: title, url: url, content: content));
++      }
++    }
++    return hits;
++  }
++
+   Future<List<({String title, String url, String content})>> _searchPerplexity(
+     http.Client client,
+     String query,
