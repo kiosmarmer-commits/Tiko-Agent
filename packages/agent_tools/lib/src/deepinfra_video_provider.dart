@@ -34,15 +34,11 @@ class DeepInfraVideoProvider implements VideoProvider {
   Future<VideoGenerationResult> generateVideo({
     required String prompt,
     String? model,
-    String? negativePrompt,
-    
-    
     int? durationSec,
-    int? steps,
-    double? guidanceScale,
+    int? fps,
+    String? aspectRatio,
+    String? resolution,
     int? seed,
-    String? style,
-    String? outputFormat,
   }) async {
     final started = DateTime.now();
     final modelId = model ?? 'stabilityai/stable-video-diffusion';
@@ -50,15 +46,11 @@ class DeepInfraVideoProvider implements VideoProvider {
       final body = <String, dynamic>{
         'model': modelId,
         'prompt': prompt,
-        if (negativePrompt != null) 'negative_prompt': negativePrompt,
-        if (width != null && height != null)
-          'size': {'width': width, 'height': height},
-        if (duration != null) 'duration': duration,
-        if (steps != null) 'steps': steps,
-        if (guidanceScale != null) 'guidance_scale': guidanceScale,
+        if (durationSec != null) 'duration': durationSec,
+        if (fps != null) 'fps': fps,
+        if (aspectRatio != null) 'aspect_ratio': aspectRatio,
+        if (resolution != null) 'resolution': resolution,
         if (seed != null) 'seed': seed,
-        if (style != null) 'style': style,
-        if (outputFormat != null) 'format': outputFormat,
       };
 
       final uri = Uri.parse('$baseUrl/inference/$modelId');
@@ -90,7 +82,7 @@ class DeepInfraVideoProvider implements VideoProvider {
         provider: name,
         
         
-        durationSec: duration,
+        durationSec: durationSec,
         prompt: prompt,
         generationTime: DateTime.now().difference(started),
       );

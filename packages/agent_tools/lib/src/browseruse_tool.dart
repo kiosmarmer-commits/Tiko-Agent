@@ -29,10 +29,8 @@ class BrowserUseTool implements Tool {
 
   CdpSession? _session;
 
-  @override
   String get name => 'browseruse';
 
-  @override
   String get description =>
       'BrowserUse tool for advanced browser automation with high-level commands.';
 

@@ -30,10 +30,8 @@ class BrowserVaultTool implements Tool {
   CdpSession? _session;
   final _vault = <String, String>{};
 
-  @override
   String get name => 'browser_vault';
 
-  @override
   String get description =>
       'Browser vault tool for secure credential management in web automation.';
 

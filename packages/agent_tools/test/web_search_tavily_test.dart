@@ -160,4 +160,32 @@ void main() {
     expect(r.content, 'Tidak ada hasil.');
     expect(hosts, contains('api.tavily.com'));
   });
+
+  test('Parallel Search memakai x-api-key dan memetakan excerpts', () async {
+    String? apiKey;
+    final client = _recordingClient((request) async {
+      apiKey = request.headers['x-api-key'];
+      return http.Response(jsonEncode({
+        'results': [
+          {
+            'title': 'Hasil Parallel',
+            'url': 'https://parallel.example/result',
+            'excerpts': ['kutipan satu', 'kutipan dua'],
+          },
+        ],
+      }), 200);
+    }).$1;
+    final tool = WebSearchTool(
+      providerOrder: const ['parallel'],
+      parallelApiKey: 'parallel-test',
+      fetchTop: 0,
+      client: client,
+      ssrf: _NoopSsrf(),
+    );
+    final r = await _run(tool);
+    expect(r.isError, isFalse);
+    expect(r.content, contains('Hasil Parallel'));
+    expect(r.content, contains('kutipan satu'));
+    expect(apiKey, 'parallel-test');
+  });
 }

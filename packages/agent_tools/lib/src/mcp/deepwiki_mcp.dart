@@ -24,10 +24,8 @@ class DeepWikiMcpTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
   String get name => 'deepwiki_mcp';
 
-  @override
   String get description =>
       'DeepWiki MCP server for accessing knowledge graph and structured information.';
 
@@ -299,9 +297,8 @@ class DeepWikiMcpTool implements Tool {
         final response = await client.get(uri, headers: headers).timeout(timeout);
         return http.Response(response.body, response.statusCode);
       } else {
-        final request = http.Request(method, uri)
-          ..headers.addAll(headers)
-          ..body = body != null ? jsonEncode(body) : null;
+        final request = http.Request(method, uri)..headers.addAll(headers);
+        if (body != null) request.body = jsonEncode(body);
         
         final response = await client.send(request).timeout(timeout);
         final responseBody = await response.stream.bytesToString();

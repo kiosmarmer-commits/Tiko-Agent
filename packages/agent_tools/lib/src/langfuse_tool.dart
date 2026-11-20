@@ -26,10 +26,8 @@ class LangfuseTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
   String get name => 'langfuse';
 
-  @override
   String get description =>
       'Langfuse observability tool for tracing and debugging AI applications.';
 
@@ -544,9 +542,8 @@ class LangfuseTool implements Tool {
 
     final client = http.Client();
     try {
-      final request = http.Request(method, uri)
-        ..headers.addAll(headers)
-        ..body = body != null ? jsonEncode(body) : null;
+      final request = http.Request(method, uri)..headers.addAll(headers);
+      if (body != null) request.body = jsonEncode(body);
 
       final response = await client.send(request).timeout(timeout);
       final responseBody = await response.stream.bytesToString();

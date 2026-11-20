@@ -29,10 +29,8 @@ class HermesTelemetryTool implements Tool {
   final String? agentId;
   final String? agentVersion;
 
-  @override
   String get name => 'hermes_telemetry';
 
-  @override
   String get description =>
       'Hermes Telemetry tool for monitoring and analytics of AI agents.';
 
@@ -664,9 +662,8 @@ class HermesTelemetryTool implements Tool {
 
     final client = http.Client();
     try {
-      final request = http.Request(method, uri)
-        ..headers.addAll(headers)
-        ..body = body != null ? jsonEncode(body) : null;
+      final request = http.Request(method, uri)..headers.addAll(headers);
+      if (body != null) request.body = jsonEncode(body);
 
       final response = await client.send(request).timeout(timeout);
       final responseBody = await response.stream.bytesToString();

@@ -40,7 +40,9 @@ jobs:
           for dir in packages/* apps/agentd apps/tiko apps/agent_cli apps/simpul; do
             [[ -d "$dir" ]] || continue
             echo "== analyze: $dir =="
-            out="$( cd "$dir" && dart analyze --fatal-warnings 2>&1 )"
+            # Dart workspaces keep the package_config at the workspace root.
+            # Analyze by path so package imports resolve consistently in CI.
+            out="$( dart analyze "$dir" --fatal-warnings 2>&1 )"
             rc=$?
             if [[ $rc -ne 0 ]]; then
               fail=1
@@ -77,7 +79,9 @@ jobs:
             if [[ -d "$dir/test" ]]; then
               echo "== dart test: $dir =="
               out="$(mktemp)"
-              (cd "$dir" && dart test --reporter json) > "$out" 2>&1
+              # Run from the workspace root; package-local .dart_tool only
+              # contains workspace metadata, not a standalone package config.
+              (dart test "$dir/test" --reporter json) > "$out" 2>&1
               rc=$?
               if [[ $rc -ne 0 ]]; then
                 fail=1

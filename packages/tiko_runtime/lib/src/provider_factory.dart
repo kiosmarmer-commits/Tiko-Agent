@@ -366,7 +366,7 @@ class ProviderFactory {
             "provider '${c.id}' (gmi) membutuhkan api_key (SecretRef env:)",
           );
         }
-        return GmiProvider(
+        return GMIProvider(
           apiKey: key,
           model: model ?? 'gmi-70b',
           baseUrl: baseUrl ?? 'https://api.gmi-serving.com/v1',
@@ -431,7 +431,7 @@ class ProviderFactory {
             "provider '${c.id}' (alibaba) membutuhkan api_key (SecretRef env:)",
           );
         }
-        return AlibabaProvider(
+        return AlibabaDashScopeProvider(
           apiKey: key,
           model: model ?? 'qwen-max',
           baseUrl: baseUrl ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
@@ -483,7 +483,7 @@ class ProviderFactory {
             "provider '${c.id}' (actual) membutuhkan api_key (SecretRef env:)",
           );
         }
-        return ActualProvider(
+        return ActualComputerProvider(
           apiKey: key,
           model: model ?? 'actual-70b',
           baseUrl: baseUrl ?? 'https://api.actualai.io/v1',

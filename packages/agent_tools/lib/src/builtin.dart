@@ -60,6 +60,10 @@ List<Tool> createBuiltinTools({
   String? xaiApiKey,
   String? openaiCodexApiKey,
   String? nousPortalApiKey,
+  String? braveApiKey,
+  String? exaApiKey,
+  String? firecrawlApiKey,
+  String? parallelApiKey,
 }) {
   final root = workspaceRoot ?? Directory.current.path;
   final guard = ssrf ?? SsrfGuard();
@@ -114,6 +118,10 @@ List<Tool> createBuiltinTools({
       WebSearchTool(
         searxngBaseUrl: searxngBaseUrl,
         tavilyApiKey: tavilyApiKey,
+        braveApiKey: braveApiKey,
+        exaApiKey: exaApiKey,
+        firecrawlApiKey: firecrawlApiKey,
+        parallelApiKey: parallelApiKey,
         perplexityApiKey: perplexityApiKey,
         keenableApiKey: keenableApiKey,
         xaiApiKey: xaiApiKey,

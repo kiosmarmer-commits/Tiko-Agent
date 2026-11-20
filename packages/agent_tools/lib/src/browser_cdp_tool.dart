@@ -32,10 +32,8 @@ class BrowserCdpTool implements Tool {
 
   CdpSession? _session;
 
-  @override
   String get name => 'browser_cdp';
 
-  @override
   String get description =>
       'Direct Chrome DevTools Protocol tool for low-level browser automation. '
       'Allows executing raw CDP commands for advanced browser control.';
