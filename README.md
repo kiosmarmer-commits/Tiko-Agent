@@ -65,7 +65,7 @@ dart run apps/tiko/bin/tiko.dart chat
 
 ### Gateway dan automation
 
-- Telegram, Discord, Slack, WhatsApp, Email, Signal, Matrix, LINE, Teams webhook, Home Assistant, dan webhook HTTP sesuai konfigurasi.
+- Telegram, Discord, Slack, WhatsApp, Email, Signal, Matrix, LINE, Teams webhook/Bot Framework inbound, Home Assistant, dan webhook HTTP sesuai konfigurasi.
 - Delivery wrapper menyediakan timeout, retry terbatas, exponential backoff, dan close forwarding.
 - LINE memiliki webhook routing dan validasi HMAC signature.
 - Scheduler mendukung cron, IANA timezone/DST, retry, dan acknowledgement.

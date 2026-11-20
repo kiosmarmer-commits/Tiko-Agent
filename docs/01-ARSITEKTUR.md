@@ -1,8 +1,8 @@
 # 01 — Arsitektur Aktual Tiko Agent
 
-> **Catatan status:** dokumen ini adalah panduan arsitektur. Source dan test pada commit `73bbec5` adalah kontrak implementasi; status CI harus dibaca dari GitHub Actions.
+> **Catatan status:** dokumen ini adalah panduan arsitektur. Source dan test pada commit `ddb7ceb` adalah kontrak implementasi; status CI harus dibaca dari GitHub Actions.
 
-**Snapshot:** `73bbec5` (20 November 2026).
+**Snapshot:** `ddb7ceb` (20 November 2026).
 
 Dokumen ini menjelaskan komposisi source saat ini. Diagram dan pseudocode adalah model konseptual, bukan kontrak API Dart yang harus disalin apa adanya.
 

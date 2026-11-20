@@ -1,6 +1,6 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `73bbec5` pada branch `main`.
+**Source snapshot:** commit `ddb7ceb` pada branch `main`.
 
 **Terakhir diperbarui:** 20 November 2026.
 
@@ -31,7 +31,8 @@
 | Browser CDP lokal/remote | Implemented/conditional | Chrome atau backend remote harus tersedia |
 | Scheduler dan job delivery | Implemented | Channel tujuan harus aktif |
 | Telegram/Discord/Slack/WhatsApp/Email/Signal/Matrix/LINE | Implemented/conditional | Masing-masing membutuhkan konfigurasi dan credential |
-| Teams | Partial | Outbound webhook tersedia; inbound Bot Framework belum menjadi gateway penuh |
+| Teams | Implemented | Outbound webhook dan inbound Bot Framework activity melalui `/webhooks/teams` dengan bearer token |
+| ACP resources | Implemented | List/read/write resource terdaftar, resource read-only, dan command fail-closed |
 | Wake-word Porcupine/openWakeWord | Partial | Native engine belum terhubung; tersedia fallback energy/keyword |
 | Home Assistant provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | Tuya provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
