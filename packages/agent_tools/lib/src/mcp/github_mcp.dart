@@ -24,12 +24,6 @@ class GitHubMcpTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
-  String get name => 'github_mcp';
-
-  @override
-  String get description =>
-      'GitHub MCP server for accessing GitHub repositories and resources.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -113,51 +107,53 @@ class GitHubMcpTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'list_repos':
-          return await _listRepos(call);
+          return await _listRepos(args, ctx);
         case 'get_repo':
-          return await _getRepo(call);
+          return await _getRepo(args, ctx);
         case 'list_issues':
-          return await _listIssues(call);
+          return await _listIssues(args, ctx);
         case 'get_issue':
-          return await _getIssue(call);
+          return await _getIssue(args, ctx);
         case 'create_issue':
-          return await _createIssue(call);
+          return await _createIssue(args, ctx);
         case 'update_issue':
-          return await _updateIssue(call);
+          return await _updateIssue(args, ctx);
         case 'list_prs':
-          return await _listPullRequests(call);
+          return await _listPullRequests(args, ctx);
         case 'get_pr':
-          return await _getPullRequest(call);
+          return await _getPullRequest(args, ctx);
         case 'list_contents':
-          return await _listContents(call);
+          return await _listContents(args, ctx);
         case 'get_content':
-          return await _getContent(call);
+          return await _getContent(args, ctx);
         case 'search':
-          return await _search(call);
+          return await _search(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listRepos(ToolCall call) async {
+  Future<ToolResult> _listRepos(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final limit = call.args['limit'] as num? ?? 10;
-      final page = call.args['page'] as num? ?? 1;
+      final limit = args['limit'] as num? ?? 10;
+      final page = args['page'] as num? ?? 1;
       
       final response = await _makeRequest(
         'GET',
@@ -169,6 +165,7 @@ class GitHubMcpTool implements Tool {
       final repos = jsonDecode(response.body) as List<dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'repositories': repos,
@@ -178,19 +175,21 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list repositories: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getRepo(ToolCall call) async {
+  Future<ToolResult> _getRepo(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
@@ -206,6 +205,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'repository': data,
@@ -214,21 +214,23 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get repository: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listIssues(ToolCall call) async {
+  Future<ToolResult> _listIssues(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
-      final page = call.args['page'] as num? ?? 1;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final limit = args['limit'] as num? ?? 10;
+      final page = args['page'] as num? ?? 1;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
@@ -248,6 +250,7 @@ class GitHubMcpTool implements Tool {
       final issues = jsonDecode(response.body) as List<dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issues': issues,
@@ -257,26 +260,29 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list issues: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getIssue(ToolCall call) async {
+  Future<ToolResult> _getIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final issueNumber = call.args['issue_number'] as num?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final issueNumber = args['issue_number'] as num?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (issueNumber == null) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'issue_number is required'}),
           isError: true,
         );
@@ -292,6 +298,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -300,29 +307,32 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createIssue(ToolCall call) async {
+  Future<ToolResult> _createIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final title = call.args['title'] as String?;
-      final body = call.args['body'] as String?;
-      final labels = call.args['labels'] as List<dynamic>?;
-      final assignees = call.args['assignees'] as List<dynamic>?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final title = args['title'] as String?;
+      final body = args['body'] as String?;
+      final labels = args['labels'] as List<dynamic>?;
+      final assignees = args['assignees'] as List<dynamic>?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (title == null || title.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'title is required'}),
           isError: true,
         );
@@ -345,6 +355,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -353,28 +364,31 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _updateIssue(ToolCall call) async {
+  Future<ToolResult> _updateIssue(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final issueNumber = call.args['issue_number'] as num?;
-      final title = call.args['title'] as String?;
-      final body = call.args['body'] as String?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final issueNumber = args['issue_number'] as num?;
+      final title = args['title'] as String?;
+      final body = args['body'] as String?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (issueNumber == null) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'issue_number is required'}),
           isError: true,
         );
@@ -386,6 +400,7 @@ class GitHubMcpTool implements Tool {
       
       if (requestBody.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'No fields to update'}),
           isError: true,
         );
@@ -401,6 +416,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'issue': data,
@@ -409,21 +425,23 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to update issue: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listPullRequests(ToolCall call) async {
+  Future<ToolResult> _listPullRequests(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
-      final page = call.args['page'] as num? ?? 1;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final limit = args['limit'] as num? ?? 10;
+      final page = args['page'] as num? ?? 1;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
@@ -443,6 +461,7 @@ class GitHubMcpTool implements Tool {
       final prs = jsonDecode(response.body) as List<dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'pull_requests': prs,
@@ -452,26 +471,29 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list pull requests: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getPullRequest(ToolCall call) async {
+  Future<ToolResult> _getPullRequest(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final prNumber = call.args['pr_number'] as num?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final prNumber = args['pr_number'] as num?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (prNumber == null) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'pr_number is required'}),
           isError: true,
         );
@@ -487,6 +509,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'pull_request': data,
@@ -495,20 +518,22 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get pull request: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _listContents(ToolCall call) async {
+  Future<ToolResult> _listContents(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final path = call.args['path'] as String? ?? '';
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final path = args['path'] as String? ?? '';
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
@@ -524,6 +549,7 @@ class GitHubMcpTool implements Tool {
       final contents = jsonDecode(response.body) as List<dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'contents': contents,
@@ -534,26 +560,29 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to list contents: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _getContent(ToolCall call) async {
+  Future<ToolResult> _getContent(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final owner = call.args['owner'] as String?;
-      final repo = call.args['repo'] as String?;
-      final path = call.args['path'] as String?;
+      final owner = args['owner'] as String?;
+      final repo = args['repo'] as String?;
+      final path = args['path'] as String?;
       
       if (owner == null || owner.isEmpty || repo == null || repo.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'owner and repo are required'}),
           isError: true,
         );
       }
       if (path == null || path.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'path is required'}),
           isError: true,
         );
@@ -569,6 +598,7 @@ class GitHubMcpTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'content': data,
@@ -578,19 +608,21 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to get content: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _search(ToolCall call) async {
+  Future<ToolResult> _search(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final query = call.args['query'] as String?;
-      final limit = call.args['limit'] as num? ?? 10;
+      final query = args['query'] as String?;
+      final limit = args['limit'] as num? ?? 10;
       
       if (query == null || query.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'query is required'}),
           isError: true,
         );
@@ -610,6 +642,7 @@ class GitHubMcpTool implements Tool {
       final items = data['items'] as List<dynamic>? ?? [];
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'success',
           'query': query,
@@ -620,6 +653,7 @@ class GitHubMcpTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to search: ${e.toString()}'}),
         isError: true,
       );
