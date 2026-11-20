@@ -29,12 +29,6 @@ class BrowserUseTool implements Tool {
 
   CdpSession? _session;
 
-  @override
-  String get name => 'browseruse';
-
-  @override
-  String get description =>
-      'BrowserUse tool for advanced browser automation with high-level commands.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -97,9 +91,9 @@ class BrowserUseTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'open':
@@ -111,6 +105,7 @@ class BrowserUseTool implements Tool {
           );
           await _session!.open();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'opened', 'session_id': _session!.sessionId}),
             isError: false,
           );
@@ -121,6 +116,7 @@ class BrowserUseTool implements Tool {
             _session = null;
           }
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'closed'}),
             isError: false,
           );
@@ -128,19 +124,22 @@ class BrowserUseTool implements Tool {
         case 'navigate':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final url = call.args['url'] as String?;
+          final url = args['url'] as String?;
           if (url == null || url.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'url is required'}),
               isError: true,
             );
           }
           await _session!.navigate(url);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'navigated', 'url': url}),
             isError: false,
           );
@@ -148,13 +147,15 @@ class BrowserUseTool implements Tool {
         case 'click':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
+          final selector = args['selector'] as String?;
           if (selector == null || selector.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector is required'}),
               isError: true,
             );
@@ -170,6 +171,7 @@ class BrowserUseTool implements Tool {
             })()
           ''');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'clicked', 'selector': selector}),
             isError: false,
           );
@@ -177,14 +179,16 @@ class BrowserUseTool implements Tool {
         case 'type':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
-          final text = call.args['text'] as String?;
+          final selector = args['selector'] as String?;
+          final text = args['text'] as String?;
           if (selector == null || selector.isEmpty || text == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector and text are required'}),
               isError: true,
             );
@@ -202,6 +206,7 @@ class BrowserUseTool implements Tool {
             })()
           ''');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'typed', 'selector': selector, 'text': text}),
             isError: false,
           );
@@ -209,14 +214,16 @@ class BrowserUseTool implements Tool {
         case 'select':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
-          final text = call.args['text'] as String?;
+          final selector = args['selector'] as String?;
+          final text = args['text'] as String?;
           if (selector == null || selector.isEmpty || text == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector and text are required'}),
               isError: true,
             );
@@ -237,6 +244,7 @@ class BrowserUseTool implements Tool {
             })()
           ''');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'selected', 'selector': selector, 'value': text}),
             isError: false,
           );
@@ -244,20 +252,23 @@ class BrowserUseTool implements Tool {
         case 'wait_for_selector':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
-          final timeoutMs = call.args['timeout'] as num? ?? 5000;
+          final selector = args['selector'] as String?;
+          final timeoutMs = args['timeout'] as num? ?? 5000;
           if (selector == null || selector.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector is required'}),
               isError: true,
             );
           }
           final found = await _waitForSelector(selector, timeoutMs);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'found', 'selector': selector, 'found': found}),
             isError: !found,
           );
@@ -265,12 +276,14 @@ class BrowserUseTool implements Tool {
         case 'get_title':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final title = await _session!.evaluate('document.title');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'title': title}),
             isError: false,
           );
@@ -278,12 +291,14 @@ class BrowserUseTool implements Tool {
         case 'get_url':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final url = await _session!.evaluate('window.location.href');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'url': url}),
             isError: false,
           );
@@ -291,13 +306,15 @@ class BrowserUseTool implements Tool {
         case 'get_text':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
+          final selector = args['selector'] as String?;
           if (selector == null || selector.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector is required'}),
               isError: true,
             );
@@ -309,6 +326,7 @@ class BrowserUseTool implements Tool {
             })()
           ''');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'selector': selector, 'text': text}),
             isError: false,
           );
@@ -316,14 +334,16 @@ class BrowserUseTool implements Tool {
         case 'get_attribute':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final selector = call.args['selector'] as String?;
-          final attribute = call.args['attribute'] as String?;
+          final selector = args['selector'] as String?;
+          final attribute = args['attribute'] as String?;
           if (selector == null || selector.isEmpty || attribute == null || attribute.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'selector and attribute are required'}),
               isError: true,
             );
@@ -335,6 +355,7 @@ class BrowserUseTool implements Tool {
             })()
           ''');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'selector': selector, 'attribute': attribute, 'value': value}),
             isError: false,
           );
@@ -342,19 +363,22 @@ class BrowserUseTool implements Tool {
         case 'execute_script':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final script = call.args['script'] as String?;
+          final script = args['script'] as String?;
           if (script == null || script.isEmpty) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'script is required'}),
               isError: true,
             );
           }
           final result = await _session!.evaluate(script);
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'executed', 'result': result}),
             isError: false,
           );
@@ -362,12 +386,14 @@ class BrowserUseTool implements Tool {
         case 'take_screenshot':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final screenshot = await _session!.screenshot();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'captured', 'screenshot': screenshot}),
             isError: false,
           );
@@ -375,12 +401,14 @@ class BrowserUseTool implements Tool {
         case 'get_html':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           final html = await _session!.getContent();
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'retrieved', 'html': html}),
             isError: false,
           );
@@ -388,12 +416,14 @@ class BrowserUseTool implements Tool {
         case 'go_back':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           await _session!.evaluate('window.history.back()');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'navigated_back'}),
             isError: false,
           );
@@ -401,12 +431,14 @@ class BrowserUseTool implements Tool {
         case 'go_forward':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           await _session!.evaluate('window.history.forward()');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'navigated_forward'}),
             isError: false,
           );
@@ -414,12 +446,14 @@ class BrowserUseTool implements Tool {
         case 'reload':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
           await _session!.evaluate('window.location.reload()');
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'reloaded'}),
             isError: false,
           );
@@ -427,26 +461,30 @@ class BrowserUseTool implements Tool {
         case 'wait_for_navigation':
           if (_session == null) {
             return ToolResult(
+              callId: '',
               content: jsonEncode({'error': 'Session not opened. Call open first.'}),
               isError: true,
             );
           }
-          final timeoutMs = call.args['timeout'] as num? ?? 5000;
+          final timeoutMs = args['timeout'] as num? ?? 5000;
           // Wait for navigation to complete
           await Future.delayed(Duration(milliseconds: timeoutMs.toInt()));
           return ToolResult(
+            callId: '',
             content: jsonEncode({'status': 'navigation_completed'}),
             isError: false,
           );
 
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
