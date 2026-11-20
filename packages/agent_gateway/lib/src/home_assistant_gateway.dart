@@ -75,7 +75,7 @@ class HomeAssistantGateway implements Gateway {
           'message': m.text,
           'title': title,
           'target': target,
-          ...?data,
+          ...data,
         },
       };
 
