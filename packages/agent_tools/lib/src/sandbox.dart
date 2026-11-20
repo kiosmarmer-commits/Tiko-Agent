@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 ///
 /// `SandboxKind.none` is deliberately fail-closed: it never runs a child
 /// process on the host. Callers must surface that the capability is disabled.
-enum SandboxKind { none, bubblewrap, docker, ssh, modal, daytona }
+enum SandboxKind { none, bubblewrap, docker, ssh, modal, daytona, vercel, singularity, sprites }
 
 /// Computes a command risk index R_cmd ∈ [0,1] for sandbox dispatch.
 /// Callers that have the full structured policy available (e.g.
@@ -81,6 +81,12 @@ class SandboxRunner {
     this.daytonaSandboxId,
     this.daytonaApiUrl = 'https://api.daytona.io',
     this.daytonaApiKey,
+    this.vercelSandboxId,
+    this.vercelApiKey,
+    this.vercelApiUrl = 'https://api.vercel.com',
+    this.singularityImage,
+    this.spritesUrl,
+    this.spritesApiKey,
     this.httpClient,
     this.modalBin = 'modal',
     this.containerPersistent = false,
@@ -93,7 +99,18 @@ class SandboxRunner {
         assert(kind != SandboxKind.daytona ||
             ((daytonaSandboxId ?? '').isNotEmpty &&
                 (daytonaApiKey ?? '').isNotEmpty),
-            'daytona sandbox requires daytonaSandboxId and daytonaApiKey');
+            'daytona sandbox requires daytonaSandboxId and daytonaApiKey'),
+        assert(kind != SandboxKind.vercel ||
+            ((vercelSandboxId ?? '').isNotEmpty &&
+                (vercelApiKey ?? '').isNotEmpty),
+            'vercel sandbox requires vercelSandboxId and vercelApiKey'),
+        assert(kind != SandboxKind.singularity ||
+            (singularityImage ?? '').isNotEmpty,
+            'singularity sandbox requires singularityImage'),
+        assert(kind != SandboxKind.sprites ||
+            ((spritesUrl ?? '').isNotEmpty &&
+                (spritesApiKey ?? '').isNotEmpty),
+            'sprites sandbox requires spritesUrl and spritesApiKey');
 
   final SandboxKind kind;
   final String dockerImage;
@@ -118,6 +135,24 @@ class SandboxRunner {
 
   /// Daytona API key (sent as Bearer token).
   final String? daytonaApiKey;
+
+  /// Cloud sandbox (Vercel): target sandbox id.
+  final String? vercelSandboxId;
+
+  /// Vercel API key.
+  final String? vercelApiKey;
+
+  /// Vercel API base URL.
+  final String vercelApiUrl;
+
+  /// Singularity/Apptainer image path.
+  final String? singularityImage;
+
+  /// Sprites (Fly.io) URL.
+  final String? spritesUrl;
+
+  /// Sprites API key.
+  final String? spritesApiKey;
 
   /// Injectable HTTP client (tests stub the Daytona REST endpoint).
   final http.Client? httpClient;
@@ -545,6 +580,12 @@ class SandboxRunner {
     if (kind == SandboxKind.daytona) {
       return _runDaytona(parts, timeout: timeout, workingDirectory: workingDirectory);
     }
+    if (kind == SandboxKind.vercel) {
+      return _runVercel(parts, timeout: timeout, workingDirectory: workingDirectory);
+    }
+    if (kind == SandboxKind.sprites) {
+      return _runSprites(parts, timeout: timeout, workingDirectory: workingDirectory);
+    }
     return _runModal(parts, timeout: timeout);
   }
 
@@ -602,6 +643,86 @@ class SandboxRunner {
     return ProcessResult(result.pid, result.exitCode, result.stdout, result.stderr);
   }
 
+  Future<ProcessResult> _runVercel(
+    List<String> parts, {
+    required Duration timeout,
+    String? workingDirectory,
+  }) async {
+    final id = vercelSandboxId!;
+    final key = vercelApiKey!;
+    final base = vercelApiUrl.replaceAll(RegExp(r'/+$'), '');
+    final client = httpClient ?? http.Client();
+    try {
+      final res = await client
+          .post(
+            Uri.parse('$base/v1/sandboxes/$id/exec'),
+            headers: {
+              'Authorization': 'Bearer $key',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'command': parts.join(' '),
+              if (workingDirectory != null && workingDirectory.isNotEmpty)
+                'cwd': workingDirectory,
+            }),
+          )
+          .timeout(timeout);
+      if (res.statusCode >= 400) {
+        throw StateError('Vercel exec HTTP ${res.statusCode}: ${res.body}');
+      }
+      final map = jsonDecode(utf8.decode(res.bodyBytes, allowMalformed: true));
+      if (map is! Map<String, dynamic>) {
+        throw StateError('Vercel exec: response is not an object');
+      }
+      final exitCode = map['exitCode'] as int? ?? map['exit_code'] as int? ?? 0;
+      final stdout = map['stdout']?.toString() ?? '';
+      final stderr = map['stderr']?.toString() ?? '';
+      return ProcessResult(0, exitCode, stdout, stderr);
+    } finally {
+      if (httpClient == null) client.close();
+    }
+  }
+
+  Future<ProcessResult> _runSprites(
+    List<String> parts, {
+    required Duration timeout,
+    String? workingDirectory,
+  }) async {
+    final url = spritesUrl!;
+    final key = spritesApiKey!;
+    final base = url.replaceAll(RegExp(r'/+$'), '');
+    final client = httpClient ?? http.Client();
+    try {
+      final res = await client
+          .post(
+            Uri.parse('$base/api/sandboxes/exec'),
+            headers: {
+              'Authorization': 'Bearer $key',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'command': parts.join(' '),
+              if (workingDirectory != null && workingDirectory.isNotEmpty)
+                'cwd': workingDirectory,
+            }),
+          )
+          .timeout(timeout);
+      if (res.statusCode >= 400) {
+        throw StateError('Sprites exec HTTP ${res.statusCode}: ${res.body}');
+      }
+      final map = jsonDecode(utf8.decode(res.bodyBytes, allowMalformed: true));
+      if (map is! Map<String, dynamic>) {
+        throw StateError('Sprites exec: response is not an object');
+      }
+      final exitCode = map['exitCode'] as int? ?? map['exit_code'] as int? ?? 0;
+      final stdout = map['stdout']?.toString() ?? '';
+      final stderr = map['stderr']?.toString() ?? '';
+      return ProcessResult(0, exitCode, stdout, stderr);
+    } finally {
+      if (httpClient == null) client.close();
+    }
+  }
+
   /// Run argv (never through a shell), with bounded output and kill-on-timeout.
   Future<ProcessResult> run(
     List<String> parts, {
@@ -609,7 +730,7 @@ class SandboxRunner {
     String? stdinText,
     String? workingDirectory,
   }) async {
-    if (kind == SandboxKind.modal || kind == SandboxKind.daytona) {
+    if (kind == SandboxKind.modal || kind == SandboxKind.daytona || kind == SandboxKind.vercel || kind == SandboxKind.sprites) {
       return _runCloud(parts, timeout: timeout, workingDirectory: workingDirectory);
     }
     final proc = await startProcess(parts, workingDirectory: workingDirectory);
@@ -748,8 +869,20 @@ class SandboxRunner {
         throw UnsupportedError('ssh sandbox must use startProcess directly');
       case SandboxKind.modal:
       case SandboxKind.daytona:
+      case SandboxKind.vercel:
+      case SandboxKind.sprites:
         // Handled by _runCloud(); never reached through this path.
         throw UnsupportedError('cloud sandbox must use run() directly');
+      case SandboxKind.singularity:
+        final args = <String>[
+          'exec',
+          '-B', '$root:/work',
+          '-W', '/work',
+          for (final entry in extraEnv.entries) ...['--env', '${entry.key}=${entry.value}'],
+          singularityImage!,
+          ...parts,
+        ];
+        return (executable: 'singularity', arguments: args);
       case SandboxKind.none:
         throw UnsupportedError('sandbox unavailable');
     }
