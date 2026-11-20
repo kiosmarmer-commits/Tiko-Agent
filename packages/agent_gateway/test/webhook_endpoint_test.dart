@@ -7,16 +7,18 @@ import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 String metaSig(String secret, String body) {
-  final digest = Hmac(sha256, utf8.encode(secret))
-      .convert(utf8.encode(body))
-      .toString();
+  final digest = Hmac(
+    sha256,
+    utf8.encode(secret),
+  ).convert(utf8.encode(body)).toString();
   return 'sha256=$digest';
 }
 
 String slackSig(String secret, String ts, String body) {
-  final digest = Hmac(sha256, utf8.encode(secret))
-      .convert(utf8.encode('v0:$ts:$body'))
-      .toString();
+  final digest = Hmac(
+    sha256,
+    utf8.encode(secret),
+  ).convert(utf8.encode('v0:$ts:$body')).toString();
   return 'v0=$digest';
 }
 
@@ -40,6 +42,8 @@ void main() {
         whatsappAppSecret: 'wa-secret',
         slack: SlackGateway(webhookUrl: 'https://hooks.slack.com/x'),
         slackSigningSecret: 'slack-secret',
+        teams: TeamsGateway(webhookUrl: 'https://example.com/teams'),
+        teamsBotAuthToken: 'teams-bot-token',
         onMessage: (m) async => received.add(m),
       ),
     );
@@ -77,10 +81,12 @@ void main() {
   test('whatsapp handshake echoes the challenge', () async {
     final client = HttpClient();
     try {
-      final res = await client.getUrl(uri(
-        '/webhooks/whatsapp'
-        '?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=abc123',
-      ));
+      final res = await client.getUrl(
+        uri(
+          '/webhooks/whatsapp'
+          '?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=abc123',
+        ),
+      );
       final r = await res.close();
       final text = await r.transform(utf8.decoder).join();
       expect(r.statusCode, 200);
@@ -91,12 +97,20 @@ void main() {
   });
 
   test('whatsapp message with a valid signature is dispatched', () async {
-    final msg = {'type': 'text', 'from': '628123456789', 'text': {'body': 'halo'}};
+    final msg = {
+      'type': 'text',
+      'from': '628123456789',
+      'text': {'body': 'halo'},
+    };
     final body = jsonEncode({
       'entry': [
         {
           'changes': [
-            {'value': {'messages': [msg]}},
+            {
+              'value': {
+                'messages': [msg],
+              },
+            },
           ],
         },
       ],
@@ -120,6 +134,29 @@ void main() {
     expect(status, 401);
     expect(received, isEmpty);
   });
+
+  test(
+    'teams Bot Framework activity requires bearer token and dispatches message',
+    () async {
+      final body = jsonEncode({
+        'type': 'message',
+        'id': 'activity-1',
+        'text': 'halo teams',
+        'from': {'id': 'user-1', 'aadObjectId': 'aad-1'},
+        'conversation': {'id': 'conversation-1'},
+      });
+      final (unauthorized, _) = await post('/webhooks/teams', body, {});
+      expect(unauthorized, 401);
+      final (status, text) = await post('/webhooks/teams', body, {
+        HttpHeaders.authorizationHeader: 'Bearer teams-bot-token',
+      });
+      expect(status, 200);
+      expect((jsonDecode(text) as Map)['accepted'], 1);
+      expect(received.single.channel, 'teams');
+      expect(received.single.text, 'halo teams');
+      expect(received.single.userKey, 'teams:aad-1');
+    },
+  );
 
   test('slack url_verification echoes the challenge', () async {
     final body = jsonEncode({

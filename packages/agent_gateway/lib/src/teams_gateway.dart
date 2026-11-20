@@ -8,8 +8,8 @@ import 'package:http/http.dart' as http;
 ///
 /// Teams supports incoming webhooks for posting messages to channels.
 /// This gateway sends messages via outgoing webhooks.
-/// For receiving messages, Teams uses Bot Framework which requires
-/// more complex setup (not implemented in this basic version).
+/// For receiving messages, the gateway accepts Bot Framework activity payloads
+/// through the host application's authenticated webhook endpoint.
 ///
 /// Configuration:
 /// - Create an incoming webhook connector in your Teams channel
@@ -56,6 +56,41 @@ class TeamsGateway implements Gateway {
     );
   }
 
+  /// Converts a Bot Framework activity into an inbound message.
+  ///
+  /// Returns `false` for non-message activities, malformed payloads, or
+  /// messages sent by the bot itself.
+  bool pushBotFrameworkActivity(Map<String, dynamic> activity) {
+    if (activity['type'] != 'message' || activity['from'] is! Map) return false;
+    final from = Map<String, dynamic>.from(activity['from'] as Map);
+    if (from['role'] == 'bot' || from['id'] == activity['recipient']?['id']) {
+      return false;
+    }
+    final text = activity['text'] as String?;
+    final userId = from['aadObjectId'] as String? ?? from['id'] as String?;
+    final conversation = activity['conversation'];
+    final conversationId = conversation is Map
+        ? conversation['id'] as String?
+        : null;
+    if (text == null ||
+        text.trim().isEmpty ||
+        userId == null ||
+        conversationId == null) {
+      return false;
+    }
+    pushInbound(
+      userKey: 'teams:$userId',
+      sessionKey: 'teams:$conversationId',
+      text: text.trim(),
+      meta: {
+        'activity_id': activity['id'],
+        'conversation_id': conversationId,
+        'service_url': activity['serviceUrl'],
+      },
+    );
+    return true;
+  }
+
   @override
   Future<void> send(OutboundMessage m) async {
     final client = httpClient ?? http.Client();
@@ -69,10 +104,7 @@ class TeamsGateway implements Gateway {
         '@context': 'https://schema.org/extensions',
         'summary': m.text.length > 100 ? m.text.substring(0, 100) : m.text,
         'sections': [
-          {
-            'text': m.text,
-            'markdown': m.markdown,
-          },
+          {'text': m.text, 'markdown': m.markdown},
         ],
         if (channelId != null) 'channelId': channelId,
         if (threadId != null) 'threadId': threadId,

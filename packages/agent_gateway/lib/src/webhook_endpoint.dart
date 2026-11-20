@@ -7,6 +7,7 @@ import 'slack_gateway.dart';
 import 'webhook_signature.dart';
 import 'whatsapp_gateway.dart';
 import 'line_gateway.dart';
+import 'teams_gateway.dart';
 
 /// Inbound webhook routes for the WhatsApp Cloud API and the Slack Events
 /// API, mounted on [HttpApiServer]. These requests come from external
@@ -21,6 +22,8 @@ class WebhookEndpoint {
     this.slackSigningSecret,
     this.line,
     this.lineChannelSecret,
+    this.teams,
+    this.teamsBotAuthToken,
   });
 
   final WhatsAppGateway? whatsapp;
@@ -29,6 +32,8 @@ class WebhookEndpoint {
   final String? slackSigningSecret;
   final LineGateway? line;
   final String? lineChannelSecret;
+  final TeamsGateway? teams;
+  final String? teamsBotAuthToken;
   final Future<void> Function(InboundMessage message) onMessage;
 
   Future<void> handle(HttpRequest req, String path) async {
@@ -55,6 +60,15 @@ class WebhookEndpoint {
     if (path == '/webhooks/line') {
       if (req.method == 'POST') {
         await _lineMessages(req);
+      } else {
+        req.response.statusCode = 405;
+        await req.response.close();
+      }
+      return;
+    }
+    if (path == '/webhooks/teams') {
+      if (req.method == 'POST') {
+        await _teamsMessages(req);
       } else {
         req.response.statusCode = 405;
         await req.response.close();
@@ -92,6 +106,40 @@ class WebhookEndpoint {
     });
     try {
       gateway.pushInbound(webhookData: payload);
+      await Future<void>.delayed(Duration.zero);
+    } finally {
+      await subscription.cancel();
+    }
+    _json(req, {'ok': true, 'accepted': accepted});
+  }
+
+  Future<void> _teamsMessages(HttpRequest req) async {
+    final gateway = teams;
+    final expected = teamsBotAuthToken;
+    if (gateway == null || expected == null || expected.isEmpty) {
+      _deny(req, 403, 'teams webhook not configured');
+      return;
+    }
+    final authorization = req.headers.value(HttpHeaders.authorizationHeader);
+    if (authorization != 'Bearer $expected') {
+      _deny(req, 401, 'invalid bearer token');
+      return;
+    }
+    final raw = await utf8.decoder.bind(req).join();
+    Map<String, dynamic> payload;
+    try {
+      payload = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      _deny(req, 400, 'invalid json');
+      return;
+    }
+    var accepted = 0;
+    final subscription = gateway.inbound.listen((message) async {
+      accepted++;
+      await onMessage(message);
+    });
+    try {
+      gateway.pushBotFrameworkActivity(payload);
       await Future<void>.delayed(Duration.zero);
     } finally {
       await subscription.cancel();

@@ -12,7 +12,10 @@ import 'acp_agent.dart';
 String _generateId({int length = 32}) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   final random = Random();
-  return List.generate(length, (_) => chars[random.nextInt(chars.length)]).join();
+  return List.generate(
+    length,
+    (_) => chars[random.nextInt(chars.length)],
+  ).join();
 }
 
 /// IDE types supported for integration
@@ -33,13 +36,20 @@ class IdeType {
   }
 
   /// Get IDE configuration directory
-  static String? getConfigDirectory(String ideType, {String? workingDirectory}) {
-    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  static String? getConfigDirectory(
+    String ideType, {
+    String? workingDirectory,
+  }) {
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     if (home == null) return null;
 
     switch (ideType) {
       case vscode:
-        return p.join(home, Platform.isWindows ? 'AppDataRoamingCodeUser' : '.vscode');
+        return p.join(
+          home,
+          Platform.isWindows ? 'AppDataRoamingCodeUser' : '.vscode',
+        );
       case zed:
         return p.join(home, '.zed');
       case jetbrains:
@@ -47,9 +57,12 @@ class IdeType {
       case cursor:
         return p.join(home, '.cursor');
       case sublime:
-        return p.join(home, Platform.isWindows
-            ? 'AppDataRoamingSublime TextPackagesUser'
-            : '.configsublime-text-3PackagesUser');
+        return p.join(
+          home,
+          Platform.isWindows
+              ? 'AppDataRoamingSublime TextPackagesUser'
+              : '.configsublime-text-3PackagesUser',
+        );
       case neovim:
         return p.join(home, '.config\nvim');
       default:
@@ -122,22 +135,23 @@ class IdeIntegrationConfig {
       supportedSchemas: supportedSchemas ?? this.supportedSchemas,
       registerCommands: registerCommands ?? this.registerCommands,
       showNotifications: showNotifications ?? this.showNotifications,
-      maxConcurrentRequests: maxConcurrentRequests ?? this.maxConcurrentRequests,
+      maxConcurrentRequests:
+          maxConcurrentRequests ?? this.maxConcurrentRequests,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'ideType': ideType,
-        'autoDetect': autoDetect,
-        'enableAcp': enableAcp,
-        'acpPort': acpPort,
-        'acpHost': acpHost,
-        'supportedSchemas': supportedSchemas,
-        'registerCommands': registerCommands,
-        'showNotifications': showNotifications,
-        'maxConcurrentRequests': maxConcurrentRequests,
-      };
+    'enabled': enabled,
+    'ideType': ideType,
+    'autoDetect': autoDetect,
+    'enableAcp': enableAcp,
+    'acpPort': acpPort,
+    'acpHost': acpHost,
+    'supportedSchemas': supportedSchemas,
+    'registerCommands': registerCommands,
+    'showNotifications': showNotifications,
+    'maxConcurrentRequests': maxConcurrentRequests,
+  };
 }
 
 /// ACP (Agent Communication Protocol) message types
@@ -157,20 +171,20 @@ enum AcpMessageType {
 enum AcpRequestType {
   // Agent capabilities
   capabilities('capabilities'),
-  
+
   // Resource access
   readResource('readResource'),
   writeResource('writeResource'),
   listResources('listResources'),
-  
+
   // Tool execution
   executeTool('executeTool'),
   listTools('listTools'),
-  
+
   // Agent interaction
   sendPrompt('sendPrompt'),
   getStatus('getStatus'),
-  
+
   // Custom commands
   executeCommand('executeCommand');
 
@@ -197,13 +211,13 @@ class AcpMessage {
   final DateTime? timestamp;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.value,
-        if (requestType != null) 'requestType': requestType!.value,
-        if (payload != null) 'payload': payload,
-        if (error != null) 'error': error,
-        if (timestamp != null) 'timestamp': timestamp!.toIso8601String(),
-      };
+    'id': id,
+    'type': type.value,
+    if (requestType != null) 'requestType': requestType!.value,
+    if (payload != null) 'payload': payload,
+    if (error != null) 'error': error,
+    if (timestamp != null) 'timestamp': timestamp!.toIso8601String(),
+  };
 
   factory AcpMessage.fromJson(Map<String, dynamic> json) {
     return AcpMessage(
@@ -239,11 +253,14 @@ class AcpResourceUri {
   final String? query;
   final String? fragment;
 
-  String get fullUri => '$scheme://$authority$path${query != null ? '?$query' : ''}${fragment != null ? '#$fragment' : ''}';
+  String get fullUri =>
+      '$scheme://$authority$path${query != null ? '?$query' : ''}${fragment != null ? '#$fragment' : ''}';
 
   /// Parse ACP resource URI
   factory AcpResourceUri.parse(String uri) {
-    final match = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^\/?#]*)([^?#]*)(\?([^#]*))?(#(.*))?$').firstMatch(uri);
+    final match = RegExp(
+      r'^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^\/?#]*)([^?#]*)(\?([^#]*))?(#(.*))?$',
+    ).firstMatch(uri);
     if (match == null) {
       throw FormatException('Invalid ACP resource URI: $uri');
     }
@@ -258,16 +275,17 @@ class AcpResourceUri {
   }
 
   /// Check if URI is supported by this ACP server
-  bool isSupported(List<String> supportedSchemas) => supportedSchemas.contains(scheme);
+  bool isSupported(List<String> supportedSchemas) =>
+      supportedSchemas.contains(scheme);
 
   Map<String, dynamic> toJson() => {
-        'scheme': scheme,
-        'authority': authority,
-        'path': path,
-        'query': query,
-        'fragment': fragment,
-        'fullUri': fullUri,
-      };
+    'scheme': scheme,
+    'authority': authority,
+    'path': path,
+    'query': query,
+    'fragment': fragment,
+    'fullUri': fullUri,
+  };
 }
 
 /// ACP Capabilities
@@ -293,15 +311,15 @@ class AcpCapabilities {
   final int maxPayloadSize;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'version': version,
-        'description': description,
-        'supportedSchemas': supportedSchemas,
-        'supportedTools': supportedTools,
-        'supportedCommands': supportedCommands,
-        'maxConcurrentRequests': maxConcurrentRequests,
-        'maxPayloadSize': maxPayloadSize,
-      };
+    'name': name,
+    'version': version,
+    'description': description,
+    'supportedSchemas': supportedSchemas,
+    'supportedTools': supportedTools,
+    'supportedCommands': supportedCommands,
+    'maxConcurrentRequests': maxConcurrentRequests,
+    'maxPayloadSize': maxPayloadSize,
+  };
 }
 
 /// IDE Integration Manager
@@ -319,6 +337,7 @@ class IdeIntegrationManager {
   final String? workingDirectory;
 
   final Map<String, AcpMessage> _pendingRequests = {};
+  final Map<String, String> _resources = {};
   bool _isRunning = false;
   HttpServer? _acpServer;
   final List<Map<String, dynamic>> _acpOutbound = [];
@@ -330,6 +349,11 @@ class IdeIntegrationManager {
   Future<void> start() async {
     if (_isRunning) return;
     _isRunning = true;
+    _resources['tiko://status'] = jsonEncode(getStatus());
+    _resources['tiko://capabilities'] = jsonEncode({
+      'schemas': config.supportedSchemas,
+      'commands': _getSupportedCommands(),
+    });
 
     // Auto-detect IDE if configured
     if (config.autoDetect) {
@@ -418,8 +442,10 @@ class IdeIntegrationManager {
         }
       });
     } catch (e) {
-      stderr.writeln('ACP HTTP server gagal berjalan pada '
-          '${config.acpHost}:${config.acpPort}: $e');
+      stderr.writeln(
+        'ACP HTTP server gagal berjalan pada '
+        '${config.acpHost}:${config.acpPort}: $e',
+      );
     }
   }
 
@@ -561,7 +587,7 @@ class IdeIntegrationManager {
     }
 
     final uri = AcpResourceUri.parse(uriString);
-    
+
     if (!uri.isSupported(config.supportedSchemas)) {
       return AcpMessage(
         id: request.id,
@@ -593,10 +619,7 @@ class IdeIntegrationManager {
         id: request.id,
         type: AcpMessageType.response,
         requestType: AcpRequestType.readResource,
-        payload: {
-          'uri': uri.fullUri,
-          'content': content,
-        },
+        payload: {'uri': uri.fullUri, 'content': content},
       );
     } catch (e) {
       return AcpMessage(
@@ -611,7 +634,7 @@ class IdeIntegrationManager {
   Future<AcpMessage> _handleWriteResourceRequest(AcpMessage request) async {
     final uriString = request.payload?['uri'] as String?;
     final content = request.payload?['content'] as String?;
-    
+
     if (uriString == null || content == null) {
       return AcpMessage(
         id: request.id,
@@ -621,7 +644,7 @@ class IdeIntegrationManager {
     }
 
     final uri = AcpResourceUri.parse(uriString);
-    
+
     if (!uri.isSupported(config.supportedSchemas)) {
       return AcpMessage(
         id: request.id,
@@ -652,10 +675,7 @@ class IdeIntegrationManager {
         id: request.id,
         type: AcpMessageType.response,
         requestType: AcpRequestType.writeResource,
-        payload: {
-          'uri': uri.fullUri,
-          'success': success,
-        },
+        payload: {'uri': uri.fullUri, 'success': success},
       );
     } catch (e) {
       return AcpMessage(
@@ -669,7 +689,7 @@ class IdeIntegrationManager {
   /// Handle list resources request
   Future<AcpMessage> _handleListResourcesRequest(AcpMessage request) async {
     final scheme = request.payload?['scheme'] as String?;
-    
+
     try {
       List<Map<String, dynamic>> resources;
       if (scheme != null) {
@@ -682,10 +702,7 @@ class IdeIntegrationManager {
         id: request.id,
         type: AcpMessageType.response,
         requestType: AcpRequestType.listResources,
-        payload: {
-          'scheme': scheme,
-          'resources': resources,
-        },
+        payload: {'scheme': scheme, 'resources': resources},
       );
     } catch (e) {
       return AcpMessage(
@@ -700,7 +717,7 @@ class IdeIntegrationManager {
   Future<AcpMessage> _handleExecuteToolRequest(AcpMessage request) async {
     final toolName = request.payload?['toolName'] as String?;
     final args = request.payload?['args'] as Map<String, dynamic>? ?? {};
-    
+
     if (toolName == null) {
       return AcpMessage(
         id: request.id,
@@ -750,20 +767,21 @@ class IdeIntegrationManager {
 
   /// Handle list tools request
   Future<AcpMessage> _handleListToolsRequest(AcpMessage request) async {
-    final toolList = tools.map((tool) => {
-      'name': tool.spec.name,
-      'description': tool.spec.description,
-      'spec': tool.spec.toJson(),
-    }).toList();
+    final toolList = tools
+        .map(
+          (tool) => {
+            'name': tool.spec.name,
+            'description': tool.spec.description,
+            'spec': tool.spec.toJson(),
+          },
+        )
+        .toList();
 
     return AcpMessage(
       id: request.id,
       type: AcpMessageType.response,
       requestType: AcpRequestType.listTools,
-      payload: {
-        'tools': toolList,
-        'total': toolList.length,
-      },
+      payload: {'tools': toolList, 'total': toolList.length},
     );
   }
 
@@ -771,7 +789,7 @@ class IdeIntegrationManager {
   Future<AcpMessage> _handleSendPromptRequest(AcpMessage request) async {
     final prompt = request.payload?['prompt'] as String?;
     final contextData = request.payload?['context'] as Map<String, dynamic>?;
-    
+
     if (prompt == null) {
       return AcpMessage(
         id: request.id,
@@ -846,7 +864,7 @@ class IdeIntegrationManager {
   Future<AcpMessage> _handleExecuteCommandRequest(AcpMessage request) async {
     final command = request.payload?['command'] as String?;
     final args = request.payload?['args'] as List<dynamic>? ?? [];
-    
+
     if (command == null) {
       return AcpMessage(
         id: request.id,
@@ -880,48 +898,99 @@ class IdeIntegrationManager {
 
   /// Read Tiko resource
   Future<String> _readTikoResource(AcpResourceUri uri) async {
-    // Implement resource reading based on URI
-    // For now, return a simple response
-    return 'Tiko Agent Resource: ${uri.path}';
+    final content = _resources[uri.fullUri];
+    if (content == null) throw StateError('Resource not found: ${uri.fullUri}');
+    return content;
   }
 
   /// Write Tiko resource
   Future<bool> _writeTikoResource(AcpResourceUri uri, String content) async {
-    // Implement resource writing
+    if (uri.fullUri == 'tiko://status' ||
+        uri.fullUri == 'tiko://capabilities') {
+      throw StateError('Resource is read-only: ${uri.fullUri}');
+    }
+    _resources[uri.fullUri] = content;
     return true;
   }
 
   /// Read tool resource
   Future<String> _readToolResource(AcpResourceUri uri) async {
-    // Implement tool resource reading
-    return 'Tool Resource: ${uri.path}';
+    final toolName = uri.authority.isNotEmpty
+        ? uri.authority
+        : uri.path.replaceFirst(RegExp(r'^/+'), '').split('/').first;
+    Tool? tool;
+    for (final item in tools) {
+      if (item.spec.name == toolName) {
+        tool = item;
+        break;
+      }
+    }
+    if (tool == null) throw StateError('Tool resource not found: $toolName');
+    return jsonEncode(tool.spec.toJson());
   }
 
   /// Write tool resource
   Future<bool> _writeToolResource(AcpResourceUri uri, String content) async {
-    // Implement tool resource writing
-    return true;
+    throw StateError('Tool resources are read-only: ${uri.fullUri}');
   }
 
   /// List resources by scheme
-  Future<List<Map<String, dynamic>>> _listResourcesByScheme(String scheme) async {
-    // Implement resource listing
-    return [];
+  Future<List<Map<String, dynamic>>> _listResourcesByScheme(
+    String scheme,
+  ) async {
+    if (!config.supportedSchemas.contains(scheme)) {
+      throw StateError('Unsupported scheme: $scheme');
+    }
+    final resources = <Map<String, dynamic>>[];
+    if (scheme == 'tiko' || scheme == 'tiko-agent') {
+      for (final uri in _resources.keys) {
+        resources.add({
+          'uri': uri,
+          'name': uri.substring(uri.indexOf('://') + 3),
+        });
+      }
+    } else if (scheme == 'tiko-tool') {
+      for (final tool in tools) {
+        resources.add({
+          'uri': 'tiko-tool://${tool.spec.name}',
+          'name': tool.spec.name,
+          'readOnly': true,
+        });
+      }
+    }
+    return resources;
   }
 
   /// List all resources
   Future<List<Map<String, dynamic>>> _listAllResources() async {
-    // Implement all resources listing
-    return [];
+    final resources = <Map<String, dynamic>>[];
+    for (final scheme in config.supportedSchemas) {
+      resources.addAll(await _listResourcesByScheme(scheme));
+    }
+    return resources;
   }
 
   /// Execute IDE command
-  Future<Map<String, dynamic>> _executeCommand(String command, List<dynamic> args) async {
-    // Implement command execution
-    return {
-      'success': true,
-      'output': 'Command executed: $command',
-    };
+  Future<Map<String, dynamic>> _executeCommand(
+    String command,
+    List<dynamic> args,
+  ) async {
+    switch (command) {
+      case 'tiko.start':
+        await start();
+        return {'success': true, 'output': 'IDE integration started'};
+      case 'tiko.stop':
+        await stop();
+        return {'success': true, 'output': 'IDE integration stopped'};
+      case 'tiko.status':
+        return {'success': true, 'output': jsonEncode(getStatus())};
+      default:
+        return {
+          'success': false,
+          'output': '',
+          'error': 'Unsupported command: $command',
+        };
+    }
   }
 
   /// Get supported commands
@@ -938,16 +1007,16 @@ class IdeIntegrationManager {
 
   /// Get IDE integration status
   Map<String, dynamic> getStatus() => {
-        'enabled': config.enabled,
-        'ideType': config.ideType,
-        'autoDetect': config.autoDetect,
-        'acpEnabled': config.enableAcp,
-        'acpUrl': config.acpUrl,
-        'isRunning': _isRunning,
-        'supportedSchemas': config.supportedSchemas,
-        'toolsCount': tools.length,
-        'pendingRequests': _pendingRequests.length,
-      };
+    'enabled': config.enabled,
+    'ideType': config.ideType,
+    'autoDetect': config.autoDetect,
+    'acpEnabled': config.enableAcp,
+    'acpUrl': config.acpUrl,
+    'isRunning': _isRunning,
+    'supportedSchemas': config.supportedSchemas,
+    'toolsCount': tools.length,
+    'pendingRequests': _pendingRequests.length,
+  };
 }
 
 /// IDE Integration Tool for Tiko-Agent
@@ -958,12 +1027,14 @@ class IdeIntegrationTool implements Tool {
     this.agentLoop,
     this.tools = const [],
     this.workingDirectory,
-  }) : _manager = manager ?? IdeIntegrationManager(
-          config: config,
-          agentLoop: agentLoop,
-          tools: tools,
-          workingDirectory: workingDirectory,
-        );
+  }) : _manager =
+           manager ??
+           IdeIntegrationManager(
+             config: config,
+             agentLoop: agentLoop,
+             tools: tools,
+             workingDirectory: workingDirectory,
+           );
 
   final IdeIntegrationManager? manager;
   final IdeIntegrationConfig config;
@@ -981,75 +1052,72 @@ class IdeIntegrationTool implements Tool {
 
   @override
   ToolSpec get spec => ToolSpec(
-        name: name,
-        description: description,
-        inputSchema: {
-          'type': 'object',
-          'properties': {
-            'action': {
-              'type': 'string',
-              'enum': [
-                'start',
-                'stop',
-                'status',
-                'configure',
-                'sendAcpRequest',
-                'listCommands',
-                'executeCommand',
-                'registerCommands',
-                'getCapabilities',
-              ],
-              'description': 'The action to perform',
-            },
-            'ideType': {
-              'type': 'string',
-              'enum': IdeType.all,
-              'description': 'IDE type to integrate with',
-            },
-            'autoDetect': {
-              'type': 'boolean',
-              'description': 'Auto-detect IDE type',
-              'default': true,
-            },
-            'enableAcp': {
-              'type': 'boolean',
-              'description': 'Enable ACP (Agent Communication Protocol)',
-              'default': true,
-            },
-            'acpPort': {
-              'type': 'integer',
-              'description': 'ACP server port',
-              'default': 3000,
-            },
-            'acpHost': {
-              'type': 'string',
-              'description': 'ACP server host',
-              'default': '127.0.0.1',
-            },
-            'request': {
-              'type': 'object',
-              'description': 'ACP request to send',
-              'properties': {
-                'type': {'type': 'string'},
-                'requestType': {'type': 'string'},
-                'payload': {'type': 'object'},
-              },
-            },
-            'command': {
-              'type': 'string',
-              'description': 'Command to execute',
-            },
-            'args': {
-              'type': 'array',
-              'description': 'Command arguments',
-              'items': {'type': 'string'},
-            },
-          },
-          'required': ['action'],
+    name: name,
+    description: description,
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': [
+            'start',
+            'stop',
+            'status',
+            'configure',
+            'sendAcpRequest',
+            'listCommands',
+            'executeCommand',
+            'registerCommands',
+            'getCapabilities',
+          ],
+          'description': 'The action to perform',
         },
-        risk: 'medium',
-        timeoutSec: 60,
-      );
+        'ideType': {
+          'type': 'string',
+          'enum': IdeType.all,
+          'description': 'IDE type to integrate with',
+        },
+        'autoDetect': {
+          'type': 'boolean',
+          'description': 'Auto-detect IDE type',
+          'default': true,
+        },
+        'enableAcp': {
+          'type': 'boolean',
+          'description': 'Enable ACP (Agent Communication Protocol)',
+          'default': true,
+        },
+        'acpPort': {
+          'type': 'integer',
+          'description': 'ACP server port',
+          'default': 3000,
+        },
+        'acpHost': {
+          'type': 'string',
+          'description': 'ACP server host',
+          'default': '127.0.0.1',
+        },
+        'request': {
+          'type': 'object',
+          'description': 'ACP request to send',
+          'properties': {
+            'type': {'type': 'string'},
+            'requestType': {'type': 'string'},
+            'payload': {'type': 'object'},
+          },
+        },
+        'command': {'type': 'string', 'description': 'Command to execute'},
+        'args': {
+          'type': 'array',
+          'description': 'Command arguments',
+          'items': {'type': 'string'},
+        },
+      },
+      'required': ['action'],
+    },
+    risk: 'medium',
+    timeoutSec: 60,
+  );
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
@@ -1088,10 +1156,7 @@ class IdeIntegrationTool implements Tool {
     } catch (e) {
       return ToolResult(
         callId: '',
-        content: jsonEncode({
-          'success': false,
-          'error': e.toString(),
-        }),
+        content: jsonEncode({'success': false, 'error': e.toString()}),
         isError: true,
       );
     }
@@ -1100,7 +1165,7 @@ class IdeIntegrationTool implements Tool {
   Future<ToolResult> _handleStart(Map<String, dynamic> args) async {
     // Update config if provided
     final config = _updateConfigFromArgs(args);
-    
+
     await _manager.start();
 
     return ToolResult(
@@ -1133,11 +1198,7 @@ class IdeIntegrationTool implements Tool {
 
     return ToolResult(
       callId: '',
-      content: jsonEncode({
-        'success': true,
-        'action': 'status',
-        ...status,
-      }),
+      content: jsonEncode({'success': true, 'action': 'status', ...status}),
     );
   }
 
@@ -1156,14 +1217,11 @@ class IdeIntegrationTool implements Tool {
 
   Future<ToolResult> _handleSendAcpRequest(Map<String, dynamic> args) async {
     final requestData = args['request'] as Map<String, dynamic>?;
-    
+
     if (requestData == null) {
       return ToolResult(
         callId: '',
-        content: jsonEncode({
-          'success': false,
-          'error': 'request is required',
-        }),
+        content: jsonEncode({'success': false, 'error': 'request is required'}),
         isError: true,
       );
     }
@@ -1206,14 +1264,11 @@ class IdeIntegrationTool implements Tool {
   Future<ToolResult> _handleExecuteCommand(Map<String, dynamic> args) async {
     final command = args['command'] as String?;
     final commandArgs = args['args'] as List<dynamic>? ?? [];
-    
+
     if (command == null) {
       return ToolResult(
         callId: '',
-        content: jsonEncode({
-          'success': false,
-          'error': 'command is required',
-        }),
+        content: jsonEncode({'success': false, 'error': 'command is required'}),
         isError: true,
       );
     }
@@ -1306,5 +1361,6 @@ class IdeIntegrationException implements Exception {
   final int? code;
 
   @override
-  String toString() => 'IdeIntegrationException: $message${code != null ? ' ($code)' : ''}';
+  String toString() =>
+      'IdeIntegrationException: $message${code != null ? ' ($code)' : ''}';
 }

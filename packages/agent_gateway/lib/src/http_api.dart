@@ -101,7 +101,8 @@ class HttpApiServer {
     String sessionId, {
     required int limit,
     required int offset,
-  })? sessionMessages;
+  })?
+  sessionMessages;
   final Future<bool> Function(String sessionId)? deleteSession;
   final Future<bool> Function(String sessionId, String title)? renameSession;
 
@@ -112,13 +113,14 @@ class HttpApiServer {
     String sessionKey,
     String actionId,
     Map<String, dynamic> values,
-  )? uiActionHandler;
+  )?
+  uiActionHandler;
   final Future<List<Map<String, dynamic>>> Function()? doctorProvider;
   final Map<String, Object?> Function()? capabilitiesProvider;
   final List<Map<String, dynamic>> Function()? eventsProvider;
   final Future<List<Map<String, dynamic>>> Function()? listApprovals;
   final Future<bool> Function(String id, bool approve, {String? actor})?
-      decideApproval;
+  decideApproval;
   final Stream<Map<String, dynamic>>? eventStream;
   final Future<void> Function()? onShutdown;
 
@@ -135,8 +137,7 @@ class HttpApiServer {
   /// default 'api'.
   static String? _sanitizeActor(String? raw) {
     if (raw == null) return null;
-    final cleaned =
-        raw.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').trim();
+    final cleaned = raw.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').trim();
     if (cleaned.isEmpty) return null;
     return cleaned.length > 64 ? cleaned.substring(0, 64) : cleaned;
   }
@@ -162,22 +163,31 @@ class HttpApiServer {
 
   /// Validasi payload `POST /v1/plugins/consent` (GUI-P1-06): plugin
   /// nama non-kosong maks 64, action wajib `grant`/`revoke`.
-  Map<String, dynamic> _validatePluginConsentPayload(
-    dynamic decoded,
-  ) {
+  Map<String, dynamic> _validatePluginConsentPayload(dynamic decoded) {
     if (decoded is! Map<String, dynamic>) {
-      throw ApiRequestException(400, 'invalid_request',
-          'body wajib berupa mapping {plugin, action}');
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'body wajib berupa mapping {plugin, action}',
+      );
     }
     final plugin = decoded['plugin'];
-    if (plugin is! String || plugin.trim().isEmpty || plugin.trim().length > 64) {
-      throw ApiRequestException(400, 'invalid_request',
-          'plugin wajib nama non-kosong maksimal 64 karakter');
+    if (plugin is! String ||
+        plugin.trim().isEmpty ||
+        plugin.trim().length > 64) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'plugin wajib nama non-kosong maksimal 64 karakter',
+      );
     }
     final action = decoded['action'];
     if (action is! String || (action != 'grant' && action != 'revoke')) {
       throw ApiRequestException(
-          400, 'invalid_request', 'action wajib grant atau revoke');
+        400,
+        'invalid_request',
+        'action wajib grant atau revoke',
+      );
     }
     return {'plugin': plugin.trim().toLowerCase(), 'action': action};
   }
@@ -185,20 +195,34 @@ class HttpApiServer {
   /// Validasi path query /v1/artifacts: non-kosong (kecuali dir), maksimal
   /// 256 karakter, tanpa rawan kontrol/NUL. Validasi keamanan penuh
   /// (symlink/escaping) di runtime via PathSafety — fail-closed.
-  String _parseArtifactsPath(String? raw,
-      {bool allowEmpty = false, required String field}) {
+  String _parseArtifactsPath(
+    String? raw, {
+    bool allowEmpty = false,
+    required String field,
+  }) {
     final value = raw?.trim() ?? '';
     if (value.isEmpty && !allowEmpty) {
       throw ApiRequestException(
-          400, 'invalid_request', "parameter $field wajib");
+        400,
+        'invalid_request',
+        "parameter $field wajib",
+      );
     }
     if (value.length > 256) {
       throw ApiRequestException(
-          400, 'invalid_request', "$field maksimal 256 karakter");
+        400,
+        'invalid_request',
+        "$field maksimal 256 karakter",
+      );
     }
-    if (value.contains('\u0000') || value.contains('\r') || value.contains('\n')) {
+    if (value.contains('\u0000') ||
+        value.contains('\r') ||
+        value.contains('\n')) {
       throw ApiRequestException(
-          400, 'invalid_request', "$field mengandung karakter invalid");
+        400,
+        'invalid_request',
+        "$field mengandung karakter invalid",
+      );
     }
     return value;
   }
@@ -208,12 +232,18 @@ class HttpApiServer {
   Map<String, dynamic> _validateMemoryCuratedPatch(Object? raw) {
     if (raw is! Map<String, dynamic>) {
       throw ApiRequestException(
-          400, 'invalid_request', 'body JSON object wajib');
+        400,
+        'invalid_request',
+        'body JSON object wajib',
+      );
     }
     final file = raw['file'];
     if (file is! String || (file != 'memory' && file != 'user')) {
       throw ApiRequestException(
-          400, 'invalid_request', "file wajib 'memory' atau 'user'");
+        400,
+        'invalid_request',
+        "file wajib 'memory' atau 'user'",
+      );
     }
     final text = raw['text'];
     if (text is! String) {
@@ -221,7 +251,10 @@ class HttpApiServer {
     }
     if (text.length > 200000) {
       throw ApiRequestException(
-          400, 'invalid_request', 'text maksimal 200000 karakter');
+        400,
+        'invalid_request',
+        'text maksimal 200000 karakter',
+      );
     }
     return {'file': file, 'text': text};
   }
@@ -235,11 +268,13 @@ class HttpApiServer {
       final parsed = int.tryParse(rawLimit);
       if (parsed == null) {
         throw ApiRequestException(
-            400, 'invalid_request', 'limit harus bilangan');
+          400,
+          'invalid_request',
+          'limit harus bilangan',
+        );
       }
       if (parsed < 1 || parsed > 500) {
-        throw ApiRequestException(
-            400, 'invalid_request', 'limit wajib 1..500');
+        throw ApiRequestException(400, 'invalid_request', 'limit wajib 1..500');
       }
       limit = parsed;
     }
@@ -255,13 +290,19 @@ class HttpApiServer {
   Map<String, dynamic> _validateMemoryLayerPayload(Object? raw) {
     if (raw is! Map<String, dynamic>) {
       throw ApiRequestException(
-          400, 'invalid_request', 'body JSON object wajib');
+        400,
+        'invalid_request',
+        'body JSON object wajib',
+      );
     }
     final layer = raw['layer'];
     if (layer is! String ||
         !['episodic', 'semantic', 'procedural'].contains(layer)) {
-      throw ApiRequestException(400, 'invalid_request',
-          'layer wajib episodic/semantic/procedural');
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'layer wajib episodic/semantic/procedural',
+      );
     }
     final text = raw['text'];
     if (text is! String || text.trim().isEmpty) {
@@ -269,17 +310,26 @@ class HttpApiServer {
     }
     if (text.length > 20000) {
       throw ApiRequestException(
-          400, 'invalid_request', 'text maksimal 20000 karakter');
+        400,
+        'invalid_request',
+        'text maksimal 20000 karakter',
+      );
     }
     final importanceRaw = raw['importance'];
     if (importanceRaw is! num && importanceRaw != null) {
       throw ApiRequestException(
-          400, 'invalid_request', 'importance harus angka');
+        400,
+        'invalid_request',
+        'importance harus angka',
+      );
     }
     final importance = (importanceRaw as num?)?.toDouble();
     if (importance != null && (importance < 0 || importance > 1)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'importance wajib 0..1');
+        400,
+        'invalid_request',
+        'importance wajib 0..1',
+      );
     }
     final tagsRaw = raw['tags'];
     if (tagsRaw is! List && tagsRaw != null) {
@@ -291,8 +341,7 @@ class HttpApiServer {
           (tag.trim().length > 64 ? tag.trim().substring(0, 64) : tag.trim()),
     ];
     if (tags.length > 12) {
-      throw ApiRequestException(
-          400, 'invalid_request', 'tags maksimal 12');
+      throw ApiRequestException(400, 'invalid_request', 'tags maksimal 12');
     }
     return {
       'layer': layer,
@@ -300,7 +349,8 @@ class HttpApiServer {
       'importance': importance ?? 0.5,
       'tags': tags,
       if (raw['owner_key'] is String) 'owner_key': raw['owner_key'],
-      if (raw['source_session'] is String) 'source_session': raw['source_session'],
+      if (raw['source_session'] is String)
+        'source_session': raw['source_session'],
     };
   }
 
@@ -314,7 +364,10 @@ class HttpApiServer {
       if (value == null || value.isEmpty) return null;
       if (value.length > maxLen) {
         throw ApiRequestException(
-            400, 'invalid_request', "$key maksimal $maxLen karakter");
+          400,
+          'invalid_request',
+          "$key maksimal $maxLen karakter",
+        );
       }
       return value;
     }
@@ -332,7 +385,10 @@ class HttpApiServer {
       final lower = taintRaw.toLowerCase();
       if (lower != 'true' && lower != 'false') {
         throw ApiRequestException(
-            400, 'invalid_request', "taint hanya 'true' atau 'false'");
+          400,
+          'invalid_request',
+          "taint hanya 'true' atau 'false'",
+        );
       }
       filters['taint'] = lower == 'true';
     }
@@ -342,7 +398,10 @@ class HttpApiServer {
       final parsed = DateTime.tryParse(raw);
       if (parsed == null) {
         throw ApiRequestException(
-            400, 'invalid_request', "$key bukan timestamp ISO valid");
+          400,
+          'invalid_request',
+          "$key bukan timestamp ISO valid",
+        );
       }
       filters[key] = parsed.toUtc();
     }
@@ -351,7 +410,10 @@ class HttpApiServer {
       final parsed = int.tryParse(limitRaw);
       if (parsed == null || parsed < 1 || parsed > 200) {
         throw ApiRequestException(
-            400, 'invalid_request', 'limit harus angka 1..200');
+          400,
+          'invalid_request',
+          'limit harus angka 1..200',
+        );
       }
       filters['limit'] = parsed;
     }
@@ -360,7 +422,10 @@ class HttpApiServer {
       final parsed = int.tryParse(offsetRaw);
       if (parsed == null || parsed < 0) {
         throw ApiRequestException(
-            400, 'invalid_request', 'offset harus angka >= 0');
+          400,
+          'invalid_request',
+          'offset harus angka >= 0',
+        );
       }
       filters['offset'] = parsed;
     }
@@ -382,14 +447,21 @@ class HttpApiServer {
     };
     for (final key in body.keys) {
       if (!allowed.contains(key)) {
-        throw ApiRequestException(400, 'invalid_request', 'field tidak dikenal: $key');
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'field tidak dikenal: $key',
+        );
       }
     }
     if (forCreate) {
       final cron = body['cron'];
       if (cron is! String || cron.trim().isEmpty) {
-        throw ApiRequestException(400, 'invalid_request',
-            'cron wajib diisi (ekspresi 5 field, mis. "*/5 * * * *")');
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'cron wajib diisi (ekspresi 5 field, mis. "*/5 * * * *")',
+        );
       }
       final prompt = body['prompt'];
       if (prompt is! String || prompt.trim().isEmpty) {
@@ -400,40 +472,66 @@ class HttpApiServer {
     if (cron != null &&
         (cron is! String || cron.trim().isEmpty || cron.trim().length > 256)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'cron wajib string non-kosong maks 256');
+        400,
+        'invalid_request',
+        'cron wajib string non-kosong maks 256',
+      );
     }
     final prompt = body['prompt'];
     if (prompt != null &&
         (prompt is! String || prompt.trim().isEmpty || prompt.length > 10000)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'prompt wajib string 1..10000 karakter');
+        400,
+        'invalid_request',
+        'prompt wajib string 1..10000 karakter',
+      );
     }
     final channel = body['channel'];
     if (channel != null &&
-        (channel is! String || channel.trim().isEmpty || channel.trim().length > 64)) {
+        (channel is! String ||
+            channel.trim().isEmpty ||
+            channel.trim().length > 64)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'channel wajib string non-kosong maks 64');
+        400,
+        'invalid_request',
+        'channel wajib string non-kosong maks 64',
+      );
     }
     final userKey = body['user_key'];
     if (userKey != null &&
-        (userKey is! String || userKey.trim().isEmpty || userKey.trim().length > 256)) {
+        (userKey is! String ||
+            userKey.trim().isEmpty ||
+            userKey.trim().length > 256)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'user_key wajib string non-kosong maks 256');
+        400,
+        'invalid_request',
+        'user_key wajib string non-kosong maks 256',
+      );
     }
     final enabled = body['enabled'];
     if (enabled != null && enabled is! bool) {
-      throw ApiRequestException(400, 'invalid_request', 'enabled wajib boolean');
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'enabled wajib boolean',
+      );
     }
     final policy = body['missed_policy'];
     if (policy != null) {
       if (policy is! String) {
         throw ApiRequestException(
-            400, 'invalid_request', 'missed_policy wajib string');
+          400,
+          'invalid_request',
+          'missed_policy wajib string',
+        );
       }
       const known = {'skip', 'runonce', 'catchup'};
       if (!known.contains(policy.replaceAll('_', '').toLowerCase())) {
         throw ApiRequestException(
-            400, 'invalid_request', 'missed_policy wajib skip | run_once | catch_up');
+          400,
+          'invalid_request',
+          'missed_policy wajib skip | run_once | catch_up',
+        );
       }
     }
     final timezone = body['timezone'];
@@ -442,7 +540,10 @@ class HttpApiServer {
             timezone.trim().isEmpty ||
             timezone.trim().length > 64)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'timezone wajib nama zona IANA maks 64');
+        400,
+        'invalid_request',
+        'timezone wajib nama zona IANA maks 64',
+      );
     }
   }
 
@@ -453,14 +554,21 @@ class HttpApiServer {
     final allowed = forCreate ? _botCreateKeys : _botUpdateKeys;
     for (final key in body.keys) {
       if (!allowed.contains(key)) {
-        throw ApiRequestException(400, 'invalid_request', 'field tidak dikenal: $key');
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'field tidak dikenal: $key',
+        );
       }
     }
     if (forCreate) {
       final id = body['id'];
       if (id is! String || !_botIdPattern.hasMatch(id)) {
-        throw ApiRequestException(400, 'invalid_request',
-            'id bot wajib [a-z0-9][a-z0-9_-]{0,63}');
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'id bot wajib [a-z0-9][a-z0-9_-]{0,63}',
+        );
       }
     }
     final name = body['name'];
@@ -470,25 +578,37 @@ class HttpApiServer {
     if (name != null &&
         (name is! String || name.trim().isEmpty || name.trim().length > 128)) {
       throw ApiRequestException(
-          400, 'invalid_request', 'name wajib string non-kosong maks 128');
+        400,
+        'invalid_request',
+        'name wajib string non-kosong maks 128',
+      );
     }
     for (final key in const ['persona', 'greeting']) {
       final value = body[key];
       if (value != null && value is! String) {
         throw ApiRequestException(
-            400, 'invalid_request', '$key wajib berupa string');
+          400,
+          'invalid_request',
+          '$key wajib berupa string',
+        );
       }
     }
     final model = body['model'];
     if (model != null && model is! String) {
       throw ApiRequestException(
-          400, 'invalid_request', 'model wajib string atau null');
+        400,
+        'invalid_request',
+        'model wajib string atau null',
+      );
     }
     final allowlist = body['tool_allowlist'];
     if (allowlist != null &&
         (allowlist is! List || allowlist.any((e) => e is! String))) {
       throw ApiRequestException(
-          400, 'invalid_request', 'tool_allowlist wajib berupa daftar string');
+        400,
+        'invalid_request',
+        'tool_allowlist wajib berupa daftar string',
+      );
     }
   }
 
@@ -505,11 +625,12 @@ class HttpApiServer {
   final Future<List<Map<String, dynamic>>> Function()? listBots;
   final Future<Map<String, dynamic>?> Function(String id)? getBot;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
-      createBot;
+  createBot;
   final Future<Map<String, dynamic>?> Function(
     String id,
     Map<String, dynamic> body,
-  )? updateBot;
+  )?
+  updateBot;
   final Future<bool> Function(String id)? deleteBot;
   final Future<Map<String, String>> Function()? listBotBindings;
   final Future<bool> Function(String botId, String sessionId)? bindBot;
@@ -519,7 +640,7 @@ class HttpApiServer {
   /// membuat endpoint terkait merespons 501 not_implemented.
   final Future<Map<String, dynamic>> Function()? providersProvider;
   final Future<bool> Function(String sessionId, String providerArg)?
-      sessionProviderSetter;
+  sessionProviderSetter;
 
   /// Plugin & tools manager callbacks (GUI-P1-06). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
@@ -527,7 +648,7 @@ class HttpApiServer {
 
   /// [action] adalah `grant` atau `revoke`; hasil memuat `ok` dan `message`.
   final Future<Map<String, dynamic>> Function(String plugin, String action)?
-      pluginConsentSetter;
+  pluginConsentSetter;
 
   /// Channels setup (GUI-P1-07): status channel gateway aktif + nama env
   /// yang mengonfigurasinya (read-only; env + restart untuk mengubah).
@@ -537,11 +658,12 @@ class HttpApiServer {
   /// membuat endpoint terkait merespons 501 not_implemented.
   final Future<List<Map<String, dynamic>>> Function()? jobsProvider;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
-      createJob;
+  createJob;
   final Future<Map<String, dynamic>?> Function(
     String id,
     Map<String, dynamic> body,
-  )? updateJob;
+  )?
+  updateJob;
   final Future<bool> Function(String id)? deleteJob;
   final Future<Map<String, dynamic>?> Function(String id)? runJobNow;
 
@@ -553,13 +675,16 @@ class HttpApiServer {
   /// (tool/session/risk/verdict string, taint bool, since/until DateTime,
   /// limit/offset int) — callback null membuat GET /v1/audit merespons 501.
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> filters)?
-      auditQueryProvider;
+  auditQueryProvider;
 
   /// Artifacts browser callbacks (GUI-P2-04, read-only). Masing-masing
   /// null membuat endpoint terkait merespons 501 not_implemented.
-  final Future<Map<String, dynamic>> Function(String dir)? artifactsListProvider;
-  final Future<Map<String, dynamic>> Function(String path)? artifactsReadProvider;
-  final Future<Map<String, dynamic>> Function(String path)? artifactsDiffProvider;
+  final Future<Map<String, dynamic>> Function(String dir)?
+  artifactsListProvider;
+  final Future<Map<String, dynamic>> Function(String path)?
+  artifactsReadProvider;
+  final Future<Map<String, dynamic>> Function(String path)?
+  artifactsDiffProvider;
 
   /// Run-inspector callback (GUI-P2-04, read-only): snapshot {active, recent,
   /// truncated} — callback null membuat GET /v1/runs merespons 501.
@@ -571,11 +696,11 @@ class HttpApiServer {
   /// merespons 501 not_implemented.
   final Future<Map<String, dynamic>> Function()? memoryCuratedProvider;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
-      memoryCuratedSetProvider;
+  memoryCuratedSetProvider;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> filters)?
-      memoryLayersProvider;
+  memoryLayersProvider;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
-      memoryLayerAddProvider;
+  memoryLayerAddProvider;
   final Future<bool> Function(String id)? memoryLayerDeleteProvider;
   final Future<Map<String, dynamic>> Function()? memoryRagProvider;
 
@@ -591,7 +716,6 @@ class HttpApiServer {
   /// Bounded idempotency cache for POST /v1/messages.
   static const _idempotencyLimit = 256;
   final _idempotencyCache = <String, Future<Map<String, dynamic>>>{};
-
 
   Future<void> start() async {
     _server = await HttpServer.bind(host, port);
@@ -692,10 +816,12 @@ class HttpApiServer {
     while (_idempotencyCache.length > _idempotencyLimit) {
       _idempotencyCache.remove(_idempotencyCache.keys.first);
     }
-    unawaited(started.catchError((Object _) {
-      _idempotencyCache.remove(key);
-      return <String, dynamic>{};
-    }));
+    unawaited(
+      started.catchError((Object _) {
+        _idempotencyCache.remove(key);
+        return <String, dynamic>{};
+      }),
+    );
     return started;
   }
 
@@ -723,7 +849,10 @@ class HttpApiServer {
         return;
       }
       _pruneTickets();
-      _json(req, {'ticket': _issueTicket(), 'ttl_seconds': _ticketTtl.inSeconds});
+      _json(req, {
+        'ticket': _issueTicket(),
+        'ttl_seconds': _ticketTtl.inSeconds,
+      });
       return;
     }
 
@@ -735,7 +864,9 @@ class HttpApiServer {
 
     // Inbound platform webhooks authenticate with HMAC signatures, not
     // with the local bearer token, so they are routed before _auth.
-    if (path == '/webhooks/whatsapp' || path == '/webhooks/slack') {
+    if (path == '/webhooks/whatsapp' ||
+        path == '/webhooks/slack' ||
+        path == '/webhooks/teams') {
       final endpoint = webhookEndpoint;
       if (endpoint == null) {
         _error(req, 403, 'forbidden', 'webhook endpoint not configured');
@@ -747,8 +878,8 @@ class HttpApiServer {
 
     if (path == '/v1/stream' && WebSocketTransformer.isUpgradeRequest(req)) {
       final ticket = req.uri.queryParameters['ticket'];
-      final authorized = (ticket != null && _consumeTicket(ticket)) ||
-          _auth(req);
+      final authorized =
+          (ticket != null && _consumeTicket(ticket)) || _auth(req);
       if (!authorized) {
         req.response.statusCode = 401;
         await req.response.close();
@@ -764,7 +895,8 @@ class HttpApiServer {
               final id = json['id'] as String? ?? '';
               final allow = json['allow'] == true;
               final actor = _sanitizeActor(json['actor'] as String?);
-              final ok = id.isNotEmpty &&
+              final ok =
+                  id.isNotEmpty &&
                   await (decideApproval?.call(id, allow, actor: actor) ??
                       Future.value(false));
               _sendWsEvent(ws, {'type': 'confirm_result', 'id': id, 'ok': ok});
@@ -788,7 +920,10 @@ class HttpApiServer {
             await ws.close();
           } catch (e) {
             _sendWsEvent(ws, {'type': 'error', 'message': e.toString()});
-            await ws.close(WebSocketStatus.internalServerError, 'request failed');
+            await ws.close(
+              WebSocketStatus.internalServerError,
+              'request failed',
+            );
           }
         },
         onDone: () => _wsClients.remove(ws),
@@ -799,8 +934,14 @@ class HttpApiServer {
 
     if (!_auth(req) && path != '/health') {
       req.response.statusCode = 401;
-      req.response.write(jsonEncode(
-          {'ok': false, 'code': 'unauthorized', 'error': 'unauthorized', 'retryable': false}));
+      req.response.write(
+        jsonEncode({
+          'ok': false,
+          'code': 'unauthorized',
+          'error': 'unauthorized',
+          'retryable': false,
+        }),
+      );
       await req.response.close();
       return;
     }
@@ -811,14 +952,23 @@ class HttpApiServer {
       } else if (path == '/v1/status') {
         _json(req, statusProvider?.call() ?? {'ok': true});
       } else if (path == '/v1/sessions' && req.method == 'GET') {
-        final sessions = await (listSessions?.call() ?? Future.value(<Map<String, dynamic>>[]));
+        final sessions =
+            await (listSessions?.call() ??
+                Future.value(<Map<String, dynamic>>[]));
         _json(req, {'sessions': sessions});
       } else if (path.startsWith('/v1/sessions/') &&
           path.endsWith('/messages') &&
           req.method == 'GET') {
-        final id = Uri.decodeComponent(path
-            .substring('/v1/sessions/'.length, path.length - '/messages'.length));
-        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+        final id = Uri.decodeComponent(
+          path.substring(
+            '/v1/sessions/'.length,
+            path.length - '/messages'.length,
+          ),
+        );
+        if (id.isEmpty ||
+            id.contains('/') ||
+            id.contains('\\') ||
+            id.contains('..')) {
           _error(req, 400, 'invalid_request', 'invalid session id');
           return;
         }
@@ -828,10 +978,14 @@ class HttpApiServer {
           return;
         }
         final q = req.uri.queryParameters;
-        final limit =
-            ((int.tryParse(q['limit'] ?? '') ?? 50).clamp(1, 200)).toInt();
-        final offset =
-            ((int.tryParse(q['offset'] ?? '') ?? 0).clamp(0, 200)).toInt();
+        final limit = ((int.tryParse(q['limit'] ?? '') ?? 50).clamp(
+          1,
+          200,
+        )).toInt();
+        final offset = ((int.tryParse(q['offset'] ?? '') ?? 0).clamp(
+          0,
+          200,
+        )).toInt();
         final messages = await api(id, limit: limit, offset: offset);
         _json(req, {
           'session_id': id,
@@ -841,7 +995,10 @@ class HttpApiServer {
         });
       } else if (path.startsWith('/v1/sessions/') && req.method == 'DELETE') {
         final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
-        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+        if (id.isEmpty ||
+            id.contains('/') ||
+            id.contains('\\') ||
+            id.contains('..')) {
           _error(req, 400, 'invalid_request', 'invalid session id');
         } else {
           final ok = await (deleteSession?.call(id) ?? Future.value(false));
@@ -849,21 +1006,33 @@ class HttpApiServer {
         }
       } else if (path.startsWith('/v1/sessions/') && req.method == 'PATCH') {
         final id = Uri.decodeComponent(path.substring('/v1/sessions/'.length));
-        if (id.isEmpty || id.contains('/') || id.contains('\\') || id.contains('..')) {
+        if (id.isEmpty ||
+            id.contains('/') ||
+            id.contains('\\') ||
+            id.contains('..')) {
           _error(req, 400, 'invalid_request', 'invalid session id');
           return;
         }
         final body =
-            jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
         final title = body['title'] as String? ?? '';
-        final ok = await (renameSession?.call(id, title) ?? Future.value(false));
+        final ok =
+            await (renameSession?.call(id, title) ?? Future.value(false));
         if (!ok) {
-          _error(req, 404, 'not_found', 'session not found or rename unsupported');
+          _error(
+            req,
+            404,
+            'not_found',
+            'session not found or rename unsupported',
+          );
         } else {
           _json(req, {'ok': true, 'id': id, 'title': title});
         }
       } else if (path == '/v1/doctor' && req.method == 'GET') {
-        final d = await (doctorProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
+        final d =
+            await (doctorProvider?.call() ??
+                Future.value(<Map<String, dynamic>>[]));
         _json(req, {'checks': d});
       } else if (path == '/v1/capabilities' && req.method == 'GET') {
         _json(req, capabilitiesProvider?.call() ?? {'ok': true});
@@ -871,19 +1040,25 @@ class HttpApiServer {
         _json(req, {'events': eventsProvider?.call() ?? []});
       } else if (path == '/v1/tasks' && req.method == 'GET') {
         final tasks =
-            await (tasksProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
+            await (tasksProvider?.call() ??
+                Future.value(<Map<String, dynamic>>[]));
         _json(req, {'tasks': tasks});
       } else if (path == '/v1/logs' && req.method == 'GET') {
         final logs =
-            await (logsProvider?.call() ?? Future.value(<Map<String, dynamic>>[]));
+            await (logsProvider?.call() ??
+                Future.value(<Map<String, dynamic>>[]));
         _json(req, {'logs': logs});
       } else if (path.startsWith('/v1/logs/') && req.method == 'GET') {
         final name = Uri.decodeComponent(path.substring('/v1/logs/'.length));
-        if (name.isEmpty || name.contains('/') || name.contains('\\') || name.contains('..')) {
+        if (name.isEmpty ||
+            name.contains('/') ||
+            name.contains('\\') ||
+            name.contains('..')) {
           _error(req, 400, 'invalid_request', 'invalid log name');
         } else {
-          final content = await (logContentProvider?.call(name) ??
-              Future<Map<String, dynamic>?>.value(null));
+          final content =
+              await (logContentProvider?.call(name) ??
+                  Future<Map<String, dynamic>?>.value(null));
           if (content == null) {
             _error(req, 404, 'not_found', 'log not found');
           } else {
@@ -891,16 +1066,22 @@ class HttpApiServer {
           }
         }
       } else if (path == '/v1/approvals' && req.method == 'GET') {
-        final list = await (listApprovals?.call() ?? Future.value(<Map<String, dynamic>>[]));
+        final list =
+            await (listApprovals?.call() ??
+                Future.value(<Map<String, dynamic>>[]));
         _json(req, {'approvals': list});
       } else if (path.startsWith('/v1/approvals/') && req.method == 'POST') {
         final id = path.substring('/v1/approvals/'.length).split('/').first;
-        final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
         final allow = body['approve'] == true || path.endsWith('/approve');
-        final actor = _sanitizeActor(body['actor'] as String?) ??
+        final actor =
+            _sanitizeActor(body['actor'] as String?) ??
             _sanitizeActor(req.headers.value('x-tiko-actor'));
-        final ok = await (decideApproval?.call(id, allow, actor: actor) ??
-            Future.value(false));
+        final ok =
+            await (decideApproval?.call(id, allow, actor: actor) ??
+                Future.value(false));
         _json(req, {'ok': ok, 'id': id, 'approve': allow});
       } else if (path == '/v1/messages' && req.method == 'POST') {
         final body =
@@ -986,9 +1167,11 @@ class HttpApiServer {
                 as Map<String, dynamic>;
         final id = body['id'] as String? ?? '';
         final allow = body['allow'] == true;
-        final actor = _sanitizeActor(body['actor'] as String?) ??
+        final actor =
+            _sanitizeActor(body['actor'] as String?) ??
             _sanitizeActor(req.headers.value('x-tiko-actor'));
-        final ok = id.isNotEmpty &&
+        final ok =
+            id.isNotEmpty &&
             await (decideApproval?.call(id, allow, actor: actor) ??
                 Future.value(false));
         _json(req, {'ok': ok, 'id': id, 'approve': allow});
@@ -1001,7 +1184,7 @@ class HttpApiServer {
         final id = path.substring('/v1/memories/'.length);
         final ok = await (deleteMemory?.call(id) ?? Future.value(false));
         _json(req, {'deleted': ok});
-      // Skill management endpoints (P1-03)
+        // Skill management endpoints (P1-03)
       } else if (path == '/v1/skills' && req.method == 'GET') {
         final api = skillApi;
         if (api == null) {
@@ -1062,8 +1245,10 @@ class HttpApiServer {
           _json(req, {'error': 'skill API not configured'});
         } else {
           final sessionId = path
-              .substring('/v1/sessions/'.length,
-                  path.length - '/feedback'.length)
+              .substring(
+                '/v1/sessions/'.length,
+                path.length - '/feedback'.length,
+              )
               .trim();
           if (sessionId.isEmpty || sessionId.contains('/')) {
             req.response.statusCode = 400;
@@ -1073,11 +1258,15 @@ class HttpApiServer {
             _json(req, result);
           }
         }
-      // Bot manager endpoints (GUI-P1-04)
+        // Bot manager endpoints (GUI-P1-04)
       } else if (path == '/v1/bots' && req.method == 'GET') {
-        final bots = await (listBots?.call() ??
-            (throw ApiRequestException(
-                501, 'not_implemented', 'bot manager not configured')));
+        final bots =
+            await (listBots?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot manager not configured',
+                )));
         _json(req, {'bots': bots});
       } else if (path == '/v1/bots' && req.method == 'POST') {
         if (createBot == null) {
@@ -1092,9 +1281,13 @@ class HttpApiServer {
         req.response.statusCode = 201;
         _json(req, profile);
       } else if (path == '/v1/bots/bindings' && req.method == 'GET') {
-        final bindings = await (listBotBindings?.call() ??
-            (throw ApiRequestException(
-                501, 'not_implemented', 'bot manager not configured')));
+        final bindings =
+            await (listBotBindings?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot manager not configured',
+                )));
         _json(req, {'bindings': bindings});
       } else if (path.startsWith('/v1/bots/') &&
           req.method == 'GET' &&
@@ -1105,9 +1298,13 @@ class HttpApiServer {
           _error(req, 400, 'invalid_request', 'invalid bot id');
           return;
         }
-        final profile = await (getBot?.call(id) ??
-            (throw ApiRequestException(
-                501, 'not_implemented', 'bot manager not configured')));
+        final profile =
+            await (getBot?.call(id) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot manager not configured',
+                )));
         if (profile == null) {
           _error(req, 404, 'not_found', 'bot not found');
         } else {
@@ -1154,8 +1351,9 @@ class HttpApiServer {
           (path.endsWith('/bind') || path.endsWith('/unbind'))) {
         final bind = path.endsWith('/bind');
         final id = path.substring(
-            '/v1/bots/'.length,
-            path.length - (bind ? '/bind'.length : '/unbind'.length));
+          '/v1/bots/'.length,
+          path.length - (bind ? '/bind'.length : '/unbind'.length),
+        );
         if (id.isEmpty || id.contains('/')) {
           _error(req, 400, 'invalid_request', 'invalid bot id');
           return;
@@ -1170,25 +1368,40 @@ class HttpApiServer {
         }
         final ok = bind
             ? await (bindBot?.call(id, sessionId.trim()) ??
-                (throw ApiRequestException(
-                    501, 'not_implemented', 'bot manager not configured')))
+                  (throw ApiRequestException(
+                    501,
+                    'not_implemented',
+                    'bot manager not configured',
+                  )))
             : await (unbindBot?.call(id, sessionId.trim()) ??
-                (throw ApiRequestException(
-                    501, 'not_implemented', 'bot manager not configured')));
+                  (throw ApiRequestException(
+                    501,
+                    'not_implemented',
+                    'bot manager not configured',
+                  )));
         if (!ok) {
           _error(req, 404, 'not_found', 'bot or binding not found');
         } else {
           _json(req, {'ok': true, 'bound': bind});
         }
-      // Provider & model manager endpoints (GUI-P1-05)
+        // Provider & model manager endpoints (GUI-P1-05)
       } else if (path == '/v1/providers' && req.method == 'GET') {
-        final snapshot = await (providersProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'provider manager not configured')));
+        final snapshot =
+            await (providersProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'provider manager not configured',
+                )));
         _json(req, snapshot);
       } else if (path == '/v1/providers/session' && req.method == 'POST') {
         if (sessionProviderSetter == null) {
-          _error(req, 501, 'not_implemented', 'provider manager not configured');
+          _error(
+            req,
+            501,
+            'not_implemented',
+            'provider manager not configured',
+          );
           return;
         }
         final body =
@@ -1201,21 +1414,36 @@ class HttpApiServer {
           return;
         }
         if (provider is! String || provider.trim().isEmpty) {
-          _error(req, 400, 'invalid_request',
-              'provider wajib diisi (id atau "default")');
+          _error(
+            req,
+            400,
+            'invalid_request',
+            'provider wajib diisi (id atau "default")',
+          );
           return;
         }
-        final ok = await sessionProviderSetter!(sessionId.trim(), provider.trim());
+        final ok = await sessionProviderSetter!(
+          sessionId.trim(),
+          provider.trim(),
+        );
         if (!ok) {
           _error(req, 404, 'not_found', 'provider not found');
         } else {
-          _json(req, {'ok': true, 'session_id': sessionId.trim(), 'provider': provider.trim()});
+          _json(req, {
+            'ok': true,
+            'session_id': sessionId.trim(),
+            'provider': provider.trim(),
+          });
         }
-      // Plugin & tools manager endpoints (GUI-P1-06)
+        // Plugin & tools manager endpoints (GUI-P1-06)
       } else if (path == '/v1/plugins' && req.method == 'GET') {
-        final snapshot = await (pluginProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'plugin manager not configured')));
+        final snapshot =
+            await (pluginProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'plugin manager not configured',
+                )));
         _json(req, snapshot);
       } else if (path == '/v1/plugins/consent' && req.method == 'POST') {
         if (pluginConsentSetter == null) {
@@ -1223,120 +1451,191 @@ class HttpApiServer {
           return;
         }
         final body = _validatePluginConsentPayload(
-            jsonDecode(await utf8.decoder.bind(req).join()));
+          jsonDecode(await utf8.decoder.bind(req).join()),
+        );
         final result = await pluginConsentSetter!(
-            body['plugin'] as String, body['action'] as String);
+          body['plugin'] as String,
+          body['action'] as String,
+        );
         if (result['ok'] != true) {
-          _error(req, 404, 'not_found',
-              '${result['message'] ?? 'plugin not found'}');
+          _error(
+            req,
+            404,
+            'not_found',
+            '${result['message'] ?? 'plugin not found'}',
+          );
         } else {
-          _json(req, {
-            'ok': true,
-            'message': '${result['message'] ?? ''}',
-          });
+          _json(req, {'ok': true, 'message': '${result['message'] ?? ''}'});
         }
       } else if (path == '/v1/channels' && req.method == 'GET') {
-        final snapshot = await (channelsProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'channels status not configured')));
+        final snapshot =
+            await (channelsProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'channels status not configured',
+                )));
         _json(req, snapshot);
-      // Security Center endpoint (GUI-P1-10, read-only)
+        // Security Center endpoint (GUI-P1-10, read-only)
       } else if (path == '/v1/security' && req.method == 'GET') {
-        final snapshot = await (securityProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'security center not configured')));
+        final snapshot =
+            await (securityProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'security center not configured',
+                )));
         _json(req, snapshot);
-      // Audit query browser endpoint (GUI-P1-11, read-only; filter via
-      // query string tool/session/risk/verdict/taint/since/until/limit/offset)
+        // Audit query browser endpoint (GUI-P1-11, read-only; filter via
+        // query string tool/session/risk/verdict/taint/since/until/limit/offset)
       } else if (path == '/v1/audit' && req.method == 'GET') {
-        final result = await (auditQueryProvider
-                ?.call(_parseAuditQuery(req.uri.queryParameters)) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'audit query not configured')));
+        final result =
+            await (auditQueryProvider?.call(
+                  _parseAuditQuery(req.uri.queryParameters),
+                ) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'audit query not configured',
+                )));
         _json(req, result);
-      // Artifacts browser endpoints (GUI-P2-04, read-only; path/divalidasi
-      // PathSafety di runtime — fail-closed untuk path di luar workspace)
+        // Artifacts browser endpoints (GUI-P2-04, read-only; path/divalidasi
+        // PathSafety di runtime — fail-closed untuk path di luar workspace)
       } else if (path == '/v1/artifacts' && req.method == 'GET') {
         final dir = _parseArtifactsPath(
-            req.uri.queryParameters['dir'], allowEmpty: true, field: 'dir');
-        final result = await (artifactsListProvider?.call(dir) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'artifacts not configured')));
+          req.uri.queryParameters['dir'],
+          allowEmpty: true,
+          field: 'dir',
+        );
+        final result =
+            await (artifactsListProvider?.call(dir) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'artifacts not configured',
+                )));
         _json(req, result);
       } else if (path == '/v1/artifacts/read' && req.method == 'GET') {
         final filePath = _parseArtifactsPath(
-            req.uri.queryParameters['path'], field: 'path');
-        final result = await (artifactsReadProvider?.call(filePath) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'artifacts not configured')));
+          req.uri.queryParameters['path'],
+          field: 'path',
+        );
+        final result =
+            await (artifactsReadProvider?.call(filePath) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'artifacts not configured',
+                )));
         _json(req, result);
       } else if (path == '/v1/artifacts/diff' && req.method == 'GET') {
         final filePath = _parseArtifactsPath(
-            req.uri.queryParameters['path'], field: 'path');
-        final result = await (artifactsDiffProvider?.call(filePath) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'artifacts not configured')));
+          req.uri.queryParameters['path'],
+          field: 'path',
+        );
+        final result =
+            await (artifactsDiffProvider?.call(filePath) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'artifacts not configured',
+                )));
         _json(req, result);
-      // Run-inspector endpoint (GUI-P2-04, read-only): live + recent turns.
+        // Run-inspector endpoint (GUI-P2-04, read-only): live + recent turns.
       } else if (path == '/v1/runs' && req.method == 'GET') {
-        final result = await (runsProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'run inspector not configured')));
+        final result =
+            await (runsProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'run inspector not configured',
+                )));
         _json(req, result);
-      // Memory Explorer endpoints (GUI-P1-12): kurasi, lapisan, RAG.
+        // Memory Explorer endpoints (GUI-P1-12): kurasi, lapisan, RAG.
       } else if (path == '/v1/memory/curated' && req.method == 'GET') {
-        final result = await (memoryCuratedProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+        final result =
+            await (memoryCuratedProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         _json(req, result);
       } else if (path == '/v1/memory/curated' && req.method == 'PATCH') {
         final body = _validateMemoryCuratedPatch(
-            jsonDecode(await utf8.decoder.bind(req).join()));
-        final result = await (memoryCuratedSetProvider?.call(body) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+          jsonDecode(await utf8.decoder.bind(req).join()),
+        );
+        final result =
+            await (memoryCuratedSetProvider?.call(body) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         _json(req, result);
       } else if (path == '/v1/memory/layers' && req.method == 'GET') {
-        final result = await (memoryLayersProvider?.call(
-                _parseMemoryLayersQuery(req.uri.queryParameters)) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+        final result =
+            await (memoryLayersProvider?.call(
+                  _parseMemoryLayersQuery(req.uri.queryParameters),
+                ) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         _json(req, result);
       } else if (path == '/v1/memory/layers' && req.method == 'POST') {
         final body = _validateMemoryLayerPayload(
-            jsonDecode(await utf8.decoder.bind(req).join()));
-        final result = await (memoryLayerAddProvider?.call(body) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+          jsonDecode(await utf8.decoder.bind(req).join()),
+        );
+        final result =
+            await (memoryLayerAddProvider?.call(body) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         req.response.statusCode = 201;
         _json(req, result);
       } else if (path.startsWith('/v1/memory/layers/') &&
           req.method == 'DELETE') {
         final id = Uri.decodeComponent(
-            path.substring('/v1/memory/layers/'.length));
+          path.substring('/v1/memory/layers/'.length),
+        );
         if (id.isEmpty) {
           _error(req, 400, 'invalid_request', 'id wajib diisi');
           return;
         }
-        final ok = await (memoryLayerDeleteProvider?.call(id) ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+        final ok =
+            await (memoryLayerDeleteProvider?.call(id) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         if (!ok) {
-          _error(req, 404, 'not_found',
-              'entri berlapis tidak ditemukan: $id');
+          _error(req, 404, 'not_found', 'entri berlapis tidak ditemukan: $id');
           return;
         }
         _json(req, {'ok': true, 'id': id});
       } else if (path == '/v1/memory/rag' && req.method == 'GET') {
-        final result = await (memoryRagProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'memory explorer not configured')));
+        final result =
+            await (memoryRagProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'memory explorer not configured',
+                )));
         _json(req, result);
-      // Automation / cron CRUD endpoints (GUI-P1-09)
+        // Automation / cron CRUD endpoints (GUI-P1-09)
       } else if (path == '/v1/jobs' && req.method == 'GET') {
-        final jobs = await (jobsProvider?.call() ??
-            (throw ApiRequestException(501, 'not_implemented',
-                'scheduler not configured')));
+        final jobs =
+            await (jobsProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'scheduler not configured',
+                )));
         _json(req, {'jobs': jobs});
       } else if (path == '/v1/jobs' && req.method == 'POST') {
         if (createJob == null) {
@@ -1350,8 +1649,7 @@ class HttpApiServer {
         final job = await createJob!(body);
         req.response.statusCode = 201;
         _json(req, job);
-      } else if (path.startsWith('/v1/jobs/') &&
-          req.method == 'PATCH') {
+      } else if (path.startsWith('/v1/jobs/') && req.method == 'PATCH') {
         if (updateJob == null) {
           _error(req, 501, 'not_implemented', 'scheduler not configured');
           return;
@@ -1371,8 +1669,7 @@ class HttpApiServer {
         } else {
           _json(req, updated);
         }
-      } else if (path.startsWith('/v1/jobs/') &&
-          req.method == 'DELETE') {
+      } else if (path.startsWith('/v1/jobs/') && req.method == 'DELETE') {
         if (deleteJob == null) {
           _error(req, 501, 'not_implemented', 'scheduler not configured');
           return;
@@ -1396,7 +1693,9 @@ class HttpApiServer {
           return;
         }
         final id = path.substring(
-            '/v1/jobs/'.length, path.length - '/run'.length);
+          '/v1/jobs/'.length,
+          path.length - '/run'.length,
+        );
         if (id.isEmpty || id.contains('/')) {
           _error(req, 400, 'invalid_request', 'invalid job id');
           return;
@@ -1429,7 +1728,12 @@ class HttpApiServer {
     bool retryable = false,
   }) {
     req.response.statusCode = status;
-    _json(req, {'ok': false, 'code': code, 'error': message, 'retryable': retryable});
+    _json(req, {
+      'ok': false,
+      'code': code,
+      'error': message,
+      'retryable': retryable,
+    });
   }
 
   bool _isStatic(String path) {
@@ -1509,5 +1813,4 @@ class HttpApiServer {
     };
     ws.add(jsonEncode(eventWithMetadata));
   }
-
 }
