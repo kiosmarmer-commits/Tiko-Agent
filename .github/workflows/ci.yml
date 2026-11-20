@@ -125,14 +125,14 @@ jobs:
           for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
             if [ -d "$dir/test" ]; then
               echo "Testing $dir..."
-              (cd "$dir" && dart test --test-randomize-ordering-seed=$SEED1)
+              dart test "$dir/test" --test-randomize-ordering-seed=$SEED1
             fi
           done
           echo "=== Run 2 with seed: $SEED2 ==="
           for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
             if [ -d "$dir/test" ]; then
               echo "Testing $dir..."
-              (cd "$dir" && dart test --test-randomize-ordering-seed=$SEED2)
+              dart test "$dir/test" --test-randomize-ordering-seed=$SEED2
             fi
           done
           echo "✓ Both runs completed successfully - no nondeterminism detected"
@@ -451,7 +451,7 @@ jobs:
           set -euo pipefail
           for dir in packages/agent_core packages/agent_memory packages/agent_tools packages/tiko_runtime; do
             echo "== dart test: $dir =="
-            (cd "$dir" && dart test)
+            dart test "$dir/test"
           done
       - name: Verify forced JSON memory fallback (TIKO_FORCE_JSON_MEMORY=1)
         run: dart test packages/tiko_runtime/test/eco_memory_backend_test.dart
