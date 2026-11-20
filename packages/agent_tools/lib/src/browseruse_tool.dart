@@ -36,69 +36,63 @@ class BrowserUseTool implements Tool {
 
   @override
   ToolSpec get spec => ToolSpec(
-        name: name,
-        description: description,
-        inputSchema: {
-          'type': 'object',
-          'properties': {
-            'action': {
-              'type': 'string',
-              'enum': [
-                'open',
-                'close',
-                'navigate',
-                'click',
-                'type',
-                'select',
-                'wait_for_selector',
-                'wait_for_navigation',
-                'go_back',
-                'go_forward',
-                'reload',
-                'get_title',
-                'get_url',
-                'get_text',
-                'get_attribute',
-                'execute_script',
-                'take_screenshot',
-                'get_html',
-              ],
-              'description': 'The BrowserUse action to perform',
-            },
-            'url': {
-              'type': 'string',
-              'description': 'URL to navigate to',
-            },
-            'selector': {
-              'type': 'string',
-              'description': 'CSS selector for element actions',
-            },
-            'text': {
-              'type': 'string',
-              'description': 'Text to type or select option',
-            },
-            'attribute': {
-              'type': 'string',
-              'description': 'Attribute name to get',
-            },
-            'script': {
-              'type': 'string',
-              'description': 'JavaScript code to execute',
-            },
-            'timeout': {
-              'type': 'number',
-              'description': 'Timeout in milliseconds for wait actions',
-            },
-          },
-          'required': ['action'],
+    name: name,
+    description: description,
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': [
+            'open',
+            'close',
+            'navigate',
+            'click',
+            'type',
+            'select',
+            'wait_for_selector',
+            'wait_for_navigation',
+            'go_back',
+            'go_forward',
+            'reload',
+            'get_title',
+            'get_url',
+            'get_text',
+            'get_attribute',
+            'execute_script',
+            'take_screenshot',
+            'get_html',
+          ],
+          'description': 'The BrowserUse action to perform',
         },
-      );
+        'url': {'type': 'string', 'description': 'URL to navigate to'},
+        'selector': {
+          'type': 'string',
+          'description': 'CSS selector for element actions',
+        },
+        'text': {
+          'type': 'string',
+          'description': 'Text to type or select option',
+        },
+        'attribute': {'type': 'string', 'description': 'Attribute name to get'},
+        'script': {
+          'type': 'string',
+          'description': 'JavaScript code to execute',
+        },
+        'timeout': {
+          'type': 'number',
+          'description': 'Timeout in milliseconds for wait actions',
+        },
+      },
+      'required': ['action'],
+    },
+  );
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
       final action = args['action'] as String?;
-      
+
       switch (action) {
         case 'open':
           _session = CdpSession(
@@ -110,7 +104,10 @@ class BrowserUseTool implements Tool {
           await _session!.open();
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'opened', 'session_id': _session!.sessionId}),
+            content: jsonEncode({
+              'status': 'opened',
+              'session_id': _session!.sessionId,
+            }),
             isError: false,
           );
 
@@ -129,7 +126,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -152,7 +151,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -184,7 +185,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -211,7 +214,11 @@ class BrowserUseTool implements Tool {
           ''');
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'typed', 'selector': selector, 'text': text}),
+            content: jsonEncode({
+              'status': 'typed',
+              'selector': selector,
+              'text': text,
+            }),
             isError: false,
           );
 
@@ -219,7 +226,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -249,7 +258,11 @@ class BrowserUseTool implements Tool {
           ''');
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'selected', 'selector': selector, 'value': text}),
+            content: jsonEncode({
+              'status': 'selected',
+              'selector': selector,
+              'value': text,
+            }),
             isError: false,
           );
 
@@ -257,7 +270,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -273,7 +288,11 @@ class BrowserUseTool implements Tool {
           final found = await _waitForSelector(selector, timeoutMs);
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'found', 'selector': selector, 'found': found}),
+            content: jsonEncode({
+              'status': 'found',
+              'selector': selector,
+              'found': found,
+            }),
             isError: !found,
           );
 
@@ -281,7 +300,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -296,7 +317,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -311,7 +334,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -331,7 +356,11 @@ class BrowserUseTool implements Tool {
           ''');
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'retrieved', 'selector': selector, 'text': text}),
+            content: jsonEncode({
+              'status': 'retrieved',
+              'selector': selector,
+              'text': text,
+            }),
             isError: false,
           );
 
@@ -339,16 +368,23 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
           final selector = args['selector'] as String?;
           final attribute = args['attribute'] as String?;
-          if (selector == null || selector.isEmpty || attribute == null || attribute.isEmpty) {
+          if (selector == null ||
+              selector.isEmpty ||
+              attribute == null ||
+              attribute.isEmpty) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'selector and attribute are required'}),
+              content: jsonEncode({
+                'error': 'selector and attribute are required',
+              }),
               isError: true,
             );
           }
@@ -360,7 +396,12 @@ class BrowserUseTool implements Tool {
           ''');
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'retrieved', 'selector': selector, 'attribute': attribute, 'value': value}),
+            content: jsonEncode({
+              'status': 'retrieved',
+              'selector': selector,
+              'attribute': attribute,
+              'value': value,
+            }),
             isError: false,
           );
 
@@ -368,7 +409,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -391,14 +434,19 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
           final screenshot = await _session!.screenshot();
           return ToolResult(
             callId: '',
-            content: jsonEncode({'status': 'captured', 'screenshot': screenshot}),
+            content: jsonEncode({
+              'status': 'captured',
+              'screenshot': screenshot,
+            }),
             isError: false,
           );
 
@@ -406,7 +454,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -421,7 +471,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -436,7 +488,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -451,7 +505,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -466,7 +522,9 @@ class BrowserUseTool implements Tool {
           if (_session == null) {
             return ToolResult(
               callId: '',
-              content: jsonEncode({'error': 'Session not opened. Call open first.'}),
+              content: jsonEncode({
+                'error': 'Session not opened. Call open first.',
+              }),
               isError: true,
             );
           }
@@ -504,7 +562,9 @@ class BrowserUseTool implements Tool {
             return document.querySelector('$selector') !== null;
           })()
         ''');
-        if (result == true) {
+        // CdpSession.evaluate returns a JSON-encoded value, so JavaScript
+        // boolean true is represented as the string "true".
+        if (result == 'true') {
           return true;
         }
       } catch (e) {

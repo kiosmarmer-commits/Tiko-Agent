@@ -377,6 +377,7 @@ class EwelinkCubeSmartHomeProvider extends _HttpSmartHomeProvider {
   final String accessToken;
   final Duration timeout;
   final Set<String> allowedDeviceIds;
+  HttpClient? _sseClient;
 
   @override
   String get name => 'ewelink_cube';
@@ -419,7 +420,10 @@ class EwelinkCubeSmartHomeProvider extends _HttpSmartHomeProvider {
   }
 
   Future<void> startEvents() async {
-    final request = await HttpClient().getUrl(
+    if (_sseClient != null) return;
+    final sseClient = HttpClient();
+    _sseClient = sseClient;
+    final request = await sseClient.getUrl(
       Uri.parse(
         '$baseUrl/open-api/v2/sse/bridge?access_token=${Uri.encodeQueryComponent(accessToken)}',
       ),
@@ -454,6 +458,13 @@ class EwelinkCubeSmartHomeProvider extends _HttpSmartHomeProvider {
         }
       }
     }();
+  }
+
+  @override
+  Future<void> close() async {
+    _sseClient?.close(force: true);
+    _sseClient = null;
+    await super.close();
   }
 
   Future<Map<String, dynamic>> _request(

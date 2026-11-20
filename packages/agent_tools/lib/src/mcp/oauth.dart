@@ -38,17 +38,34 @@ class McpOAuthConfig {
         uri.userInfo.isNotEmpty ||
         uri.hasFragment ||
         RegExp(r'[\x00-\x20\x7F]').hasMatch(tokenUrl)) {
-      throw ArgumentError.value(tokenUrl, 'tokenUrl', 'Expected a safe HTTP(S) token URL');
+      throw ArgumentError.value(
+        tokenUrl,
+        'tokenUrl',
+        'Expected a safe HTTP(S) token URL',
+      );
     }
     if (clientId.isEmpty || clientId.length > 128) {
       throw ArgumentError.value(clientId, 'clientId', 'Expected 1-128 chars');
     }
     if (clientSecret.isEmpty || clientSecret.length > 2048) {
-      throw ArgumentError.value(clientSecret, 'clientSecret', 'Expected 1-2048 chars');
+      throw ArgumentError.value(
+        clientSecret,
+        'clientSecret',
+        'Expected 1-2048 chars',
+      );
     }
     if (scopes.length > 32 ||
-        scopes.any((s) => s.isEmpty || s.length > 128 || RegExp(r'[\x00-\x20\x7F]').hasMatch(s))) {
-      throw ArgumentError.value(scopes, 'scopes', 'Expected at most 32 safe scope strings');
+        scopes.any(
+          (s) =>
+              s.isEmpty ||
+              s.length > 128 ||
+              RegExp(r'[\x00-\x20\x7F]').hasMatch(s),
+        )) {
+      throw ArgumentError.value(
+        scopes,
+        'scopes',
+        'Expected at most 32 safe scope strings',
+      );
     }
   }
 
@@ -67,8 +84,8 @@ class McpOAuthClientCredentials implements McpOAuthTokenSource {
     this.config, {
     http.Client? client,
     DateTime Function()? clock,
-  })  : _ownedClient = client,
-        _clock = clock ?? DateTime.now;
+  }) : _ownedClient = client,
+       _clock = clock ?? DateTime.now;
 
   final McpOAuthConfig config;
   final http.Client? _ownedClient;
@@ -76,11 +93,10 @@ class McpOAuthClientCredentials implements McpOAuthTokenSource {
 
   String? _cachedToken;
   DateTime _expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Future<String>? _fetchingToken;
 
   /// Diagnostics: how many token endpoint fetches were performed.
   int fetchCount = 0;
-
-  http.Client get _client => _ownedClient ?? http.Client();
 
   bool get _hasFreshToken =>
       _cachedToken != null && _clock().isBefore(_expiresAt);
@@ -88,16 +104,30 @@ class McpOAuthClientCredentials implements McpOAuthTokenSource {
   @override
   Future<String> token() async {
     if (_hasFreshToken) return _cachedToken!;
+    final pending = _fetchingToken;
+    if (pending != null) return pending;
+    final fetch = _fetchToken();
+    _fetchingToken = fetch;
+    try {
+      return await fetch;
+    } finally {
+      if (identical(_fetchingToken, fetch)) _fetchingToken = null;
+    }
+  }
+
+  Future<String> _fetchToken() async {
     fetchCount += 1;
     final form = <String, String>{
       'grant_type': 'client_credentials',
       if (config.scopes.isNotEmpty) 'scope': config.scopes.join(' '),
     };
-    final basic =
-        base64Encode(utf8.encode('${config.clientId}:${config.clientSecret}'));
+    final basic = base64Encode(
+      utf8.encode('${config.clientId}:${config.clientSecret}'),
+    );
+    final client = _ownedClient ?? http.Client();
     final http.Response res;
     try {
-      res = await _client
+      res = await client
           .post(
             Uri.parse(config.tokenUrl),
             headers: {
@@ -108,18 +138,18 @@ class McpOAuthClientCredentials implements McpOAuthTokenSource {
           )
           .timeout(const Duration(seconds: 15));
     } finally {
-      if (_ownedClient == null) _client.close();
+      if (_ownedClient == null) client.close();
     }
     if (res.statusCode != 200) {
-      throw StateError(
-        'MCP OAuth token endpoint HTTP ${res.statusCode}',
-      );
+      throw StateError('MCP OAuth token endpoint HTTP ${res.statusCode}');
     }
     final map = jsonDecode(utf8.decode(res.bodyBytes, allowMalformed: true));
     if (map is! Map<String, dynamic> ||
         map['access_token'] is! String ||
         (map['access_token'] as String).isEmpty) {
-      throw const FormatException('MCP OAuth: token response missing access_token');
+      throw const FormatException(
+        'MCP OAuth: token response missing access_token',
+      );
     }
     _cachedToken = map['access_token'] as String;
     final expiresIn = map['expires_in'];
