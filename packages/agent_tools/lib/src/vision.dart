@@ -33,16 +33,16 @@ class VisionProvider {
   final bool supportsOcr;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'baseUrl': baseUrl,
-        'apiKeyEnvVar': apiKeyEnvVar,
-        'defaultModel': defaultModel,
-        'timeout': timeout.inSeconds,
-        'maxRetries': maxRetries,
-        'supportsImagePaste': supportsImagePaste,
-        'supportsImageAnalysis': supportsImageAnalysis,
-        'supportsOcr': supportsOcr,
-      };
+    'name': name,
+    'baseUrl': baseUrl,
+    'apiKeyEnvVar': apiKeyEnvVar,
+    'defaultModel': defaultModel,
+    'timeout': timeout.inSeconds,
+    'maxRetries': maxRetries,
+    'supportsImagePaste': supportsImagePaste,
+    'supportsImageAnalysis': supportsImageAnalysis,
+    'supportsOcr': supportsOcr,
+  };
 
   factory VisionProvider.fromJson(Map<String, dynamic> json) {
     return VisionProvider(
@@ -110,15 +110,15 @@ class VisionConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'defaultProvider': defaultProvider,
-        'providers': providers.map((p) => p.toJson()).toList(),
-        'clipboardEnabled': clipboardEnabled,
-        'imageCacheEnabled': imageCacheEnabled,
-        'imageCacheDirectory': imageCacheDirectory,
-        'maxImageSize': maxImageSize,
-        'allowedImageFormats': allowedImageFormats,
-      };
+    'enabled': enabled,
+    'defaultProvider': defaultProvider,
+    'providers': providers.map((p) => p.toJson()).toList(),
+    'clipboardEnabled': clipboardEnabled,
+    'imageCacheEnabled': imageCacheEnabled,
+    'imageCacheDirectory': imageCacheDirectory,
+    'maxImageSize': maxImageSize,
+    'allowedImageFormats': allowedImageFormats,
+  };
 
   factory VisionConfig.fromJson(Map<String, dynamic> json) {
     return VisionConfig(
@@ -129,13 +129,41 @@ class VisionConfig {
           .toList(),
       clipboardEnabled: json['clipboardEnabled'] as bool? ?? true,
       imageCacheEnabled: json['imageCacheEnabled'] as bool? ?? true,
-      imageCacheDirectory: json['imageCacheDirectory'] as String? ?? 'vision_cache',
+      imageCacheDirectory:
+          json['imageCacheDirectory'] as String? ?? 'vision_cache',
       maxImageSize: json['maxImageSize'] as int? ?? 10 * 1024 * 1024,
       allowedImageFormats: (json['allowedImageFormats'] as List<dynamic>? ?? [])
           .map((f) => f.toString())
           .toList(),
     );
   }
+}
+
+/// Reads an image from the native clipboard without invoking a shell.
+///
+/// Linux desktops are supported through `wl-paste` or `xclip`. Applications
+/// on other platforms can provide the bytes through their platform bridge and
+/// pass them as a file/base64 input to the vision tool.
+Future<Uint8List?> readClipboardImage() async {
+  if (!Platform.isLinux) return null;
+  final commands = <(String, List<String>)>[
+    ('wl-paste', ['--no-newline', '--type', 'image/png']),
+    ('xclip', ['-selection', 'clipboard', '-t', 'image/png', '-o']),
+  ];
+  for (final (executable, args) in commands) {
+    try {
+      final result = await Process.run(executable, args);
+      if (result.exitCode == 0) {
+        final bytes = result.stdout is List<int>
+            ? Uint8List.fromList(result.stdout as List<int>)
+            : Uint8List.fromList((result.stdout as String).codeUnits);
+        if (bytes.isNotEmpty) return bytes;
+      }
+    } on ProcessException {
+      // The next clipboard provider may be installed.
+    }
+  }
+  return null;
 }
 
 /// Abstract interface for vision providers
@@ -190,17 +218,17 @@ class VisionResult {
   final Duration? generationTime;
 
   Map<String, dynamic> toJson() => {
-        'success': success,
-        'description': description,
-        'objects': objects?.map((o) => o.toJson()).toList(),
-        'colors': colors,
-        'text': text,
-        'model': model,
-        'provider': provider,
-        'error': error,
-        'confidence': confidence,
-        'generationTime': generationTime?.inMilliseconds,
-      };
+    'success': success,
+    'description': description,
+    'objects': objects?.map((o) => o.toJson()).toList(),
+    'colors': colors,
+    'text': text,
+    'model': model,
+    'provider': provider,
+    'error': error,
+    'confidence': confidence,
+    'generationTime': generationTime?.inMilliseconds,
+  };
 }
 
 /// Detected object in vision analysis
@@ -218,11 +246,11 @@ class DetectedObject {
   final String? category;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'confidence': confidence,
-        'boundingBox': boundingBox?.toJson(),
-        'category': category,
-      };
+    'name': name,
+    'confidence': confidence,
+    'boundingBox': boundingBox?.toJson(),
+    'category': category,
+  };
 }
 
 /// Bounding box for detected objects
@@ -240,11 +268,11 @@ class BoundingBox {
   final double height;
 
   Map<String, dynamic> toJson() => {
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-      };
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+  };
 }
 
 /// Result of OCR (text extraction)
@@ -274,17 +302,17 @@ class OcrResult {
   final Duration? generationTime;
 
   Map<String, dynamic> toJson() => {
-        'success': success,
-        'text': text,
-        'language': language,
-        'model': model,
-        'provider': provider,
-        'error': error,
-        'confidence': confidence,
-        'lines': lines,
-        'words': words?.map((w) => w.toJson()).toList(),
-        'generationTime': generationTime?.inMilliseconds,
-      };
+    'success': success,
+    'text': text,
+    'language': language,
+    'model': model,
+    'provider': provider,
+    'error': error,
+    'confidence': confidence,
+    'lines': lines,
+    'words': words?.map((w) => w.toJson()).toList(),
+    'generationTime': generationTime?.inMilliseconds,
+  };
 }
 
 /// Detected word in OCR
@@ -300,10 +328,10 @@ class OcrWord {
   final double? confidence;
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'boundingBox': boundingBox.toJson(),
-        'confidence': confidence,
-      };
+    'text': text,
+    'boundingBox': boundingBox.toJson(),
+    'confidence': confidence,
+  };
 }
 
 /// OpenAI Vision provider implementation
@@ -332,11 +360,11 @@ class OpenAIVisionProvider implements VisionProviderInterface {
     String? model,
   }) async {
     final client = httpClient ?? http.Client();
-    
+
     try {
       // Convert image to base64
       final imageBase64 = base64Encode(imageBytes);
-      
+
       // Build the request
       final requestBody = {
         'model': model ?? 'gpt-4-vision-preview',
@@ -357,26 +385,31 @@ class OpenAIVisionProvider implements VisionProviderInterface {
         ],
         'max_tokens': 1000,
       };
-      
-      final response = await client.post(
-        Uri.parse('$baseUrl/chat/completions'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(timeout);
-      
+
+      final response = await client
+          .post(
+            Uri.parse('$baseUrl/chat/completions'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(timeout);
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final content = data['choices']?[0]['message']['content'] as String? ?? '';
-        
+        final content =
+            data['choices']?[0]['message']['content'] as String? ?? '';
+
         return VisionResult(
           success: true,
           description: content,
           model: model ?? 'gpt-4-vision-preview',
           provider: name,
-          generationTime: Duration(milliseconds: data['usage']?['total_tokens'] ?? 0),
+          generationTime: Duration(
+            milliseconds: data['usage']?['total_tokens'] ?? 0,
+          ),
         );
       } else {
         return VisionResult(
@@ -407,11 +440,11 @@ class OpenAIVisionProvider implements VisionProviderInterface {
     String? language,
   }) async {
     final client = httpClient ?? http.Client();
-    
+
     try {
       // Convert image to base64
       final imageBase64 = base64Encode(imageBytes);
-      
+
       // Build the request for OCR
       final requestBody = {
         'model': model ?? 'gpt-4-vision-preview',
@@ -421,7 +454,8 @@ class OpenAIVisionProvider implements VisionProviderInterface {
             'content': [
               {
                 'type': 'text',
-                'text': 'Extract all text from this image. Return only the text without any description or commentary.',
+                'text':
+                    'Extract all text from this image. Return only the text without any description or commentary.',
               },
               {
                 'type': 'image_url',
@@ -432,27 +466,32 @@ class OpenAIVisionProvider implements VisionProviderInterface {
         ],
         'max_tokens': 2000,
       };
-      
-      final response = await client.post(
-        Uri.parse('$baseUrl/chat/completions'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(timeout);
-      
+
+      final response = await client
+          .post(
+            Uri.parse('$baseUrl/chat/completions'),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(timeout);
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final content = data['choices']?[0]['message']['content'] as String? ?? '';
-        
+        final content =
+            data['choices']?[0]['message']['content'] as String? ?? '';
+
         return OcrResult(
           success: true,
           text: content,
           language: language,
           model: model ?? 'gpt-4-vision-preview',
           provider: name,
-          generationTime: Duration(milliseconds: data['usage']?['total_tokens'] ?? 0),
+          generationTime: Duration(
+            milliseconds: data['usage']?['total_tokens'] ?? 0,
+          ),
         );
       } else {
         return OcrResult(
@@ -477,21 +516,21 @@ class OpenAIVisionProvider implements VisionProviderInterface {
   }
 
   @override
-  Future<VisionResult> describeImage(Uint8List imageBytes, {String? model}) async {
+  Future<VisionResult> describeImage(
+    Uint8List imageBytes, {
+    String? model,
+  }) async {
     return await analyzeImage(
       imageBytes: imageBytes,
-      prompt: 'Describe this image in detail including objects, colors, and any text.',
+      prompt:
+          'Describe this image in detail including objects, colors, and any text.',
       model: model,
     );
   }
 
   @override
   Future<List<String>> listModels() async {
-    return [
-      'gpt-4-vision-preview',
-      'gpt-4o',
-      'gpt-4o-mini',
-    ];
+    return ['gpt-4-vision-preview', 'gpt-4o', 'gpt-4o-mini'];
   }
 }
 
@@ -517,56 +556,50 @@ class VisionTool implements Tool {
 
   @override
   ToolSpec get spec => ToolSpec(
-        name: name,
-        description: description,
-        inputSchema: {
-          'type': 'object',
-          'properties': {
-            'action': {
-              'type': 'string',
-              'enum': ['analyze', 'describe', 'ocr', 'detect_objects'],
-              'description': 'The vision action to perform',
-            },
-            'image': {
-              'type': 'string',
-              'description': 'Image source: file path, URL, base64, or clipboard',
-            },
-            'image_base64': {
-              'type': 'string',
-              'description': 'Base64 encoded image data',
-            },
-            'prompt': {
-              'type': 'string',
-              'description': 'Custom prompt for analysis (for analyze action)',
-            },
-            'model': {
-              'type': 'string',
-              'description': 'Model to use for vision',
-            },
-            'language': {
-              'type': 'string',
-              'description': 'Language hint for OCR',
-            },
-            'save_to_file': {
-              'type': 'boolean',
-              'description': 'Whether to save the image to a file',
-              'default': false,
-            },
-          },
-          'required': ['action'],
+    name: name,
+    description: description,
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': ['analyze', 'describe', 'ocr', 'detect_objects'],
+          'description': 'The vision action to perform',
         },
-        risk: 'medium',
-        parallelSafe: false,
-      );
+        'image': {
+          'type': 'string',
+          'description': 'Image source: file path, URL, base64, or clipboard',
+        },
+        'image_base64': {
+          'type': 'string',
+          'description': 'Base64 encoded image data',
+        },
+        'prompt': {
+          'type': 'string',
+          'description': 'Custom prompt for analysis (for analyze action)',
+        },
+        'model': {'type': 'string', 'description': 'Model to use for vision'},
+        'language': {'type': 'string', 'description': 'Language hint for OCR'},
+        'save_to_file': {
+          'type': 'boolean',
+          'description': 'Whether to save the image to a file',
+          'default': false,
+        },
+      },
+      'required': ['action'],
+    },
+    risk: 'medium',
+    parallelSafe: false,
+  );
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     final startTime = DateTime.now();
-    
+
     try {
       // Parse action
       final action = args['action'] as String? ?? 'analyze';
-      
+
       // Get image data
       final imageData = await _getImageData(args);
       if (imageData == null) {
@@ -574,7 +607,8 @@ class VisionTool implements Tool {
           callId: '',
           content: jsonEncode({
             'success': false,
-            'error': 'No image data provided. Use image, image_base64, or clipboard.',
+            'error':
+                'No image data provided. Use image, image_base64, or clipboard.',
           }),
           isError: true,
         );
@@ -605,10 +639,7 @@ class VisionTool implements Tool {
 
         case 'detect_objects':
           final model = args['model'] as String?;
-          final result = await provider.describeImage(
-            imageData,
-            model: model,
-          );
+          final result = await provider.describeImage(imageData, model: model);
           return _createResult(result, startTime);
 
         default:
@@ -624,10 +655,7 @@ class VisionTool implements Tool {
     } catch (e) {
       return ToolResult(
         callId: '',
-        content: jsonEncode({
-          'success': false,
-          'error': e.toString(),
-        }),
+        content: jsonEncode({'success': false, 'error': e.toString()}),
         isError: true,
       );
     }
@@ -655,7 +683,7 @@ class VisionTool implements Tool {
         if (await File(imageSource).exists()) {
           return await File(imageSource).readAsBytes();
         }
-        
+
         // Check if it's a URL
         if (Uri.tryParse(imageSource)?.isAbsolute == true) {
           try {
@@ -667,7 +695,7 @@ class VisionTool implements Tool {
             return null;
           }
         }
-        
+
         // Check if it's base64 (without prefix)
         try {
           return base64Decode(imageSource);
@@ -695,16 +723,14 @@ class VisionTool implements Tool {
   /// Get image from clipboard (platform-specific)
   /// This is a placeholder - actual implementation depends on platform
   Future<Uint8List?> _getClipboardImage() async {
-    // In a real implementation, this would use platform-specific APIs
-    // For now, return null
-    return null;
+    return readClipboardImage();
   }
 
   /// Create tool result from vision result
   ToolResult _createResult(VisionResult result, DateTime startTime) {
     final json = result.toJson();
     json['generationTime'] = result.generationTime?.inMilliseconds;
-    
+
     return ToolResult(
       callId: '',
       content: jsonEncode(json),
@@ -716,7 +742,7 @@ class VisionTool implements Tool {
   ToolResult _createOcrResult(OcrResult result, DateTime startTime) {
     final json = result.toJson();
     json['generationTime'] = result.generationTime?.inMilliseconds;
-    
+
     return ToolResult(
       callId: '',
       content: jsonEncode(json),
@@ -732,10 +758,7 @@ class VisionTool implements Tool {
 
 /// Tool for pasting images from clipboard
 class ImagePasteTool implements Tool {
-  ImagePasteTool({
-    required this.visionTool,
-    this.outputDirectory,
-  });
+  ImagePasteTool({required this.visionTool, this.outputDirectory});
 
   final VisionTool visionTool;
   final String? outputDirectory;
@@ -748,37 +771,37 @@ class ImagePasteTool implements Tool {
 
   @override
   ToolSpec get spec => ToolSpec(
-        name: name,
-        description: description,
-        inputSchema: {
-          'type': 'object',
-          'properties': {
-            'analyze': {
-              'type': 'boolean',
-              'description': 'Whether to analyze the image after pasting',
-              'default': false,
-            },
-            'prompt': {
-              'type': 'string',
-              'description': 'Custom prompt for analysis (if analyze is true)',
-            },
-            'save_to_file': {
-              'type': 'boolean',
-              'description': 'Whether to save the image to a file',
-              'default': true,
-            },
-          },
+    name: name,
+    description: description,
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'analyze': {
+          'type': 'boolean',
+          'description': 'Whether to analyze the image after pasting',
+          'default': false,
         },
-        risk: 'medium',
-        parallelSafe: false,
-      );
+        'prompt': {
+          'type': 'string',
+          'description': 'Custom prompt for analysis (if analyze is true)',
+        },
+        'save_to_file': {
+          'type': 'boolean',
+          'description': 'Whether to save the image to a file',
+          'default': true,
+        },
+      },
+    },
+    risk: 'medium',
+    parallelSafe: false,
+  );
 
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
       // Get image from clipboard
       final clipboardData = await _getClipboardImage();
-      
+
       if (clipboardData == null) {
         return ToolResult(
           callId: '',
@@ -822,10 +845,7 @@ class ImagePasteTool implements Tool {
     } catch (e) {
       return ToolResult(
         callId: '',
-        content: jsonEncode({
-          'success': false,
-          'error': e.toString(),
-        }),
+        content: jsonEncode({'success': false, 'error': e.toString()}),
         isError: true,
       );
     }
@@ -833,11 +853,7 @@ class ImagePasteTool implements Tool {
 
   /// Get image from clipboard (platform-specific)
   Future<Uint8List?> _getClipboardImage() async {
-    // In a real implementation, this would use platform-specific APIs
-    // For Flutter: use clipboard package
-    // For CLI: use platform-specific commands
-    // For now, return null
-    return null;
+    return readClipboardImage();
   }
 
   /// Save image to file
@@ -869,27 +885,27 @@ class VisionToolFactory {
       if (apiKey == null || apiKey.isEmpty) {
         throw ArgumentError('OpenAI API key is required for OpenAI provider');
       }
-      
+
       final visionProvider = OpenAIVisionProvider(apiKey: apiKey);
       final config = VisionConfig(
         defaultProvider: 'openai',
         imageCacheDirectory: outputDirectory ?? 'vision_cache',
       );
-      
+
       final visionTool = VisionTool(
         provider: visionProvider,
         config: config,
         outputDirectory: outputDirectory,
       );
-      
+
       final imagePasteTool = ImagePasteTool(
         visionTool: visionTool,
         outputDirectory: outputDirectory,
       );
-      
+
       return [visionTool, imagePasteTool];
     }
-    
+
     throw ArgumentError('Unsupported provider: $provider');
   }
 }

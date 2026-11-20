@@ -54,6 +54,16 @@ void main() {
   });
 
   group('LineGateway', () {
+    test('verifies LINE HMAC-SHA256 signatures', () {
+      const body = 'hello';
+      const signature = 'iKqz7ejTrflNJquQ07r9SiCDBww7zOnAFO4EpEOEfAs=';
+
+      expect(LineGateway.verifySignature('secret', body, signature), isTrue);
+      expect(LineGateway.verifySignature('secret', body, 'invalid'), isFalse);
+      expect(LineGateway.verifySignature('wrong', body, signature), isFalse);
+      expect(LineGateway.verifySignature('secret', '', signature), isFalse);
+    });
+
     test('channel is line', () {
       final gateway = LineGateway(
         channelAccessToken: 'test-token',

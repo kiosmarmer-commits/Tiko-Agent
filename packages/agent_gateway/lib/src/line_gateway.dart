@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:agent_core/agent_core.dart';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 /// LINE Messaging API gateway.
@@ -13,9 +14,6 @@ import 'package:http/http.dart' as http;
 ///
 /// Reference: https://developers.line.biz/en/docs/messaging-api/
 ///
-/// Note: Signature verification requires the crypto package.
-/// For now, signature verification is disabled. In production, you should
-/// verify the X-Line-Signature header using HMAC-SHA256.
 class LineGateway implements Gateway {
   LineGateway({
     required this.channelAccessToken,
@@ -39,30 +37,39 @@ class LineGateway implements Gateway {
 
   /// Verify LINE webhook signature.
   /// LINE sends a signature in the X-Line-Signature header.
-  /// This requires the crypto package which is not always available.
-  /// For production use, implement HMAC-SHA256 verification.
+  /// The signature is HMAC-SHA256 over the raw request body, encoded as base64.
+  ///
+  /// Comparison is performed byte-by-byte without early exit so that malformed
+  /// signatures do not become a timing oracle.
   static bool verifySignature(
     String channelSecret,
     String body,
     String signature,
   ) {
-    // TODO: Implement HMAC-SHA256 signature verification
-    // final hmac = Hmac(sha256, utf8.encode(channelSecret));
-    // final computed = base64.encode(hmac.convert(utf8.encode(body)).bytes);
-    // return computed == signature;
-    return true; // Skip verification for now
+    if (channelSecret.isEmpty || body.isEmpty || signature.isEmpty) {
+      return false;
+    }
+    final digest = Hmac(
+      sha256,
+      utf8.encode(channelSecret),
+    ).convert(utf8.encode(body));
+    final expected = base64.encode(digest.bytes);
+    if (expected.length != signature.length) return false;
+    var difference = 0;
+    for (var i = 0; i < expected.length; i++) {
+      difference |= expected.codeUnitAt(i) ^ signature.codeUnitAt(i);
+    }
+    return difference == 0;
   }
 
   /// Push an inbound message from LINE webhook.
-  void pushInbound({
-    required Map<String, dynamic> webhookData,
-  }) {
+  void pushInbound({required Map<String, dynamic> webhookData}) {
     try {
       final events = webhookData['events'] as List<dynamic>? ?? [];
       for (final event in events) {
         final eventMap = event as Map<String, dynamic>;
         final type = eventMap['type'] as String? ?? '';
-        
+
         if (type == 'message') {
           final message = eventMap['message'] as Map<String, dynamic>? ?? {};
           final text = message['text'] as String? ?? '';
@@ -70,24 +77,18 @@ class LineGateway implements Gateway {
           final userId = source['userId'] as String? ?? '';
           final groupId = source['groupId'] as String?;
           final roomId = source['roomId'] as String?;
-          
-          final sessionKey = groupId != null 
-              ? 'line:group:$groupId' 
-              : (roomId != null 
-                  ? 'line:room:$roomId' 
-                  : 'line:user:$userId');
-          
+
+          final sessionKey = groupId != null
+              ? 'line:group:$groupId'
+              : (roomId != null ? 'line:room:$roomId' : 'line:user:$userId');
+
           _inbound.add(
             InboundMessage(
               channel: channel,
               userKey: userId,
               sessionKey: sessionKey,
               text: text,
-              meta: {
-                'source': source,
-                'message': message,
-                'event': eventMap,
-              },
+              meta: {'source': source, 'message': message, 'event': eventMap},
             ),
           );
         }
@@ -103,19 +104,18 @@ class LineGateway implements Gateway {
     try {
       final replyToken = m.meta['reply_token'] as String?;
       final to = m.meta['to'] as String?;
-      
+
       if (replyToken == null && to == null) {
-        throw StateError('LINE: reply_token or to (userId/groupId/roomId) required');
+        throw StateError(
+          'LINE: reply_token or to (userId/groupId/roomId) required',
+        );
       }
 
       final payload = {
         if (replyToken != null) 'replyToken': replyToken,
         if (to != null) 'to': to,
         'messages': [
-          {
-            'type': 'text',
-            'text': m.text,
-          },
+          {'type': 'text', 'text': m.text},
         ],
       };
 
