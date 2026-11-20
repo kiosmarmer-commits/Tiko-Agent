@@ -68,7 +68,7 @@ void main() {
       configPath: configPath,
       revisionsDir: revisionsDir,
       out: buf,
-      scriptedLines: ['9', 'x', '6', '99999', 'q'],
+      scriptedLines: ['99', 'x', '6', '99999', 'q'],
       color: false,
     );
     final (cfg, issues) = TikoConfig.load(configPath);

@@ -221,17 +221,17 @@ List<_Setting> _settingsOf(TikoConfig c) {
     _Setting('Model', 'providers.chat.$id.model'),
     _Setting('Base URL', 'providers.chat.$id.base_url'),
     _Setting('API key (SecretRef env:VAR)', 'providers.chat.$id.api_key'),
-    _Setting(
+    const _Setting(
       'Mode keamanan',
       'security.mode',
-      choices: const ['ask', 'auto', 'deny'],
+      choices: ['ask', 'auto', 'deny'],
     ),
-    _Setting('Port API daemon', 'api.port'),
-    _Setting('Vision', 'features.vision', choices: const ['true', 'false']),
-    _Setting(
+    const _Setting('Port API daemon', 'api.port'),
+    const _Setting('Vision', 'features.vision', choices: ['true', 'false']),
+    const _Setting(
       'Image generation',
       'features.image_generation',
-      choices: const ['true', 'false'],
+      choices: ['true', 'false'],
     ),
     _Setting(
       'Enabled provider "$id"',
