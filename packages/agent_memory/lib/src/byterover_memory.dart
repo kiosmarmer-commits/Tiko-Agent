@@ -17,6 +17,7 @@ class ByteRoverMemoryProvider implements MemoryProvider {
     this.namespace = 'tiko_agent',
     this.httpClient,
     this.timeout = const Duration(seconds: 30),
+    this.embedder,
   });
 
   final String apiKey;
@@ -25,6 +26,11 @@ class ByteRoverMemoryProvider implements MemoryProvider {
   final http.Client? httpClient;
   final Duration timeout;
 
+  /// Vectorises record text. MemoryRecord carries no embedding field, so a
+  /// vector database adapter must obtain the vector itself, matching the
+  /// embedder pattern used by RagPipeline.
+  final Future<List<double>> Function(String text)? embedder;
+
   @override
   String get name => 'byterover';
 
@@ -32,9 +38,15 @@ class ByteRoverMemoryProvider implements MemoryProvider {
   Future<void> upsert(MemoryRecord record) async {
     final client = httpClient ?? http.Client();
     try {
-      final embedding = record.embedding;
-      if (embedding == null || embedding.isEmpty) {
-        throw ArgumentError('MemoryRecord must have an embedding');
+      final embed = embedder;
+      if (embed == null) {
+        throw StateError(
+          'ByteRoverMemoryProvider requires an embedder to vectorise text',
+        );
+      }
+      final embedding = await embed(record.text);
+      if (embedding.isEmpty) {
+        throw ArgumentError('embedder returned an empty vector');
       }
 
       final uri = Uri.parse('$baseUrl/namespaces/$namespace/vectors');
@@ -76,7 +88,7 @@ class ByteRoverMemoryProvider implements MemoryProvider {
     try {
       // Build filter for ownerKey if provided
       final filter = ownerKey != null ? {'owner_key': ownerKey} : null;
-      
+
       final uri = Uri.parse('$baseUrl/namespaces/$namespace/vectors/query');
       final res = await client
           .post(
@@ -99,7 +111,7 @@ class ByteRoverMemoryProvider implements MemoryProvider {
 
       final json = jsonDecode(res.body) as Map<String, dynamic>;
       final results = json['results'] as List<dynamic>? ?? [];
-      
+
       return results.map((r) {
         final map = r as Map<String, dynamic>;
         final metadata = map['metadata'] as Map<String, dynamic>? ?? {};
@@ -113,7 +125,6 @@ class ByteRoverMemoryProvider implements MemoryProvider {
           createdAt: metadata['created_at'] != null
               ? DateTime.tryParse(metadata['created_at'] as String? ?? '')
               : null,
-          embedding: const [],
         );
       }).toList();
     } finally {
