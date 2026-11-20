@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 /// - apiKey: SuperMemory API key (required)
 /// - baseUrl: SuperMemory API base URL (default: https://api.supermemory.ai)
 /// - timeout: Request timeout (default: 30 seconds)
+/// - sessionId: Optional session ID for scoping memories
 class SuperMemoryProvider implements MemoryProvider {
   SuperMemoryProvider({
     required this.apiKey,
@@ -30,14 +31,17 @@ class SuperMemoryProvider implements MemoryProvider {
   String get name => 'supermemory';
 
   @override
-  Future<void> upsert(MemoryItem item) async {
+  Future<void> upsert(MemoryRecord record) async {
     try {
       final requestBody = {
-        'session_id': sessionId ?? item.sessionId,
-        'key': item.key,
-        'value': item.value,
-        'metadata': item.metadata,
-        'timestamp': item.timestamp.toIso8601String(),
+        'session_id': sessionId ?? record.ownerKey,
+        'key': record.id,
+        'value': record.text,
+        'metadata': {
+          'tags': record.tags,
+          'created_at': record.createdAt?.toIso8601String(),
+        },
+        'timestamp': record.createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
       };
 
       await _makeRequest(
@@ -46,18 +50,21 @@ class SuperMemoryProvider implements MemoryProvider {
         requestBody,
       );
     } catch (e) {
-      throw MemoryException('Failed to upsert memory: ${e.toString()}');
+      throw StateError('Failed to upsert memory: ${e.toString()}');
     }
   }
 
   @override
-  Future<List<MemoryItem>> search(String query, {int limit = 10, Map<String, dynamic>? filters}) async {
+  Future<List<MemoryRecord>> search(
+    String query, {
+    int k = 8,
+    String? ownerKey,
+  }) async {
     try {
       final requestBody = {
-        'session_id': sessionId,
+        'session_id': ownerKey ?? sessionId,
         'query': query,
-        'limit': limit,
-        'filters': filters,
+        'limit': k,
       };
 
       final response = await _makeRequest(
@@ -69,24 +76,33 @@ class SuperMemoryProvider implements MemoryProvider {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final results = data['results'] as List<dynamic>? ?? [];
 
-      return results.map((item) => MemoryItem(
-            key: item['key'] as String? ?? '',
-            value: item['value'] as String? ?? '',
-            metadata: item['metadata'] as Map<String, dynamic>? ?? {},
-            timestamp: DateTime.parse(item['timestamp'] as String? ?? DateTime.now().toIso8601String()),
-            sessionId: item['session_id'] as String? ?? sessionId,
-          )).toList();
+      return results.map((item) {
+        final map = item as Map<String, dynamic>;
+        final metadata = map['metadata'] as Map<String, dynamic>? ?? {};
+        return MemoryRecord(
+          id: map['key'] as String? ?? '',
+          text: map['value'] as String? ?? '',
+          ownerKey: map['session_id'] as String?,
+          tags: (metadata['tags'] as List<dynamic>?)
+              ?.map((t) => t.toString())
+              .toList() ?? [],
+          createdAt: metadata['created_at'] != null
+              ? DateTime.tryParse(metadata['created_at'] as String)
+              : null,
+          score: (map['score'] as num?)?.toDouble() ?? 0.0,
+        );
+      }).toList();
     } catch (e) {
-      throw MemoryException('Failed to search memory: ${e.toString()}');
+      throw StateError('Failed to search memory: ${e.toString()}');
     }
   }
 
   @override
-  Future<void> forget(String key) async {
+  Future<void> forget(String id) async {
     try {
       final requestBody = {
         'session_id': sessionId,
-        'key': key,
+        'key': id,
       };
 
       await _makeRequest(
@@ -95,53 +111,7 @@ class SuperMemoryProvider implements MemoryProvider {
         requestBody,
       );
     } catch (e) {
-      throw MemoryException('Failed to forget memory: ${e.toString()}');
-    }
-  }
-
-  @override
-  Future<void> clear({String? sessionId}) async {
-    try {
-      final requestBody = {
-        'session_id': sessionId ?? this.sessionId,
-      };
-
-      await _makeRequest(
-        'POST',
-        '/v1/memory/clear',
-        requestBody,
-      );
-    } catch (e) {
-      throw MemoryException('Failed to clear memory: ${e.toString()}');
-    }
-  }
-
-  @override
-  Future<List<MemoryItem>> getAll({String? sessionId, int limit = 100}) async {
-    try {
-      final requestBody = {
-        'session_id': sessionId ?? this.sessionId,
-        'limit': limit,
-      };
-
-      final response = await _makeRequest(
-        'POST',
-        '/v1/memory/get_all',
-        requestBody,
-      );
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final results = data['results'] as List<dynamic>? ?? [];
-
-      return results.map((item) => MemoryItem(
-            key: item['key'] as String? ?? '',
-            value: item['value'] as String? ?? '',
-            metadata: item['metadata'] as Map<String, dynamic>? ?? {},
-            timestamp: DateTime.parse(item['timestamp'] as String? ?? DateTime.now().toIso8601String()),
-            sessionId: item['session_id'] as String? ?? sessionId,
-          )).toList();
-    } catch (e) {
-      throw MemoryException('Failed to get all memory: ${e.toString()}');
+      throw StateError('Failed to forget memory: ${e.toString()}');
     }
   }
 
@@ -160,7 +130,7 @@ class SuperMemoryProvider implements MemoryProvider {
     try {
       final request = http.Request(method, uri)
         ..headers.addAll(headers)
-        ..body = body != null ? jsonEncode(body) : null;
+        ..body = body != null ? jsonEncode(body) : '';
 
       final response = await client.send(request).timeout(timeout);
       final responseBody = await response.stream.bytesToString();
