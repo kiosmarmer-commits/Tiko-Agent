@@ -21,3 +21,6 @@ export 'src/memory_layer_tools.dart';
 export 'src/hdc_memory.dart';
 export 'src/retaindb_memory.dart';
 export 'src/byterover_memory.dart';
+export 'src/honcho_memory.dart';
+export 'src/hindsight_memory.dart';
+export 'src/supermemory_memory.dart';
