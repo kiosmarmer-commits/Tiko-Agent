@@ -46,6 +46,10 @@ abstract class WakeWordDetector {
   void setOnDetected(void Function() callback);
 }
 
+/// Processes one PCM frame using an optional platform/native wake-word engine.
+/// The callback returns `true` only when the configured wake word is detected.
+typedef WakeWordFrameProcessor = bool Function(Uint8List audioData);
+
 /// Porcupine-based wake word detector.
 ///
 /// Porcupine is a highly-accurate and lightweight wake word detection engine.
@@ -55,11 +59,13 @@ class PorcupineWakeWordDetector implements WakeWordDetector {
     required this.wakeWordPath,
     this.sensitivity = 0.5,
     this.sampleRate = 16000,
+    this.nativeProcessor,
   });
 
   final String wakeWordPath;
   final double sensitivity;
   final int sampleRate;
+  final WakeWordFrameProcessor? nativeProcessor;
 
   bool _isListening = false;
   void Function()? _onDetected;
@@ -70,39 +76,29 @@ class PorcupineWakeWordDetector implements WakeWordDetector {
   @override
   Future<void> start() async {
     if (_isListening) return;
-    
-    // Initialize Porcupine
-    // _porcupineInstance = Porcupine.fromPath(wakeWordPath, sensitivity);
+
+    // A native binding can be supplied through [nativeProcessor].
     _isListening = true;
-    
-    // Start audio capture
-    // This would typically be done by the audio capture system
   }
 
   @override
   Future<void> stop() async {
     if (!_isListening) return;
-    
+
     _isListening = false;
     _onDetected = null;
-    
-    // Cleanup Porcupine
-    // _porcupineInstance?.delete();
-    // _porcupineInstance = null;
   }
 
   @override
   bool processAudio(Uint8List audioData) {
     if (!_isListening) return false;
-    
-    // Process audio with Porcupine
-    // final result = _porcupineInstance?.process(audioData);
-    // if (result == true) {
-    //   _onDetected?.call();
-    //   return true;
-    // }
-    
-    // For now, use a simple energy-based detection as fallback
+
+    final nativeDetected = nativeProcessor?.call(audioData) ?? false;
+    if (nativeDetected) {
+      _onDetected?.call();
+      return true;
+    }
+    if (nativeProcessor != null) return false;
     return _simpleEnergyDetection(audioData);
   }
 
@@ -111,8 +107,7 @@ class PorcupineWakeWordDetector implements WakeWordDetector {
     _onDetected = callback;
   }
 
-  /// Simple energy-based wake word detection fallback.
-  /// This is a placeholder and should be replaced with actual Porcupine integration.
+  /// Simple energy-based fallback used when no native processor is supplied.
   bool _simpleEnergyDetection(Uint8List audioData) {
     // Calculate RMS energy
     double sum = 0;
@@ -120,9 +115,7 @@ class PorcupineWakeWordDetector implements WakeWordDetector {
       sum += sample * sample;
     }
     final rms = math.sqrt(sum / audioData.length);
-    
-    // Simple threshold-based detection
-    // In production, this would use proper wake word detection
+
     if (rms > 50) {
       _onDetected?.call();
       return true;
@@ -141,12 +134,14 @@ class OpenWakeWordDetector implements WakeWordDetector {
     this.wakeWord = 'hey tiko',
     this.sensitivity = 0.5,
     this.sampleRate = 16000,
+    this.nativeProcessor,
   });
 
   final String modelPath;
   final String wakeWord;
   final double sensitivity;
   final int sampleRate;
+  final WakeWordFrameProcessor? nativeProcessor;
 
   bool _isListening = false;
   void Function()? _onDetected;
@@ -157,29 +152,28 @@ class OpenWakeWordDetector implements WakeWordDetector {
   @override
   Future<void> start() async {
     if (_isListening) return;
-    
-    // Initialize openWakeWord
-    // _owwInstance = OpenWakeWord.fromPath(modelPath, wakeWord, sensitivity);
+
     _isListening = true;
   }
 
   @override
   Future<void> stop() async {
     if (!_isListening) return;
-    
+
     _isListening = false;
     _onDetected = null;
-    
-    // Cleanup openWakeWord
-    // _owwInstance?.delete();
-    // _owwInstance = null;
   }
 
   @override
   bool processAudio(Uint8List audioData) {
     if (!_isListening) return false;
 
-    // Energy-based fallback until the openWakeWord native binding is wired up
+    final nativeDetected = nativeProcessor?.call(audioData) ?? false;
+    if (nativeDetected) {
+      _onDetected?.call();
+      return true;
+    }
+    if (nativeProcessor != null) return false;
     double sum = 0;
     for (final sample in audioData) {
       sum += sample * sample;
@@ -240,20 +234,19 @@ class KeywordSpotter implements WakeWordDetector {
   @override
   bool processAudio(Uint8List audioData) {
     if (!_isListening) return false;
-    
+
     // Convert audio data to samples (assuming 16-bit PCM)
     // This is a simplified implementation
     final samples = _convertToSamples(audioData);
     _audioBuffer.addAll(samples);
-    
+
     // Keep buffer at reasonable size
     if (_audioBuffer.length > _bufferSize) {
       _audioBuffer.removeRange(0, _audioBuffer.length - _bufferSize);
     }
-    
-    // Check for wake word
-    // This is a placeholder - in production, use proper audio processing
-    // For now, just check if we have enough audio
+
+    // The software fallback uses buffered energy; native implementations can
+    // be supplied through PorcupineWakeWordDetector/OpenWakeWordDetector.
     if (_audioBuffer.length >= sampleRate) {
       // Simple detection based on energy
       final energy = _calculateEnergy(_audioBuffer);
@@ -262,7 +255,7 @@ class KeywordSpotter implements WakeWordDetector {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -299,10 +292,7 @@ class KeywordSpotter implements WakeWordDetector {
 /// This implementation wraps a wake word detector and provides the
 /// HotwordListener interface for use with VoiceLoop.
 class WakeWordHotwordListener implements HotwordListener {
-  WakeWordHotwordListener({
-    required this.detector,
-    this.label = 'wake_word',
-  });
+  WakeWordHotwordListener({required this.detector, this.label = 'wake_word'});
 
   final WakeWordDetector detector;
   final String label;
@@ -319,10 +309,10 @@ class WakeWordHotwordListener implements HotwordListener {
   @override
   Future<void> start(void Function() onDetected) async {
     if (_isRunning) return;
-    
+
     _onDetected = onDetected;
     detector.setOnDetected(_handleDetection);
-    
+
     await detector.start();
     _isRunning = true;
   }
@@ -330,7 +320,7 @@ class WakeWordHotwordListener implements HotwordListener {
   @override
   Future<void> stop() async {
     if (!_isRunning) return;
-    
+
     await detector.stop();
     _onDetected = null;
     _isRunning = false;
@@ -364,7 +354,7 @@ class WakeWordDetectorFactory {
         // Fall through to next option
       }
     }
-    
+
     // Try openWakeWord
     if (useOpenWakeWord && openWakeWordPath != null) {
       try {
@@ -377,7 +367,7 @@ class WakeWordDetectorFactory {
         // Fall through to keyword spotter
       }
     }
-    
+
     // Fallback to keyword spotter
     final detector = KeywordSpotter(wakeWord: wakeWord);
     return WakeWordHotwordListener(

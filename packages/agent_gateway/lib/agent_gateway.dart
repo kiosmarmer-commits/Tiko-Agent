@@ -15,6 +15,7 @@ export 'src/stt.dart';
 export 'src/tts.dart';
 export 'src/tts_providers.dart';
 export 'src/hotword.dart';
+export 'src/voice/wake_word_detector.dart';
 export 'src/voice_loop.dart';
 export 'src/whatsapp_gateway.dart';
 export 'src/slack_gateway.dart';
