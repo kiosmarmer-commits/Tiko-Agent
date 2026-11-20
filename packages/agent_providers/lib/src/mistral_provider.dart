@@ -34,6 +34,9 @@ class MistralProvider implements LlmProvider {
   );
 
   @override
+  Future<List<double>> embed(String text) async => const [];
+
+  @override
   Stream<LlmEvent> chat(ChatRequest req) async* {
     final client = httpClient ?? http.Client();
     try {

@@ -203,7 +203,6 @@ class ProviderFactory {
           model: model ?? 'abab6-chat',
           baseUrl: baseUrl ?? 'https://api.minimax.chat',
           requestTimeout: timeout ?? const Duration(seconds: 120),
-          groupId: c.groupId,
         );
       default:
         throw ArgumentError('Tipe provider tidak didukung: ${c.type}');

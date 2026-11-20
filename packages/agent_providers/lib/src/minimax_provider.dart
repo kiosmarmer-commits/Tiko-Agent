@@ -15,7 +15,6 @@ class MiniMaxProvider implements LlmProvider {
     this.baseUrl = 'https://api.minimax.chat',
     this.httpClient,
     this.requestTimeout = const Duration(seconds: 120),
-    this.groupId,
   });
 
   final String apiKey;
@@ -23,7 +22,6 @@ class MiniMaxProvider implements LlmProvider {
   final String baseUrl;
   final http.Client? httpClient;
   final Duration requestTimeout;
-  final String? groupId;
 
   @override
   String get id => 'minimax';
@@ -34,6 +32,9 @@ class MiniMaxProvider implements LlmProvider {
     streaming: true,
     maxContext: 32768,
   );
+
+  @override
+  Future<List<double>> embed(String text) async => const [];
 
   @override
   Stream<LlmEvent> chat(ChatRequest req) async* {
@@ -69,11 +70,6 @@ class MiniMaxProvider implements LlmProvider {
         'temperature': req.temperature ?? 0.7,
         'max_tokens': req.maxTokens,
       };
-
-      // Add group_id if provided
-      if (groupId != null && groupId!.isNotEmpty) {
-        body['group_id'] = groupId;
-      }
 
       // Remove null values
       body.removeWhere((key, value) => value == null);
