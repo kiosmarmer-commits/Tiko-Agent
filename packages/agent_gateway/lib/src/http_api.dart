@@ -806,7 +806,7 @@ class HttpApiServer {
   /// [_uiCookieAuthorized]. 32 byte acak per proses; mati setelah restart
   /// daemon karena nilai lama tidak lagi cocok.
   static const _uiCookieName = 'tiko_web_session';
-  static const _uiCookieMaxAge = Duration(hours: 24).inSeconds;
+  static const _uiCookieMaxAge = 86400; // Duration(hours: 24) — const-eval tidak boleh akses properti
   late final String _uiSecret = base64UrlEncode(
     List<int>.generate(32, (_) => _rng.nextInt(256)),
   );
