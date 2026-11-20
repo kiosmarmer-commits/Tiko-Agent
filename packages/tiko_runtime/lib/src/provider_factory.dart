@@ -10,6 +10,23 @@ import 'package:agent_providers/src/nous_portal_provider.dart';
 import 'package:agent_providers/src/xiaomi_mimo_provider.dart';
 import 'package:agent_providers/src/kimi_provider.dart';
 
+
+import 'package:agent_providers/src/ai_gateway_provider.dart';
+import 'package:agent_providers/src/zai_provider.dart';
+import 'package:agent_providers/src/arcee_provider.dart';
+import 'package:agent_providers/src/gmi_provider.dart';
+import 'package:agent_providers/src/nebius_provider.dart';
+import 'package:agent_providers/src/kilocode_provider.dart';
+import 'package:agent_providers/src/tokenhub_provider.dart';
+import 'package:agent_providers/src/tokenplan_provider.dart';
+import 'package:agent_providers/src/alibaba_provider.dart';
+import 'package:agent_providers/src/opencode_zen_provider.dart';
+import 'package:agent_providers/src/opencode_go_provider.dart';
+import 'package:agent_providers/src/commandcode_provider.dart';
+import 'package:agent_providers/src/actual_provider.dart';
+import 'package:agent_providers/src/ramprouter_provider.dart';
+import 'package:agent_providers/src/langchain_gateway_provider.dart';
+
 import 'tiko_config.dart';
 
 /// Builds runtime providers from `providers.chat.*` (PRD P0: provider factory
@@ -302,6 +319,203 @@ class ProviderFactory {
           baseUrl: baseUrl ?? 'https://api.moonshot.cn/v1',
           requestTimeout: timeout ?? const Duration(seconds: 120),
         );
+
+      case 'ai_gateway':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (ai_gateway) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return AiGatewayProvider(
+          apiKey: key,
+          model: model ?? 'gpt-4o',
+          baseUrl: baseUrl ?? 'https://api.aigateway.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'zai':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (zai) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return ZaiProvider(
+          apiKey: key,
+          model: model ?? 'glm-4.6',
+          baseUrl: baseUrl ?? 'https://api.z.ai/api/paas/v4',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'arcee':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (arcee) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return ArceeProvider(
+          apiKey: key,
+          model: model ?? 'arcee-hermes-2.5',
+          baseUrl: baseUrl ?? 'https://models.arcee.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'gmi':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (gmi) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return GmiProvider(
+          apiKey: key,
+          model: model ?? 'gmi-70b',
+          baseUrl: baseUrl ?? 'https://api.gmi-serving.com/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'nebius':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (nebius) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return NebiusProvider(
+          apiKey: key,
+          model: model ?? 'nebius-70b',
+          baseUrl: baseUrl ?? 'https://api.studio.nebius.com/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'kilocode':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (kilocode) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return KiloCodeProvider(
+          apiKey: key,
+          model: model ?? 'kilocode-70b',
+          baseUrl: baseUrl ?? 'https://api.kilo.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'tokenhub':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (tokenhub) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return TokenHubProvider(
+          apiKey: key,
+          model: model ?? 'tokenhub-70b',
+          baseUrl: baseUrl ?? 'https://api.tokenhub.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'tokenplan':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (tokenplan) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return TokenPlanProvider(
+          apiKey: key,
+          model: model ?? 'tokenplan-70b',
+          baseUrl: baseUrl ?? 'https://api.tokenplan.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'alibaba':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (alibaba) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return AlibabaProvider(
+          apiKey: key,
+          model: model ?? 'qwen-max',
+          baseUrl: baseUrl ?? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'opencode_zen':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (opencode_zen) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return OpenCodeZenProvider(
+          apiKey: key,
+          model: model ?? 'opencode-zen-70b',
+          baseUrl: baseUrl ?? 'https://opencode.ai/zen/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'opencode_go':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (opencode_go) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return OpenCodeGoProvider(
+          apiKey: key,
+          model: model ?? 'opencode-go-70b',
+          baseUrl: baseUrl ?? 'https://opencode.ai/go/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'commandcode':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (commandcode) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return CommandCodeProvider(
+          apiKey: key,
+          model: model ?? 'command-r-plus',
+          baseUrl: baseUrl ?? 'https://api.commandcode.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'actual':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (actual) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return ActualProvider(
+          apiKey: key,
+          model: model ?? 'actual-70b',
+          baseUrl: baseUrl ?? 'https://api.actualai.io/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'ramprouter':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (ramprouter) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return RampRouterProvider(
+          apiKey: key,
+          model: model ?? 'ramp-70b',
+          baseUrl: baseUrl ?? 'https://api.ramp.ai/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+      case 'langchain_gateway':
+        final key = _secret(c.apiKeyRef);
+        if (key == null || key.isEmpty) {
+          throw ArgumentError(
+            "provider '${c.id}' (langchain_gateway) membutuhkan api_key (SecretRef env:)",
+          );
+        }
+        return LangChainGatewayProvider(
+          apiKey: key,
+          model: model ?? 'langchain-70b',
+          baseUrl: baseUrl ?? 'https://gateway.langchain.com/v1',
+          requestTimeout: timeout ?? const Duration(seconds: 120),
+        );
+
       default:
         throw ArgumentError('Tipe provider tidak didukung: ${c.type}');
     }
