@@ -198,6 +198,7 @@ class SelfLearningEngine {
   final String? skillsDir;
 
   final Map<String, SessionLearningStats> _sessionStats = {};
+  final Map<String, String> _pendingNudges = {};
   final Map<String, List<SkillFeedback>> _feedbackLog = {};
   final Map<String, DateTime> _skillImprovedAt = {};
   DateTime? _lastImprovementRun;
@@ -642,8 +643,7 @@ Create a SKILL.md that captures this workflow for future reuse.
       }
     }
 
-    // Inject the nudge into the conversation
-    // This would typically be done through the agent loop
+    _pendingNudges[session.id] = message.trim();
     
     _updateSessionStats(session.id, (stats) {
       stats.lastNudgeTime = DateTime.now();
@@ -653,16 +653,29 @@ Create a SKILL.md that captures this workflow for future reuse.
     return true;
   }
 
+  /// Returns and clears the latest queued nudge for [sessionId].
+  String? takePendingNudge(String sessionId) => _pendingNudges.remove(sessionId);
+
   /// Detects important information that should be persisted.
   List<String> detectImportantInformation(ConversationTurn turn) {
-    // This is a placeholder implementation
-    // In production, you'd use more sophisticated analysis
-    
-    final List<String> important = [];
-
-    // Look for patterns that indicate important information
-    // e.g., configurations, decisions, learnings
-
+    final text = '${turn.userMessage ?? ''}\n${turn.assistantMessage ?? ''}';
+    if (text.trim().isEmpty) return const [];
+    final important = <String>[];
+    final patterns = [
+      RegExp(r'^\s*(?:decision|keputusan)\s*:\s*(.+)$', multiLine: true, caseSensitive: false),
+      RegExp(r'^\s*(?:preference|preferensi|selalu|always)\s*:\s*(.+)$', multiLine: true, caseSensitive: false),
+      RegExp(r'^\s*(?:config|konfigurasi|aturan|rule)\s*:\s*(.+)$', multiLine: true, caseSensitive: false),
+      RegExp(r'^\s*(?:remember|ingat|catat)\s*:\s*(.+)$', multiLine: true, caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      for (final match in pattern.allMatches(text)) {
+        final value = match.group(1)?.trim();
+        if (value != null && value.length >= 3 && value.length <= 500) {
+          final normalized = value.replaceAll(RegExp(r'\s+'), ' ');
+          if (!important.contains(normalized)) important.add(normalized);
+        }
+      }
+    }
     return important;
   }
 

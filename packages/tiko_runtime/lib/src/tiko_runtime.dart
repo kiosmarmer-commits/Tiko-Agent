@@ -11,6 +11,7 @@ import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 
 import 'provider_factory.dart';
+import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'idle_consolidation.dart';
 import 'script_repair_advisor.dart';
@@ -313,6 +314,7 @@ class TikoRuntime {
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
     SelfEvolutionEngine? selfEvolution,
+    this.smartHomeTool,
     SandboxRunner? sandbox,
   }) : _sandbox = sandbox {
     _tokenAnomaly = config.tokenAnomaly.enabled
@@ -378,6 +380,7 @@ class TikoRuntime {
   /// The OS-sandbox runner shared by shell/script/MCP tools; kept so
   /// [close] can tear down a persistent docker container (P1-5).
   final SandboxRunner? _sandbox;
+  final SmartHomeTool? smartHomeTool;
   final AuditLog audit;
   final String workspace;
   final String dataDir;
@@ -809,6 +812,7 @@ class TikoRuntime {
     }
 
     final sessionStore = FileSessionStore(path: p.join(dataDir, 'sessions.json'));
+    final smartHomeTool = SmartHomeTool.fromEnvironment(env ?? Platform.environment);
 
     final registry = ToolRegistry()
       ..registerAll(createBuiltinTools(
@@ -1001,9 +1005,13 @@ class TikoRuntime {
       reflectionEngine: reflection,
       personaPrompt: personaPrompt,
       selfLearningEngine: selfLearningEngine,
+      smartHomeTool: smartHomeTool.providers.isEmpty ? null : smartHomeTool,
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
+    if (rt.smartHomeTool != null && rt.registry.get('smart_home') == null) {
+      rt.registry.register(rt.smartHomeTool!);
+    }
     // Plugin out-of-process dari config: di-spawn lalu tunduk pada consent
     // (gagal consent → antrean pending, bukan error startup).
     for (final pluginCfg in cfg.processPlugins) {
@@ -4026,6 +4034,9 @@ class TikoRuntime {
     } catch (_) {} // best-effort
     try {
       await scriptRunner.close();
+    } catch (_) {} // best-effort
+    try {
+      await smartHomeTool?.close();
     } catch (_) {} // best-effort
     try {
       await _sandbox?.dispose();

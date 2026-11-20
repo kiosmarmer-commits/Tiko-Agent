@@ -303,10 +303,40 @@ class ContextFilesManager {
   }
 
   /// Watch for changes in context files
-  Stream<ContextFileChange> watch() async* {
-    // In a real implementation, this would watch the filesystem
-    // For now, this is a placeholder
-    yield* const Stream.empty();
+  Stream<ContextFileChange> watch({Duration debounce = const Duration(milliseconds: 200)}) async* {
+    if (!config.enabled) return;
+    final subscriptions = <StreamSubscription<FileSystemEvent>>[];
+    final events = StreamController<FileSystemEvent>();
+    try {
+      for (final relative in config.searchPaths) {
+        final dir = Directory(p.join(workingDirectory, relative));
+        if (await dir.exists()) {
+          subscriptions.add(dir.watch(recursive: true).listen(events.add));
+        }
+      }
+      await for (final event in events.stream) {
+        if (event is! FileSystemModifyEvent && event is! FileSystemCreateEvent && event is! FileSystemDeleteEvent) continue;
+        final filename = p.basename(event.path);
+        final type = _getType(filename);
+        if (!ContextFileType.isContextFile(filename) || !config.shouldLoad(type)) continue;
+        await Future<void>.delayed(debounce);
+        final old = _loadedFiles[event.path]?.content;
+        final file = File(event.path);
+        final next = await file.exists() ? await file.readAsString() : null;
+        if (next == old) continue;
+        if (next == null) {
+          _loadedFiles.remove(event.path);
+        } else {
+          _loadedFiles[event.path] = ContextFile(path: event.path, type: type, content: next, priority: config.getPriority(type));
+        }
+        yield ContextFileChange(type: type, path: event.path, oldContent: old, newContent: next);
+      }
+    } finally {
+      await events.close();
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    }
   }
 }
 
@@ -663,9 +693,25 @@ class EnhancedContextExpander extends ContextExpander {
 
   @override
   Future<String> expandGit(String ref) async {
-    // Parse git reference (e.g., "diff", "commit:hash", "branch:name")
-    // This is a placeholder - actual implementation would use git commands
-    return '[ERROR: Git expansion not yet implemented: $ref]';
+    final value = ref.trim();
+    if (value.isEmpty || value.length > 256 || !RegExp(r'^[A-Za-z0-9._/@:+~^\-]+$').hasMatch(value)) {
+      return '[ERROR: Unsafe git reference: $ref]';
+    }
+    final args = value == 'diff'
+        ? ['diff', '--no-ext-diff', '--', '.']
+        : value.startsWith('commit:')
+            ? ['show', '--no-ext-diff', '--stat', value.substring(7)]
+            : value.startsWith('branch:')
+                ? ['log', '-1', '--stat', value.substring(7)]
+                : ['show', '--no-ext-diff', '--stat', value];
+    try {
+      final result = await Process.run('git', args, workingDirectory: workspaceRoot).timeout(const Duration(seconds: 10));
+      if (result.exitCode != 0) return '[ERROR: Git command failed: ${result.stderr}]';
+      final output = result.stdout.toString();
+      return output.length > maxFileSize ? '${output.substring(0, maxFileSize)}\n...[truncated]' : output;
+    } catch (error) {
+      return '[ERROR: Failed to expand git reference: $error]';
+    }
   }
 
   /// Expand all references in text

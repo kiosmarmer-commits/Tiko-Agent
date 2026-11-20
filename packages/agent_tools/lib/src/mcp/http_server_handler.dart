@@ -21,6 +21,8 @@ class McpServerRequestHandler {
     required this.toolRegistry,
     required this.onServerRequest,
     this.onSampling,
+    this.onResourcesList,
+    this.onResourceRead,
     this.maxSamplingPerMinute = 10,
     this.maxConcurrentRequests = 10,
     this.requestTimeout = const Duration(seconds: 30),
@@ -38,7 +40,8 @@ class McpServerRequestHandler {
     String method,
     Map<String, dynamic> params,
     String requestId,
-  )? onServerRequest;
+  )?
+  onServerRequest;
 
   /// Callback for `sampling/createMessage` server requests (MCP sampling).
   /// Receives the request params and must return the sampled message result
@@ -47,7 +50,18 @@ class McpServerRequestHandler {
   final Future<Map<String, dynamic>?> Function(
     Map<String, dynamic> params,
     String requestId,
-  )? onSampling;
+  )?
+  onSampling;
+
+  /// Supplies resources exposed to an MCP server, or `null` to keep the list empty.
+  final Future<List<Map<String, dynamic>>?> Function(
+    Map<String, dynamic> params,
+  )?
+  onResourcesList;
+
+  /// Reads one resource URI and returns MCP resource contents.
+  final Future<List<Map<String, dynamic>>?> Function(String uri)?
+  onResourceRead;
 
   /// Maximum `sampling/createMessage` requests answered per sliding minute.
   /// Excess requests are declined with a rate-limit error (P1-7).
@@ -80,9 +94,7 @@ class McpServerRequestHandler {
 
     // Cancel all active requests
     for (final entry in _activeRequests.entries) {
-      entry.value.completeError(
-        Exception('Server request handler stopped'),
-      );
+      entry.value.completeError(Exception('Server request handler stopped'));
     }
     _activeRequests.clear();
 
@@ -136,8 +148,11 @@ class McpServerRequestHandler {
 
     try {
       // Handle the request with timeout
-      final response = await _processRequest(method, params, requestId)
-          .timeout(requestTimeout);
+      final response = await _processRequest(
+        method,
+        params,
+        requestId,
+      ).timeout(requestTimeout);
 
       // Send the response
       await _sendResponse(requestId, {
@@ -152,10 +167,7 @@ class McpServerRequestHandler {
       await _sendResponse(requestId, {
         'jsonrpc': '2.0',
         'id': requestId,
-        'error': {
-          'code': _errorCodeFor(e),
-          'message': e.toString(),
-        },
+        'error': {'code': _errorCodeFor(e), 'message': e.toString()},
       });
 
       if (!completer.isCompleted) completer.completeError(e);
@@ -251,11 +263,13 @@ class McpServerRequestHandler {
   Future<Map<String, dynamic>> _handleToolsList() async {
     return {
       'tools': toolRegistry.specs
-          .map((spec) => {
-                'name': spec.name,
-                'description': spec.description,
-                'inputSchema': spec.inputSchema,
-              })
+          .map(
+            (spec) => {
+              'name': spec.name,
+              'description': spec.description,
+              'inputSchema': spec.inputSchema,
+            },
+          )
           .toList(),
     };
   }
@@ -264,11 +278,8 @@ class McpServerRequestHandler {
   Future<Map<String, dynamic>> _handleResourcesList(
     Map<String, dynamic> params,
   ) async {
-    // For now, return empty list as resources are not fully implemented
-    // This can be extended when resource support is added
-    return {
-      'resources': [],
-    };
+    final resources = await onResourcesList?.call(params);
+    return {'resources': resources ?? const <Map<String, dynamic>>[]};
   }
 
   /// Handles a `sampling/createMessage` request from the server (P1-7).
@@ -301,13 +312,16 @@ class McpServerRequestHandler {
     Map<String, dynamic> params,
   ) async {
     final uri = params['uri'] as String?;
-    
+
     if (uri == null) {
       throw ArgumentError('Resource URI is required');
     }
 
-    // For now, return error as resources are not fully implemented
-    throw Exception('Resource reading not yet implemented');
+    final contents = await onResourceRead?.call(uri);
+    if (contents == null) {
+      throw Exception('Resource reading is not configured');
+    }
+    return {'contents': contents};
   }
 
   /// Sends a JSON-RPC response back to the server by POSTing it to the MCP
@@ -396,11 +410,13 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
     String method,
     Map<String, dynamic> params,
     String requestId,
-  )? onServerRequest;
+  )?
+  onServerRequest;
   final Future<Map<String, dynamic>?> Function(
     Map<String, dynamic> params,
     String requestId,
-  )? onSampling;
+  )?
+  onSampling;
   final int maxSamplingPerMinute;
   final int maxConcurrentRequests;
   final Duration requestTimeout;
@@ -435,6 +451,6 @@ class EnhancedHttpMcpClient extends HttpMcpClient {
   }
 
   /// Gets the server request handler (if initialized).
-  McpServerRequestHandler? get serverHandler => 
+  McpServerRequestHandler? get serverHandler =>
       toolRegistry != null ? _serverHandler : null;
 }

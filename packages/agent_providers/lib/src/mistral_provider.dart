@@ -27,11 +27,8 @@ class MistralProvider implements LlmProvider {
   String get id => 'mistral';
 
   @override
-  Capabilities get capabilities => const Capabilities(
-    toolCalling: true,
-    streaming: true,
-    maxContext: 32768,
-  );
+  Capabilities get capabilities =>
+      const Capabilities(toolCalling: true, streaming: true, maxContext: 32768);
 
   @override
   Future<List<double>> embed(String text) async => const [];
@@ -54,11 +51,8 @@ class MistralProvider implements LlmProvider {
               {
                 'id': tc.id,
                 'type': 'function',
-                'function': {
-                  'name': tc.name,
-                  'arguments': jsonEncode(tc.args),
-                },
-              }
+                'function': {'name': tc.name, 'arguments': jsonEncode(tc.args)},
+              },
           ];
         }
         messages.add(message);
@@ -71,6 +65,7 @@ class MistralProvider implements LlmProvider {
         'max_tokens': req.maxTokens,
         'temperature': req.temperature ?? 0.7,
         'stream': true,
+        'stream_options': {'include_usage': true},
       };
 
       // Remove null values
@@ -98,6 +93,10 @@ class MistralProvider implements LlmProvider {
 
       // Parse streaming response
       final lines = res.body.split('\n');
+      var promptTokens = 0;
+      var completionTokens = 0;
+      var totalTokens = 0;
+      var hasUsage = false;
       for (final line in lines) {
         if (line.trim().isEmpty) continue;
         if (line.startsWith('data: ')) {
@@ -105,6 +104,18 @@ class MistralProvider implements LlmProvider {
           if (dataStr == '[DONE]') break;
           try {
             final json = jsonDecode(dataStr) as Map<String, dynamic>;
+            final usage = json['usage'];
+            if (usage is Map<String, dynamic>) {
+              promptTokens =
+                  (usage['prompt_tokens'] as num?)?.toInt() ?? promptTokens;
+              completionTokens =
+                  (usage['completion_tokens'] as num?)?.toInt() ??
+                  completionTokens;
+              totalTokens =
+                  (usage['total_tokens'] as num?)?.toInt() ??
+                  promptTokens + completionTokens;
+              hasUsage = true;
+            }
             final choices = json['choices'] as List<dynamic>? ?? [];
             for (final choice in choices) {
               final choiceMap = choice as Map<String, dynamic>;
@@ -127,7 +138,9 @@ class MistralProvider implements LlmProvider {
                           name: function['name'] as String? ?? '',
                           args: function['arguments'] is String
                               ? jsonDecode(function['arguments'] as String)
-                              : (function['arguments'] as Map<String, dynamic>? ?? {}),
+                              : (function['arguments']
+                                        as Map<String, dynamic>? ??
+                                    {}),
                         ),
                       );
                     }
@@ -141,9 +154,17 @@ class MistralProvider implements LlmProvider {
         }
       }
 
-      // Note: Usage is typically sent in the final chunk
-      // For now, we'll use a placeholder
-      yield LlmUsage(TokenUsage(prompt: 0, completion: 0, total: 0));
+      if (hasUsage) {
+        yield LlmUsage(
+          TokenUsage(
+            prompt: promptTokens,
+            completion: completionTokens,
+            total: totalTokens == 0
+                ? promptTokens + completionTokens
+                : totalTokens,
+          ),
+        );
+      }
     } catch (e) {
       yield LlmError('Mistral error: $e', code: 'network_error');
     } finally {
@@ -173,9 +194,7 @@ class MistralProvider implements LlmProvider {
       final res = await client
           .get(
             Uri.parse('$baseUrl/v1/models'),
-            headers: {
-              'Authorization': 'Bearer $apiKey',
-            },
+            headers: {'Authorization': 'Bearer $apiKey'},
           )
           .timeout(requestTimeout);
 
@@ -185,7 +204,9 @@ class MistralProvider implements LlmProvider {
 
       final json = jsonDecode(res.body) as Map<String, dynamic>;
       final data = json['data'] as List<dynamic>? ?? [];
-      return data.map((m) => (m as Map<String, dynamic>)['id'] as String).toList();
+      return data
+          .map((m) => (m as Map<String, dynamic>)['id'] as String)
+          .toList();
     } finally {
       if (httpClient == null) client.close();
     }

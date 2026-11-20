@@ -14,6 +14,8 @@ dependencies:
     path: ../agent_providers
   agent_tools:
     path: ../agent_tools
+  agent_gateway:
+    path: ../agent_gateway
   agent_security:
     path: ../agent_security
   agent_memory:
