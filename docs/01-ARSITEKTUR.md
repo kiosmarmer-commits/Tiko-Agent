@@ -103,6 +103,8 @@ Keduanya belum satu state machine bersama; jangan menganggap angka/metrik keduan
 
 Daemon bind default `127.0.0.1`; API memerlukan token kecuali `/health`. `API_HOST`, `API_PORT`, `TIKO_CONFIG`, gateway environment variables dan config file mengontrol deployment. Flutter/Web adalah client; server AI, tools dan background scheduler hidup pada daemon.
 
+Static UI: `HttpApiServer` melayani folder `webRoot` secara generik (excluding `/v1/*`, `/health`, `/webhooks/*`). Discovery di `agentd`: `WEB_ROOT` env lalu `apps/agent_flutter/build/web` (hasil `flutter build web --release`), fallback dashboard vanilla `apps/agentd/web`. Aset tanpa auth karena hanya terjangkau lewat bind loopback + Host allowlist; traversal path ditolak fail-closed. Rincian di README `apps/agentd/web`.
+
 Sandbox host dapat berupa bubblewrap, Docker, SSH atau none. Mode none tidak memberi isolasi OS. Termux/proot tidak boleh didokumentasikan sebagai sandbox keamanan kuat.
 
 ## 8. Konfigurasi inti

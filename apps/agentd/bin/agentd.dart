@@ -1369,7 +1369,16 @@ const Map<String, List<String>> _channelEnv = {
 };
 
 String? _findWebRoot() {
+  // Jalur A fase 1: Flutter Web build (apps/agent_flutter/build/web)
+  // diutamakan; dashboard vanilla apps/agentd/web tetap fallback agar
+  // pengembangan tanpa build Flutter tetap punya UI.
+  final env = Platform.environment['WEB_ROOT'];
+  if (env != null && env.isNotEmpty && File('$env/index.html').existsSync()) {
+    return env;
+  }
   for (final c in [
+    'apps/agent_flutter/build/web',
+    '${Directory.current.path}/apps/agent_flutter/build/web',
     'apps/agentd/web',
     'web',
     '${Directory.current.path}/apps/agentd/web',

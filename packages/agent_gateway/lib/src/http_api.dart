@@ -1736,12 +1736,57 @@ class HttpApiServer {
     });
   }
 
+  /// Static assets serve from [webRoot] as a directory tree so the compiled
+  /// Flutter Web client (main.dart.js, assets/, canvaskit/, flutter.js) can
+  /// replace the vanilla dashboard. API namespaces, health, and webhooks stay
+  /// excluded; assets remain unauthenticated but protected by the loopback
+  /// bind and the Host allowlist above.
   bool _isStatic(String path) {
-    return path == '/' ||
-        path == '/index.html' ||
-        path == '/app.js' ||
-        path == '/app.css' ||
-        path == '/favicon.ico';
+    return path != '/health' &&
+        !path.startsWith('/v1/') &&
+        !path.startsWith('/webhooks/');
+  }
+
+  static String _staticContentType(String rel) {
+    final ext = rel.contains('.') ? rel.split('.').last.toLowerCase() : '';
+    switch (ext) {
+      case 'html':
+        return 'text/html; charset=utf-8';
+      case 'js':
+      case 'mjs':
+        return 'application/javascript; charset=utf-8';
+      case 'css':
+        return 'text/css; charset=utf-8';
+      case 'json':
+        return 'application/json; charset=utf-8';
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'gif':
+        return 'image/gif';
+      case 'svg':
+        return 'image/svg+xml';
+      case 'ico':
+        return 'image/x-icon';
+      case 'webp':
+        return 'image/webp';
+      case 'woff':
+        return 'font/woff';
+      case 'woff2':
+        return 'font/woff2';
+      case 'ttf':
+        return 'font/ttf';
+      case 'wasm':
+        return 'application/wasm';
+      case 'txt':
+        return 'text/plain; charset=utf-8';
+      case 'map':
+        return 'application/json; charset=utf-8';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   Future<void> _serveStatic(HttpRequest req, String path) async {
@@ -1752,36 +1797,34 @@ class HttpApiServer {
       return;
     }
     final rel = path == '/' ? 'index.html' : path.substring(1);
-    if (rel.contains('..')) {
+    final List<String> segments;
+    try {
+      segments = rel
+          .split('/')
+          .map(Uri.decodeComponent)
+          .toList();
+    } on FormatException {
       req.response.statusCode = 400;
       await req.response.close();
       return;
     }
-    final file = File(p.join(root, rel));
+    if (segments.any((s) => s.isEmpty || s == '.' || s == '..')) {
+      req.response.statusCode = 400;
+      await req.response.close();
+      return;
+    }
+    final file = File(
+      p.joinAll([root, ...segments]),
+    );
     if (!await file.exists()) {
       req.response.statusCode = 404;
       await req.response.close();
       return;
     }
-    if (rel.endsWith('.html')) {
-      req.response.headers.contentType = ContentType(
-        'text',
-        'html',
-        charset: 'utf-8',
-      );
-    } else if (rel.endsWith('.js')) {
-      req.response.headers.contentType = ContentType(
-        'application',
-        'javascript',
-        charset: 'utf-8',
-      );
-    } else if (rel.endsWith('.css')) {
-      req.response.headers.contentType = ContentType(
-        'text',
-        'css',
-        charset: 'utf-8',
-      );
-    }
+    req.response.headers.contentType =
+        ContentType.parse(_staticContentType(rel));
+    req.response.headers.set('X-Content-Type-Options', 'nosniff');
+    req.response.headers.set('Cache-Control', 'no-cache');
     await req.response.addStream(file.openRead());
     await req.response.close();
   }
