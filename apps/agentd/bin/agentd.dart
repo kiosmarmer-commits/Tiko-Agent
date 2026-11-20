@@ -1124,9 +1124,16 @@ Future<void> main(List<String> args) async {
         },
       );
       await api.start();
-      stdout.writeln('UI http://127.0.0.1:$port/');
       if (webRootDir != null) {
+        stdout.writeln('UI http://127.0.0.1:$port/');
         _openLocalBrowser('http://127.0.0.1:$port/');
+      } else {
+        stderr.writeln(
+          'Web UI tidak tersedia: build Flutter Web tidak ditemukan.');
+        stderr.writeln(
+          'Jalankan: cd apps/agent_flutter && flutter build web --release, '
+              'atau set WEB_ROOT=/path/ke/build/web, lalu restart daemon.',
+        );
       }
       stdout.writeln(
         'Token tersimpan di ${ApiTokenStore.pathFor(rt.dataDir)} (permission 600).',
@@ -1392,9 +1399,8 @@ void _openLocalBrowser(String url) {
 }
 
 String? _findWebRoot() {
-  // Jalur A fase 1: Flutter Web build (apps/agent_flutter/build/web)
-  // diutamakan; dashboard vanilla apps/agentd/web tetap fallback agar
-  // pengembangan tanpa build Flutter tetap punya UI.
+  // Jalur A fase 3: satu-satunya web UI adalah hasil `flutter build web`;
+  // dashboard vanilla apps/agentd/web sudah dipensiunkan (lihat docs/10).
   final env = Platform.environment['WEB_ROOT'];
   if (env != null && env.isNotEmpty && File('$env/index.html').existsSync()) {
     return env;
@@ -1402,9 +1408,7 @@ String? _findWebRoot() {
   for (final c in [
     'apps/agent_flutter/build/web',
     '${Directory.current.path}/apps/agent_flutter/build/web',
-    'apps/agentd/web',
-    'web',
-    '${Directory.current.path}/apps/agentd/web',
+    '../apps/agent_flutter/build/web',
   ]) {
     if (File('$c/index.html').existsSync()) return c;
   }

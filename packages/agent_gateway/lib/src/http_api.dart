@@ -1780,9 +1780,10 @@ class HttpApiServer {
     });
   }
 
-  /// Static assets serve from [webRoot] as a directory tree so the compiled
-  /// Flutter Web client (main.dart.js, assets/, canvaskit/, flutter.js) can
-  /// replace the vanilla dashboard. API namespaces, health, and webhooks stay
+  /// Static assets serve from [webRoot] as a directory tree hosting the
+  /// compiled Flutter Web client (main.dart.js, assets/, canvaskit/,
+  /// flutter.js) as the only web UI (Jalur A fase 3: dashboard vanilla
+  /// apps/agentd/web dihapus). API namespaces, health, and webhooks stay
   /// excluded; assets remain unauthenticated but protected by the loopback
   /// bind and the Host allowlist above.
   bool _isStatic(String path) {
