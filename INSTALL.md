@@ -132,6 +132,8 @@ flutter test
 flutter build web --release
 ```
 
+Hasil build ini menjadi satu-satunya web dashboard agentd: setelah daemon dijalankan, UI tersedia di `http://127.0.0.1:8787/` (browser terbuka otomatis) tanpa perlu memasukkan token; bila build belum ada, daemon mencetak instruksi build. Rincian di `docs/10-WEB-UI.md`.
+
 ## 6. Smart home dan gateway tambahan
 
 Provider smart-home berada di `packages/agent_gateway` dan menggunakan kontrak

@@ -21,8 +21,6 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: 3.13.4
-      - name: Web UI syntax and interaction tests
-        run: bash scripts/web_ui_validate.sh
       - name: Validate shell and Python scripts
         run: |
           set -euo pipefail

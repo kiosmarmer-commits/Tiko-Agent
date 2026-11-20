@@ -97,7 +97,7 @@ CI mencakup static analysis/test suites; uji penetrasi dan konfigurasi akun ekst
 
 - `SecretStore` (`agent_security`) mengenkripsi payload dengan XChaCha20-Poly1305 di bawah kunci Argon2id (19 MiB, t=2, p=1), format file v2 `TSS2|salt|nonce|cipher|mac`, tulis atomik + chmod 600, dan migrasi otomatis dari format legacy XOR.
 - `CredentialManager` menyimpan kredensial dengan tulis atomik + chmod 600 wajib; kegagalan simpan dilempar ke pemanggil, dan file lama ber-permission longgar diperketat saat `initialize()`.
-- `HttpApiServer` hanya menerima Bearer (constant-time); WebSocket memakai ticket sekali pakai TTL 30 detik; Host asing ditolak 421; tanpa `Access-Control-Allow-Origin: *`.
+- `HttpApiServer` menerima Bearer (constant-time) **atau** cookie sesi UI `tiko_web_session` same-origin (Jalur A fase 2) untuk dashboard lokal, dengan cek header `Origin` bila ada; WebSocket memakai ticket sekali pakai TTL 30 detik; Host asing ditolak 421; tanpa `Access-Control-Allow-Origin: *`. Cookie hanya diterbitkan saat index UI dilayani, `HttpOnly; SameSite=Strict; Path=/`, nilai acak 32 byte per proses dan tidak menyimpan token API utama.
 - `ApiServer` fail-closed: tanpa token dikonfigurasi, token acak CSPRNG digenerate dan endpoint ber-auth tetap terkunci; body dibatasi `maxRequestSize` (413); CORS mengikuti `corsOrigins`.
 
 Detail perubahan keamanan dan aturan kontribusi: [08-PEDOMAN-PENGEMBANGAN.md](08-PEDOMAN-PENGEMBANGAN.md).

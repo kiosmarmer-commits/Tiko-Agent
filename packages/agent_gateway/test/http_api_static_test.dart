@@ -76,6 +76,91 @@ void main() {
     return req.close();
   }
 
+  /// GET/POST dengan header tambahan (Cookie, Origin, dsb).
+  Future<HttpClientResponse> send(
+    String method,
+    String path, {
+    Map<String, String> headers = const {},
+  }) async {
+    final uri = Uri.parse('http://127.0.0.1:${server.boundPort}$path');
+    final req = await client.openUrl(method, uri);
+    headers.forEach(req.headers.set);
+    return req.close();
+  }
+
+  /// Muat index UI sekali dan kembalikan nilai cookie sesi yang diberikan.
+  Future<String> uiSessionCookie() async {
+    final res = await get('/');
+    final setCookie = res.headers.value(HttpHeaders.setCookieHeader) ?? '';
+    await res.drain<void>();
+    expect(setCookie, startsWith('tiko_web_session='));
+    return setCookie.split(';').first;
+  }
+
+  test('index UI memberikan cookie sesi HttpOnly + SameSite=Strict', () async {
+    final index = await get('/');
+    final setCookie = index.headers.value(HttpHeaders.setCookieHeader) ?? '';
+    await index.drain<void>();
+    expect(setCookie, startsWith('tiko_web_session='));
+    expect(setCookie, contains('HttpOnly'));
+    expect(setCookie, contains('SameSite=Strict'));
+    expect(setCookie, contains('Path=/'));
+    expect(setCookie, contains('Max-Age=86400'));
+  });
+
+  test('API menerima cookie sesi tanpa Bearer (dashboard tanpa token)', () async {
+    final res = await send(
+      'GET',
+      '/v1/status',
+      headers: {HttpHeaders.cookieHeader: await uiSessionCookie()},
+    );
+    expect(res.statusCode, 200);
+  });
+
+  test('cookie sesi dengan nilai salah ditolak 401', () async {
+    final res = await send(
+      'GET',
+      '/v1/status',
+      headers: {HttpHeaders.cookieHeader: 'tiko_web_session=salah'},
+    );
+    expect(res.statusCode, 401);
+  });
+
+  test('cookie sesi dengan Origin asing ditolak 401', () async {
+    final res = await send(
+      'GET',
+      '/v1/status',
+      headers: {
+        HttpHeaders.cookieHeader: await uiSessionCookie(),
+        'origin': 'http://evil.example',
+      },
+    );
+    expect(res.statusCode, 401);
+  });
+
+  test('cookie sesi dengan Origin loopback yang cocok diterima', () async {
+    final res = await send(
+      'GET',
+      '/v1/status',
+      headers: {
+        HttpHeaders.cookieHeader: await uiSessionCookie(),
+        'origin': 'http://127.0.0.1:${server.boundPort}',
+      },
+    );
+    expect(res.statusCode, 200);
+  });
+
+  test('ticket WS bisa diminta hanya dengan cookie sesi (tanpa token)', () async {
+    final res = await send(
+      'POST',
+      '/v1/auth/ticket',
+      headers: {HttpHeaders.cookieHeader: await uiSessionCookie()},
+    );
+    expect(res.statusCode, 200);
+    final body = jsonDecode(await res.transform(utf8.decoder).join()) as Map;
+    expect(body['ticket'] as String, isNotEmpty);
+  });
+
   test('dilayani dari root statis dengan tipe html', () async {
     final res = await get('/');
     expect(res.statusCode, 200);

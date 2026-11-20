@@ -1,0 +1,39 @@
+# 10 — Web UI agentd (Flutter Web)
+
+> **Catatan status:** dokumen mengikuti implementasi Jalur A fase 3. Dashboard web agentd adalah hasil build Flutter Web yang dilayani `HttpApiServer` milik daemon; dashboard vanilla berbasis JavaScript di `apps/agentd/web` telah dipensiunkan dan dihapus.
+
+## 1. Arsitektur penyajian
+
+- Sumber UI: hasil `flutter build web --release` pada `apps/agent_flutter/build/web`. Satu pohon widget memakai design token `SimpulTheme` (lihat [09-DESAIN-GUI.md](09-DESAIN-GUI.md)) sehingga UI web identik dengan client Android/Desktop.
+- Penyajian: `HttpApiServer` (`packages/agent_gateway/lib/src/http_api.dart`) melayani folder `webRoot` secara generik — hanya GET, mengecualikan `/health`, `/v1/*`, dan `/webhooks/*`; peta mime lengkap; header `X-Content-Type-Options: nosniff` dan `Cache-Control: no-cache`; guard traversal `..`/`%2e%2e` fail-closed (400) dengan dekoding percent-encoded sebelum dicek.
+- Discovery webRoot di `apps/agentd/bin/agentd.dart` (`_findWebRoot`): env `WEB_ROOT` (harus memuat `index.html`), lalu `apps/agent_flutter/build/web` relatif root repo dan CWD. Bila tidak ditemukan, UI statis 404 dan daemon mencetak instruksi build.
+- Aset statis tanpa auth karena hanya terjangkau lewat bind loopback + Host allowlist 421 (B-08); API tetap 401 tanpa kredensial.
+
+## 2. Menjalankan
+
+```bash
+cd apps/agent_flutter && flutter build web --release
+dart run apps/agentd/bin/agentd.dart --api
+```
+
+- Buka `http://127.0.0.1:8787/`. Override lokasi aset via `WEB_ROOT=/path/to/build/web`.
+- Saat UI dilayani langsung oleh agentd (same-origin), **tidak perlu memasukkan token**: browser otomatis membuka dashboard setelah server siap. Token Bearer tetap diterima dan hanya diperlukan untuk klien di luar origin daemon (misal perangkat lain yang mengakses daemon yang di-bind ke host non-loopback).
+- Flutter Web berjalan same-origin: `API_BASE` mengikuti origin halaman, WebSocket memakai ticket sekali pakai (`POST /v1/auth/ticket`).
+
+## 3. Sesi cookie same-origin (tanpa token)
+
+- Saat `_serveStatic` menyajikan `index.html`, respons memuat `Set-Cookie: tiko_web_session=<acak>; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`; nilai acak 32 byte per proses daemon (ganti setelah restart).
+- `_auth` menerima Bearer **atau** cookie tersebut. Permintaan yang membawa header `Origin` hanya diterima jika origin-nya loopback (`127.0.0.1`, `localhost`, `::1`) atau host bind daemon — lapis kedua di atas browser yang tidak mengirim cookie `SameSite=Strict` untuk permintaan cross-site; bind loopback + Host allowlist tetap lapis pertama. Opsi "tanpa auth di loopback" ditolak karena POST cross-site simple-request dapat melewati preflight. Token API utama tidak pernah tersimpan di cookie.
+- Alur chat: cookie → `POST /v1/auth/ticket` → ticket sekali pakai TTL 30 detik → upgrade WebSocket `/v1/stream?ticket=`.
+
+## 4. Auto-open browser
+
+- Menjalankan daemon secara langsung otomatis membuka browser ke UI bila webRoot ditemukan dan bind loopback, per platform (`open`/`xdg-open`/`cmd /c start`).
+- Spawn dari app Flutter desktop dan scheduler programatik menyetel `TIKO_NO_BROWSER=1` agar tidak membuka tab ekstra. Kontrol manual: `TIKO_NO_BROWSER=1` atau `TIKO_OPEN_BROWSER=0`.
+- Auto-open hanya aktif pada bind loopback; daemon yang di-bind ke host non-loopback tidak membuka browser.
+
+## 5. Batasan dan test
+
+- Memerlukan Flutter SDK untuk build; tanpa build, UI statis 404 dengan instruksi di log daemon. Renderer Canvaskit postematik aset engine dari CDN saat pertama kali dibuka, jadi browser pengguna memerlukan akses jaringan keluar; untuk lingkungan offline, pertimbangkan self-host aset Canvaskit pada konfigurasi build Flutter Web.
+- Contract test generik static serving termasuk sesi cookie: `packages/agent_gateway/test/http_api_static_test.dart` (statika, traversal, Set-Cookie, API via cookie, Origin check, ticket via cookie).
+- Pengujian lintas browser/perangkat bersifat manual; tidak ada pengganti otomatis untuk skenario visual tersebut.

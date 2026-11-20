@@ -20,6 +20,7 @@
 | 8 | [07-KEAMANAN-OBSERVABILITAS.md](07-KEAMANAN-OBSERVABILITAS.md) | Security dan telemetry |
 | 9 | [08-PEDOMAN-PENGEMBANGAN.md](08-PEDOMAN-PENGEMBANGAN.md) | Prosedur perubahan aman |
 | 10 | [09-DESAIN-GUI.md](09-DESAIN-GUI.md) | Token UI, gaya flat modern, paritas lintas platform |
+| 11 | [10-WEB-UI.md](10-WEB-UI.md) | Dashboard web agentd (Flutter Web), sesi cookie, auto-open |
 
 ## Status implementasi
 
@@ -41,6 +42,7 @@
 | Google Home | Conditional via Home Assistant | Tidak ada direct Google Home API provider di repo |
 | Self-learning/reflection | Implemented with guards | Sintesis tetap dibatasi gate, score, dan approval |
 | Flutter client/widgets | Implemented/conditional | Memerlukan Flutter SDK dan daemon/API |
+| Web dashboard agentd (Jalur A) | Implemented/conditional | Flutter Web sebagai satu-satunya webRoot + cookie sesi same-origin + auto-open browser; butuh `flutter build web` sebelum daemon dapat menyajikan UI |
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
 
 ## Kontrak dokumentasi

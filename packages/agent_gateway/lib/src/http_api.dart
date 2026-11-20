@@ -745,10 +745,45 @@ class HttpApiServer {
 
   bool _auth(HttpRequest req) {
     final h = req.headers.value('authorization') ?? '';
-    if (h.startsWith('Bearer ')) {
-      return _constantTimeEquals(h.substring(7), authToken);
+    if (h.startsWith('Bearer ') &&
+        _constantTimeEquals(h.substring(7), authToken)) {
+      return true;
+    }
+    return _uiCookieAuthorized(req);
+  }
+
+  /// Same-origin web UI session (Jalur A fase 2): browser menerima cookie
+  /// HttpOnly + SameSite=Strict saat memuat index UI; API menerima cookie
+  /// ini sebagai pengganti Bearer sehingga pengguna tidak perlu memasukkan
+  /// token di lokal. Permintaan cross-site ditolak dua lapis: browser tidak
+  /// mengirim cookie SameSite=Strict, dan header `Origin` yang ada wajib
+  /// cocok dengan host yang diizinkan. Host allowlist + bind loopback tetap
+  /// jadi lapis pertama.
+  bool _uiCookieAuthorized(HttpRequest req) {
+    final cookies = req.headers.value(HttpHeaders.cookieHeader);
+    if (cookies == null) return false;
+    for (final part in cookies.split(';')) {
+      final trimmed = part.trim();
+      if (!trimmed.startsWith('$_uiCookieName=')) continue;
+      final value = trimmed.substring(_uiCookieName.length + 1);
+      if (_constantTimeEquals(value, _uiSecret)) {
+        final origin = req.headers.value('origin');
+        if (origin != null && !_originAllowed(origin)) return false;
+        return true;
+      }
     }
     return false;
+  }
+
+  bool _originAllowed(String origin) {
+    final uri = Uri.tryParse(origin);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return false;
+    }
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    const loopback = {'127.0.0.1', 'localhost', '::1'};
+    return loopback.contains(host) || host == this.host.toLowerCase();
   }
 
   /// Constant-time token comparison (B-08).
@@ -766,6 +801,15 @@ class HttpApiServer {
   /// 30-second single-use ticket via POST /v1/auth/ticket.
   static const _ticketTtl = Duration(seconds: 30);
   final _tickets = <String, DateTime>{};
+
+  /// Same-origin UI session cookie (Jalur A fase 2) — lihat
+  /// [_uiCookieAuthorized]. 32 byte acak per proses; mati setelah restart
+  /// daemon karena nilai lama tidak lagi cocok.
+  static const _uiCookieName = 'tiko_web_session';
+  static const _uiCookieMaxAge = 86400; // Duration(hours: 24) — const-eval tidak boleh akses properti
+  late final String _uiSecret = base64UrlEncode(
+    List<int>.generate(32, (_) => _rng.nextInt(256)),
+  );
 
   String _issueTicket() {
     final ticket = base64UrlEncode(
@@ -1736,9 +1780,10 @@ class HttpApiServer {
     });
   }
 
-  /// Static assets serve from [webRoot] as a directory tree so the compiled
-  /// Flutter Web client (main.dart.js, assets/, canvaskit/, flutter.js) can
-  /// replace the vanilla dashboard. API namespaces, health, and webhooks stay
+  /// Static assets serve from [webRoot] as a directory tree hosting the
+  /// compiled Flutter Web client (main.dart.js, assets/, canvaskit/,
+  /// flutter.js) as the only web UI (Jalur A fase 3: dashboard vanilla
+  /// apps/agentd/web dihapus). API namespaces, health, and webhooks stay
   /// excluded; assets remain unauthenticated but protected by the loopback
   /// bind and the Host allowlist above.
   bool _isStatic(String path) {
@@ -1825,6 +1870,13 @@ class HttpApiServer {
         ContentType.parse(_staticContentType(rel));
     req.response.headers.set('X-Content-Type-Options', 'nosniff');
     req.response.headers.set('Cache-Control', 'no-cache');
+    if (rel == 'index.html') {
+      req.response.headers.set(
+        HttpHeaders.setCookieHeader,
+        '$_uiCookieName=$_uiSecret; HttpOnly; SameSite=Strict; '
+            'Path=/; Max-Age=$_uiCookieMaxAge',
+      );
+    }
     await req.response.addStream(file.openRead());
     await req.response.close();
   }
