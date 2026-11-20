@@ -26,12 +26,6 @@ class LangfuseTool implements Tool {
   final String baseUrl;
   final Duration timeout;
 
-  @override
-  String get name => 'langfuse';
-
-  @override
-  String get description =>
-      'Langfuse observability tool for tracing and debugging AI applications.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -121,46 +115,48 @@ class LangfuseTool implements Tool {
       );
 
   @override
-  Future<ToolResult> run(ToolCall call) async {
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final action = call.args['action'] as String?;
+      final action = args['action'] as String?;
       
       switch (action) {
         case 'create_trace':
-          return await _createTrace(call);
+          return await _createTrace(args, ctx);
         case 'end_trace':
-          return await _endTrace(call);
+          return await _endTrace(args, ctx);
         case 'create_span':
-          return await _createSpan(call);
+          return await _createSpan(args, ctx);
         case 'end_span':
-          return await _endSpan(call);
+          return await _endSpan(args, ctx);
         case 'create_event':
-          return await _createEvent(call);
+          return await _createEvent(args, ctx);
         case 'create_generation':
-          return await _createGeneration(call);
+          return await _createGeneration(args, ctx);
         case 'end_generation':
-          return await _endGeneration(call);
+          return await _endGeneration(args, ctx);
         case 'log':
-          return await _log(call);
+          return await _log(args, ctx);
         default:
           return ToolResult(
+            callId: '',
             content: jsonEncode({'error': 'Unknown action: $action'}),
             isError: true,
           );
       }
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': e.toString()}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createTrace(ToolCall call) async {
+  Future<ToolResult> _createTrace(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final name = call.args['name'] as String? ?? 'unnamed_trace';
-      final input = call.args['input'] as Map<String, dynamic>?;
-      final metadata = call.args['metadata'] as Map<String, dynamic>? ?? {};
+      final name = args['name'] as String? ?? 'unnamed_trace';
+      final input = args['input'] as Map<String, dynamic>?;
+      final metadata = args['metadata'] as Map<String, dynamic>? ?? {};
       
       final requestBody = {
         'name': name,
@@ -178,6 +174,7 @@ class LangfuseTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'trace_id': data['id'],
@@ -187,19 +184,21 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create trace: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _endTrace(ToolCall call) async {
+  Future<ToolResult> _endTrace(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final traceId = call.args['trace_id'] as String?;
-      final output = call.args['output'] as Map<String, dynamic>?;
+      final traceId = args['trace_id'] as String?;
+      final output = args['output'] as Map<String, dynamic>?;
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
@@ -216,6 +215,7 @@ class LangfuseTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'trace_id': traceId,
@@ -224,22 +224,24 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to end trace: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createSpan(ToolCall call) async {
+  Future<ToolResult> _createSpan(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final traceId = call.args['trace_id'] as String?;
-      final name = call.args['name'] as String? ?? 'unnamed_span';
-      final parentId = call.args['parent_id'] as String?;
-      final input = call.args['input'] as Map<String, dynamic>?;
-      final metadata = call.args['metadata'] as Map<String, dynamic>? ?? {};
+      final traceId = args['trace_id'] as String?;
+      final name = args['name'] as String? ?? 'unnamed_span';
+      final parentId = args['parent_id'] as String?;
+      final input = args['input'] as Map<String, dynamic>?;
+      final metadata = args['metadata'] as Map<String, dynamic>? ?? {};
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
@@ -262,6 +264,7 @@ class LangfuseTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'span_id': data['id'],
@@ -272,19 +275,21 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create span: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _endSpan(ToolCall call) async {
+  Future<ToolResult> _endSpan(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final spanId = call.args['span_id'] as String?;
-      final output = call.args['output'] as Map<String, dynamic>?;
+      final spanId = args['span_id'] as String?;
+      final output = args['output'] as Map<String, dynamic>?;
       
       if (spanId == null || spanId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'span_id is required'}),
           isError: true,
         );
@@ -301,6 +306,7 @@ class LangfuseTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'span_id': spanId,
@@ -309,22 +315,24 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to end span: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createEvent(ToolCall call) async {
+  Future<ToolResult> _createEvent(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final traceId = call.args['trace_id'] as String?;
-      final spanId = call.args['span_id'] as String?;
-      final name = call.args['name'] as String? ?? 'unnamed_event';
-      final input = call.args['input'] as Map<String, dynamic>?;
-      final metadata = call.args['metadata'] as Map<String, dynamic>? ?? {};
+      final traceId = args['trace_id'] as String?;
+      final spanId = args['span_id'] as String?;
+      final name = args['name'] as String? ?? 'unnamed_event';
+      final input = args['input'] as Map<String, dynamic>?;
+      final metadata = args['metadata'] as Map<String, dynamic>? ?? {};
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
@@ -347,6 +355,7 @@ class LangfuseTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'event_id': data['id'],
@@ -357,22 +366,24 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create event: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _createGeneration(ToolCall call) async {
+  Future<ToolResult> _createGeneration(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final traceId = call.args['trace_id'] as String?;
-      final spanId = call.args['span_id'] as String?;
-      final model = call.args['model'] as String?;
-      final prompt = call.args['prompt'] as String?;
-      final metadata = call.args['metadata'] as Map<String, dynamic>? ?? {};
+      final traceId = args['trace_id'] as String?;
+      final spanId = args['span_id'] as String?;
+      final model = args['model'] as String?;
+      final prompt = args['prompt'] as String?;
+      final metadata = args['metadata'] as Map<String, dynamic>? ?? {};
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
@@ -395,6 +406,7 @@ class LangfuseTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'created',
           'generation_id': data['id'],
@@ -405,20 +417,22 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to create generation: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _endGeneration(ToolCall call) async {
+  Future<ToolResult> _endGeneration(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final generationId = call.args['generation_id'] as String?;
-      final completion = call.args['completion'] as String?;
-      final usage = call.args['usage'] as Map<String, dynamic>?;
+      final generationId = args['generation_id'] as String?;
+      final completion = args['completion'] as String?;
+      final usage = args['usage'] as Map<String, dynamic>?;
       
       if (generationId == null || generationId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'generation_id is required'}),
           isError: true,
         );
@@ -436,6 +450,7 @@ class LangfuseTool implements Tool {
       );
 
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'ended',
           'generation_id': generationId,
@@ -444,28 +459,31 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to end generation: ${e.toString()}'}),
         isError: true,
       );
     }
   }
 
-  Future<ToolResult> _log(ToolCall call) async {
+  Future<ToolResult> _log(Map<String, dynamic> args, ToolContext ctx) async {
     try {
-      final traceId = call.args['trace_id'] as String?;
-      final spanId = call.args['span_id'] as String?;
-      final message = call.args['message'] as String?;
-      final level = call.args['level'] as String? ?? 'info';
-      final metadata = call.args['metadata'] as Map<String, dynamic>? ?? {};
+      final traceId = args['trace_id'] as String?;
+      final spanId = args['span_id'] as String?;
+      final message = args['message'] as String?;
+      final level = args['level'] as String? ?? 'info';
+      final metadata = args['metadata'] as Map<String, dynamic>? ?? {};
       
       if (traceId == null || traceId.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'trace_id is required'}),
           isError: true,
         );
       }
       if (message == null || message.isEmpty) {
         return ToolResult(
+          callId: '',
           content: jsonEncode({'error': 'message is required'}),
           isError: true,
         );
@@ -488,6 +506,7 @@ class LangfuseTool implements Tool {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       
       return ToolResult(
+        callId: '',
         content: jsonEncode({
           'status': 'logged',
           'log_id': data['id'],
@@ -499,6 +518,7 @@ class LangfuseTool implements Tool {
       );
     } catch (e) {
       return ToolResult(
+        callId: '',
         content: jsonEncode({'error': 'Failed to log: ${e.toString()}'}),
         isError: true,
       );
