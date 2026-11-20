@@ -52,24 +52,9 @@ class MistralProvider implements LlmProvider {
                 'id': tc.id,
                 'type': 'function',
                 'function': {
-                  'name': tc.function.name,
-                  'arguments': tc.function.arguments,
+                  'name': tc.name,
+                  'arguments': jsonEncode(tc.args),
                 },
-              }
-          ];
-        }
-        // Add tool results if present
-        if (m.toolResults != null && m.toolResults!.isNotEmpty) {
-          message['tool_results'] = [
-            for (final tr in m.toolResults!)
-              {
-                'tool_call_id': tr.callId,
-                'type': 'function',
-                'function': {
-                  'name': tr.function?.name ?? '',
-                  'arguments': tr.function?.arguments ?? '',
-                },
-                'result': tr.result,
               }
           ];
         }
@@ -82,7 +67,6 @@ class MistralProvider implements LlmProvider {
         'messages': messages,
         'max_tokens': req.maxTokens,
         'temperature': req.temperature ?? 0.7,
-        'top_p': req.topP ?? 1.0,
         'stream': true,
       };
 
@@ -134,10 +118,14 @@ class MistralProvider implements LlmProvider {
                     final tcMap = tc as Map<String, dynamic>;
                     final function = tcMap['function'] as Map<String, dynamic>?;
                     if (function != null) {
-                      yield LlmToolCallDelta(
-                        id: tcMap['id'] as String? ?? '',
-                        name: function['name'] as String? ?? '',
-                        arguments: function['arguments'] as String? ?? '',
+                      yield LlmToolCall(
+                        ToolCall(
+                          id: tcMap['id'] as String? ?? '',
+                          name: function['name'] as String? ?? '',
+                          args: function['arguments'] is String
+                              ? jsonDecode(function['arguments'] as String)
+                              : (function['arguments'] as Map<String, dynamic>? ?? {}),
+                        ),
                       );
                     }
                   }

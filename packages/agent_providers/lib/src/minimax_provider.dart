@@ -53,8 +53,8 @@ class MiniMaxProvider implements LlmProvider {
             for (final tc in m.toolCalls!)
               {
                 'id': tc.id,
-                'name': tc.function.name,
-                'arguments': tc.function.arguments,
+                'name': tc.name,
+                'arguments': jsonEncode(tc.args),
               }
           ];
         }
@@ -67,7 +67,6 @@ class MiniMaxProvider implements LlmProvider {
         'stream': true,
         'messages': messages,
         'temperature': req.temperature ?? 0.7,
-        'top_p': req.topP ?? 1.0,
         'max_tokens': req.maxTokens,
       };
 
@@ -122,10 +121,14 @@ class MiniMaxProvider implements LlmProvider {
                   final toolCalls = delta['function_calls'] as List<dynamic>? ?? [];
                   for (final tc in toolCalls) {
                     final tcMap = tc as Map<String, dynamic>;
-                    yield LlmToolCallDelta(
-                      id: tcMap['id'] as String? ?? '',
-                      name: tcMap['name'] as String? ?? '',
-                      arguments: tcMap['arguments'] as String? ?? '',
+                    yield LlmToolCall(
+                      ToolCall(
+                        id: tcMap['id'] as String? ?? '',
+                        name: tcMap['name'] as String? ?? '',
+                        args: tcMap['arguments'] is String
+                            ? jsonDecode(tcMap['arguments'] as String)
+                            : (tcMap['arguments'] as Map<String, dynamic>? ?? {}),
+                      ),
                     );
                   }
                 }
