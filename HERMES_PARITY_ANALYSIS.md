@@ -181,7 +181,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 ### Hermes Supported:
 - [x] **SQLite (internal, default)** - ✅ Implemented (`agent_memory`)
 - [x] **RetainDB** - ✅ Implemented (`retaindb_memory.dart`) (NEW)
-- [ ] **ByteRover** - ❌ NOT IMPLEMENTED
+- [x] **ByteRover** - ✅ Implemented (`byterover_memory.dart`) (NEW)
 - [ ] **Honcho** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Hindsight** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **SuperMemory** - ❌ NOT IMPLEMENTED (plugin)
@@ -190,7 +190,7 @@ This document compares the features and tools described in the Hermes Agent AI (
 - [ ] **Nexus** - ❌ NOT IMPLEMENTED (plugin)
 - [ ] **Memobase** - ❌ NOT IMPLEMENTED (plugin)
 
-### Status: 3/10 implemented (30%)
+### Status: 4/10 implemented (40%)
 
 ---
 
