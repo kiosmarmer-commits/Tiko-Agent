@@ -63,9 +63,134 @@ class PromptRunner {
     List<String> completions = const [],
   }) async {
     if (_raw) {
-      return _readLineRaw(label, completions);
+      await _enterRaw();
+      try {
+        return await _readLineRaw(label, completions);
+      } finally {
+        _exitRaw();
+      }
     }
     return _readLineScripted(label);
+  }
+
+  /// Menu pilihan gaya TUI (Hermes-parity): panah atas/bawah untuk memindah
+  /// kursor, Enter untuk memilih, atau tekan angka 1..9 untuk lompat langsung.
+  /// Kembali nilai opsi yang dipilih. Bila raw mode tidak tersedia (pipe/CI/test
+  /// scripted), turun ke menu bernomor yang dibaca baris-demi-baris.
+  Future<String> select(
+    String label,
+    List<String> options, {
+    String? def,
+  }) async {
+    if (options.isEmpty) throw ArgumentError('setidaknya satu opsi diperlukan');
+    if (!_raw) {
+      // Mode line/scripted: menu bernomor sederhana.
+      for (var i = 0; i < options.length; i++) {
+        final mark = options[i] == def ? ' (default)' : '';
+        _out.writeln('  ${i + 1}. ${options[i]}$mark');
+      }
+      final parsed = RegExp(r'^\s*(\d+)\s*$');
+      while (true) {
+        final line = _readLineScripted('$label [1-${options.length}]: ');
+        if (line.trim().isEmpty && def != null && options.contains(def)) {
+          return def;
+        }
+        final m = parsed.firstMatch(line);
+        final n = m == null ? 0 : int.parse(m.group(1)!);
+        if (n >= 1 && n <= options.length) return options[n - 1];
+        _out.writeln('  Pilih angka 1-${options.length} (kosong = default).');
+      }
+    }
+    await _enterRaw();
+    try {
+      return await _selectRaw(label, options, def);
+    } finally {
+      _exitRaw();
+    }
+  }
+
+  Future<String> _selectRaw(
+    String label,
+    List<String> options,
+    String? def,
+  ) async {
+    var cursor = options.indexOf(def ?? '');
+    if (cursor < 0) cursor = 0;
+    var painted = false;
+    void render() {
+      final buf = StringBuffer();
+      if (painted) buf.write('\x1B[${options.length}A');
+      buf.write('\x1B[J');
+      buf.writeln(label);
+      for (var i = 0; i < options.length; i++) {
+        final marker = i == cursor ? '>' : ' ';
+        buf.write(i == cursor ? '\x1B[7m' : '');
+        buf.writeln(' $marker ${i + 1}. ${options[i]}\x1B[0m');
+      }
+      _out.write(buf.toString());
+      painted = true;
+    }
+
+    render();
+    final chunks = _chunks ??= StreamIterator(_inputStream ?? stdin);
+    while (await chunks.moveNext()) {
+      for (final event in decodeKeys(chunks.current)) {
+        switch (event.type) {
+          case KeyType.up:
+            cursor = (cursor - 1 + options.length) % options.length;
+            render();
+          case KeyType.down:
+            cursor = (cursor + 1) % options.length;
+            render();
+          case KeyType.enter:
+            _out.writeln();
+            return options[cursor];
+          case KeyType.ctrlC:
+          case KeyType.ctrlD:
+            _out.writeln();
+            throw PromptAborted(label);
+          case KeyType.tab:
+            break;
+          case KeyType.char:
+            final digits = int.tryParse(event.char);
+            if (digits != null && digits >= 1 && digits <= options.length) {
+              _out.writeln();
+              return options[digits - 1];
+            }
+            if (event.char == 'k') {
+              cursor = (cursor - 1 + options.length) % options.length;
+              render();
+            } else if (event.char == 'j') {
+              cursor = (cursor + 1) % options.length;
+              render();
+            }
+          default:
+            break;
+        }
+      }
+    }
+    _out.writeln();
+    throw PromptAborted(label);
+  }
+
+  Future<void> _enterRaw() async {
+    if (_inputStream != null) return;
+    try {
+      stdin.lineMode = false;
+      stdin.echoMode = false;
+    } on StdinException {
+      _raw = false;
+    }
+  }
+
+  void _exitRaw() {
+    if (_inputStream != null) return;
+    try {
+      stdin.lineMode = true;
+      stdin.echoMode = true;
+    } on StdinException {
+      // Terminal sudah ditutup; tidak ada yang perlu dipulihkan.
+    }
   }
 
   /// Prompt with default/required semantics used by the setup wizard.

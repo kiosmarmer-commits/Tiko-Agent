@@ -1096,17 +1096,22 @@ Future<void> _setupInteractive(String configPath, bool force) async {
     'azure_openai',
     'bedrock',
   ];
-
   String providerType;
   while (true) {
-    providerType = await prompts.prompt(
-      'Tipe provider (mock | ollama_native | openai | deepseek | anthropic | '
-      'gemini | openai_compat | openai_responses | azure_openai | bedrock | '
-      'id preset lain)',
+    final choice = await prompts.select(
+      'Tipe provider:',
+      [...providerTypes, 'Lainnya (id preset lain)…'],
       def: 'mock',
-      required: true,
-      completions: providerTypes,
     );
+    if (choice == 'Lainnya (id preset lain)…') {
+      providerType = await prompts.prompt(
+        'id preset (mis. cerberus)',
+        required: true,
+        completions: providerTypes,
+      );
+    } else {
+      providerType = choice;
+    }
     try {
       OnboardingWizard.renderConfigYaml(OnboardingProfile(
         providerType: providerType,
@@ -1117,6 +1122,8 @@ Future<void> _setupInteractive(String configPath, bool force) async {
       stdout.writeln('  Tipe provider tidak dikenal, coba lagi.');
     }
   }
+  // Simpan pilihan custom agar langkah berikutnya konsisten dengan menu.
+  stdout.writeln('Provider dipilih: $providerType');
 
   final needsKey = providerType != 'mock' && providerType != 'ollama_native';
   final baseUrl = needsKey
@@ -1175,23 +1182,41 @@ Future<void> _setupInteractive(String configPath, bool force) async {
       ? p.dirname(configDir)
       : configDir;
   try {
+    var forceWrite = force;
+    final existing = File(configPath);
+    if (await existing.exists() && !force) {
+      stdout.writeln('');
+      stdout.writeln('Config sudah ada: ${p.absolute(configPath)}');
+      forceWrite = await prompts.confirm(
+        '  Timpa config dengan hasil wizard ini? (y/t)',
+      );
+      if (!forceWrite) {
+        stdout.writeln(
+          'Config tidak diubah. Untuk overwrite tanpa tanya, jalankan '
+          '`tiko setup --interactive --force`.',
+        );
+        return;
+      }
+    }
     final paths = await OnboardingWizard.writeAll(
       configPath: configPath,
       dataDir: p.join(projectRoot, 'data'),
       profile: profile,
-      force: force,
+      force: forceWrite,
     );
-    stdout.writeln('Config: ${paths.configPath}');
-    stdout.writeln('Env:    ${paths.envPath} (permission 600)');
+    stdout.writeln('');
+    stdout.writeln('✓ Config disimpan: ${paths.configPath}');
+    stdout.writeln('✓ Env file disimpan: ${paths.envPath} (permission 600)');
     stdout.writeln('');
     stdout.writeln('Lanjut:');
     stdout.writeln('  source ${paths.envPath}');
     stdout.writeln('  tiko doctor --probe && tiko chat');
   } on StateError catch (error) {
-    stderr.writeln(error.message);
+    stderr.writeln('✗ GAGAL menyimpan: ${error.message}');
+    stderr.writeln('Tidak ada perubahan yang selesai; jalankan ulang wizard.');
     exitCode = 1;
   } on ArgumentError catch (error) {
-    stderr.writeln(error.message);
+    stderr.writeln('✗ GAGAL: ${error.message}');
     exitCode = 2;
   }
 }
