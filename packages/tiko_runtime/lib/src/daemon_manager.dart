@@ -65,6 +65,25 @@ class DaemonManager {
     );
   }
 
+  /// Baca baris terakhir [maxLines] dari file log (mis. data/daemon.log)
+  /// untuk disertakan pada pesan kegagalan start. Null bila kosong/tak terbaca.
+  static String? tailLog(String path, {int maxLines = 40}) {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      final lines = file.readAsLinesSync();
+      while (lines.isNotEmpty && lines.last.trim().isEmpty) {
+        lines.removeLast();
+      }
+      if (lines.isEmpty) return null;
+      final tail =
+          lines.length > maxLines ? lines.sublist(lines.length - maxLines) : lines;
+      return tail.join('\n');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Walks up from the current directory looking for the repository root
   /// (a directory containing pubspec.yaml and apps/).
   static String? findRepoRoot() {
@@ -165,8 +184,11 @@ class DaemonManager {
     // Wait for both the process lock and the HTTP health endpoint. A lock
     // only proves that the process started; it does not prove that API bind,
     // token persistence, and runtime initialization succeeded.
-    for (var i = 0; i < 25; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+    const waitMs = 250;
+    const maxWait = 60;
+    var exitedBeforeReady = false;
+    for (var i = 0; i < maxWait; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: waitMs));
       final st = await status();
       if (st['running'] == true && await _apiHealthy(healthHost, apiPort)) {
         return {
@@ -177,14 +199,31 @@ class DaemonManager {
           'log': logPath,
         };
       }
+      // Deteksi kematian awal proses: agentd bisa exit segera (config
+      // invalid, biner lama, `dart` tidak ada di PATH) tanpa sempat menulis
+      // lock. exitCode tidak tersedia pada detachedWithStdio, jadi cek
+      // langsung lewat ping PID.
+      if (!RuntimeLock.isAlive(proc.pid)) {
+        exitedBeforeReady = true;
+        break;
+      }
       if (st['running'] != true && i > 2) break;
     }
+    // Pastikan seluruh output agentd ter-flush sebelum log dibaca.
+    try {
+      await log.close();
+    } catch (_) {}
+    final tail = tailLog(logPath);
+    final detail = exitedBeforeReady
+        ? 'proses daemon berakhir sebelum siap; log terakhir:\n${tail ?? '(log kosong)'}'
+        : 'timeout menunggu daemon siap (${(maxWait * waitMs / 1000).toStringAsFixed(0)}s); '
+            'log terakhir:\n${tail ?? '(log kosong)'}';
     return {
       'running': false,
-      'action': 'timeout',
+      'action': exitedBeforeReady ? 'exited' : 'timeout',
       'pid': proc.pid,
       'log': logPath,
-      'detail': 'lock belum muncul; cek data/daemon.log',
+      'detail': detail,
     };
   }
 
