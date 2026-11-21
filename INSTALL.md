@@ -190,7 +190,7 @@ Workflow CI melakukan strict Dart analysis, test seluruh workspace member yang m
 | `tiko: command not found` | prefix biner belum di PATH: `source ~/.bashrc` atau buka terminal baru; installer menambahkan `export PATH="$HOME/.local/bin:$PATH"` ke shell rc (jalankan ulang `bash install.sh` bila belum) |
 | Konfigurasi ditolak | `tiko config validate`; secret harus berupa `env:NAMA_VAR`, bukan nilai mentah |
 | Provider tidak tersedia | Periksa `providers.default_chat`, `providers.chat`, endpoint, model, dan variabel secret. `gateway.env` (hasil wizard) dimuat otomatis saat runtime start — variabel yang di-export di shell tetap menang. Setelah mengubah config, jalankan `tiko daemon restart` agar tersens |
-| Daftar model kosong di pemilih model | Discovery `GET {base}/models` hanya jalan untuk provider openai_compat/openai/gemini/deepseek yang terkonfigurasi (API key valid dari `gateway.env`); mock/ollama_native/anthropic native tidak mendukungnya dan memakai model dari config. Daftar ter-cache 15 menit |
+| Daftar model kosong di pemilih model | Discovery hanya jalan untuk provider yang terkonfigurasi (API key valid dari `gateway.env`): openai_compat/openai/gemini/deepseek via `GET {base}/models`, `ollama_native` via `GET {base}/api/tags` (daemon Ollama harus jalan); provider lain memakai model dari config. Daftar ter-cache 15 menit |
 | API port dipakai proses lain | `tiko doctor`; cek `api.port` atau `API_PORT`; jangan membunuh PID yang tidak dikenal |
 | UI offline | Periksa daemon, URL, token di Settings, dan `/health` |
 | SQLite gagal dibuka | `tiko doctor`; runtime dapat beralih ke JSON fallback dengan status degraded |

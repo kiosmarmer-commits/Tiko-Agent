@@ -1593,17 +1593,18 @@ class TikoRuntime {
     return true;
   }
 
-  /// Discovery model live (Hermes-parity): query `GET {base}/models` untuk
-  /// provider OpenAI-compat yang TERKONFIGURASI di config/gateway.env —
-  /// tidak pernah menebak provider. Cache 15 menit; fail-open (error atau
-  /// endpoint tidak mendukung discovery → daftar kosong).
+  /// Discovery model live (Hermes-parity): query endpoint daftar model
+  /// provider (OpenAI-compat `GET {base}/models`, Ollama `GET {base}/api/tags`)
+  /// untuk provider yang TERKONFIGURASI di config/gateway.env — tidak pernah
+  /// menebak provider. Cache 15 menit; fail-open (error atau provider tidak
+  /// mendukung discovery → daftar kosong).
   Future<Map<String, dynamic>> discoverProviderModels(String providerId) async {
     final id = providerId.trim().toLowerCase();
     if (!_router.providers.containsKey(id)) {
       throw StateError('provider tidak dikenal: $id');
     }
-    final provider = _router.providers[id];
-    if (provider is! OpenAiCompatProvider) {
+    final raw = _router.providers[id];
+    if (raw is! ModelDiscovery) {
       return {
         'provider': id,
         'models': const <String>[],
@@ -1611,6 +1612,12 @@ class TikoRuntime {
         'discovered': false,
       };
     }
+    final ModelDiscovery provider = raw as ModelDiscovery;
+    final configuredModel = switch (provider) {
+      final OpenAiCompatProvider p => p.model,
+      final OllamaNativeProvider p => p.model,
+      _ => null,
+    };
     final cached = _modelCatalog[id];
     final now = DateTime.now();
     if (cached == null || now.difference(cached.$2) >= _modelCatalogTtl) {
@@ -1623,7 +1630,7 @@ class TikoRuntime {
       'models': fresh,
       'count': fresh.length,
       'discovered': true,
-      'configured_model': provider.model,
+      if (configuredModel != null) 'configured_model': configuredModel,
     };
   }
 
@@ -2161,6 +2168,8 @@ class TikoRuntime {
       if (overrideProvider != null && choice != null) {
         final pinned = _router.providers[overrideProvider];
         if (pinned is OpenAiCompatProvider) {
+          preferredLlm = pinned.withModel(choice);
+        } else if (pinned is OllamaNativeProvider) {
           preferredLlm = pinned.withModel(choice);
         }
       }

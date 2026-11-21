@@ -5,8 +5,10 @@ import 'dart:io';
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
+import 'model_discovery.dart';
+
 /// Native Ollama `/api/chat` provider (shape compatible with ollama_dart usage).
-class OllamaNativeProvider implements LlmProvider {
+class OllamaNativeProvider implements LlmProvider, ModelDiscovery {
   OllamaNativeProvider({
     this.id = 'ollama_native',
     this.baseUrl = 'http://127.0.0.1:11434',
@@ -19,6 +21,42 @@ class OllamaNativeProvider implements LlmProvider {
   final String baseUrl;
   final String model;
   final http.Client? _client;
+
+  /// Salinan provider dengan model berbeda (Hermes-parity model picker)
+  /// untuk pilihan model per-sesi hasil discovery `/api/tags`.
+  OllamaNativeProvider withModel(String model) => OllamaNativeProvider(
+        id: id,
+        baseUrl: baseUrl,
+        model: model,
+        client: _client,
+      );
+
+  /// Live model discovery via `GET {base}/api/tags` (Hermes-parity
+  /// `discover_models`). Kosong bila gagal (fail-open, mis. daemon Ollama
+  /// belum jalan).
+  @override
+  Future<List<String>> discoverModels() async {
+    final base =
+        baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final client = _client ?? http.Client();
+    try {
+      final res = await client
+          .get(Uri.parse('$base/api/tags'))
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode >= 400) return const [];
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final models = json['models'] as List<dynamic>?;
+      if (models == null) return const [];
+      return [
+        for (final m in models)
+          if (m is Map && m['name'] is String) m['name'] as String,
+      ];
+    } catch (_) {
+      return const [];
+    } finally {
+      if (_client == null) client.close();
+    }
+  }
 
   @override
   Capabilities get capabilities =>
