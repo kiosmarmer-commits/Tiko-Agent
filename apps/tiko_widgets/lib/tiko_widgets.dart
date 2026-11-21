@@ -5,5 +5,6 @@
 library;
 
 export 'src/gen_ui_view.dart';
+export 'src/markdown_view.dart';
 export 'src/status_view.dart';
 export 'src/chat_interface.dart';

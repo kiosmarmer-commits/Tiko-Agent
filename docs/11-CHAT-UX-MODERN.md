@@ -51,15 +51,22 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
 
 ## 3. Rancangan perbaikan — 4 fase kecil, masing-masing satuan PR
 
-### Fase C1 — Markdown + copy (murni client, tanpa dependency baru)
-- Renderer markdown minimal **tanpa paket baru** di `tiko_widgets`: paragraf,
-  heading `#`–`###`, bullet/numbered, `**bold**`, `*italic*`, `inline code`,
-  tabel sederhana, dan **code fence** → widget `_CodeBlock` (monospace, panel
-  gelap terpisah, wrap toggle, tombol copy, label bahasa).
-- Tombol **Salin** per-pesan asisten (`Clipboard.setData`) + toast "Tersalin".
-  Pesan user mendapat menu edit-resend (opsional, bisa F2).
-- Auto-scroll bila user berada dekat dasar list; tombol "Ke bawah" bila tidak.
-- Label jujur: renderer markdown minimal, bukan CommonMark penuh.
+### Fase C1 — Markdown + copy (murni client, tanpa dependency baru) — **Implemented**
+- Renderer markdown minimal **tanpa paket baru**: `tiko_widgets/src/markdown_view.dart`
+  (`TikoMarkdownView`, parser `parseMarkdownBlocks`, inline `buildInlineSpans`).
+- Subset yang didukung: paragraf, heading `#`–`######`, bullet/numbered,
+  `**bold**`, `*italic*`, `inline code`, tabel sederhana, blockquote, dan
+  **code fence** → widget `_MdCodeBlock` (panel monospace terpisah, label
+  bahasa, scroll horizontal, tombol salin). Sintaks di luar subset dirender
+  apa adanya (fail-open) — BUKAN CommonMark penuh (label jujur).
+- `GenUiMessageView` kini merender segmen non-genui lewat `TikoMarkdownView`;
+  blok ```genui tetap berfungsi seperti sebelumnya.
+- Tombol **Salin** per-pesan asisten di chat (`Clipboard.setData`) + SnackBar
+  "Pesan tersalin" (`main.dart` `_copyMessage`); tombol salin juga di tiap
+  code block ("Kode tersalin").
+- Auto-scroll follow versi lama tetap (threshold 120px) — tombol "Ke bawah"
+  ekspres tidak dibuat karena follow yang sudah ada memadai (keputusan, bukan
+  kelalaian).
 
 ### Fase C2 — Attachment file end-to-end
 - **Backend:** `POST /v1/attachments` (multipart atau JSON base64; batas ukuran
