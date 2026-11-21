@@ -31,7 +31,10 @@ telah menambahkan `export PATH="$HOME/.local/bin:$PATH"` ke shell rc.
 
 Yang **tidak** dilakukan (jujur): memasang Flutter SDK/membangun client
 Flutter, dan mengonfigurasi provider LLM — jalankan `tiko setup --provider
-mock` setelah install (lihat bagian 2).
+mock` setelah install (lihat bagian 2), atau wizard interaktif `tiko setup
+--interactive` yang menampilkan menu bernomor/panah (↑/bawah + Enter) untuk
+memilih tipe provider, lalu menyimpan config + `gateway.env` (permission 600)
+dengan konfirmasi timpa bila config sudah ada.
 
 ## 1. Persyaratan
 
