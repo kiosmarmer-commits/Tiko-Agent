@@ -36,7 +36,15 @@ abstract class AgentRepository {
   Future<SkillGateOutcome> rollbackSkill(String slug);
   Future<List<SkillHistoryEntry>> skillHistory(String slug);
   Future<ProvidersSnapshot> providers();
-  Future<bool> setSessionProvider(String sessionId, String providerArg);
+
+  /// Live model discovery (Hermes-parity); daftar kosong bila endpoint
+  /// tidak mendukung.
+  Future<List<String>> providerModels(String providerId);
+  Future<bool> setSessionProvider(
+    String sessionId,
+    String providerArg, {
+    String? model,
+  });
   Future<PluginsToolsSnapshot> pluginsTools();
   Future<String> setPluginConsent(String plugin, String action);
   Future<ChannelsSnapshot> channels();
@@ -210,8 +218,22 @@ class HttpAgentRepository implements AgentRepository {
       ProvidersSnapshot.fromMap(await _guard(_client.fetchProviders));
 
   @override
-  Future<bool> setSessionProvider(String sessionId, String providerArg) =>
-      _guard(() => _client.setSessionProvider(sessionId, providerArg));
+  @override
+  Future<List<String>> providerModels(String providerId) async {
+    final json = await _guard(() => _client.fetchProviderModels(providerId));
+    final models = json['models'] as List? ?? const [];
+    return [for (final m in models) if (m is String) m];
+  }
+
+  @override
+  Future<bool> setSessionProvider(
+    String sessionId,
+    String providerArg, {
+    String? model,
+  }) =>
+      _guard(
+        () => _client.setSessionProvider(sessionId, providerArg, model: model),
+      );
 
   @override
   Future<PluginsToolsSnapshot> pluginsTools() async =>

@@ -10,11 +10,31 @@ class _FakeOpenAI {
   _FakeOpenAI._(this._server);
   final HttpServer _server;
 
+  String? lastChatModel;
+  int modelsRequests = 0;
+
   static Future<_FakeOpenAI> start() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final api = _FakeOpenAI._(server);
     server.listen((req) async {
-      await utf8.decoder.bind(req).drain();
+      final body = await utf8.decoder.bind(req).join();
+      if (req.uri.path == '/v1/models') {
+        api.modelsRequests++;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({
+          'data': [
+            {'id': 'fake-1'},
+            {'id': 'fake-2'},
+            {'id': 'fake-large'},
+          ],
+        }));
+        await req.response.close();
+        return;
+      }
+      if (body.isNotEmpty) {
+        final payload = jsonDecode(body) as Map<String, dynamic>;
+        api.lastChatModel = payload['model'] as String?;
+      }
       req.response.headers.contentType =
           ContentType.parse('text/event-stream');
       req.response.write(
@@ -117,5 +137,67 @@ void main() {
     final out = await rt.chat('/tools');
     expect(out, contains('tool terdaftar'));
     expect(out, contains('risk='));
+  });
+
+  test('discoverProviderModels: live /models + cache 15 menit', () async {
+    final rt = await TikoRuntime.create(configPath: configPath);
+    addTearDown(rt.close);
+
+    final first = await rt.discoverProviderModels('fake');
+    expect(first['provider'], 'fake');
+    expect(first['discovered'], isTrue);
+    expect(first['count'], 3);
+    expect(first['models'], containsAll(['fake-1', 'fake-2', 'fake-large']));
+    expect(fake.modelsRequests, 1);
+
+    final cached = await rt.discoverProviderModels('fake');
+    expect(cached['models'], contains('fake-large'));
+    expect(fake.modelsRequests, 1, reason: 'cache 15 menit: satu request saja');
+  });
+
+  test('discoverProviderModels: provider tidak dikenal → StateError, '
+      'mock → discovered false', () async {
+    final rt = await TikoRuntime.create(configPath: configPath);
+    addTearDown(rt.close);
+
+    expect(
+      () => rt.discoverProviderModels('tidak-ada'),
+      throwsStateError,
+    );
+
+    final mock = await rt.discoverProviderModels('mock');
+    expect(mock['discovered'], isFalse);
+    expect(mock['models'], isEmpty);
+  });
+
+  test('setSessionModel memasang provider + model; chat memakai model itu',
+      () async {
+    final rt = await TikoRuntime.create(configPath: configPath);
+    addTearDown(rt.close);
+
+    expect(rt.setSessionModel('cli:default', 'fake', 'fake-large'), isTrue);
+    expect(rt.sessionModelChoice('cli:default'), 'fake-large');
+    expect(rt.effectiveSessionProvider('cli:default'), 'fake');
+
+    final out = await rt.chat('halo');
+    expect(out, contains('dari provider palsu'));
+    expect(fake.lastChatModel, 'fake-large');
+
+    expect(rt.setSessionModel('cli:default', 'fake', null), isTrue);
+    expect(rt.sessionModelChoice('cli:default'), isNull);
+
+    expect(rt.setSessionModel('cli:default', 'tidak-ada', 'x'), isFalse);
+
+    rt.clearSessionProvider('cli:default');
+    expect(rt.sessionModelChoice('cli:default'), isNull);
+  });
+
+  test('override provider tanpa pilihan model memakai model config',
+      () async {
+    final rt = await TikoRuntime.create(configPath: configPath);
+    addTearDown(rt.close);
+    expect(rt.setSessionModel('cli:default', 'fake', null), isTrue);
+    await rt.chat('halo');
+    expect(fake.lastChatModel, 'fake-1');
   });
 }

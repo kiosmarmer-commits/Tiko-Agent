@@ -32,6 +32,13 @@ dart run apps/agentd/bin/agentd.dart --api
 - Spawn dari app Flutter desktop dan scheduler programatik menyetel `TIKO_NO_BROWSER=1` agar tidak membuka tab ekstra. Kontrol manual: `TIKO_NO_BROWSER=1` atau `TIKO_OPEN_BROWSER=0`.
 - Auto-open hanya aktif pada bind loopback; daemon yang di-bind ke host non-loopback tidak membuka browser.
 
+### 4.1 Pemilih model per-sesi (discovery ala Hermes)
+
+- Chip model di header chat membaca `GET /v1/providers/<id>/models`: daemon menjalankan live discovery `GET {base}/models` hanya untuk provider OpenAI-compat yang terkonfigurasi (config + `gateway.env`) — tidak pernah menebak provider.
+- Hasil discovery di-cache 15 menit per provider; endpoint error → daftar kosong (fail-open) dan pemilih lanjut memakai model default provider.
+- Pilihan provider + model tersimpan per-sesi via `POST /v1/providers/session` dengan field `model` opsional; chip menampilkan `provider · model` bila model eksplisit terpasang.
+- Snapshot `GET /v1/providers` menambahkan `session_model_choices` (peta session → model).
+
 ## 5. Batasan dan test
 
 - Memerlukan Flutter SDK untuk build; tanpa build, UI statis 404 dengan instruksi di log daemon. Renderer Canvaskit postematik aset engine dari CDN saat pertama kali dibuka, jadi browser pengguna memerlukan akses jaringan keluar; untuk lingkungan offline, pertimbangkan self-host aset Canvaskit pada konfigurasi build Flutter Web.

@@ -69,6 +69,16 @@ void main() {
             }));
             await req.response.close();
           }
+        } else if (req.uri.path == '/v1/models') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'data': [
+              {'id': 'mock-model'},
+              {'id': 'mock-model-2'},
+              {'not-an-id': true},
+            ],
+          }));
+          await req.response.close();
         } else {
           req.response.statusCode = 404;
           await req.response.close();
@@ -217,5 +227,31 @@ void main() {
 
     expect(events.whereType<LlmError>(), hasLength(1));
     expect(events.whereType<LlmError>().single.code, '500');
+  });
+
+  test('withModel mengembalikan salinan dengan model berbeda', () async {
+    final base = provider();
+    final alt = base.withModel('mock-model-2');
+
+    expect(alt.id, base.id);
+    expect(alt.model, 'mock-model-2');
+    expect(alt.baseUrl, base.baseUrl);
+    expect(alt.capabilities.maxContext, base.capabilities.maxContext);
+    expect(alt, isNot(same(base)));
+
+    final events = await alt
+        .chat(const ChatRequest(
+          messages: [ChatMessage(role: 'user', content: 'ping')],
+          stream: false,
+        ))
+        .toList();
+    expect(received.single.body['model'], 'mock-model-2');
+    expect(events, isNotEmpty);
+  });
+
+  test('discoverModels mengambil daftar model dari endpoint', () async {
+    final models = await provider().discoverModels();
+    expect(received.any((r) => r.path == '/v1/models'), isTrue);
+    expect(models, containsAll(['mock-model', 'mock-model-2']));
   });
 }

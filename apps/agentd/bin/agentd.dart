@@ -904,14 +904,16 @@ Future<void> main(List<String> args) async {
                 '${e.key}': e.value,
             },
             'session_overrides': rt.sessionModelOverrides(),
+            'session_model_choices': rt.sessionModelChoices(),
           };
         },
-        sessionProviderSetter: (sessionId, arg) async {
+        providerModels: (providerId) => rt.discoverProviderModels(providerId),
+        sessionProviderSetter: (sessionId, arg, model) async {
           if (arg.toLowerCase() == 'default') {
             rt.clearSessionProvider(sessionId);
             return true;
           }
-          return rt.setSessionProvider(sessionId, arg.toLowerCase());
+          return rt.setSessionModel(sessionId, arg.toLowerCase(), model);
         },
         pluginProvider: () async {
           final base = rt.pluginSnapshot();

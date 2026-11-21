@@ -451,11 +451,57 @@ class _AgentAppState extends State<AgentApp> {
     unawaited(refreshAdmin(force: true));
   }
 
-  /// Pemilih model/provider per-sesi (GUI-P3) di header chat: memakai
-  /// endpoint `POST /v1/providers/session` yang sudah ada.
+  /// Pemilih model/provider per-sesi (GUI-P3) di header chat, parity
+  /// Hermes `/model`: provider harus terkonfigurasi; bila endpoint
+  /// `/v1/providers/<id>/models` mengembalikan daftar model (discovery
+  /// live, cache 15 menit), user memilih model spesifik; bila discovery
+  /// tidak tersedia (fail-open) lanjut dengan model default provider.
   Future<void> _selectChatProvider(String providerId) async {
     try {
-      final ok = await repo.setSessionProvider(sessionKey, providerId);
+      List<String> models = const [];
+      try {
+        models = await repo.providerModels(providerId);
+      } catch (_) {
+        models = const [];
+      }
+      String? model;
+      if (models.isNotEmpty && mounted) {
+        model = await showModalBottomSheet<String>(
+          context: context,
+          showDragHandle: true,
+          builder: (sheetContext) => SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Text(
+                    'Model tersedia — $providerId',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                for (final m in models)
+                  ListTile(
+                    key: Key('opt-chat-model-$m'),
+                    dense: true,
+                    title: Text(m, style: const TextStyle(fontSize: 13)),
+                    onTap: () => Navigator.pop(sheetContext, m),
+                  ),
+              ],
+            ),
+          ),
+        );
+        if (model == null) return;
+      }
+      if (!mounted) return;
+      final ok = await repo.setSessionProvider(
+        sessionKey,
+        providerId,
+        model: model,
+      );
       if (!ok && mounted) {
         setState(
           () => adminError = 'Provider "$providerId" tidak ditemukan.',
@@ -1068,9 +1114,11 @@ class _ChatPageState extends State<_ChatPage> {
   String _chatProviderLabel() {
     final snapshot = widget.providerSnapshot;
     if (snapshot == null) return 'default';
-    return snapshot.sessionOverrides[widget.sessionKey] ??
+    final id = snapshot.sessionOverrides[widget.sessionKey] ??
         snapshot.defaultId ??
         'default';
+    final model = snapshot.sessionModelChoices[widget.sessionKey];
+    return model == null ? id : '$id · $model';
   }
 
   /// Chip pemilih model/provider gaya chat AI modern (GUI-P3): pill kecil
