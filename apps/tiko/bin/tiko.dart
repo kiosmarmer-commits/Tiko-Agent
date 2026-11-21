@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
-import 'package:agent_providers/agent_providers.dart'
-    show ModelDiscovery, OpenAiCompatProvider;
+import 'package:agent_providers/agent_providers.dart' show ModelDiscovery;
 import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
