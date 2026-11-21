@@ -185,16 +185,19 @@ class DaemonManager {
     // only proves that the process started; it does not prove that API bind,
     // token persistence, and runtime initialization succeeded.
     const waitMs = 250;
-    const maxWait = 60;
+    const maxWait = 80;
     var exitedBeforeReady = false;
     for (var i = 0; i < maxWait; i++) {
       await Future<void>.delayed(const Duration(milliseconds: waitMs));
       final st = await status();
+      // Lock membuktikan proses kita; health endpoint membuktikan API hidup.
+      // Runtime init (MCP, gateway, memory) bisa lebih lambat dari lock, jadi
+      // success ditentukan health dengan lock sebagai syarat.
       if (st['running'] == true && await _apiHealthy(healthHost, apiPort)) {
         return {
           'running': true,
           'action': 'started',
-          'pid': st['pid'],
+          'pid': (st['pid'] as int?) ?? proc.pid,
           'port': apiPort,
           'log': logPath,
         };
@@ -209,15 +212,20 @@ class DaemonManager {
       }
       if (st['running'] != true && i > 2) break;
     }
-    // Pastikan seluruh output agentd ter-flush sebelum log dibaca.
+    // JANGAN tutup sink: daemon bisa masih booting (detached) dan tetap
+    // menulis ke pipe. Menutup IOSink di sini memicu error
+    // StreamSink is closed pada listener stdout. Flush saja agar tail
+    // yang dibaca lengkap.
     try {
-      await log.close();
+      await log.flush();
     } catch (_) {}
     final tail = tailLog(logPath);
     final detail = exitedBeforeReady
         ? 'proses daemon berakhir sebelum siap; log terakhir:\n${tail ?? '(log kosong)'}'
         : 'timeout menunggu daemon siap (${(maxWait * waitMs / 1000).toStringAsFixed(0)}s); '
-            'log terakhir:\n${tail ?? '(log kosong)'}';
+            'daemon (pid ${proc.pid}) mungkin masih booting latar belakang - '
+            'cek tiko daemon status atau ulangi tiko daemon start '
+            '(akan reuse bila sudah sehat). log terakhir:\n${tail ?? '(log kosong)'}';
     return {
       'running': false,
       'action': exitedBeforeReady ? 'exited' : 'timeout',

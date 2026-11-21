@@ -67,6 +67,12 @@ Evaluation:
 Opsi: --config PATH  --json  --no-safe  --mode auto|embedded
 ''';
 
+String? _siblingAgentdBinary() {
+  final candidate =
+      p.join(p.dirname(Platform.resolvedExecutable), 'agentd');
+  return File(candidate).existsSync() ? candidate : null;
+}
+
 Future<void> main(List<String> argv) async {
   final parsed = parseTikoArgs(argv);
   final configPath = parsed.configPath;
@@ -134,6 +140,9 @@ Future<void> main(List<String> argv) async {
     apiPort: rt.config.apiPort,
     configPath: p.absolute(configPath),
     safe: safe,
+    // Biner AOT hasil install.sh hidup bersebelahan dengan tiko; startup
+    // agentd jauh lebih cepat daripada `dart run` (JIT) di mesin lemah.
+    agentdBinary: _siblingAgentdBinary(),
   );
   final bus = EventBus();
   final skillsDir = p.join(rt.workspace, 'skills');
