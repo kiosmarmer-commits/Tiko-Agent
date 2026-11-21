@@ -4017,17 +4017,38 @@ class TikoRuntime {
           'scheduled_at': job.scheduledAt?.toIso8601String(),
         });
         try {
+          // Attach skill (Hermes-parity P2): fail-closed — skill hilang/
+          // retired membuat run gagal dengan pesan eksplisit, bukan
+          // dijalankan tanpa skill.
+          var promptText = message.text;
+          final attachedSkill =
+              job.skill == null ? null : skills.get(job.skill!);
+          if (job.skill != null &&
+              (attachedSkill == null ||
+                  attachedSkill.status == SkillStatus.retired)) {
+            throw StateError(
+              'skill "${job.skill}" tidak tersedia atau sudah retired',
+            );
+          }
+          if (attachedSkill != null) {
+            promptText =
+                '${attachedSkill.body}\n\nTask:\n${message.text}';
+          }
           final outcome = await chatWithStatus(
-            message.text,
+            promptText,
             sessionId: message.sessionKey,
             channel: job.channel,
             userKey: job.userKey,
           );
+          if (attachedSkill != null) {
+            skills.recordUse(attachedSkill.slug, success: outcome.success);
+          }
           if (!outcome.success) {
             throw StateError(
               'scheduled agent turn did not complete successfully: ${outcome.text}',
             );
           }
+          jobs.recordSuccess(job.id);
           if (deliver != null) {
             // Antre durabel sebelum menerbitkan sukses: crash setelah titik
             // ini me-replay delivery alih-alih kehilangan output.
@@ -4047,8 +4068,10 @@ class TikoRuntime {
             'delivery_pending': deliver != null,
           });
         } catch (error) {
+          jobs.recordFailure(job.id, _sanitizer.output('$error'));
           events.emit('job.failed', {
             'job_id': job.id,
+            'marker': '[CRON_FAILURE]',
             'channel': job.channel,
             'session_id': message.sessionKey,
             'error': _sanitizer.output('$error'),
@@ -4071,15 +4094,18 @@ class TikoRuntime {
         'attempt': attempt,
         'error': _sanitizer.output('$error'),
       }),
-      onDeliveryFailed: (job, runId, attempts, error) =>
-          events.emit('job.delivery_failed', {
-        'job_id': job.id,
-        'channel': job.channel,
-        'run_id': runId,
-        'attempts': attempts,
-        'error': _sanitizer.output('$error'),
-        'session_id': '${job.channel}:${job.userKey}:job:${job.id}',
-      }),
+      onDeliveryFailed: (job, runId, attempts, error) {
+        jobs.recordFailure(job.id, _sanitizer.output('$error'));
+        events.emit('job.delivery_failed', {
+          'job_id': job.id,
+          'marker': '[CRON_FAILURE]',
+          'channel': job.channel,
+          'run_id': runId,
+          'attempts': attempts,
+          'error': _sanitizer.output('$error'),
+          'session_id': '${job.channel}:${job.userKey}:job:${job.id}',
+        });
+      },
       onError: (job, error) => events.emit('job.retry', {
         'job_id': job.id,
         'channel': job.channel,

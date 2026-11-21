@@ -34,10 +34,11 @@
 - **Validasi config:** aturan invalid dilompati dengan issue `fatal: false` (`hooks[N]…`) — config hook salah tidak pernah membunuh daemon.
 - **Observabilitas:** hasil tiap fire di-emit balik sebagai event `hook.executed` `{rule, trigger, outcome, error?}`; snapshot rules + stats per target tersedia via `rt.hookSnapshot()` dan di `/v1/plugins` (`hooks`). GUI Pengaturan → Hooks menyusul.
 
-### P2 — Job cron: pause/resume + attach skill + penanda kegagalan eksplisit
+### P2 — Job cron: pause/resume + attach skill + penanda kegagalan eksplisit — **Implemented**
 - **Hermes:** job bisa pause/resume/edit, melampirkan skill, dan turn gagal dideklarasikan lewat penanda eksplisit (`[CRON_FAILURE]`) yang tercatat di last_status/failure streak.
-- **Fondasi Tiko:** job create/update/delete/run-now sudah ada di gateway; belum ditemukan surface pause/resume pada scheduler (per kode saat ini).
-- **Desain sarankan:** kolom `paused` + endpoint `POST /v1/jobs/<id>/pause|resume`; attach skill slug ke job (dievaluasi lewat skill gate yang sudah ada); konvensi penanda kegagalan pada hasil run → `last_status` + streak di snapshot jobs.
+- **Implementasi Tiko:** field `Job.paused` (persist; `_claim` melewati job paused — run/delivery yang sudah berjalan dibiarkan selesai, at-least-once) + `JobStore.setPaused` + endpoint `POST /v1/jobs/<id>/pause|resume` (501 bila host tak konfigurasi); PATCH & create menerima `paused` juga.
+- **Attach skill:** field `Job.skill` (slug 1..64 tanpa spasi; `"all"` di PATCH menghapus lampiran) — dijadwalkan lewat REST (`/v1/jobs`) maupun tool `schedule_job`. Handler runtime fail-closed: skill hilang/`retired` membuat run gagal dengan pesan eksplisit; skill aktif di-prepend ke prompt run dan `recordUse` tercatat.
+- **Status run:** `JobStore.recordSuccess/recordFailure` → `last_status` (`ok`/`failed`), `last_error` berprefiks `[CRON_FAILURE]`, dan `failure_streak` direset/bertambah; semua tampil di snapshot jobs (`/v1/jobs`) dan dipersist di `jobs.json`.
 
 ### P3 — `@ Context references` di chat
 - **Hermes:** `@file`, `@folder`, `@git-diff`, `@url` diekspansi inline jadi konteks pesan.
@@ -67,5 +68,5 @@
 ## 4. Langkah tindak lanjut
 
 1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + snapshot `/v1/plugins`; wiring GUI menyusul di PR berikutnya.
-2. P2 pause/resume job — perubahan scheduler + endpoint + test (dampak kecil).
+2. ~~P2 pause/resume job~~ — **selesai**: `Job.paused` + endpoint `/v1/jobs/<id>/pause|resume` + `Job.skill` (fail-closed lewat skill registry) + `last_status`/`failure_streak` dengan penanda `[CRON_FAILURE]`.
 3. P3–P5 menyusul setelah P2 stabil; masing-masing berdiri sendiri.

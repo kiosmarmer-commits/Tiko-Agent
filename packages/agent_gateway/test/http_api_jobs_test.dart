@@ -72,6 +72,12 @@ void main() {
         hit.first['next_run'] = DateTime.now().toUtc().toIso8601String();
         return hit.first;
       },
+      pauseJob: (id, paused) async {
+        final hit = jobs.where((j) => j['id'] == id).toList();
+        if (hit.isEmpty) return null;
+        hit.first['paused'] = paused;
+        return hit.first;
+      },
     );
     await server.start();
   });
@@ -209,6 +215,42 @@ void main() {
     expect(r1['body']['next_run'], isNotEmpty);
     final r2 = await send('POST', '/v1/jobs/tidak-ada/run');
     expect(r2['status'], 404);
+  });
+
+  test('POST /v1/jobs/:id/pause dan /resume memutar flag paused', () async {
+    final r1 = await send('POST', '/v1/jobs/job-1/pause');
+    expect(r1['status'], 200);
+    expect(r1['body']['paused'], isTrue);
+    final r2 = await send('POST', '/v1/jobs/job-1/resume');
+    expect(r2['status'], 200);
+    expect(r2['body']['paused'], isFalse);
+    final r3 = await send('POST', '/v1/jobs/tidak-ada/pause');
+    expect(r3['status'], 404);
+    expect(r3['body']['code'], 'not_found');
+  });
+
+  test('PATCH /v1/jobs/:id menerima paused dan skill', () async {
+    final r1 = await send(
+      'PATCH',
+      '/v1/jobs/job-1',
+      body: {'paused': true, 'skill': 'ringkas-berita'},
+    );
+    expect(r1['status'], 200);
+    expect(r1['body']['paused'], isTrue);
+    expect(r1['body']['skill'], 'ringkas-berita');
+    final r2 = await send(
+      'PATCH',
+      '/v1/jobs/job-1',
+      body: {'paused': 'bukan-bool'},
+    );
+    expect(r2['status'], 400);
+    expect(r2['body']['code'], 'invalid_request');
+    final r3 = await send(
+      'PATCH',
+      '/v1/jobs/job-1',
+      body: {'skill': 'dua kata'},
+    );
+    expect(r3['status'], 400);
   });
 
   test('daemon tanpa callback jobs 501 not_implemented', () async {

@@ -30,6 +30,11 @@ class ScheduleJobTool implements Tool {
           'description':
               'Nama zona IANA penuh, mis. Asia/Jakarta atau America/New_York; DST dihitung otomatis',
         },
+        'skill': {
+          'type': 'string',
+          'description':
+              'Slug skill opsional yang dilampirkan ke tiap run; skill harus tersedia dan tidak retired',
+        },
       },
       'required': ['cron', 'prompt'],
     },
@@ -70,6 +75,7 @@ class ScheduleJobTool implements Tool {
         userKey: (args['user_key'] as String?) ?? ctx.session.userKey,
         missedPolicy: policy,
         timezone: timezone,
+        skill: (args['skill'] as String?)?.trim(),
       );
     } catch (error) {
       return ToolResult(callId: '', content: 'job tidak dapat disimpan: $error', isError: true);
