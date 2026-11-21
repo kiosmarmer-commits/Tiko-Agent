@@ -55,12 +55,14 @@ Semua literal warna/spacing/radius/typography di `apps/agent_flutter` wajib bera
 | Dialog/snackbar/tooltip | tema global | Radius 12–16, floating snackbar, tanpa elevation |
 | Chat | `_ChatPage` (main.dart) | Asisten full-width max 760 di `surfaceRaised`; user bubble aksen kanan; aksi suara sebagai caption button |
 | Composer | `_Composer` (main.dart) | Pil radius 24 di `panel`, field borderless, tombol kirim `IconButton.filled` aksen |
+| Header chat (GUI-P3) | `_ChatPage` (main.dart) | Tombol "chat baru" (`add_comment_outlined`) + chip pemilih provider pil `surfaceHover`/border 1px; menu popup popup-menu standar tema |
 
 ## 4. Platform paritas
 
 - Satu pohon widget dipakai semua platform; hanya shell yang berganti: NavigationRail (lebar ≥900px) vs NavigationBar (sempit). Karena semua warna berasal dari `Brightness`, Android/Web/Desktop otomatis konsisten.
 - Mode Simple/Advanced tetap memfilter route (`GUI-P2-01`); desain tidak menambah/mengurangi destinasi.
 - Badge approval pending (`GUI-P0-06`) tetap pada destinasi Approvals di kedua shell.
+- Chat baru & pemilih model (`GUI-P3`): tombol di header chat membuat id sesi baru (sesi terealisasi saat pesan pertama dikirim, pola "New chat" umum), dan chip provider di header chat mengubah provider per-sesi via `POST /v1/providers/session` yang sudah ada — meniru pemilih model ChatGPT/Claude.
 - Konsolidasi web (Jalur A): `HttpApiServer` melayani hasil `flutter build web` sebagai `webRoot`, sehingga semua permukaan web memakai token yang sama. Dashboard vanilla `apps/agentd/web` (beserta retokenisasi CSS variables-nya) telah dipensiunkan pada fase 3; satu-satunya UI web adalah Flutter Web. Fase 2 menyeragamkan sesi web: index UI yang dilayani agentd menerbitkan cookie sesi same-origin (`tiko_web_session`, HttpOnly + SameSite=Strict) sehingga kolom token di Settings/Bantuan opsional, dan daemon bind loopback otomatis membuka browser ke UI (`TIKO_NO_BROWSER=1` untuk spawn programatik/manual). Rincian penyajian dan keamanan di [10-WEB-UI.md](10-WEB-UI.md).
 
 ## 5. Aturan perubahan

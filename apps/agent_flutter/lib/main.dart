@@ -438,6 +438,41 @@ class _AgentAppState extends State<AgentApp> {
     unawaited(chat.openSession(id));
   }
 
+  /// Sesi chat baru (GUI-P3): sesi dibuat implisit saat pesan pertama
+  /// dikirim dengan id baru, meniru pola "New chat" pada agen AI umum.
+  void _newChatSession() {
+    final id = 'flutter:chat-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+    setState(() {
+      sessionKey = id;
+      adminError = null;
+      route = AppRoute.chat;
+    });
+    chat.clearChat();
+    unawaited(refreshAdmin(force: true));
+  }
+
+  /// Pemilih model/provider per-sesi (GUI-P3) di header chat: memakai
+  /// endpoint `POST /v1/providers/session` yang sudah ada.
+  Future<void> _selectChatProvider(String providerId) async {
+    try {
+      final ok = await repo.setSessionProvider(sessionKey, providerId);
+      if (!ok && mounted) {
+        setState(
+          () => adminError = 'Provider "$providerId" tidak ditemukan.',
+        );
+        return;
+      }
+      if (mounted) setState(() => adminError = null);
+      await refreshAdmin(force: true);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => adminError = 'Gagal mengganti provider: $error',
+        );
+      }
+    }
+  }
+
   Future<bool> _sendSkillFeedback(String slug, bool positive) async {
     final ok = await repo.skillFeedback(slug, positive);
     if (ok) {
@@ -615,6 +650,9 @@ class _AgentAppState extends State<AgentApp> {
           multiPane: settings.multiPane,
           inspectorVisible: inspectorVisible,
           onToggleInspector: _toggleInspector,
+          providerSnapshot: providerSnapshot,
+          onNewChat: _newChatSession,
+          onSelectProvider: _selectChatProvider,
         );
         // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
         if (!settings.multiPane) return chatPage;
@@ -953,6 +991,9 @@ class _ChatPage extends StatefulWidget {
     this.multiPane = false,
     this.inspectorVisible = false,
     this.onToggleInspector,
+    this.providerSnapshot,
+    this.onNewChat,
+    this.onSelectProvider,
   });
   final ChatController chat;
   final String sessionKey;
@@ -961,6 +1002,9 @@ class _ChatPage extends StatefulWidget {
   final bool multiPane;
   final bool inspectorVisible;
   final VoidCallback? onToggleInspector;
+  final ProvidersSnapshot? providerSnapshot;
+  final VoidCallback? onNewChat;
+  final Future<void> Function(String providerId)? onSelectProvider;
 
   @override
   State<_ChatPage> createState() => _ChatPageState();
@@ -1021,6 +1065,74 @@ class _ChatPageState extends State<_ChatPage> {
     );
   }
 
+  String _chatProviderLabel() {
+    final snapshot = widget.providerSnapshot;
+    if (snapshot == null) return 'default';
+    return snapshot.sessionOverrides[widget.sessionKey] ??
+        snapshot.defaultId ??
+        'default';
+  }
+
+  /// Chip pemilih model/provider gaya chat AI modern (GUI-P3): pill kecil
+  /// di header chat membuka menu provider yang tersedia untuk sesi ini.
+  Widget _chatModelChip(BuildContext context) {
+    final snapshot = widget.providerSnapshot;
+    final current = _chatProviderLabel();
+    return PopupMenuButton<String>(
+      key: const Key('btn-chat-provider-picker'),
+      tooltip: 'Pilih model AI untuk sesi ini',
+      onSelected: (id) {
+        if (id != current) unawaited(widget.onSelectProvider!(id));
+      },
+      itemBuilder: (context) => [
+        if (snapshot?.defaultId != null && snapshot!.defaultId!.isNotEmpty)
+          PopupMenuItem<String>(
+            value: snapshot!.defaultId,
+            child: _providerMenuRow(
+              snapshot!.defaultId!,
+              selected: current == snapshot.defaultId,
+            ),
+          ),
+        for (final p in snapshot?.providers ?? const [])
+          if (p.id != snapshot?.defaultId)
+            PopupMenuItem<String>(
+              value: p.id,
+              child: _providerMenuRow(p.id, selected: current == p.id),
+            ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.simpulSurfaceHover,
+          borderRadius: BorderRadius.circular(SimpulTheme.radiusPill),
+          border: Border.all(color: context.simpulBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune, size: 14, color: context.simpulMuted),
+            const SizedBox(width: 6),
+            Text(
+              current,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: context.simpulMuted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _providerMenuRow(String id, {required bool selected}) {
+    return Row(
+      children: [
+        Icon(selected ? Icons.check : Icons.circle_outlined, size: 14),
+        const SizedBox(width: 8),
+        Text(id, style: const TextStyle(fontSize: 13)),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     widget.chat.removeListener(_followLatestMessage);
@@ -1040,8 +1152,21 @@ class _ChatPageState extends State<_ChatPage> {
               title: 'Chat',
               subtitle: widget.sessionKey,
               online: chat.online,
-              trailing: widget.multiPane
-                  ? IconButton(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.onNewChat != null)
+                    IconButton(
+                      key: const Key('btn-chat-new-session'),
+                      tooltip: 'Chat baru',
+                      icon: const Icon(Icons.add_comment_outlined),
+                      onPressed: widget.onNewChat,
+                    ),
+                  if (widget.onSelectProvider != null &&
+                      (widget.providerSnapshot?.providers.isNotEmpty ?? false))
+                    _chatModelChip(context),
+                  if (widget.multiPane)
+                    IconButton(
                       tooltip: widget.inspectorVisible
                           ? 'Tutup inspector'
                           : 'Buka inspector (GUI-P2-03)',
@@ -1051,8 +1176,9 @@ class _ChatPageState extends State<_ChatPage> {
                             : Icons.view_column_outlined,
                       ),
                       onPressed: widget.onToggleInspector,
-                    )
-                  : null,
+                    ),
+                ],
+              ),
             ),
             Expanded(
               child: chat.messages.isEmpty
