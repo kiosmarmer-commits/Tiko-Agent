@@ -25,10 +25,14 @@
 
 ## 2. Gap yang layak diadopsi (urutan prioritas)
 
-### P1 — Event Hooks (lifecycle hooks)
+### P1 — Event Hooks (lifecycle hooks) — **Implemented**
 - **Hermes:** jalankan kode/skrip kustom di titik lifecycle: sebelum/sesudah tool call, turn selesai, cron fire, delivery gagal — dipakai untuk logging, alert, webhook, guardrail, metrics.
-- **Fondasi Tiko:** `EventBus` sudah memancarkan event (`model.switched`, `approval.denied`, `memory.curated`, dsb.); tinggal lapisan *hook executor*.
-- **Desain sarankan:** `hooks:` di `agent.yaml` (match `event`, `script`/URL, timeout, rate-limit); eksekusi lewat runner sandbox yang sama dengan tools; fail-closed + approval untuk script baru; observabilitas ke audit log. GUI: Pengaturan → Hooks.
+- **Implementasi Tiko:** config top-level `hooks:` di `agent.yaml` — daftar mapping `{event, webhook/script, timeout_sec, env}`; `event` bisa nama event `EventBus` (`model.switched`, `approval.denied`, `memory.curated`, dsb.) atau `*` untuk semua.
+- **Eksekusi:** `HookExecutor` (tiko_runtime) subscribe `events.stream`; fire-and-forget — kegagalan hook tidak pernah menggagalkan turn chat; event hasil sendiri (`hook.*`) tidak pernah memicu hook (anti-loop).
+- **Webhook:** POST JSON `{event, at, data}`; status ≥ 400 dianggap gagal.
+- **Script:** path relatif di dalam workspace (tanpa `..`/absolut — divalidasi ulang saat fire, fail-closed), dijalankan via `sh` dengan env minimal `PATH`, `TIKO_EVENT`, `TIKO_EVENT_DATA_JSON`, plus `env:` rule; timeout 1..120 detik → kill.
+- **Validasi config:** aturan invalid dilompati dengan issue `fatal: false` (`hooks[N]…`) — config hook salah tidak pernah membunuh daemon.
+- **Observabilitas:** hasil tiap fire di-emit balik sebagai event `hook.executed` `{rule, trigger, outcome, error?}`; snapshot rules + stats per target tersedia via `rt.hookSnapshot()` dan di `/v1/plugins` (`hooks`). GUI Pengaturan → Hooks menyusul.
 
 ### P2 — Job cron: pause/resume + attach skill + penanda kegagalan eksplisit
 - **Hermes:** job bisa pause/resume/edit, melampirkan skill, dan turn gagal dideklarasikan lewat penanda eksplisit (`[CRON_FAILURE]`) yang tercatat di last_status/failure streak.
@@ -62,6 +66,6 @@
 
 ## 4. Langkah tindak lanjut
 
-1. Implementasi P1 (Event Hooks) — mulai dari skema config + hook executor + test lifecycle, lalu wiring GUI.
+1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + snapshot `/v1/plugins`; wiring GUI menyusul di PR berikutnya.
 2. P2 pause/resume job — perubahan scheduler + endpoint + test (dampak kecil).
-3. P3–P5 menyusul setelah P1/P2 stabil; masing-masing berdiri sendiri.
+3. P3–P5 menyusul setelah P2 stabil; masing-masing berdiri sendiri.

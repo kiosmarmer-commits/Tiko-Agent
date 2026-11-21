@@ -197,5 +197,6 @@ Workflow CI melakukan strict Dart analysis, test seluruh workspace member yang m
 | MCP tidak aktif | Periksa `mcp.servers`, allowlist, SecretRef, dan ketersediaan sandbox OS; proses dimulai oleh daemon setelah instance lock |
 | Shell/MCP/script tidak aktif | Periksa hasil deteksi sandbox host; jangan menganggap `proot` setara isolasi OS |
 | Job tidak terkirim ke channel | Pastikan gateway channel tersebut diaktifkan; scheduler tidak mengirim silang ke gateway lain |
+| Aturan `hooks:` tidak terpicu | Periksa `data/daemon.log` untuk issue `hooks[N]` (aturan invalid dilompati, tidak mematikan daemon); event `hook.executed` di EventBus mencatat outcome tiap fire; snapshot aturan+statistik juga ada di `/v1/plugins` (`hooks`). Script harus relatif di dalam workspace — aturan invalid tidak dijalankan (fail-closed) |
 
 Jangan commit `data/api.token`, `.env`, token bot, API key, atau file data runtime.

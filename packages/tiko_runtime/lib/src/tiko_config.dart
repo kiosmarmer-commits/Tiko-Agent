@@ -318,6 +318,45 @@ class IdleConsolidationCfg {
   final int maxOutputFacts;
 }
 
+/// Aturan event hook Hermes-parity (P1): event lifecycle runtime memicu
+/// POST webhook atau eksekusi script workspace dari config `hooks:`.
+
+class HookRuleConfig {
+  const HookRuleConfig({
+    required this.event,
+    this.webhookUrl,
+    this.script,
+    this.timeoutSec = 30,
+    this.env = const {},
+  });
+
+  /// Nama event EventBus (mis. `model.switched`, `approval.denied`) atau
+  /// `*` untuk semua event.
+  final String event;
+
+  /// URL webhook HTTP(S) — POST JSON `{event, at, data}`. Salah satu dari
+  /// [webhookUrl]/[script] wajib ada (divalidasi di parser).
+  final String? webhookUrl;
+
+  /// Path script relatif di dalam workspace (tanpa `..`, tanpa absolut) —
+  /// dijalankan via `sh` dengan env minimal `TIKO_EVENT` +
+  /// `TIKO_EVENT_DATA_JSON`.
+  final String? script;
+
+  /// Batas waktu 1..120 detik (divalidasi di parser).
+  final int timeoutSec;
+
+  /// Variabel env tambahan non-rahasia untuk script hook.
+  final Map<String, String> env;
+
+  Map<String, dynamic> toJson() => {
+        'event': event,
+        if (webhookUrl != null) 'webhook': webhookUrl,
+        if (script != null) 'script': script,
+        'timeout_sec': timeoutSec,
+      };
+}
+
 class TikoConfig {
   TikoConfig({
     this.profile = 'default',
@@ -344,6 +383,7 @@ class TikoConfig {
     this.memoryEmbed = const MemoryEmbedConfig(),
     this.memoryProviders = const [],
     this.processPlugins = const [],
+    this.hooks = const [],
     this.searxngBaseUrl = 'http://127.0.0.1:8080',
     this.tavilyApiKeyRef,
     this.falApiKeyRef,
@@ -424,6 +464,9 @@ class TikoConfig {
 
   /// Plugin out-of-process yang di-spawn saat startup (tunduk consent).
   final List<ProcessPluginConfig> processPlugins;
+
+  /// Aturan event hook (Hermes-parity P1); kosong = fitur nonaktif.
+  final List<HookRuleConfig> hooks;
   final String searxngBaseUrl;
 
   /// SecretRef `env:TAVILY_API_KEY` untuk cadangan Tavily (AGD-04 §7);
@@ -576,6 +619,7 @@ class TikoConfig {
 
     // ---- plugins.process ----
     final processPluginsCfg = _parseProcessPlugins(sec('plugins'), issues);
+    final hooksCfg = _parseHooks(issues, root: root);
 
     // ---- scheduler.duplicate_policy ----
     var schedulerDuplicatePolicy = 'resend';
@@ -1220,6 +1264,7 @@ class TikoConfig {
       memoryEmbed: memoryEmbedCfg,
       memoryProviders: memoryProvidersCfg,
       processPlugins: processPluginsCfg,
+      hooks: hooksCfg,
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -1541,6 +1586,104 @@ class TikoConfig {
         command: command.trim(),
         args: args,
         permissions: permissions,
+      ));
+    }
+    return out;
+  }
+
+  /// Hermes-parity event hooks (P1): aturan lifecycle di `hooks:` (daftar
+  /// mapping). Fail-closed: aturan invalid dilompati dengan issue eksplisit.
+  static List<HookRuleConfig> _parseHooks(
+    List<ConfigIssue> issues, {
+    required YamlMap root,
+  }) {
+    final raw = root['hooks'];
+    if (raw == null) return const [];
+    if (raw is! YamlList) {
+      issues.add(const ConfigIssue(fatal: false, 'hooks', 'harus berupa daftar mapping'));
+      return const [];
+    }
+    final out = <HookRuleConfig>[];
+    for (var i = 0; i < raw.length; i++) {
+      final entry = raw[i];
+      if (entry is! YamlMap) {
+        issues.add(ConfigIssue(fatal: false, 'hooks[$i]', 'harus berupa mapping'));
+        continue;
+      }
+      final event = entry['event'];
+      if (event is! String || event.trim().isEmpty) {
+        issues.add(ConfigIssue(fatal: false,
+          'hooks[$i].event',
+          'harus berupa string yang tidak kosong (nama event atau *)',
+        ));
+        continue;
+      }
+      final webhook = entry['webhook'];
+      if (webhook != null &&
+          (webhook is! String ||
+              !(webhook.startsWith('http://') ||
+                  webhook.startsWith('https://')))) {
+        issues.add(ConfigIssue(fatal: false,
+          'hooks[$i].webhook',
+          'harus URL http:// atau https://',
+        ));
+        continue;
+      }
+      final script = entry['script'];
+      if (script != null && script is! String) {
+        issues.add(ConfigIssue(fatal: false, 'hooks[$i].script', 'harus berupa path string'));
+        continue;
+      }
+      final scriptPath = script is String ? script.trim() : null;
+      if (scriptPath != null &&
+          (scriptPath.startsWith('/') ||
+              scriptPath.startsWith('~') ||
+              scriptPath.split('/').contains('..'))) {
+        issues.add(ConfigIssue(fatal: false,
+          'hooks[$i].script',
+          'harus path relatif di dalam workspace (tanpa .. atau absolut)',
+        ));
+        continue;
+      }
+      if ((webhook == null || (webhook as String).trim().isEmpty) &&
+          (scriptPath == null || scriptPath.isEmpty)) {
+        issues.add(ConfigIssue(fatal: false,
+          'hooks[$i]',
+          'butuh salah satu webhook atau script',
+        ));
+        continue;
+      }
+      var timeoutSec = 30;
+      final rawTimeout = entry['timeout_sec'];
+      if (rawTimeout != null) {
+        if (rawTimeout is! int || rawTimeout < 1 || rawTimeout > 120) {
+          issues.add(ConfigIssue(fatal: false,
+            'hooks[$i].timeout_sec',
+            'harus berupa integer antara 1 dan 120',
+          ));
+          continue;
+        }
+        timeoutSec = rawTimeout;
+      }
+      final env = <String, String>{};
+      final rawEnv = entry['env'];
+      if (rawEnv is YamlMap) {
+        for (final e in rawEnv.entries) {
+          env['${e.key}'] = '${e.value}';
+        }
+      } else if (rawEnv != null) {
+        issues.add(ConfigIssue(fatal: false,
+          'hooks[$i].env',
+          'harus berupa mapping string',
+        ));
+        continue;
+      }
+      out.add(HookRuleConfig(
+        event: event.trim(),
+        webhookUrl: (webhook as String?)?.trim(),
+        script: scriptPath == null || scriptPath.isEmpty ? null : scriptPath,
+        timeoutSec: timeoutSec,
+        env: env,
       ));
     }
     return out;
