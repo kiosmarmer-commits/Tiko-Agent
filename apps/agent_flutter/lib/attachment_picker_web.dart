@@ -1,3 +1,8 @@
+// dart:html dipilih sadar (C2 Chat-UX): pemilih file web TANPA dependency
+// baru — `package:web` belum ada di proyek ini. Dua lint di bawah adalah
+// info yang disengaja dan dijelaskan di attachment_picker.dart.
+// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
