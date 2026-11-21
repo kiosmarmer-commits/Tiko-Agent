@@ -45,6 +45,7 @@ void main() {
       store.setPaused(job.id, true);
       store.recordFailure(job.id, 'gagal menjalankanTurn');
       store.recordFailure(job.id, 'gagal lagi');
+      await store.save();
 
       final loaded = JobStore(persistPath: path);
       await loaded.load();
