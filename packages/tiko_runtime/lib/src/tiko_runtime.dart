@@ -2430,14 +2430,22 @@ class TikoRuntime {
     return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
   }
 
+  /// Snapshot event hooks (Hermes-parity P1): aturan terpasang + statistik
+  /// fire; kosong bila fitur tidak dikonfigurasi.
+  Map<String, dynamic> hookSnapshot() {
+    final executor = hookExecutor;
+    if (executor == null) {
+      return {
+        'rules': <Map<String, dynamic>>[],
+        'stats': <String, Map<String, dynamic>>{},
+      };
+    }
+    return executor.snapshot();
+  }
+
   /// Snapshot plugin + consent untuk REST/GUI (GUI-P1-06, paritas
   /// `/plugin list|info`): plugin terdaftar dan menunggu consent, grant
   /// tersimpan, serta event hook terakhir.
-  /// Snapshot event hooks (Hermes-parity P1): aturan terpasang + statistik
-  /// fire; kosong bila fitur tidak dikonfigurasi.
-  Map<String, dynamic> hookSnapshot() =>
-      hookExecutor?.snapshot() ?? const {'rules': [], 'stats': {}};
-
   Map<String, dynamic> pluginSnapshot() {
     final names = <String>{
       for (final p in plugins.plugins) p.name,

@@ -43,10 +43,16 @@ class HookExecutor {
     _sub = null;
   }
 
-  Map<String, dynamic> snapshot() => {
-        'rules': [for (final r in rules) r.toJson()],
-        'stats': Map.unmodifiable(_stats),
-      };
+  Map<String, dynamic> snapshot() {
+    final stats = <String, Map<String, dynamic>>{};
+    _stats.forEach((key, value) {
+      stats[key] = Map<String, dynamic>.from(value);
+    });
+    return {
+      'rules': <Map<String, dynamic>>[for (final r in rules) r.toJson()],
+      'stats': stats,
+    };
+  }
 
   void _onEvent(TikoEvent ev) {
     if (ev.type.startsWith('hook.')) return;
