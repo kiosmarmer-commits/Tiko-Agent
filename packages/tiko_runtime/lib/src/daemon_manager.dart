@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -182,11 +181,6 @@ class DaemonManager {
     proc.stdout.listen(log.add);
     proc.stderr.listen(log.add);
 
-    // Deteksi kematian awal proses: agentd bisa exit segera (config invalid,
-    // biner lama, `dart` tidak ada di PATH) tanpa pernah sempat menulis lock.
-    var alive = true;
-    unawaited(proc.exitCode.then((_) => alive = false));
-
     // Wait for both the process lock and the HTTP health endpoint. A lock
     // only proves that the process started; it does not prove that API bind,
     // token persistence, and runtime initialization succeeded.
@@ -205,7 +199,11 @@ class DaemonManager {
           'log': logPath,
         };
       }
-      if (!alive) {
+      // Deteksi kematian awal proses: agentd bisa exit segera (config
+      // invalid, biner lama, `dart` tidak ada di PATH) tanpa sempat menulis
+      // lock. exitCode tidak tersedia pada detachedWithStdio, jadi cek
+      // langsung lewat ping PID.
+      if (!RuntimeLock.isAlive(proc.pid)) {
         exitedBeforeReady = true;
         break;
       }
