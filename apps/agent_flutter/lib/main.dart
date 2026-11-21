@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'attachment_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -1086,8 +1087,12 @@ class _ChatPageState extends State<_ChatPage> {
 
   /// Voice UI: setelah turn selesai, bacakan balasan assistant terakhir
   /// bila preferensi "balasan suara" aktif.
-  Future<void> _onSend(String text) async {
-    await widget.chat.send(text, sessionKey: widget.sessionKey);
+  Future<void> _onSend(String text, List<ChatAttachmentPayload> attachments) async {
+    await widget.chat.send(
+      text,
+      sessionKey: widget.sessionKey,
+      attachments: attachments,
+    );
     if (!mounted || !widget.voiceReply) return;
     final reply = VoiceService.speakableReply(widget.chat.messages);
     if (reply == null) return;
@@ -1426,7 +1431,7 @@ class _ChatPageState extends State<_ChatPage> {
 
 class _Composer extends StatefulWidget {
   const _Composer({required this.onSend, this.voice});
-  final Future<void> Function(String) onSend;
+  final Future<void> Function(String, List<ChatAttachmentPayload>) onSend;
   final VoiceService? voice;
   @override
   State<_Composer> createState() => _ComposerState();
@@ -1436,6 +1441,7 @@ class _ComposerState extends State<_Composer> {
   final c = TextEditingController();
   bool busy = false;
   VoiceService? _ownedVoice;
+  final attachments = <ChatAttachmentPayload>[];
 
   VoiceService get voice => widget.voice ?? _ownedVoice!;
 
@@ -1443,6 +1449,41 @@ class _ComposerState extends State<_Composer> {
   void initState() {
     super.initState();
     if (widget.voice == null) _ownedVoice = VoiceService();
+  }
+
+  /// C2 Chat-UX: pilih lampiran (Web: input file native browser; platform
+  /// lain gagal jujur dan mengarahkan ke referensi `@file:`).
+  Future<void> _pickAttachments() async {
+    try {
+      final picked = await pickChatAttachments();
+      if (!mounted || picked.isEmpty) return;
+      setState(
+        () => attachments.addAll([
+          for (final p in picked)
+            ChatAttachmentPayload(
+              name: p.name,
+              mime: p.mime,
+              dataBase64: p.dataBase64,
+            ),
+        ]),
+      );
+    } on AttachmentPickerException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    } on UnsupportedError catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${e.message}')),
+        );
+      }
+    }
+  }
+
+  void _removeAttachment(int index) {
+    setState(() => attachments.removeAt(index));
   }
 
   /// Voice UI: toggle dikte; hasil final STT mengganti isi text field agar
@@ -1479,9 +1520,10 @@ class _ComposerState extends State<_Composer> {
     if (text.isEmpty || busy) return;
     setState(() => busy = true);
     try {
-      await widget.onSend(text);
+      await widget.onSend(text, List.of(attachments));
       if (!mounted) return;
       c.clear();
+      setState(attachments.clear);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1517,31 +1559,65 @@ class _ComposerState extends State<_Composer> {
                   horizontal: 6,
                   vertical: 4,
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      key: const Key('btn-voice-mic'),
-                      tooltip: voice.listening
-                          ? 'Hentikan dikte'
-                          : 'Dikte suara (GUI Voice UI)',
-                      onPressed: _toggleMic,
-                      icon: Icon(
-                        voice.listening ? Icons.mic : Icons.mic_none,
-                        color: voice.listening ? context.simpulDanger : null,
+                    if (attachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (var i = 0; i < attachments.length; i++)
+                              InputChip(
+                                key: Key('chip-attachment-$i'),
+                                label: Text(
+                                  attachments[i].name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                tooltip:
+                                    '${attachments[i].name} • ${attachments[i].mime}',
+                                onDeleted: () => _removeAttachment(i),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: c,
+                    Row(
+                      children: [
+                        IconButton(
+                          key: const Key('btn-attach'),
+                          tooltip:
+                              'Lampirkan file (maks 4, 2 MiB; teks dan gambar)',
+                          onPressed: busy ? null : _pickAttachments,
+                          icon: const Icon(Icons.attach_file),
+                        ),
+                        IconButton(
+                          key: const Key('btn-voice-mic'),
+                          tooltip: voice.listening
+                              ? 'Hentikan dikte'
+                              : 'Dikte suara (GUI Voice UI)',
+                          onPressed: _toggleMic,
+                          icon: Icon(
+                            voice.listening ? Icons.mic : Icons.mic_none,
+                            color:
+                                voice.listening ? context.simpulDanger : null,
+                          ),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: c,
                         minLines: 1,
                         maxLines: 4,
                         decoration: InputDecoration(
                           hintText: voice.listening
                               ? 'Mendengarkan… (bicara sekarang)'
                               : 'Pesan ke Tiko…',
-                          helperText: voice.listening && voice.partial.isNotEmpty
-                              ? voice.partial
-                              : null,
+                          helperText:
+                              voice.listening && voice.partial.isNotEmpty
+                                  ? voice.partial
+                                  : null,
                           filled: false,
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
@@ -1550,18 +1626,22 @@ class _ComposerState extends State<_Composer> {
                         ),
                         onSubmitted: (value) => _submit(value),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton.filled(
-                      tooltip: 'Kirim pesan',
-                      onPressed: busy ? null : () => _submit(c.text),
-                      icon: busy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton.filled(
+                          tooltip: 'Kirim pesan',
+                          onPressed: busy ? null : () => _submit(c.text),
+                          icon: busy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.send),
+                        ),
+                      ],
                     ),
                   ],
                 ),

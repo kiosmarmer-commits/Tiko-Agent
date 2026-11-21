@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../agent_api_client.dart' show ChatAttachmentPayload;
 import '../data/agent_repository.dart';
 import '../data/api_error.dart';
 
@@ -49,19 +50,30 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> send(String text, {String? sessionKey}) async {
+  Future<void> send(
+    String text, {
+    String? sessionKey,
+    List<ChatAttachmentPayload> attachments = const [],
+  }) async {
     final sk = sessionKey ?? this.sessionKey;
     final t = text.trim();
     if (t.isEmpty || busy) return;
     busy = true;
-    messages.add({'role': 'user', 'text': t});
+    // C2 Chat-UX: lampiran ditampilkan jujur sebagai ringkasan di gelembung
+    // user (isi file nyata diekspansi runtime menjadi konteks `[lampiran:]`).
+    final label = attachments.isEmpty
+        ? t
+        : '$t\n📎 ${attachments.map((a) => a.name).join(', ')}';
+    messages.add({'role': 'user', 'text': label});
     messages.add({'role': 'assistant', 'text': '…'});
     notifyListeners();
     final aiIndex = messages.length - 1;
 
     try {
       if (useStreaming) {
-        await for (final ev in repo.streamChat(t, sessionKey: sk)) {
+        await for (
+          final ev in repo.streamChat(t, sessionKey: sk, attachments: attachments)
+        ) {
           final type = ev['type'] as String? ?? '';
           if (type == 'typing') {
             messages[aiIndex]['text'] = 'Menulis…';
@@ -108,7 +120,8 @@ class ChatController extends ChangeNotifier {
           }
         }
       } else {
-        final reply = await repo.sendMessage(t, sessionKey: sk);
+        final reply =
+            await repo.sendMessage(t, sessionKey: sk, attachments: attachments);
         messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
         notifyListeners();
       }

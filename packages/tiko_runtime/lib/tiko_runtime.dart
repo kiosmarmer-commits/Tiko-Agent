@@ -26,5 +26,6 @@ export 'src/character_card.dart';
 export 'src/script_repair_advisor.dart';
 export 'src/idle_consolidation.dart';
 export 'src/context_refs.dart';
+export 'src/attachments.dart';
 export 'src/event_hooks.dart';
 export 'src/smart_home_tool.dart';

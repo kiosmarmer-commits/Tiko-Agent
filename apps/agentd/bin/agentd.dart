@@ -595,6 +595,7 @@ Future<void> main(List<String> args) async {
       userKey: m.userKey,
       confirm: confirm,
       onTextDelta: streamer?.add,
+      attachments: m.attachments,
     );
 
     if (streamer != null && gw != null) {

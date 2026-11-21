@@ -15,6 +15,7 @@ import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'idle_consolidation.dart';
 import 'context_refs.dart';
+import 'attachments.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
@@ -1781,6 +1782,7 @@ class TikoRuntime {
     Future<bool> Function(ToolCall call, Session session, String approvalId)?
         confirm,
     void Function(String delta)? onTextDelta,
+    List<Attachment> attachments = const [],
   }) async => (await chatWithStatus(
         text,
         sessionId: sessionId,
@@ -1788,6 +1790,7 @@ class TikoRuntime {
         userKey: userKey,
         confirm: confirm,
         onTextDelta: onTextDelta,
+        attachments: attachments,
       )).text;
 
   /// One agent turn with explicit completion status for durable queues/jobs.
@@ -1808,6 +1811,7 @@ class TikoRuntime {
     bool internalCommand = false,
     String? interruptNote,
     String? personaPrompt,
+    List<Attachment> attachments = const [],
   }) async {
     final inputPreview = _sanitizer.output(
       text.length > 240 ? '${text.substring(0, 240)}…' : text,
@@ -1840,6 +1844,22 @@ class TikoRuntime {
         } catch (_) {
           // Kegagalan ekspansi tidak boleh menggagalkan pengiriman pesan;
           // penanda error inline tetap memberi konteks yang jujur.
+        }
+      }
+      // C2 Chat-UX: attachment pengguna diekspansi fail-closed jadi konteks
+      // teks (file teks dibaca bounded; gambar/biner  hanya metadata). Pesan
+      // internal (perintah actions) tidak menyertakan attachment, jadi tanpa
+      // guard internal pun blok tetap tidak terbentuk.
+      if (attachments.isNotEmpty) {
+        final expansion = expandAttachments(attachments);
+        if (expansion.text.isNotEmpty) {
+          prompt = prompt.isEmpty
+              ? expansion.text
+              : '$prompt\n\n${expansion.text}';
+          events.emit('attachments.expanded', {
+            'session_id': sessionId,
+            'stats': expansion.stats,
+          });
         }
       }
       final result = await _chatWithStatusCore(
