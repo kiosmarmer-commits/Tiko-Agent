@@ -21,7 +21,8 @@
 | 9 | [08-PEDOMAN-PENGEMBANGAN.md](08-PEDOMAN-PENGEMBANGAN.md) | Prosedur perubahan aman |
 | 10 | [09-DESAIN-GUI.md](09-DESAIN-GUI.md) | Token UI, gaya flat modern, paritas lintas platform |
 | 11 | [10-WEB-UI.md](10-WEB-UI.md) | Dashboard web agentd (Flutter Web), sesi cookie, auto-open |
-| 12 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
+| 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
+| 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
 
 ## Status implementasi
 
