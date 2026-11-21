@@ -305,7 +305,6 @@ Future<_RefResult> _expandGitDiff(String wsAbs) async {
     final result = await Process.run(
       'git',
       ['-C', wsAbs, 'diff', 'HEAD', '--no-color'],
-      encoding: utf8,
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
     );

@@ -114,7 +114,7 @@ void main() {
     test('@url: GET teks lokal diekspansi; 404 gagal', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((req) async {
-        if (req.uri!.path == '/ok') {
+        if (req.uri.path == '/ok') {
           req.response.headers.contentType = ContentType.text;
           req.response.write('konten dari web');
           await req.response.close();
