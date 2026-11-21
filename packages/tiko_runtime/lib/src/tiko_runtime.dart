@@ -28,6 +28,7 @@ import 'self_evolution.dart';
 import 'memory_nudge.dart';
 import 'turn_redirect.dart';
 import 'bot_mode.dart';
+import 'onboarding.dart';
 import 'character_card.dart';
 import 'team_tool.dart';
 
@@ -594,7 +595,16 @@ class TikoRuntime {
     final dataDir = abs(cfg.dataDir);
     await Directory(dataDir).create(recursive: true);
 
-    final factory = ProviderFactory(env: env);
+    // gateway.env (hasil `tiko setup --interactive`) dimuat otomatis agar
+    // SecretRef `env:VAR` resolves tanpa perlu `source` manual. Environment
+    // proses (shell/export atau param [env]) tetap menang.
+    final fileEnv = OnboardingWizard.loadEnvFileSync(dataDir);
+    final baseEnv = env ?? Platform.environment;
+    final effectiveEnv = fileEnv.isEmpty
+        ? baseEnv
+        : <String, String>{...fileEnv, ...baseEnv};
+
+    final factory = ProviderFactory(env: effectiveEnv);
     final providers = factory.buildAll(cfg);
     // FR/T1: decision provider (Jev/Laya systemone) from `decision:` config.
     // Null when disabled → Router falls back to its keyword heuristics.
@@ -612,7 +622,7 @@ class TikoRuntime {
     // TIKO_FORCE_JSON_MEMORY=1 skips the sqlite probe entirely — the escape
     // hatch for Termux/eco hosts without libsqlite3 (P2-15).
     final forceJsonMemory =
-        (env ?? Platform.environment)['TIKO_FORCE_JSON_MEMORY'] == '1';
+        effectiveEnv['TIKO_FORCE_JSON_MEMORY'] == '1';
     final sqlite = forceJsonMemory
         ? null
         : await SqliteMemoryStore.tryOpen(
@@ -719,30 +729,30 @@ class TikoRuntime {
       for (final c in cfg.memoryProviders)
         switch (c.kind) {
           'mem0' => Mem0MemoryProvider(
-              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: effectiveEnv) ?? '',
               userId: c.name,
               baseUrl: c.baseUrl.isEmpty ? 'https://api.mem0.ai' : c.baseUrl,
             ),
           'honcho' => HonchoMemoryProvider(
-              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: effectiveEnv) ?? '',
               sessionId: c.name ?? 'tiko-agent',
               baseUrl: c.baseUrl.isEmpty ? 'https://api.honcho.dev' : c.baseUrl,
             ),
           'supermemory' => SupermemoryMemoryProvider(
-              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: effectiveEnv) ?? '',
               userId: c.name,
               baseUrl:
                   c.baseUrl.isEmpty ? 'https://api.supermemory.ai' : c.baseUrl,
             ),
           'hindsight' => HindsightMemoryProvider(
-              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env) ?? '',
+              apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: effectiveEnv) ?? '',
               userId: c.name,
               baseUrl: c.baseUrl,
             ),
           _ => HttpMemoryProvider(
               config: HttpMemoryProviderConfig(
                 baseUrl: c.baseUrl,
-                apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: env),
+                apiKey: TikoConfig.resolveSecretRef(c.apiKeyRef, env: effectiveEnv),
               ),
               name: c.name,
             ),
@@ -788,11 +798,11 @@ class TikoRuntime {
     ImageProvider? imageRouter;
     if (cfg.enableImageGeneration) {
       final imageProviders = <String, ImageProvider>{};
-      final falKey = TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env);
+      final falKey = TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: effectiveEnv);
       if (falKey != null && falKey.isNotEmpty) {
         imageProviders['fal'] = FalAiImageProvider(apiKey: falKey);
       }
-      final openaiKey = TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: env);
+      final openaiKey = TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: effectiveEnv);
       if (openaiKey != null && openaiKey.isNotEmpty) {
         imageProviders['openai'] = OpenAiImagesProvider(apiKey: openaiKey);
       }
@@ -805,24 +815,24 @@ class TikoRuntime {
     // configured; the tool is registered only when explicitly enabled.
     VideoProvider? videoRouter;
     if (cfg.enableVideoGeneration) {
-      final falKey = TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env);
+      final falKey = TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: effectiveEnv);
       if (falKey != null && falKey.isNotEmpty) {
         videoRouter = FalVideoGenerationProvider(apiKey: falKey);
       }
     }
 
     final sessionStore = FileSessionStore(path: p.join(dataDir, 'sessions.json'));
-    final smartHomeTool = SmartHomeTool.fromEnvironment(env ?? Platform.environment);
+    final smartHomeTool = SmartHomeTool.fromEnvironment(effectiveEnv);
 
     final registry = ToolRegistry()
       ..registerAll(createBuiltinTools(
         workspaceRoot: workspace,
         searxngBaseUrl: cfg.searxngBaseUrl,
-        tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: env),
+        tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: effectiveEnv),
         sandbox: sandbox,
         skillRegistry: skillRegistry,
-        falApiKey: TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: env),
-        openaiApiKey: TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: env),
+        falApiKey: TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: effectiveEnv),
+        openaiApiKey: TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: effectiveEnv),
         enableImageGeneration: cfg.enableImageGeneration,
         enableVideoGeneration: cfg.enableVideoGeneration,
         videoProvider: videoRouter,
@@ -986,7 +996,7 @@ class TikoRuntime {
       mcpLoader: mcpLoader,
       scriptRunner: scriptRunner,
       evidence: evidence,
-      mcpEnvironment: env ?? Platform.environment,
+      mcpEnvironment: effectiveEnv,
       decision: decision,
       tirith: tirith,
       capabilities: capabilityGate,
@@ -1046,7 +1056,7 @@ class TikoRuntime {
     rt.offlineQueue = OfflineQueue(p.join(dataDir, 'offline'));
     // P2 observability: OTLP/HTTP trace export is opt-in via env and
     // privacy-filtered (see otel.dart allow-list).
-    final otelEnv = env ?? Platform.environment;
+    final otelEnv = effectiveEnv;
     final otelEndpoint = otelEnv['OTEL_EXPORTER_OTLP_ENDPOINT']?.trim();
     final otelHeaders = <String, String>{};
     final hdrRaw = otelEnv['OTEL_EXPORTER_OTLP_HEADERS']?.trim() ?? '';
@@ -1095,7 +1105,7 @@ class TikoRuntime {
     }
     // Hermes-style Skills Hub and cloud browser backends activate only when
     // their credentials are present in the environment.
-    final envMap = env ?? Platform.environment;
+    final envMap = effectiveEnv;
     final hubUrl = envMap['TIKO_SKILLS_HUB_URL']?.trim() ?? '';
     if (hubUrl.isNotEmpty && rt.registry.get('skills_hub') == null) {
       rt.registry.register(SkillsHubTool(SkillsHubClient(

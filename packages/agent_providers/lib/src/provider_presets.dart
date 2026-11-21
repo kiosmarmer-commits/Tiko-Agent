@@ -89,8 +89,11 @@ const Map<String, ProviderPreset> providerPresets = {
   ),
   'gemini': ProviderPreset(
     id: 'gemini',
-    baseUrl: 'https://generativelanguage.googleapis.com',
+    // Endpoint OpenAI-compat resmi Google; tanpa path ini request
+    // /chat/completions akan 404.
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     defaultModel: 'gemini-2.0-flash',
+    transport: 'chat_completions',
     contextLength: 1000000,
   ),
   'azure': ProviderPreset(
