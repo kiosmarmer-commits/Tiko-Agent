@@ -1084,22 +1084,25 @@ class _ChatPageState extends State<_ChatPage> {
       onSelected: (id) {
         if (id != current) unawaited(widget.onSelectProvider!(id));
       },
-      itemBuilder: (context) => [
-        if (snapshot?.defaultId != null && snapshot!.defaultId!.isNotEmpty)
-          PopupMenuItem<String>(
-            value: snapshot!.defaultId,
-            child: _providerMenuRow(
-              snapshot!.defaultId!,
-              selected: current == snapshot.defaultId,
+      itemBuilder: (context) {
+        final defaultId = snapshot?.defaultId;
+        return [
+          if (defaultId != null && defaultId.isNotEmpty)
+            PopupMenuItem<String>(
+              value: defaultId,
+              child: _providerMenuRow(
+                defaultId,
+                selected: current == defaultId,
+              ),
             ),
-          ),
         for (final p in snapshot?.providers ?? const [])
           if (p.id != snapshot?.defaultId)
             PopupMenuItem<String>(
               value: p.id,
               child: _providerMenuRow(p.id, selected: current == p.id),
             ),
-      ],
+        ];
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
