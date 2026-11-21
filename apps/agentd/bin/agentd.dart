@@ -922,6 +922,7 @@ Future<void> main(List<String> args) async {
             'events': base['events'],
             'tools': rt.toolCatalog(),
             'mcp': rt.mcpSnapshot(),
+            'hooks': rt.hookSnapshot(),
           };
         },
         channelsProvider: () async => channelsSnapshot({

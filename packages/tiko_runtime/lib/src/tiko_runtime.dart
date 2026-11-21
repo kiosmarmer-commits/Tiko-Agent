@@ -14,6 +14,7 @@ import 'provider_factory.dart';
 import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'idle_consolidation.dart';
+import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
@@ -564,6 +565,9 @@ class TikoRuntime {
   final CancellationRegistry cancellations = CancellationRegistry();
   final CapabilityVault capabilities;
   final EventBus events = EventBus();
+
+  /// Hook lifecycle Hermes-parity (P1); null bila tanpa aturan `hooks:`.
+  HookExecutor? hookExecutor;
   // Non-final agar tes dapat menyuntik broker dengan TTL pendek.
   late ApprovalBroker approvals;
   late final SkillApprovalLedger skillLedger;
@@ -1047,6 +1051,16 @@ class TikoRuntime {
       if (ok) {
         await rt._registerPluginTools(plugin, pluginCfg.permissions);
       }
+    }
+
+    // Event hooks (Hermes-parity P1): hanya dipasang bila ada aturan
+    // `hooks:` di config; hasil diobservasi lewat event `hook.executed`.
+    if (cfg.hooks.isNotEmpty) {
+      rt.hookExecutor = HookExecutor(
+        events: rt.events,
+        rules: cfg.hooks,
+        workspace: workspace,
+      )..start();
     }
     rt.skillLedger = SkillApprovalLedger(p.join(dataDir, 'skill_approvals.json'));
     await rt.skillLedger.load();
@@ -2414,6 +2428,19 @@ class TikoRuntime {
       'provider': arg,
     });
     return ChatRunResult(text: 'Sesi ini memakai provider: $arg', success: true);
+  }
+
+  /// Snapshot event hooks (Hermes-parity P1): aturan terpasang + statistik
+  /// fire; kosong bila fitur tidak dikonfigurasi.
+  Map<String, dynamic> hookSnapshot() {
+    final executor = hookExecutor;
+    if (executor == null) {
+      return {
+        'rules': <Map<String, dynamic>>[],
+        'stats': <String, Map<String, dynamic>>{},
+      };
+    }
+    return executor.snapshot();
   }
 
   /// Snapshot plugin + consent untuk REST/GUI (GUI-P1-06, paritas
@@ -4101,6 +4128,9 @@ class TikoRuntime {
     }
     try {
       await plugins.disposeAll();
+    } catch (_) {} // best-effort
+    try {
+      await hookExecutor?.dispose();
     } catch (_) {} // best-effort
     try {
       // Feedback/metric sink writes are tracked, not fire-and-forget, so the

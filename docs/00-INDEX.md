@@ -37,6 +37,7 @@
 | Teams | Implemented | Outbound webhook dan inbound Bot Framework activity melalui `/webhooks/teams` dengan bearer token |
 | ACP resources | Implemented | List/read/write resource terdaftar, resource read-only, dan command fail-closed |
 | Wake-word Porcupine/openWakeWord | Partial | Native engine belum terhubung; tersedia fallback energy/keyword |
+| Event Hooks (Hermes-parity P1) | Implemented | Config `hooks:` (event/webhook/script); hasil di `hook.executed` + snapshot `/v1/plugins`; GUI settings menyusul |
 | Home Assistant provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | Tuya provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | SONOFF/eWeLink CUBE provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
