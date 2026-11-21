@@ -32,6 +32,11 @@ class Job {
     this.lastDeliveryAt,
     this.deliveryError,
     this.deliveryState = 'none',
+    this.paused = false,
+    this.skill,
+    this.lastStatus,
+    this.lastError,
+    this.failureStreak = 0,
   });
 
   final String id;
@@ -62,6 +67,23 @@ class Job {
   String? deliveryError;
   String deliveryState = 'none'; // none | pending | delivered | failed
 
+  /// Hermes-parity P2: `pause/resume` eksplisit terpisah dari [enabled] —
+  /// job berhenti dijadwalkan, tapi status enabled asli tetap terjaga.
+  bool paused;
+
+  /// Slug skill opsional yang dilampirkan ke tiap run (dievaluasi fail-
+  /// closed oleh handler runtime: skill hilang/belum diapprove = run gagal).
+  String? skill;
+
+  /// Hasil run terakhir: `ok` | `failed`. Run sebelum run pertama: null.
+  String? lastStatus;
+
+  /// Error run/delivery terakhir (sudah disanitasi oleh penelepon).
+  String? lastError;
+
+  /// Streak kegagalan beruntun; reset ke 0 saat run sukses.
+  int failureStreak;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'cron': cron,
@@ -81,6 +103,11 @@ class Job {
     'last_delivery_at': lastDeliveryAt?.toUtc().toIso8601String(),
     'delivery_error': deliveryError,
     'delivery_state': deliveryState,
+    'paused': paused,
+    'skill': skill,
+    'last_status': lastStatus,
+    'last_error': lastError,
+    'failure_streak': failureStreak,
   };
 
   factory Job.fromJson(Map<String, dynamic> m) {
@@ -142,6 +169,35 @@ class Job {
         (rawDeliveryRunId == null || rawDeliveryRunId.isEmpty)) {
       throw const FormatException('pending delivery requires delivery_run_id');
     }
+    final paused = m['paused'];
+    if (paused != null && paused is! bool) {
+      throw const FormatException('invalid paused');
+    }
+    final rawSkill = m['skill'];
+    String? skill;
+    if (rawSkill != null) {
+      if (rawSkill is! String || rawSkill.trim().isEmpty || rawSkill.length > 64) {
+        throw const FormatException('invalid skill');
+      }
+      skill = rawSkill.trim();
+    }
+    final rawLastStatus = m['last_status'];
+    String? lastStatus;
+    if (rawLastStatus != null) {
+      if (rawLastStatus is! String ||
+          !(rawLastStatus == 'ok' || rawLastStatus == 'failed')) {
+        throw const FormatException('invalid last_status');
+      }
+      lastStatus = rawLastStatus;
+    }
+    final rawLastError = m['last_error'];
+    if (rawLastError != null && rawLastError is! String) {
+      throw const FormatException('invalid last_error');
+    }
+    final rawStreak = m['failure_streak'];
+    if (rawStreak != null && (rawStreak is! int || rawStreak < 0)) {
+      throw const FormatException('invalid failure_streak');
+    }
     return Job(
       id: m['id'] as String,
       cron: m['cron'] as String,
@@ -163,6 +219,11 @@ class Job {
       lastDeliveryAt: parsedLastDelivery,
       deliveryError: rawDeliveryError as String?,
       deliveryState: deliveryState,
+      paused: paused ?? false,
+      skill: skill,
+      lastStatus: lastStatus,
+      lastError: rawLastError as String?,
+      failureStreak: rawStreak as int? ?? 0,
     );
   }
 }
@@ -278,10 +339,18 @@ class JobStore {
     MissedPolicy missedPolicy = MissedPolicy.runOnce,
     String timezone = 'UTC',
     String? id,
+    String? skill,
   }) {
     final expr = CronExpression.parse(cron);
     if (prompt.trim().isEmpty || prompt.length > 10000) {
       throw ArgumentError.value(prompt, 'prompt', 'must contain 1..10000 characters');
+    }
+    if (skill != null) {
+      final trimmed = skill.trim();
+      if (trimmed.isEmpty || trimmed.length > 64 || trimmed.contains(' ')) {
+        throw ArgumentError.value(skill, 'skill', 'must be a slug 1..64 chars');
+      }
+      skill = trimmed;
     }
     if (channel.trim().isEmpty || channel.length > 64 ||
         userKey.trim().isEmpty || userKey.length > 256) {
@@ -299,6 +368,7 @@ class JobStore {
       nextRun: expr.nextAfter(now, timezone: timezone),
       missedPolicy: missedPolicy,
       timezone: timezone,
+      skill: skill,
     );
     _jobs[job.id] = job;
     unawaitedSave();
@@ -313,6 +383,7 @@ class JobStore {
     MissedPolicy missedPolicy = MissedPolicy.runOnce,
     String timezone = 'UTC',
     String? id,
+    String? skill,
   }) async {
     final job = add(
       cron: cron,
@@ -322,6 +393,7 @@ class JobStore {
       missedPolicy: missedPolicy,
       timezone: timezone,
       id: id,
+      skill: skill,
     );
     try {
       await save();
@@ -352,6 +424,8 @@ class JobStore {
     bool? enabled,
     String? missedPolicy,
     String? timezone,
+    bool? paused,
+    String? skill,
   }) {
     final job = _jobs[id];
     if (job == null) return null;
@@ -379,6 +453,18 @@ class JobStore {
       job.userKey = userKey.trim();
     }
     if (enabled != null) job.enabled = enabled;
+    if (paused != null) job.paused = paused;
+    if (skill != null) {
+      final trimmed = skill.trim();
+      if (trimmed == 'all') {
+        job.skill = null;
+      } else {
+        if (trimmed.isEmpty || trimmed.length > 64 || trimmed.contains(' ')) {
+          throw ArgumentError.value(skill, 'skill', 'must be a slug 1..64 chars');
+        }
+        job.skill = trimmed;
+      }
+    }
     if (missedPolicy != null) {
       MissedPolicy? policy;
       final normalized = missedPolicy.replaceAll('_', '').toLowerCase();
@@ -425,6 +511,44 @@ class JobStore {
     return ok;
   }
 
+  /// Pause/resume eksplisit (Hermes-parity P2): job paused tidak pernah
+  /// diklaim scheduler; run/delivery yang sudah berjalan dibiarkan selesai
+  /// (at-least-once). Mengembalikan null bila id tidak dikenal.
+  Job? setPaused(String id, bool value) {
+    final job = _jobs[id];
+    if (job == null) return null;
+    job.paused = value;
+    unawaitedSave();
+    return job;
+  }
+
+  /// Catat hasil run sukses: `last_status = ok`, streak direset.
+  bool recordSuccess(String id) {
+    final job = _jobs[id];
+    if (job == null) return false;
+    job
+      ..lastStatus = 'ok'
+      ..lastError = null
+      ..failureStreak = 0;
+    unawaitedSave();
+    return true;
+  }
+
+  /// Catat kegagalan run/delivery dengan penanda eksplisit Hermes
+  /// ([CRON_FAILURE]): `last_status = failed`, streak bertambah.
+  bool recordFailure(String id, Object error) {
+    final job = _jobs[id];
+    if (job == null) return false;
+    var message = '$error';
+    if (message.length > 500) message = '${message.substring(0, 500)}…';
+    job
+      ..lastStatus = 'failed'
+      ..lastError = '[CRON_FAILURE] $message'
+      ..failureStreak += 1;
+    unawaitedSave();
+    return true;
+  }
+
   /// Synchronous compatibility API for unit tests and in-memory use.
   List<Job> claimDue(DateTime now) {
     final due = <Job>[];
@@ -445,7 +569,7 @@ class JobStore {
   bool _claim(DateTime now, List<Job> due) {
     var changed = false;
     for (final job in _jobs.values) {
-      if (!job.enabled) continue;
+      if (!job.enabled || job.paused) continue;
       if (job.pendingRunAt != null) {
         job.scheduledAt = job.pendingRunAt;
         due.add(job);

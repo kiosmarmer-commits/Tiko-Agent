@@ -957,6 +957,11 @@ Future<void> main(List<String> args) async {
               'next_run': job.nextRun.toUtc().toIso8601String(),
               'last_run': job.lastRun?.toUtc().toIso8601String(),
               'delivery_state': job.deliveryState,
+              'paused': job.paused,
+              'skill': job.skill,
+              'last_status': job.lastStatus,
+              'last_error': job.lastError,
+              'failure_streak': job.failureStreak,
             },
         ],
         createJob: (body) async {
@@ -971,6 +976,7 @@ Future<void> main(List<String> args) async {
                   ((body['timezone'] as String?)?.trim().isNotEmpty ?? false)
                   ? (body['timezone'] as String).trim()
                   : 'UTC',
+              skill: (body['skill'] as String?)?.trim(),
             );
             return job.toJson();
           } on FormatException catch (e) {
@@ -990,6 +996,8 @@ Future<void> main(List<String> args) async {
               enabled: body['enabled'] as bool?,
               missedPolicy: body['missed_policy'] as String?,
               timezone: (body['timezone'] as String?)?.trim(),
+              paused: body['paused'] as bool?,
+              skill: body['skill'] as String?,
             );
             return job?.toJson();
           } on FormatException catch (e) {
@@ -1005,6 +1013,12 @@ Future<void> main(List<String> args) async {
         },
         runJobNow: (id) async {
           final job = rt.jobs.runNow(id);
+          if (job == null) return null;
+          await rt.jobs.save();
+          return job.toJson();
+        },
+        pauseJob: (id, paused) async {
+          final job = rt.jobs.setPaused(id, paused);
           if (job == null) return null;
           await rt.jobs.save();
           return job.toJson();

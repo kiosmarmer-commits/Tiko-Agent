@@ -72,6 +72,7 @@ class HttpApiServer {
     this.updateJob,
     this.deleteJob,
     this.runJobNow,
+    this.pauseJob,
     this.securityProvider,
     this.auditQueryProvider,
     this.artifactsListProvider,
@@ -445,6 +446,8 @@ class HttpApiServer {
       'enabled',
       'missed_policy',
       'timezone',
+      'paused',
+      'skill',
     };
     for (final key in body.keys) {
       if (!allowed.contains(key)) {
@@ -515,6 +518,26 @@ class HttpApiServer {
         400,
         'invalid_request',
         'enabled wajib boolean',
+      );
+    }
+    final paused = body['paused'];
+    if (paused != null && paused is! bool) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'paused wajib boolean',
+      );
+    }
+    final skill = body['skill'];
+    if (skill != null &&
+        (skill is! String ||
+            skill.trim().isEmpty ||
+            skill.trim().length > 64 ||
+            skill.trim().contains(' '))) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'skill wajib slug non-kosong maks 64 tanpa spasi (telisan `all` untuk menghapus lampiran)',
       );
     }
     final policy = body['missed_policy'];
@@ -673,6 +696,8 @@ class HttpApiServer {
   updateJob;
   final Future<bool> Function(String id)? deleteJob;
   final Future<Map<String, dynamic>?> Function(String id)? runJobNow;
+  final Future<Map<String, dynamic>?> Function(String id, bool paused)?
+  pauseJob;
 
   /// Security Center callback (GUI-P1-10). Callback null membuat endpoint
   /// terkait merespons 501 not_implemented.
@@ -1769,6 +1794,27 @@ class HttpApiServer {
           _error(req, 404, 'not_found', 'job not found');
         } else {
           _json(req, {'deleted': true});
+        }
+      } else if (path.startsWith('/v1/jobs/') &&
+          req.method == 'POST' &&
+          (path.endsWith('/pause') || path.endsWith('/resume'))) {
+        if (pauseJob == null) {
+          _error(req, 501, 'not_implemented', 'scheduler not configured');
+          return;
+        }
+        final id = path.substring(
+          '/v1/jobs/'.length,
+          path.length - (path.endsWith('/pause') ? '/pause' : '/resume').length,
+        );
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid job id');
+          return;
+        }
+        final job = await pauseJob!(id, path.endsWith('/pause'));
+        if (job == null) {
+          _error(req, 404, 'not_found', 'job not found');
+        } else {
+          _json(req, job);
         }
       } else if (path.startsWith('/v1/jobs/') &&
           req.method == 'POST' &&

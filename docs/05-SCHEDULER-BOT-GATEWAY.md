@@ -63,6 +63,9 @@ API menggunakan Bearer token pada endpoint admin/operasional. `/health` dikecual
 | GET | `/v1/memories` | Daftar memory facts |
 | DELETE | `/v1/memories/{id}` | Hapus memory |
 | POST | `/v1/shutdown` | Shutdown terautentikasi |
+| GET/POST | `/v1/jobs` | Automation/cron CRUD (list + create) |
+| PATCH/DELETE | `/v1/jobs/{id}` | Update parsial (termasuk `paused`, `skill`) / hapus job |
+| POST | `/v1/jobs/{id}/run\|pause\|resume` | Run-now, pause/resume (Hermes-parity P2) |
 
 Webhook WhatsApp/Slack dipasang pada server yang sama jika gateway dikonfigurasi.
 
