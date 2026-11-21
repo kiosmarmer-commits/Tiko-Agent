@@ -204,8 +204,12 @@ providers:
         env: {'TIKO_FORCE_JSON_MEMORY': '1'},
       );
       addTearDown(rt.close);
-      final gemini = rt.providerById('gemini') as GeminiProvider;
+      final gemini = rt.providerById('gemini') as OpenAiCompatProvider;
       expect(gemini.apiKey, 'envfile-key-123');
+      expect(
+        gemini.baseUrl,
+        'https://generativelanguage.googleapis.com/v1beta/openai',
+      );
     });
 
     test('env proses menang atas nilai gateway.env', () async {
@@ -229,8 +233,18 @@ providers:
         env: {'GEMINI_API_KEY': 'proses-env-key'},
       );
       addTearDown(rt.close);
-      expect((rt.providerById('gemini') as GeminiProvider).apiKey,
+      expect((rt.providerById('gemini') as OpenAiCompatProvider).apiKey,
           'proses-env-key');
+    });
+
+    test('preset gemini memakai endpoint OpenAI-compat Google', () {
+      final preset = findProviderPreset('gemini');
+      expect(preset, isNotNull);
+      expect(
+        preset!.baseUrl,
+        'https://generativelanguage.googleapis.com/v1beta/openai',
+      );
+      expect(preset.transport, 'chat_completions');
     });
   });
 }
