@@ -13,7 +13,7 @@ import 'prompt_cache.dart';
 /// Hermes-parity extensions: credential pool rotation (401/429), OAuth device
 /// token injection, per-provider/model request timeout, and model discovery
 /// via GET /models.
-class OpenAiCompatProvider implements LlmProvider {
+class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
   OpenAiCompatProvider({
     required this.id,
     required this.baseUrl,
@@ -355,6 +355,7 @@ class OpenAiCompatProvider implements LlmProvider {
 
   /// Lists model ids advertised by the endpoint (Hermes-parity
   /// `discover_models`). Returns an empty list on any error.
+  @override
   Future<List<String>> discoverModels() async {
     final base = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)

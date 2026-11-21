@@ -227,7 +227,7 @@ Future<void> main(List<String> argv) async {
         return;
       }
       final provider = rt.providerById(providerId);
-      if (provider is! OpenAiCompatProvider) {
+      if (provider is! ModelDiscovery) {
         stderr.writeln(
           'provider "$providerId" (${cfg.type}) tidak mendukung model discovery',
         );

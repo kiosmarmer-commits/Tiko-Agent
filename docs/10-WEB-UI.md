@@ -34,7 +34,7 @@ dart run apps/agentd/bin/agentd.dart --api
 
 ### 4.1 Pemilih model per-sesi (discovery ala Hermes)
 
-- Chip model di header chat membaca `GET /v1/providers/<id>/models`: daemon menjalankan live discovery `GET {base}/models` hanya untuk provider OpenAI-compat yang terkonfigurasi (config + `gateway.env`) — tidak pernah menebak provider.
+- Chip model di header chat membaca `GET /v1/providers/<id>/models`: daemon menjalankan live discovery hanya untuk provider yang terkonfigurasi (config + `gateway.env`) — tidak pernah menebak provider. Transport discovery: OpenAI-compat `GET {base}/models` (openai, gemini, deepseek, openai_compat) dan Ollama native `GET {base}/api/tags`; kontrak bersama `ModelDiscovery` di agent_providers.
 - Hasil discovery di-cache 15 menit per provider; endpoint error → daftar kosong (fail-open) dan pemilih lanjut memakai model default provider.
 - Pilihan provider + model tersimpan per-sesi via `POST /v1/providers/session` dengan field `model` opsional; chip menampilkan `provider · model` bila model eksplisit terpasang.
 - Snapshot `GET /v1/providers` menambahkan `session_model_choices` (peta session → model).

@@ -31,6 +31,17 @@ class _FakeOpenAI {
         await req.response.close();
         return;
       }
+      if (req.uri.path == '/api/tags') {
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({
+          'models': [
+            {'name': 'qwen2.5:3b'},
+            {'name': 'llama3.2:1b'},
+          ],
+        }));
+        await req.response.close();
+        return;
+      }
       if (body.isNotEmpty) {
         final payload = jsonDecode(body) as Map<String, dynamic>;
         api.lastChatModel = payload['model'] as String?;
@@ -72,6 +83,10 @@ providers:
       type: openai_compat
       base_url: "$baseUrl"
       model: fake-1
+    ollama-local:
+      type: ollama_native
+      base_url: "$baseUrl"
+      model: qwen2.5:3b
 agent:
   max_iterations: 4
 ''');
@@ -168,6 +183,20 @@ void main() {
     final mock = await rt.discoverProviderModels('mock');
     expect(mock['discovered'], isFalse);
     expect(mock['models'], isEmpty);
+  });
+
+  test('discoverProviderModels: ollama_native via /api/tags', () async {
+    final rt = await TikoRuntime.create(configPath: configPath);
+    addTearDown(rt.close);
+
+    final out = await rt.discoverProviderModels('ollama-local');
+    expect(out['discovered'], isTrue);
+    expect(out['configured_model'], 'qwen2.5:3b');
+    expect(out['models'], containsAll(['qwen2.5:3b', 'llama3.2:1b']));
+
+    expect(rt.setSessionModel('cli:default', 'ollama-local', 'llama3.2:1b'),
+        isTrue);
+    expect(rt.sessionModelChoice('cli:default'), 'llama3.2:1b');
   });
 
   test('setSessionModel memasang provider + model; chat memakai model itu',
