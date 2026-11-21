@@ -120,14 +120,11 @@ Future<ContextExpansion> expandContextRefs(
   }
 
   final expanded = buf.toString();
-  // split('\n') + writeln menambah newline trailing saat input tidak
-  // diakhiri newline; normalisasi agar tidak mengubah panjang pesan.
-  return ContextExpansion(
-    input.endsWith('\n')
-        ? expanded
-        : expanded.substring(0, expanded.length - 1),
-    refs,
-  );
+  // setiap baris ditulis via writeln; buang persis satu newline buntut
+  // sehingga pesan tanpa ref kembali identik dengan input.
+  final out =
+      expanded.endsWith('\n') ? expanded.substring(0, expanded.length - 1) : expanded;
+  return ContextExpansion(out, refs);
 }
 
 void _record(
