@@ -47,10 +47,14 @@
 - **Gagal jujur:** ref invalid diganti penanda inline `[@<ref> gagal: <alasan>]` — pesan tetap terkirim, tidak ada konten bocor keluar workspace.
 - **Observability:** setiap ekspansi memancarkan event `context.expanded {session_id, ok, failed, refs[].ref/kind/status/bytes/error}`. Indikator chip ekspansi di composer UI web menyusul.
 
-### P4 — Endpoint OpenAI-compat (`/v1/chat/completions`) di agent_gateway
+### P4 — Endpoint OpenAI-compat (`/v1/chat/completions`) di agent_gateway — **Implemented**
 - **Hermes:** expose agent sebagai endpoint OpenAI-compatible agar bisa dipakai Open WebUI/LibreChat/dll.
-- **Fondasi Tiko:** `HttpApiServer` sudah streaming SSE (voice/progressive stream), auth bearer/cookie sudah ada, chat sinkron lewat `TikoRuntime.chat`.
-- **Desain sarankan:** map `messages` → session ephemeral, streaming SSE, tetap bind loopback + auth; jangan melewati auth check/Host allowlist yang sudah ada.
+- **Implementasi Tiko:** `POST /v1/chat/completions` di `HttpApiServer` — auth bearer/cookie + Host allowlist + bind loopback sama seperti `/v1` lain (tidak ada jalur tanpa auth).
+- **Komposisi prompt:** `system` digabung ke blok `[system]…[/system]`, transcript percakapan sebelumnya disematkan sebagai konteks, user message terakhir diletakkan paling akhir agar instruksi terbaru dominan. Role `tool`/`function`, format invalid, atau tanpa user message → 400 (fail-closed).
+- **Body:** `{model?, messages, stream?, session_key?, user_key?}` — `session_key` default `openai:default`, `user_key` default `openai`, channel `http` — sesi terpisah dari UI web. Content string maupun array parts `[{type:'text',…}]` didukung.
+- **Respons non-stream:** bentuk `chat.completion` penuh (`id chatcmpl-…`, `choices[0].message`, `finish_reason: stop`, `usage` estimasi kasar len/4 — BUKAN token count akurat).
+- **Streaming:** `text/event-stream` satu delta berisi jawaban penuh + delta `finish_reason: stop` + `data: [DONE]` (progressive-delivery satu potong, bukan token-level).
+- **Error shape:** OpenAI `{error:{message,type,code}}` agar klien pihak ketiga menampilkan apa adanya; cap prompt terkomposisi 400.000 karakter.
 
 ### P5 — Batch processing + trajektori export (eval/self-learning)
 - **Hermes:** jalankan agent atas ribuan prompt paralel; ekspor trajektori terstruktur untuk eval/training.
@@ -72,4 +76,5 @@
 1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + snapshot `/v1/plugins`; wiring GUI menyusul di PR berikutnya.
 2. ~~P2 pause/resume job~~ — **selesai**: `Job.paused` + endpoint `/v1/jobs/<id>/pause|resume` + `Job.skill` (fail-closed lewat skill registry) + `last_status`/`failure_streak` dengan penanda `[CRON_FAILURE]`.
 3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip indikator UI web menyusul.
-4. P4–P6 menyusul; masing-masing berdiri sendiri.
+4. ~~P4 endpoint OpenAI-compat~~ — **selesai**: `POST /v1/chat/completions` (system+transcript+user-terakhir, stream/non-stream, error shape OpenAI, cap 400k karakter).
+5. P5–P6 menyusul; masing-masing berdiri sendiri.

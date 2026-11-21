@@ -147,6 +147,89 @@ class HttpApiServer {
   /// Validasi payload bot (GUI-P1-04): id cocok pola BotProfile.isValidId
   /// di tiko_runtime, name wajib string non-kosong, field di-whitelist.
   static final RegExp _botIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+
+  /// Error respons dalam bentuk OpenAI-compatible (`error.{message,type}`)
+  /// agar klien OpenAI/LibreChat dapat menampilkannya apa adanya.
+  void _openaiError(
+    HttpRequest req,
+    int status,
+    String type,
+    String message,
+  ) {
+    req.response.statusCode = status;
+    _json(req, {
+      'error': {'message': message, 'type': type, 'code': type},
+    });
+  }
+
+  /// Id chatcmpl deterministik-acak 24 hex (mustahil tabrakan untuk
+  /// konten sebar; cukup untuk idikasi klien).
+  static String _openaiId() {
+    final vals = List<int>.generate(12, (_) => _rng.nextInt(256));
+    return vals.map((v) => v.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  /// Konversi `content` OpenAI (string atau array parts) menjadi teks;
+  /// null bila format tidak didukung (fail-closed).
+  static String? _openaiContentText(Object? content) {
+    if (content is String) return content;
+    if (content is List) {
+      final parts = <String>[];
+      for (final piece in content) {
+        if (piece is! Map) return null;
+        final type = piece['type'];
+        final text = piece['text'];
+        if (type != 'text' || text is! String) return null;
+        parts.add(text);
+      }
+      return parts.join('\n');
+    }
+    return null;
+  }
+
+  /// Map `messages` OpenAI menjadi satu prompt turn runtime:
+  /// system block pertama, transcript percakapan sebelumnya sebagai
+  /// konteks, user message terakhir paling akhir (dominan).
+  /// Null bila tidak ada user message teks / role tak didukung (fail-closed).
+  static String? _openaiPrompt(List messages) {
+    final system = <String>[];
+    final transcript = <String>[];
+    String? lastUser;
+    for (final m in messages) {
+      if (m is! Map) return null;
+      final role = m['role'];
+      final content = _openaiContentText(m['content']);
+      if (role is! String || content == null) return null;
+      final text = content.trim();
+      if (role == 'system') {
+        system.add(text);
+      } else if (role == 'user') {
+        transcript.add('User: $text');
+        lastUser = text;
+      } else if (role == 'assistant') {
+        transcript.add('Assistant: $text');
+      } else {
+        return null;
+      }
+    }
+    if (lastUser == null) return null;
+    final buf = StringBuffer();
+    if (system.isNotEmpty) {
+      buf.writeln('[system]');
+      buf.writeln(system.join('\n'));
+      buf.writeln('[/system]');
+    }
+    final rest = transcript.length > 1
+        ? transcript.sublist(0, transcript.length - 1)
+        : <String>[];
+    if (rest.isNotEmpty) {
+      buf.writeln('[transcript percakapan sebelumnya — hanya konteks]');
+      buf.write(rest.join('\n\n'));
+      buf.writeln('\n[/transcript]');
+    }
+    buf.write(lastUser);
+    return buf.toString();
+  }
   static const _botCreateKeys = {
     'id',
     'name',
@@ -1198,6 +1281,137 @@ class HttpApiServer {
             payload['idempotent_replay'] = true;
           }
           _json(req, payload);
+        }
+      } else if (path == '/v1/chat/completions' && req.method == 'POST') {
+        // OpenAI-compat endpoint (Hermes-parity P4): expose agent sebagai
+        // /v1/chat/completions agar Open WebUI/LibreChat/dll. dapat memakai
+        // Tiko. Auth + Host allowlist + bind loopback sama dengan /v1 lain.
+        Map<String, dynamic> body;
+        try {
+          final decoded = jsonDecode(await utf8.decoder.bind(req).join());
+          if (decoded is! Map<String, dynamic>) {
+            throw const FormatException('body harus JSON object');
+          }
+          body = decoded;
+        } on FormatException catch (e) {
+          _openaiError(req, 400, 'invalid_request_error', '$e');
+          return;
+        } catch (e) {
+          _openaiError(req, 400, 'invalid_request_error', 'body JSON tidak valid: $e');
+          return;
+        }
+        final messages = body['messages'];
+        if (messages is! List || messages.isEmpty) {
+          _openaiError(req, 400, 'invalid_request_error',
+              'messages wajib array non-kosong');
+          return;
+        }
+        if (messages.length > 100) {
+          _openaiError(req, 400, 'invalid_request_error',
+              'maksimum 100 per pesan');
+          return;
+        }
+        final prompt = _openaiPrompt(messages);
+        if (prompt == null) {
+          _openaiError(req, 400, 'invalid_request_error',
+              'format messages tidak valid: butuh minimal satu pesan user bercontent teks; role tool/function tidak didukung');
+          return;
+        }
+        if (prompt.length > 400000) {
+          _openaiError(req, 400, 'invalid_request_error',
+              'prompt terlalu besar: maksimum 400.000 karakter setelah komposisi');
+          return;
+        }
+        final model = (body['model'] as String?)?.trim();
+        final sessionKey =
+            (body['session_key'] as String?)?.trim().isNotEmpty ?? false
+                ? (body['session_key'] as String).trim()
+                : 'openai:default';
+        final userKey = (body['user_key'] as String?)?.trim().isNotEmpty ?? false
+            ? (body['user_key'] as String).trim()
+            : 'openai';
+        final stream = body['stream'] == true;
+        final id = 'chatcmpl-${_openaiId()}';
+        final String answer;
+        try {
+          answer = await onMessage(InboundMessage(
+            channel: 'http',
+            userKey: userKey,
+            sessionKey: sessionKey,
+            text: prompt,
+            meta: {
+              'source': 'openai_compat',
+              if (model != null && model.isNotEmpty) 'requested_model': model,
+            },
+          ));
+        } on ApiRequestException catch (e) {
+          _openaiError(req, e.status, 'invalid_request_error', e.message);
+          return;
+        } catch (e) {
+          _openaiError(req, 500, 'server_error', '$e');
+          return;
+        }
+        final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final usedModel =
+            (model == null || model.isEmpty) ? 'tiko-agent' : model;
+        if (stream) {
+          req.response.headers.contentType =
+              ContentType.parse('text/event-stream');
+          req.response.headers.set('Cache-Control', 'no-cache');
+          req.response.headers.set('Connection', 'keep-alive');
+          void chunk(Map<String, dynamic> payload) {
+            req.response.write('data: ${jsonEncode(payload)}\n\n');
+          }
+
+          chunk({
+            'id': id,
+            'object': 'chat.completion.chunk',
+            'created': created,
+            'model': usedModel,
+            'choices': [
+              {
+                'index': 0,
+                'delta': {'role': 'assistant', 'content': answer},
+                'finish_reason': null,
+              },
+            ],
+          });
+          chunk({
+            'id': id,
+            'object': 'chat.completion.chunk',
+            'created': created,
+            'model': usedModel,
+            'choices': [
+              {
+                'index': 0,
+                'delta': {},
+                'finish_reason': 'stop',
+              },
+            ],
+          });
+          req.response.write('data: [DONE]\n\n');
+          await req.response.close();
+        } else {
+          final promptTokens = (prompt.length / 4).ceil();
+          final completionTokens = (answer.length / 4).ceil();
+          _json(req, {
+            'id': id,
+            'object': 'chat.completion',
+            'created': created,
+            'model': usedModel,
+            'choices': [
+              {
+                'index': 0,
+                'message': {'role': 'assistant', 'content': answer},
+                'finish_reason': 'stop',
+              },
+            ],
+            'usage': {
+              'prompt_tokens': promptTokens,
+              'completion_tokens': completionTokens,
+              'total_tokens': promptTokens + completionTokens,
+            },
+          });
         }
       } else if (path == '/v1/shutdown' && req.method == 'POST') {
         if (onShutdown == null) {

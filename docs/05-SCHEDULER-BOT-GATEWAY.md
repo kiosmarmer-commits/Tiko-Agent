@@ -66,6 +66,7 @@ API menggunakan Bearer token pada endpoint admin/operasional. `/health` dikecual
 | GET/POST | `/v1/jobs` | Automation/cron CRUD (list + create) |
 | PATCH/DELETE | `/v1/jobs/{id}` | Update parsial (termasuk `paused`, `skill`) / hapus job |
 | POST | `/v1/jobs/{id}/run\|pause\|resume` | Run-now, pause/resume (Hermes-parity P2) |
+| POST | `/v1/chat/completions` | Endpoint OpenAI-compat (Hermes-parity P4): non-stream + SSE, auth sama seperti `/v1` lain |
 
 Webhook WhatsApp/Slack dipasang pada server yang sama jika gateway dikonfigurasi.
 
