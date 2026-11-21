@@ -39,6 +39,7 @@ void main() {
       expect(snap.providers[1].health, isNull);
       expect(snap.tiers, {'1': 'mock-1', '3': 'mock-2'});
       expect(snap.sessionOverrides, {'ws:lab': 'mock-2'});
+      expect(snap.sessionModelChoices, {'ws:lab': 'mock-x'});
     });
 
     test('setSessionProvider() POST body session_id + provider', () async {
@@ -47,6 +48,26 @@ void main() {
       expect(fake.lastSetPath, '/v1/providers/session');
       expect(fake.lastSetBody,
           {'session_id': 'ws:baru', 'provider': 'mock-1'});
+    });
+
+    test('setSessionProvider() dengan model opsional (discovery)', () async {
+      final ok = await repo.setSessionProvider(
+        'ws:baru',
+        'mock-1',
+        model: 'mock-1-turbo',
+      );
+      expect(ok, isTrue);
+      expect(fake.lastSetBody, {
+        'session_id': 'ws:baru',
+        'provider': 'mock-1',
+        'model': 'mock-1-turbo',
+      });
+    });
+
+    test('providerModels() parsing daftar model live discovery', () async {
+      final models = await repo.providerModels('mock-1');
+      expect(fake.lastModelsPath, '/v1/providers/mock-1/models');
+      expect(models, ['mock-1-base', 'mock-1-turbo']);
     });
 
     test("setSessionProvider('default') melepas override", () async {
@@ -82,6 +103,7 @@ class _ApiServer {
   HttpServer? _server;
   Map<String, dynamic> lastSetBody = {};
   String lastSetPath = '';
+  String lastModelsPath = '';
   String lastAuthHeader = '';
   Map<String, String> overrides = {'ws:lab': 'mock-2'};
   int nextErrorCode = 0;
@@ -131,7 +153,28 @@ class _ApiServer {
             ],
             'tiers': {'1': 'mock-1', '3': 'mock-2'},
             'session_overrides': overrides,
+            'session_model_choices': {'ws:lab': 'mock-x'},
           }));
+        } else if (path.startsWith('/v1/providers/') &&
+            path.endsWith('/models') &&
+            method == 'GET') {
+          lastModelsPath = path;
+          if (path == '/v1/providers/mock-1/models') {
+            req.response.write(jsonEncode(<String, dynamic>{
+              'provider': 'mock-1',
+              'models': <String>['mock-1-base', 'mock-1-turbo'],
+              'count': 2,
+              'discovered': true,
+            }));
+          } else {
+            req.response.statusCode = 404;
+            req.response.write(jsonEncode(<String, dynamic>{
+              'ok': false,
+              'code': 'not_found',
+              'error': 'provider tidak dikenal',
+              'retryable': false,
+            }));
+          }
         } else if (path == '/v1/providers/session' && method == 'POST') {
           lastSetPath = path;
           lastSetBody = Map<String, dynamic>.from(

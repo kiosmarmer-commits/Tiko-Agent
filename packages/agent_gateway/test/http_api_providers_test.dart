@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 void main() {
   late HttpApiServer server;
   late Map<String, String> overrides;
+  String? lastModel;
 
   Map<String, dynamic> snapshot() => {
         'default': 'mock-1',
@@ -47,13 +48,26 @@ void main() {
       authToken: 'manager-token-0123456789abcdef',
       port: 0,
       providersProvider: () async => snapshot(),
-      sessionProviderSetter: (sessionId, arg) async {
+      providerModels: (providerId) async {
+        if (providerId != 'mock-1') {
+          throw StateError('provider tidak dikenal: $providerId');
+        }
+        return {
+          'provider': providerId,
+          'models': <String>['mock-1-base', 'mock-1-turbo'],
+          'count': 2,
+          'discovered': true,
+        };
+      },
+      sessionProviderSetter: (sessionId, arg, model) async {
         if (arg.toLowerCase() == 'default') {
           overrides.remove(sessionId);
+          lastModel = null;
           return true;
         }
         if (arg != 'mock-1' && arg != 'mock-2') return false;
         overrides[sessionId] = arg.toLowerCase();
+        lastModel = model;
         return true;
       },
     );
@@ -120,6 +134,77 @@ void main() {
     expect(r['status'], 200);
     expect(r['body']['ok'], isTrue);
     expect(r['body']['provider'], 'mock-1');
+  });
+
+  test('POST /v1/providers/session dengan model opsional diteruskan', () async {
+    final r = await send('POST', '/v1/providers/session', body: {
+      'session_id': 'ws:baru',
+      'provider': 'mock-1',
+      'model': 'mock-1-turbo',
+    });
+    expect(r['status'], 200);
+    expect(r['body']['model'], 'mock-1-turbo');
+    expect(lastModel, 'mock-1-turbo');
+  });
+
+  test('POST /v1/providers/session tanpa model → null diteruskan', () async {
+    await send('POST', '/v1/providers/session', body: {
+      'session_id': 'ws:baru',
+      'provider': 'mock-1',
+    });
+    expect(lastModel, isNull);
+  });
+
+  test('POST model non-string ditolak 400', () async {
+    final r = await send('POST', '/v1/providers/session', body: {
+      'session_id': 'ws:baru',
+      'provider': 'mock-1',
+      'model': 42,
+    });
+    expect(r['status'], 400);
+    expect(r['body']['code'], 'invalid_request');
+  });
+
+  test('GET /v1/providers/<id>/models live discovery', () async {
+    final r = await send('GET', '/v1/providers/mock-1/models');
+    expect(r['status'], 200);
+    expect(r['body']['provider'], 'mock-1');
+    expect(r['body']['models'], containsAll(['mock-1-base', 'mock-1-turbo']));
+    expect(r['body']['count'], 2);
+  });
+
+  test('GET /v1/providers/<id>/models unknown → 404', () async {
+    final r = await send('GET', '/v1/providers/grid-9/models');
+    expect(r['status'], 404);
+    expect(r['body']['code'], 'not_found');
+  });
+
+  test('GET /v1/providers/<id>/models tanpa callback → 501', () async {
+    final bare = HttpApiServer(
+      onMessage: (_) async => 'ok',
+      authToken: 'manager-token-0123456789abcdef',
+      port: 0,
+    );
+    await bare.start();
+    final client = HttpClient();
+    try {
+      final uri = Uri.parse(
+        'http://127.0.0.1:${bare.boundPort}/v1/providers/mock-1/models',
+      );
+      final request = await client.getUrl(uri);
+      request.headers.set(
+        'authorization',
+        'Bearer manager-token-0123456789abcdef',
+      );
+      final response = await request.close();
+      final text = await response.transform(utf8.decoder).join();
+      final body = jsonDecode(text) as Map<String, dynamic>;
+      expect(response.statusCode, 501);
+      expect(body['code'], 'not_implemented');
+    } finally {
+      client.close(force: true);
+      await bare.stop();
+    }
   });
 
   test("POST provider 'default' melepas override", () async {

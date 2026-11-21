@@ -203,6 +203,7 @@ class AgentLoop {
     Session session, {
     CancellationToken? cancelToken,
     String? preferredProviderId,
+    LlmProvider? preferredLlm,
   }) async {
     _lastToolNames.clear();
     executedToolNames.clear();
@@ -244,7 +245,7 @@ class AgentLoop {
       rethrow;
     }
     var ctx = initialContext;
-    var activeLlm = route.llm;
+    var activeLlm = preferredLlm ?? route.llm;
     var activeProviderId =
         route.providerId.isEmpty ? route.llm.id : route.providerId;
 

@@ -312,6 +312,7 @@ class ProvidersSnapshot {
     this.providers = const [],
     this.tiers = const {},
     this.sessionOverrides = const {},
+    this.sessionModelChoices = const {},
   });
 
   final String? defaultId;
@@ -319,10 +320,16 @@ class ProvidersSnapshot {
   final Map<String, String> tiers;
   final Map<String, String> sessionOverrides;
 
+  /// Model eksplisit hasil discovery per sesi (Hermes-parity); kosong bila
+  /// sesi memakai model default provider.
+  final Map<String, String> sessionModelChoices;
+
   factory ProvidersSnapshot.fromMap(Map<String, dynamic> map) {
     final tiers = Map<String, dynamic>.from(map['tiers'] as Map? ?? const {});
     final overrides = Map<String, dynamic>.from(
         map['session_overrides'] as Map? ?? const {});
+    final choices = Map<String, dynamic>.from(
+        map['session_model_choices'] as Map? ?? const {});
     return ProvidersSnapshot(
       defaultId: map['default'] == null ? null : '${map['default']}',
       providers: [
@@ -331,6 +338,9 @@ class ProvidersSnapshot {
       ],
       tiers: {for (final e in tiers.entries) e.key: '${e.value}'},
       sessionOverrides: {for (final e in overrides.entries) e.key: '${e.value}'},
+      sessionModelChoices: {
+        for (final e in choices.entries) e.key: '${e.value}',
+      },
     );
   }
 }

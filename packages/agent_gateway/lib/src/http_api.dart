@@ -62,6 +62,7 @@ class HttpApiServer {
     this.bindBot,
     this.unbindBot,
     this.providersProvider,
+    this.providerModels,
     this.sessionProviderSetter,
     this.pluginProvider,
     this.pluginConsentSetter,
@@ -639,8 +640,14 @@ class HttpApiServer {
   /// Provider & model manager callbacks (GUI-P1-05). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
   final Future<Map<String, dynamic>> Function()? providersProvider;
-  final Future<bool> Function(String sessionId, String providerArg)?
-  sessionProviderSetter;
+
+  /// Live model discovery per provider (Hermes-parity); null → 501.
+  final Future<Map<String, dynamic>> Function(String providerId)?
+  providerModels;
+
+  /// [model] null/'' berarti pakai model default provider.
+  final Future<bool> Function(String sessionId, String providerArg,
+      String? model)? sessionProviderSetter;
 
   /// Plugin & tools manager callbacks (GUI-P1-06). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
@@ -1438,6 +1445,31 @@ class HttpApiServer {
                   'provider manager not configured',
                 )));
         _json(req, snapshot);
+      } else if (req.method == 'GET' &&
+          path.startsWith('/v1/providers/') &&
+          path.endsWith('/models')) {
+        final providerId = path.substring(
+          '/v1/providers/'.length,
+          path.length - '/models'.length,
+        );
+        if (providerId.isEmpty || providerId.contains('/')) {
+          _error(req, 404, 'not_found', 'endpoint tidak ditemukan');
+          return;
+        }
+        if (providerModels == null) {
+          _error(
+            req,
+            501,
+            'not_implemented',
+            'provider manager not configured',
+          );
+          return;
+        }
+        try {
+          _json(req, await providerModels!(providerId));
+        } on StateError catch (e) {
+          _error(req, 404, 'not_found', '${e.message}');
+        }
       } else if (path == '/v1/providers/session' && req.method == 'POST') {
         if (sessionProviderSetter == null) {
           _error(
@@ -1453,6 +1485,11 @@ class HttpApiServer {
                 as Map<String, dynamic>;
         final sessionId = body['session_id'];
         final provider = body['provider'];
+        final model = body['model'];
+        if (model != null && model is! String) {
+          _error(req, 400, 'invalid_request', 'model harus berupa string');
+          return;
+        }
         if (sessionId is! String || sessionId.trim().isEmpty) {
           _error(req, 400, 'invalid_request', 'session_id wajib diisi');
           return;
@@ -1466,9 +1503,11 @@ class HttpApiServer {
           );
           return;
         }
+        final modelArg = (model as String?)?.trim();
         final ok = await sessionProviderSetter!(
           sessionId.trim(),
           provider.trim(),
+          (modelArg == null || modelArg.isEmpty) ? null : modelArg,
         );
         if (!ok) {
           _error(req, 404, 'not_found', 'provider not found');
@@ -1477,6 +1516,8 @@ class HttpApiServer {
             'ok': true,
             'session_id': sessionId.trim(),
             'provider': provider.trim(),
+            if (model is String && model.trim().isNotEmpty)
+              'model': model.trim(),
           });
         }
         // Plugin & tools manager endpoints (GUI-P1-06)

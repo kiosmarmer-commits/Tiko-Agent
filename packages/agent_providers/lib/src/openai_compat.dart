@@ -336,6 +336,23 @@ class OpenAiCompatProvider implements LlmProvider {
     yield LlmDone(finishReason: finish);
   }
 
+  /// Salinan provider dengan model berbeda (Hermes-parity model picker):
+  /// dipakai runtime menerapkan pilihan model hasil discovery per-sesi tanpa
+  /// mengubah konfigurasi dasar.
+  OpenAiCompatProvider withModel(String model) => OpenAiCompatProvider(
+        id: id,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+        httpClient: httpClient,
+        promptCache: promptCache,
+        credentialPool: credentialPool,
+        tokenProvider: tokenProvider,
+        requestTimeout: requestTimeout,
+        modelTimeouts: modelTimeouts,
+        capabilities: capabilities,
+      );
+
   /// Lists model ids advertised by the endpoint (Hermes-parity
   /// `discover_models`). Returns an empty list on any error.
   Future<List<String>> discoverModels() async {

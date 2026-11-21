@@ -524,6 +524,16 @@ class TikoRuntime {
   /// Override provider chat per sesi (`/model <id>`); null = ikut router.
   final Map<String, String> _sessionModel = {};
 
+  /// Model eksplisit per sesi (hasil discovery, Hermes-parity model picker);
+  /// hanya berlaku bila [_sessionModel] untuk sesi yang sama terpasang.
+  final Map<String, String> _sessionModelChoice = {};
+
+  /// Cache katalog model hasil discovery per provider: (models, fetchedAt).
+  final Map<String, (List<String>, DateTime)> _modelCatalog = {};
+
+  /// TTL cache katalog model — parity Hermes (15 menit).
+  static const Duration _modelCatalogTtl = Duration(minutes: 15);
+
   /// Persona bot persisten per chat (`/bot use <id>`); null = tanpa bot.
   final BotStore botStore;
 
@@ -1557,8 +1567,65 @@ class TikoRuntime {
 
   /// Mirror `/model default`: lepas override sesi; true bila ada override
   /// yang dilepas.
-  bool clearSessionProvider(String sessionId) =>
-      _sessionModel.remove(sessionId) != null;
+  bool clearSessionProvider(String sessionId) {
+    _sessionModelChoice.remove(sessionId);
+    return _sessionModel.remove(sessionId) != null;
+  }
+
+  /// Model eksplisit terpasang untuk sesi ini (null bila ikut default).
+  String? sessionModelChoice(String sessionId) =>
+      _sessionModelChoice[sessionId];
+
+  Map<String, String> sessionModelChoices() =>
+      Map.unmodifiable(_sessionModelChoice);
+
+  /// Pasang provider + model eksplisit untuk satu sesi (Hermes-parity
+  /// picker: provider dikonfigurasi + model dari discovery). [model] null
+  /// berarti pakai model default provider; false bila provider dikenal.
+  bool setSessionModel(String sessionId, String providerId, String? model) {
+    if (!setSessionProvider(sessionId, providerId)) return false;
+    final choice = model?.trim();
+    if (choice == null || choice.isEmpty) {
+      _sessionModelChoice.remove(sessionId);
+    } else {
+      _sessionModelChoice[sessionId] = choice;
+    }
+    return true;
+  }
+
+  /// Discovery model live (Hermes-parity): query `GET {base}/models` untuk
+  /// provider OpenAI-compat yang TERKONFIGURASI di config/gateway.env —
+  /// tidak pernah menebak provider. Cache 15 menit; fail-open (error atau
+  /// endpoint tidak mendukung discovery → daftar kosong).
+  Future<Map<String, dynamic>> discoverProviderModels(String providerId) async {
+    final id = providerId.trim().toLowerCase();
+    if (!_router.providers.containsKey(id)) {
+      throw StateError('provider tidak dikenal: $id');
+    }
+    final provider = _router.providers[id];
+    if (provider is! OpenAiCompatProvider) {
+      return {
+        'provider': id,
+        'models': const <String>[],
+        'count': 0,
+        'discovered': false,
+      };
+    }
+    final cached = _modelCatalog[id];
+    final now = DateTime.now();
+    if (cached == null || now.difference(cached.$2) >= _modelCatalogTtl) {
+      final models = await provider.discoverModels();
+      _modelCatalog[id] = (models, now);
+    }
+    final fresh = _modelCatalog[id]!.$1;
+    return {
+      'provider': id,
+      'models': fresh,
+      'count': fresh.length,
+      'discovered': true,
+      'configured_model': provider.model,
+    };
+  }
 
   /// Unified provider health (P1): [CircuitBreaker] adapter over the SAME
   /// [ProviderHealth] state the Router uses for selection/fallback. Any
@@ -2088,6 +2155,15 @@ class TikoRuntime {
           unawaited(parentToken.whenCancelled.then((_) => cancelToken.cancel()));
         }
       }
+      final overrideProvider = _sessionModel[sessionId];
+      final choice = _sessionModelChoice[sessionId];
+      LlmProvider? preferredLlm;
+      if (overrideProvider != null && choice != null) {
+        final pinned = _router.providers[overrideProvider];
+        if (pinned is OpenAiCompatProvider) {
+          preferredLlm = pinned.withModel(choice);
+        }
+      }
       await loop.handle(
         InboundMessage(
           channel: channel,
@@ -2098,7 +2174,8 @@ class TikoRuntime {
         session,
         cancelToken: cancelToken,
         preferredProviderId:
-            _sessionModel[sessionId] ?? botStore.botFor(sessionId)?.model,
+            overrideProvider ?? botStore.botFor(sessionId)?.model,
+        preferredLlm: preferredLlm,
       );
       var answer = replies.join('\n');
       final curatedReport = await memoryNudge.processReply(answer);

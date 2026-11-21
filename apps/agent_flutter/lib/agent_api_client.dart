@@ -243,13 +243,32 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Live model discovery (Hermes-parity) untuk satu provider terkonfigurasi.
+  Future<Map<String, dynamic>> fetchProviderModels(String providerId) async {
+    final res = await _http
+        .get(_u('/v1/providers/${Uri.encodeComponent(providerId)}/models'),
+            headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'models');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// [providerArg] adalah id provider atau `default` (lepas override);
-  /// false bila provider tidak dikenal (404).
-  Future<bool> setSessionProvider(String sessionId, String providerArg) async {
+  /// [model] opsional (hasil discovery); false bila provider tidak dikenal
+  /// (404).
+  Future<bool> setSessionProvider(
+    String sessionId,
+    String providerArg, {
+    String? model,
+  }) async {
     final res = await _http
         .post(_u('/v1/providers/session'),
             headers: _headers,
-            body: jsonEncode({'session_id': sessionId, 'provider': providerArg}))
+            body: jsonEncode({
+              'session_id': sessionId,
+              'provider': providerArg,
+              if (model != null && model.trim().isNotEmpty) 'model': model,
+            }))
         .timeout(const Duration(seconds: 10));
     if (res.statusCode >= 400) return false;
     final json = jsonDecode(res.body) as Map<String, dynamic>;
