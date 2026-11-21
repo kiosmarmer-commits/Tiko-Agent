@@ -73,12 +73,6 @@ hooks:
       temp.deleteSync(recursive: true);
     });
 
-    List<Object?> executed(EventBus bus) {
-      final out = <Object?>[];
-      bus.stream.listen(out.add);
-      return out;
-    }
-
     test('script hook menulis file pada event yang cocok', () async {
       File(p.join(temp.path, 'on_event.sh')).writeAsStringSync(
         r'printf "%s\n" "$TIKO_EVENT" >> out.txt',
@@ -93,7 +87,7 @@ hooks:
 
       events.emit('model.switched', {'provider': 'gemini'});
       final file = File(p.join(temp.path, 'out.txt'));
-      await _waitUntil(file.existsSync());
+      await _waitUntil(() => file.existsSync());
       await _pump();
       expect(file.readAsStringSync(), contains('model.switched'));
       final stats = exec.snapshot()['stats'] as Map<String, dynamic>;
@@ -194,7 +188,7 @@ hooks:
 
       events.emit('sembarang.event', {'who': 'tiko'});
       final file = File(p.join(temp.path, 'out.txt'));
-      await _waitUntil(file.existsSync());
+      await _waitUntil(() => file.existsSync());
       expect(file.readAsStringSync(), contains('sembarang.event'));
       await exec.dispose();
     });
@@ -223,7 +217,7 @@ hooks:
       final sub = events.stream.listen(executed.add);
 
       events.emit('approval.denied', {'tool': 'shell'});
-      await _waitUntil(bodies.isNotEmpty);
+      await _waitUntil(() => bodies.isNotEmpty);
       await _pump();
       expect(bodies, hasLength(1));
       expect(bodies.first['event'], 'approval.denied');
@@ -323,7 +317,7 @@ hooks:
 
       rt.events.emit('model.switched', {'provider': 'gemini'});
       final fired = File(p.join(temp.path, 'hooks', 'fired.txt'));
-      await _waitUntil(fired.existsSync());
+      await _waitUntil(() => fired.existsSync());
       expect(fired.readAsStringSync(), contains('model.switched'));
       final stats = rt.hookSnapshot()['stats'] as Map<String, dynamic>;
       final s = stats['hooks[0]:script'] as Map<String, dynamic>;
