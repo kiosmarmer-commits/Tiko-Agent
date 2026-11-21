@@ -39,6 +39,12 @@ dart run apps/agentd/bin/agentd.dart --api
 - Pilihan provider + model tersimpan per-sesi via `POST /v1/providers/session` dengan field `model` opsional; chip menampilkan `provider · model` bila model eksplisit terpasang.
 - Snapshot `GET /v1/providers` menambahkan `session_model_choices` (peta session → model).
 
+### 4.2 Renderer markdown + tombol salin (C1)
+
+- Balasan asisten dirender lewat `TikoMarkdownView` (`tiko_widgets`): subset markdown — heading, paragraf, bullet/ordered, blockquote, tabel sederhana, **bold**/*italic*/inline code/link, dan code fence dengan panel monospace terpisah (label bahasa, scroll horizontal, tombol "Salin kode"). Bukan CommonMark penuh — sintaks di luar subset tampil apa adanya.
+- Blok ```genui tetap dirender sebagai widget oleh `GenUiMessageView`; segmen teks di luarnya kini markdown.
+- Tombol "Salin" per-pesan asisten menyalin teks mentah (termasuk markdown) ke clipboard + SnackBar "Pesan tersalin". Pesan user tetap selectable text.
+
 ## 5. Batasan dan test
 
 - Memerlukan Flutter SDK untuk build; tanpa build, UI statis 404 dengan instruksi di log daemon. Renderer Canvaskit postematik aset engine dari CDN saat pertama kali dibuka, jadi browser pengguna memerlukan akses jaringan keluar; untuk lingkungan offline, pertimbangkan self-host aset Canvaskit pada konfigurasi build Flutter Web.

@@ -42,6 +42,7 @@
 | Cron pause/resume + attach skill + [CRON_FAILURE] (Hermes-parity P2) | Implemented | Endpoint pause/resume + PATCH `paused`/`skill`; status run (`last_status`, `failure_streak`) di `/v1/jobs` |
 | @ Context references @file/@folder/@git-diff/@url (Hermes-parity P3) | Implemented | Ekspansi fail-closed di `chatWithStatus` (command `/` dan code fence dikecualikan); event `context.expanded`; chip UI web menyusul |
 | Endpoint OpenAI-compat `/v1/chat/completions` (Hermes-parity P4) | Implemented | Non-stream + SSE (single-delta + `[DONE]`); system/transcript/user-terakhir; error shape OpenAI; auth `/v1` sama; usage estimasi len/4 |
+| Markdown + tombol salin di chat (Chat-UX C1) | Implemented | `TikoMarkdownView` subset markdown + code block tersalin sendiri; tombol Salin per-pesan asisten; tanpa dependency baru; bukan CommonMark penuh |
 | Batch processing + trajektori export (Hermes-parity P5) | Implemented | `tiko batch run --tasks JSONL --concurrency 1..16` (chatWithStatus + TrajectoryLogger + laporan `data/batch/`); `tiko batch export --out` JSONL/ShareGPT, redaksi secret default |
 | Home Assistant provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | Tuya provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |

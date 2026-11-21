@@ -1,6 +1,8 @@
 import 'package:agent_core/agent_core.dart';
 import 'package:flutter/material.dart';
 
+import 'markdown_view.dart';
+
 /// D1 GenUI — merender pesan asisten yang memuat blok ```genui menjadi
 /// widget Flutter nyata. Segmen teks biasa tetap dirender sebagai teks
 /// pilih-salin; blok yang tidak valid dibiarkan sebagai teks (fail-closed).
@@ -21,10 +23,7 @@ class GenUiMessageView extends StatelessWidget {
       if (segment is GenUiSpec) {
         children.add(GenUiView(spec: segment, onAction: onAction));
       } else if ((segment as String).trim().isNotEmpty) {
-        children.add(SelectableText(
-          segment,
-          style: const TextStyle(height: 1.4),
-        ));
+        children.add(TikoMarkdownView(text: segment));
       }
     }
     return Column(

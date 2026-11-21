@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import 'agent_api_client.dart';
 import 'app/app_routes.dart';
@@ -1093,6 +1094,19 @@ class _ChatPageState extends State<_ChatPage> {
     await widget.voice.speak(reply);
   }
 
+  /// C1 UX: tombol "Salin" per pesan assistant — salin teks mentah
+  /// (termasuk markdown) ke clipboard, feedback lewat SnackBar.
+  Future<void> _copyMessage(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Pesan tersalin'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
   /// Voice UI: tombol "dengarkan" per pesan assistant; bila sedang berbicara,
   /// tap menghentikan TTS.
   void _speakOrStop(String text) {
@@ -1275,6 +1289,8 @@ class _ChatPageState extends State<_ChatPage> {
                         final speakable = user
                             ? null
                             : VoiceService.speakableReply([message]);
+                        final messageText =
+                            (message['text'] ?? '').toString();
                         return Align(
                           alignment: user
                               ? Alignment.centerRight
@@ -1339,6 +1355,22 @@ class _ChatPageState extends State<_ChatPage> {
                                   ),
                                   label: Text(
                                     'Dengarkan',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.simpulMuted,
+                                    ),
+                                  ),
+                                ),
+                              if (!user && messageText.isNotEmpty)
+                                TextButton.icon(
+                                  key: Key('btn-copy-msg-$i'),
+                                  onPressed: () => _copyMessage(messageText),
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    'Salin',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: context.simpulMuted,
