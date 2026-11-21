@@ -1603,8 +1603,8 @@ class TikoRuntime {
     if (!_router.providers.containsKey(id)) {
       throw StateError('provider tidak dikenal: $id');
     }
-    final provider = _router.providers[id];
-    if (provider is! ModelDiscovery) {
+    final raw = _router.providers[id];
+    if (raw is! ModelDiscovery) {
       return {
         'provider': id,
         'models': const <String>[],
@@ -1612,9 +1612,10 @@ class TikoRuntime {
         'discovered': false,
       };
     }
+    final ModelDiscovery provider = raw as ModelDiscovery;
     final configuredModel = switch (provider) {
-      OpenAiCompatProvider p => p.model,
-      OllamaNativeProvider p => p.model,
+      final OpenAiCompatProvider p => p.model,
+      final OllamaNativeProvider p => p.model,
       _ => null,
     };
     final cached = _modelCatalog[id];

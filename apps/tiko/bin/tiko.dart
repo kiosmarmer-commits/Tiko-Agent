@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
-import 'package:agent_providers/agent_providers.dart' show OpenAiCompatProvider;
+import 'package:agent_providers/agent_providers.dart'
+    show ModelDiscovery, OpenAiCompatProvider;
 import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
@@ -234,7 +235,8 @@ Future<void> main(List<String> argv) async {
         exitCode = 2;
         return;
       }
-      final models = await provider.discoverModels();
+      final ModelDiscovery discovery = provider as ModelDiscovery;
+      final models = await discovery.discoverModels();
       emit(
         {'provider': providerId, 'models': models},
         models.isEmpty ? '(kosong)' : models.join('\n'),
