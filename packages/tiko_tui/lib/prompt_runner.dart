@@ -91,8 +91,7 @@ class PromptRunner {
       }
       final parsed = RegExp(r'^\s*(\d+)\s*$');
       while (true) {
-        final line =
-            await _readLineScripted('$label [1-${options.length}]: ');
+        final line = _readLineScripted('$label [1-${options.length}]: ');
         if (line.trim().isEmpty && def != null && options.contains(def)) {
           return def;
         }

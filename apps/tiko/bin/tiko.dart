@@ -1096,11 +1096,6 @@ Future<void> _setupInteractive(String configPath, bool force) async {
     'azure_openai',
     'bedrock',
   ];
-  const customMarker = '__custom_preset__';
-
-  stdout.writeln(
-    'Pilih dengan panah atas/bawah (atau angka), lalu Enter.',
-  );
   String providerType;
   while (true) {
     final choice = await prompts.select(
