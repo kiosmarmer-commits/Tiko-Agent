@@ -14,6 +14,7 @@ import 'provider_factory.dart';
 import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'idle_consolidation.dart';
+import 'context_refs.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
@@ -1817,8 +1818,32 @@ class TikoRuntime {
       input: inputPreview,
     );
     try {
+      // @ context references (Hermes-parity P3): diekspansi fail-closed
+      // sebelum turn dijalankan; perintah internal (`/…`) tidak disentuh.
+      var prompt = text;
+      if (!internalCommand &&
+          !text.trim().startsWith('/') &&
+          text.contains('@')) {
+        try {
+          final expansion = await expandContextRefs(prompt,
+              workspace: workspace);
+          if (expansion.refs.isNotEmpty) {
+            prompt = expansion.text;
+            events.emit('context.expanded', {
+              'session_id': sessionId,
+              'ok': expansion.refs.where((r) => r['status'] == 'ok').length,
+              'failed':
+                  expansion.refs.where((r) => r['status'] == 'error').length,
+              'refs': expansion.refs,
+            });
+          }
+        } catch (_) {
+          // Kegagalan ekspansi tidak boleh menggagalkan pengiriman pesan;
+          // penanda error inline tetap memberi konteks yang jujur.
+        }
+      }
       final result = await _chatWithStatusCore(
-        text,
+        prompt,
         sessionId: sessionId,
         channel: channel,
         userKey: userKey,
