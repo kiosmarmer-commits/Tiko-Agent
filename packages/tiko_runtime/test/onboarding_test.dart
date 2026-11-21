@@ -185,6 +185,7 @@ void main() {
       final root = Directory.systemTemp.createTempSync('tiko_envfile_rt_');
       addTearDown(() => root.deleteSync(recursive: true));
       Directory('${root.path}/data').createSync();
+      Directory('${root.path}/config').createSync();
       await File('${root.path}/config/agent.yaml').writeAsString('''
 providers:
   default_chat: gemini
@@ -211,6 +212,7 @@ providers:
       final root = Directory.systemTemp.createTempSync('tiko_envfile_win_');
       addTearDown(() => root.deleteSync(recursive: true));
       Directory('${root.path}/data').createSync();
+      Directory('${root.path}/config').createSync();
       await File('${root.path}/config/agent.yaml').writeAsString('''
 providers:
   default_chat: gemini
