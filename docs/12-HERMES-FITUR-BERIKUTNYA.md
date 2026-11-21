@@ -40,10 +40,12 @@
 - **Attach skill:** field `Job.skill` (slug 1..64 tanpa spasi; `"all"` di PATCH menghapus lampiran) — dijadwalkan lewat REST (`/v1/jobs`) maupun tool `schedule_job`. Handler runtime fail-closed: skill hilang/`retired` membuat run gagal dengan pesan eksplisit; skill aktif di-prepend ke prompt run dan `recordUse` tercatat.
 - **Status run:** `JobStore.recordSuccess/recordFailure` → `last_status` (`ok`/`failed`), `last_error` berprefiks `[CRON_FAILURE]`, dan `failure_streak` direset/bertambah; semua tampil di snapshot jobs (`/v1/jobs`) dan dipersist di `jobs.json`.
 
-### P3 — `@ Context references` di chat
+### P3 — `@ Context references` di chat — **Implemented**
 - **Hermes:** `@file`, `@folder`, `@git-diff`, `@url` diekspansi inline jadi konteks pesan.
-- **Fondasi Tiko:** tool read/patch/artifact ada; web chat + TUI tinggal parser argumen pesan.
-- **Desain sarankan:** parser `@` di `chatWithStatus` (fail-closed pada path di luar workspace + ukuran maksimum), deteksi `@url` lewat tool fetch existing; indikator ekspansi di UI web (chip di atas composer).
+- **Implementasi Tiko:** `expandContextRefs()` (tiko_runtime) dipanggil di awal `chatWithStatus` — semua channel (CLI/web/gateway/cron) mendapat ekspansi; perintah internal (`/…`) dan isi code fence tidak disentuh. Sintaks satu token: `@file:<rel>`, `@folder:<rel>`, `@git-diff`, `@url:<http(s)://…>`.
+- **Fail-closed:** path relatif workspace saja (tanpa `..`/`~`/absolut, tervalidasi ulang setelah normalisasi); file ≤ 64 KiB dan bukan biner; folder listing ≤ 200 entri / depth 3; URL GET ≤ 64 KiB, hanya http(s), timeout 15s; maks 8 ref/pesan; budget total ≤ 96 KiB.
+- **Gagal jujur:** ref invalid diganti penanda inline `[@<ref> gagal: <alasan>]` — pesan tetap terkirim, tidak ada konten bocor keluar workspace.
+- **Observability:** setiap ekspansi memancarkan event `context.expanded {session_id, ok, failed, refs[].ref/kind/status/bytes/error}`. Indikator chip ekspansi di composer UI web menyusul.
 
 ### P4 — Endpoint OpenAI-compat (`/v1/chat/completions`) di agent_gateway
 - **Hermes:** expose agent sebagai endpoint OpenAI-compatible agar bisa dipakai Open WebUI/LibreChat/dll.
@@ -69,4 +71,5 @@
 
 1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + snapshot `/v1/plugins`; wiring GUI menyusul di PR berikutnya.
 2. ~~P2 pause/resume job~~ — **selesai**: `Job.paused` + endpoint `/v1/jobs/<id>/pause|resume` + `Job.skill` (fail-closed lewat skill registry) + `last_status`/`failure_streak` dengan penanda `[CRON_FAILURE]`.
-3. P3–P5 menyusul setelah P2 stabil; masing-masing berdiri sendiri.
+3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip indikator UI web menyusul.
+4. P4–P6 menyusul; masing-masing berdiri sendiri.

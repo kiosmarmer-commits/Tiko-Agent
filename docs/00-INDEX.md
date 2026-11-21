@@ -39,6 +39,7 @@
 | Wake-word Porcupine/openWakeWord | Partial | Native engine belum terhubung; tersedia fallback energy/keyword |
 | Event Hooks (Hermes-parity P1) | Implemented | Config `hooks:` (event/webhook/script); hasil di `hook.executed` + snapshot `/v1/plugins`; GUI settings menyusul |
 | Cron pause/resume + attach skill + [CRON_FAILURE] (Hermes-parity P2) | Implemented | Endpoint pause/resume + PATCH `paused`/`skill`; status run (`last_status`, `failure_streak`) di `/v1/jobs` |
+| @ Context references @file/@folder/@git-diff/@url (Hermes-parity P3) | Implemented | Ekspansi fail-closed di `chatWithStatus` (command `/` dan code fence dikecualikan); event `context.expanded`; chip UI web menyusul |
 | Home Assistant provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | Tuya provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
 | SONOFF/eWeLink CUBE provider | Implemented as library | User-facing smart-home tool/runtime wiring belum lengkap |
