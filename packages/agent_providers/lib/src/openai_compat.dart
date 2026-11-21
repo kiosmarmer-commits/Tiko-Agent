@@ -5,6 +5,7 @@ import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
 import 'credential_pool.dart';
+import 'model_discovery.dart';
 import 'prompt_cache.dart';
 
 /// Thin OpenAI-compatible chat provider (Ollama /v1, LM Studio, OpenRouter, Groq, …).

@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
+import 'model_discovery.dart';
+
 /// Native Ollama `/api/chat` provider (shape compatible with ollama_dart usage).
 class OllamaNativeProvider implements LlmProvider, ModelDiscovery {
   OllamaNativeProvider({
