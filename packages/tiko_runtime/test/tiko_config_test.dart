@@ -717,6 +717,54 @@ providers:
     expect(await lock.read(), isNull);
   }, skip: Platform.isWindows);
 
+  test('DaemonManager.tailLog mengembalikan baris akhir, null bila kosong/absen', () {
+    final temp = Directory.systemTemp.createTempSync('tiko_taillog_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+
+    expect(DaemonManager.tailLog('${temp.path}/tidak-ada.log'), isNull);
+
+    final log = File('${temp.path}/daemon.log');
+    log.writeAsStringSync('  \n');
+    expect(DaemonManager.tailLog(log.path), isNull);
+
+    log.writeAsStringSync(
+      List.generate(60, (i) => 'baris-${i + 1}').join('\n'),
+    );
+    final tail = DaemonManager.tailLog(log.path, maxLines: 10);
+    expect(tail, isNotNull);
+    expect(tail!.split('\n'), hasLength(10));
+    expect(tail, contains('baris-60'));
+    expect(tail, isNot(contains('baris-50')));
+
+    log.writeAsStringSync('a\nb\n');
+    expect(DaemonManager.tailLog(log.path), 'a\nb');
+  });
+
+  test('DaemonManager.start proses mati awal → action exited + tail log di detail',
+      () async {
+    final temp = await Directory.systemTemp.createTemp('tiko_daemon_fail_');
+    addTearDown(() => temp.delete(recursive: true));
+
+    final bin = File('${temp.path}/agentd-fail')..writeAsStringSync(
+      '#!/bin/sh\necho "err: config agent.yaml tidak valid" >&2\nexit 3\n',
+    );
+    await Process.run('chmod', ['+x', bin.path]);
+
+    final manager = DaemonManager(
+      dataDir: '${temp.path}/data',
+      apiPort: 8787,
+      configPath: 'config/agent.yaml',
+      agentdBinary: bin.path,
+      workspaceRoot: temp.path,
+    );
+    final result = await manager.start();
+    expect(result['running'], isFalse);
+    expect(result['action'], 'exited');
+    final detail = result['detail'] as String;
+    expect(detail, contains('proses daemon berakhir sebelum siap'));
+    expect(detail, contains('err: config agent.yaml tidak valid'));
+  }, skip: Platform.isWindows);
+
 
 
   group('RuntimeLock', () {
