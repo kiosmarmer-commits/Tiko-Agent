@@ -7,6 +7,7 @@ class _FakeAgentApiClient extends AgentApiClient {
   _FakeAgentApiClient() : super(baseUrl: 'http://127.0.0.1:1', token: 'test');
 
   int sendMessageCalls = 0;
+  final recordedAttachments = <List<ChatAttachmentPayload>>[];
   final decisions = <({String id, bool allow})>[];
   bool failDecision = false;
   Stream<Map<String, dynamic>> Function(String text)? streamHandler;
@@ -15,12 +16,17 @@ class _FakeAgentApiClient extends AgentApiClient {
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey = 'flutter:default',
-  }) => streamHandler?.call(text) ?? const Stream.empty();
+    List<ChatAttachmentPayload> attachments = const [],
+  }) {
+    recordedAttachments.add(attachments);
+    return streamHandler?.call(text) ?? const Stream.empty();
+  }
 
   @override
   Future<String> sendMessage(
     String text, {
     String sessionKey = 'flutter:default',
+    List<ChatAttachmentPayload> attachments = const [],
   }) async {
     sendMessageCalls++;
     return 'fallback reply';
@@ -96,5 +102,32 @@ void main() {
 
     expect(client.decisions, [(id: 'apr_456', allow: true)]);
     expect(controller.pendingConfirm, isNull);
+  });
+
+
+  test('lampiran composer diteruskan ke streamChat dan tampil di gelembung user', () async {
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        yield {'type': 'typing'};
+        yield {'type': 'text', 'text': 'hasil lampiran'};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    await controller.send('analisis ini', attachments: [
+      ChatAttachmentPayload(
+        name: 'laporan.md',
+        mime: 'text/plain',
+        dataBase64: 'aGVsbG8=',
+      ),
+    ]);
+
+    expect(client.recordedAttachments.single.single.name, 'laporan.md');
+    expect(
+      controller.messages.any((m) => m['text'].toString().contains('laporan.md')),
+      isTrue,
+    );
+    expect(controller.messages.last['text'], 'hasil lampiran');
   });
 }

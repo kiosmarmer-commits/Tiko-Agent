@@ -45,6 +45,13 @@ dart run apps/agentd/bin/agentd.dart --api
 - Blok ```genui tetap dirender sebagai widget oleh `GenUiMessageView`; segmen teks di luarnya kini markdown.
 - Tombol "Salin" per-pesan asisten menyalin teks mentah (termasuk markdown) ke clipboard + SnackBar "Pesan tersalin". Pesan user tetap selectable text.
 
+### 4.3 Lampiran file di chat (C2)
+
+- Composer punya tombol attach (maksimum 4 file, 2 MiB/file) + chip pratinjau dengan tombol hapus; pesan user menampilkan ringkasan `📎 nama-file`.
+- Lampiran dikirim inline base64 ke `POST /v1/messages` / WS `/v1/stream` (`attachments: [{name, mime, data_base64}]`); daemon memvalidasi fail-closed (jumlah, nama aman, mime allowlist text/* + subset application/* + image png/jpeg/gif/webp, 2 MiB/file) dan menolak 400 dengan pesan bahasa Indonesia.
+- Runtime membaca dokumen teks sebagai konteks inline `[lampiran: nama] … [/lampiran: nama]` (cap 64 KiB/file, 128 KiB total); gambar/biner  hanya menghasilkan metadata jujur (vision provider belum didukung runtime).
+- Platform: pemilih file aktif di Web (input file browser, tanpa dependency baru); desktop gagal jujur dan mengarahkan ke referensi `@file:` dari P3.
+
 ## 5. Batasan dan test
 
 - Memerlukan Flutter SDK untuk build; tanpa build, UI statis 404 dengan instruksi di log daemon. Renderer Canvaskit postematik aset engine dari CDN saat pertama kali dibuka, jadi browser pengguna memerlukan akses jaringan keluar; untuk lingkungan offline, pertimbangkan self-host aset Canvaskit pada konfigurasi build Flutter Web.

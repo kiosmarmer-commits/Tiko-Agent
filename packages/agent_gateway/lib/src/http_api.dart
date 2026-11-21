@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
@@ -147,6 +148,133 @@ class HttpApiServer {
   /// Validasi payload bot (GUI-P1-04): id cocok pola BotProfile.isValidId
   /// di tiko_runtime, name wajib string non-kosong, field di-whitelist.
   static final RegExp _botIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+
+  /// C2 Chat-UX: batas lampiran inline ({name, mime, data_base64}).
+  /// Deviasi dari docs/11 (yang menghendaki endpoint upload + id): gateway
+  /// stateless, jadi lampiran dikirim inline base64 per pesan dengan cap
+  /// ketat — tanpa file yang tersimpan di gateway.
+  static const _attachmentMaxCount = 4;
+  static const _attachmentMaxBytes = 2 * 1024 * 1024;
+  static final RegExp _attachmentNamePattern =
+      RegExp(r'^[A-Za-z0-9._() -]{1,128}$');
+  static const _attachmentExtraMimes = {
+    'application/json',
+    'application/x-ndjson',
+    'application/yaml',
+    'application/x-yaml',
+    'application/toml',
+    'application/xml',
+    'application/javascript',
+    'application/x-sh',
+  };
+  static const _attachmentImageMimes = {
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+  };
+
+  static bool _attachmentMimeAllowed(String mime) {
+    if (mime.startsWith('image/')) {
+      return _attachmentImageMimes.contains(mime);
+    }
+    if (mime.startsWith('text/')) return true;
+    return _attachmentExtraMimes.contains(mime);
+  }
+
+  /// Validasi `attachments` fail-closed: maksimum [_attachmentMaxCount] file,
+  /// nama aman 1-128 karakter, mime allowlist (text/*, application subset,
+  /// image png/jpeg/gif/webp), isi base64 valid, size maksimum 2 MiB.
+  /// Melempar [ApiRequestException] 400 dengan pesan bahasa Indonesia.
+  static List<Attachment> _parseAttachments(Object? raw) {
+    if (raw == null) return const [];
+    if (raw is! List) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'attachments harus berupa array {name, mime, data_base64}.',
+      );
+    }
+    if (raw.length > _attachmentMaxCount) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'maksimum $_attachmentMaxCount lampiran per pesan '
+        '(diterima ${raw.length}).',
+      );
+    }
+    final out = <Attachment>[];
+    for (var i = 0; i < raw.length; i++) {
+      final item = raw[i];
+      if (item is! Map) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran #${i + 1} harus berupa object {name, mime, data_base64}.',
+        );
+      }
+      final name = (item['name'] as String? ?? '').trim();
+      if (!_attachmentNamePattern.hasMatch(name)) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran #${i + 1}: nama wajib 1-128 karakter alfanumerik '
+          '(boleh . _ ( ) - spasi).',
+        );
+      }
+      final mime = (item['mime'] as String? ?? '').trim().toLowerCase();
+      if (!_attachmentMimeAllowed(mime)) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran "$name": mime "$mime" tidak didukung. '
+          'Yang didukung: text/*, application/json|yaml|toml|xml|javascript|x-ndjson|x-sh, '
+          'image/png|jpeg|gif|webp.',
+        );
+      }
+      final data = item['data_base64'];
+      if (data is! String || data.trim().isEmpty) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran "$name": data_base64 wajib string base64 non-kosong.',
+        );
+      }
+      var normalized = data.replaceAll(RegExp(r'\s'), '');
+      final mod = normalized.length % 4;
+      if (mod == 1) {
+        throw ApiRequestException(400, 'invalid_request',
+            'lampiran "$name": panjang base64 tidak valid.');
+      }
+      if (mod == 2) normalized = '$normalized==';
+      if (mod == 3) normalized = '$normalized=';
+      Uint8List bytes;
+      try {
+        bytes = Uint8List.fromList(base64.decode(normalized));
+      } on FormatException {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran "$name": data_base64 tidak dapat didekode.',
+        );
+      }
+      if (bytes.length > _attachmentMaxBytes) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'lampiran "$name" terlalu besar: ${bytes.length} byte; '
+          'maksimum $_attachmentMaxBytes byte (2 MiB).',
+        );
+      }
+      out.add(Attachment(
+        type: mime.startsWith('image/') ? 'image' : 'document',
+        urlOrBytes: bytes,
+        mime: mime,
+        name: name,
+      ));
+    }
+    return out;
+  }
 
   /// Error respons dalam bentuk OpenAI-compatible (`error.{message,type}`)
   /// agar klien OpenAI/LibreChat dapat menampilkannya apa adanya.
@@ -1065,6 +1193,7 @@ class HttpApiServer {
             final sessionKey = json['session_key'] as String? ?? 'ws:default';
             final userKey = json['user_key'] as String? ?? 'ws';
             if (text.isEmpty) return;
+            final attachments = _parseAttachments(json['attachments']);
             _sendWsEvent(ws, {'type': 'typing'});
             final answer = await onMessage(
               InboundMessage(
@@ -1072,11 +1201,15 @@ class HttpApiServer {
                 userKey: userKey,
                 sessionKey: sessionKey,
                 text: text,
+                attachments: attachments,
               ),
             );
             _sendWsEvent(ws, {'type': 'text', 'text': answer});
             _sendWsEvent(ws, {'type': 'done'});
             await ws.close();
+          } on ApiRequestException catch (e) {
+            _sendWsEvent(ws, {'type': 'error', 'message': e.message});
+            await ws.close(WebSocketStatus.policyViolation, e.message);
           } catch (e) {
             _sendWsEvent(ws, {'type': 'error', 'message': e.toString()});
             await ws.close(
@@ -1250,6 +1383,13 @@ class HttpApiServer {
         final sessionKey = body['session_key'] as String? ?? 'http:default';
         final userKey = body['user_key'] as String? ?? 'http';
         final idempotencyKey = req.headers.value('idempotency-key') ?? '';
+        List<Attachment> attachments;
+        try {
+          attachments = _parseAttachments(body['attachments']);
+        } on ApiRequestException catch (e) {
+          _error(req, e.status, e.code, e.message);
+          return;
+        }
         if (idempotencyKey.trim().isEmpty) {
           final answer = await onMessage(
             InboundMessage(
@@ -1257,6 +1397,7 @@ class HttpApiServer {
               userKey: userKey,
               sessionKey: sessionKey,
               text: text,
+              attachments: attachments,
             ),
           );
           _json(req, {'text': answer});
@@ -1269,6 +1410,7 @@ class HttpApiServer {
                 userKey: userKey,
                 sessionKey: sessionKey,
                 text: text,
+                attachments: attachments,
               ),
             );
             return {'text': answer};

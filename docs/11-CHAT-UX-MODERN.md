@@ -68,20 +68,44 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
   ekspres tidak dibuat karena follow yang sudah ada memadai (keputusan, bukan
   kelalaian).
 
-### Fase C2 — Attachment file end-to-end
-- **Backend:** `POST /v1/attachments` (multipart atau JSON base64; batas ukuran
-  dan mime whitelist; simpan ke `data/attachments/`, PathSafety) → mengembalikan
-  id + nama + ukuran. `POST /v1/messages` dan WS `/v1/stream` menerima
-  `attachments: [id… ]` yang diteruskan ke `InboundMessage.attachments`.
-- **Runtime:** dokumen teks (txt/md/json/code) → dibaca jadi konteks inline
-  `[lampiran: nama.md] … `; gambar → diteruskan ke provider vision bila
-  didukung, kalau tidak jawaban jujur dilanjutkan dengan metadata file;
-  biner → hanya metadata (nama/ukuran/hash) + penanda.
-- **UI:** tombol attach di composer, chip pratinjau di atas input (nama, ukuran,
-  tombol remove); pratinjau gambar kecil untuk image; picker lain mengikuti
-  platform. Cap jumlah/ukuran lampiran ditampilkan apa adanya.
-- **Fail-closed:** file tak dikenal/oversize ditolak dengan pesan bahasa Indonesia
-  yang menyebut batas.
+### Fase C2 — Attachment file end-to-end — **Implemented**
+- **Backend (deviasi jujur dari rancangan awal):** TANPA endpoint upload
+  `POST /v1/attachments` — gateway stateless (tidak tahu `dataDir` runtime),
+  jadi lampiran dikirim inline base64 per pesan:
+  `attachments: [{name, mime, data_base64}…]` pada `POST /v1/messages` DAN
+  frame WS `/v1/stream` (`HttpApiServer._parseAttachments`). Tidak ada file
+  yang disimpan di gateway; byte hanya hidup di memori selama satu turn.
+- **Validasi fail-closed** (error 400, bahasa Indonesia, menyebut batas):
+  maksimum 4 lampiran/pesan; nama 1–128 karakter aman `[A-Za-z0-9._() -]`;
+  mime allowlist `text/*`, `application/json|x-ndjson|yaml|x-yaml|toml|xml|
+  javascript|x-sh`, `image/png|jpeg|gif|webp`; maksimum 2 MiB per file;
+  base64 padding kurang dinormalisasi otomatis, karakter/panjang invalid
+  ditolak.
+- **Model:** field `name` ditambahkan ke `Attachment` (agent_core, opsional —
+  backwards compatible); type dipetakan `image` bila image/* selain itu
+  `document`.
+- **Runtime** (`tiko_runtime/src/attachments.dart` → `expandAttachments`):
+  dokumen teks → dekode UTF-8, dibaca jadi konteks inline
+  `[lampiran: nama (mime, N byte)] … [/lampiran: nama]`, cap 64 KiB per file
+  dan 128 KiB total (potongan ditandai jujur); gambar/biner/audio → metadata
+  saja (nama, mime, ukuran, checksum fnv-1a) + penanda bahwa runtime ini
+  TIDAK dapat membaca isinya — dukungan vision provider belum ada (lie-free,
+  bukan pura-pura menganalisis gambar). Lampiran dikerahkan di
+  `chatWithStatus(..., attachments: …)` setelah ekspansi `@`-refs; event
+  `attachments.expanded` berisi ringkasan per file.
+- **agentd**: `handleMessage` meneruskan `m.attachments` ke `rt.chat`.
+- **UI (composer):** tombol attach (`Icons.attach_file`, cap ikut ditampilkan
+  di tooltip) + chip pratinjau `InputChip` (nama, tooltip mime, tombol hapus)
+  di atas input; pesan user menampilkan ringkasan `📎 nama…`. Picker aktif di
+  Web via `dart:html` (`<input type=file>` + FileReader, tanpa paket baru) —
+  deviasi kecil dari rancangan: pratinjau thumbnail image TIDAK dibuat (chip
+  teks saja) agar murni tanpa dependency; platform non-web langsung gagal
+  jujur (dialog native butuh plugin) dan mengarahkan ke referensi `@file:`
+  (P3) yang sudah bekerja.
+- **Fail-closed:** file tak dikenal/oversize/mime-reject ditolak 400 dengan
+  pesan bahasa Indonesia; frame WS invalid menghasilkan frame `error`, bukan
+  menjalankan turn separuh (setelah penambahan lampiran gagal, pesan tidak
+  pernah sampai agent).
 
 ### Fase C3 — Embedded file view (artifacts/pane) + kartu diff
 - **Panel kanan (desktop ≥1200px):** daftar file workspace/artifacts terkini
