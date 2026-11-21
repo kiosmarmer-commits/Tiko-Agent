@@ -122,7 +122,10 @@ extension TikoRuntimeDoctor on TikoRuntime {
       'sandbox',
       sandboxKind == SandboxKind.none ? CheckStatus.warn : CheckStatus.ok,
       sandboxKind == SandboxKind.none
-          ? 'tidak ada sandbox OS; shell, script, dan MCP dinonaktifkan'
+          ? 'tidak ada sandbox OS; shell, script, dan MCP dinonaktifkan '
+              '(fail-closed). Pasang Docker atau bubblewrap untuk '
+              'mengaktifkannya, atau atur sandbox cloud via env '
+              '(MODAL_SANDBOX_ID / DAYTONA_SANDBOX_ID)'
           : sandboxKind.name,
     ));
 

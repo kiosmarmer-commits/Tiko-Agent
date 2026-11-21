@@ -29,6 +29,8 @@ Router memilih tier 1–3 melalui DecisionProvider atau heuristic, memakai `prov
 
 Jangan menyebut routing sebagai “LLM selalu memilih model”: default config menggunakan mock dan DecisionProvider biasanya disabled sampai diaktifkan.
 
+Provider mock punya pemilih behavior (`providers.chat.scenario`): plain | assisted | single_tool | multi_tool | loop_trap. Bila kosong, runtime kini memakai `assisted`: jawaban kontekstual deterministik — pertanyaan hitungan memanggil tool `calc` dan pertanyaan waktu memanggil `datetime` bila tool tersedia, sisanya balasan bantuan (cara setting provider dsb.) — sehingga percobaan tanpa LLM sungguhan tetap interaktif, bukan hanya satu kalimat greeting. Scenario `plain` tetap dipertahankan untuk unit test yang mengunci teks.
+
 ## 3. Retrieval algoritma
 
 - SQLite path: FTS5/BM25 candidate dan vector candidate bila embedding tersedia, lalu Reciprocal Rank Fusion (RRF, `k=60`).

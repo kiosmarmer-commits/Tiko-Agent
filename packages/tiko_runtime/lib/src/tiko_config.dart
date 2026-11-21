@@ -41,7 +41,8 @@ class ProviderConfig {
   /// A [SecretRef] such as `env:OPENAI_API_KEY`. Never a raw secret.
   final String? apiKeyRef;
 
-  /// Mock-only behavior selector: plain | single_tool | multi_tool | loop_trap.
+  /// Mock-only behavior selector: plain | assisted | single_tool |
+  /// multi_tool | loop_trap. Kosong = `assisted` (jawaban kontekstual).
   final String? scenario;
   final bool enabled;
 
@@ -697,7 +698,7 @@ class TikoConfig {
         if (scenarioValue != null && scenarioValue is! String) {
           issues.add(const ConfigIssue(
             'providers.chat.scenario',
-            'harus berupa string (plain | single_tool | multi_tool | loop_trap)',
+            'harus berupa string (plain | assisted | single_tool | multi_tool | loop_trap)',
           ));
           invalidField = true;
         }

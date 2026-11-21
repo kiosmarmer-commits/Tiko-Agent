@@ -556,6 +556,8 @@ class ProviderFactory {
 }
 
 MockScenario _mockScenario(String? raw) => switch (raw) {
+      'plain' => MockScenario.plain,
+      'assisted' || 'auto' || null => MockScenario.assisted,
       'single_tool' => MockScenario.singleTool,
       'multi_tool' => MockScenario.multiTool,
       'loop_trap' => MockScenario.loopTrap,
