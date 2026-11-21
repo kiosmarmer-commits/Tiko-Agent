@@ -34,7 +34,8 @@ Flutter, dan mengonfigurasi provider LLM — jalankan `tiko setup --provider
 mock` setelah install (lihat bagian 2), atau wizard interaktif `tiko setup
 --interactive` yang menampilkan menu bernomor/panah (↑/bawah + Enter) untuk
 memilih tipe provider, lalu menyimpan config + `gateway.env` (permission 600)
-dengan konfirmasi timpa bila config sudah ada.
+dengan konfirmasi timpa bila config sudah ada. `gateway.env` dimuat otomatis
+oleh runtime/daemon saat start (variabel yang sudah ada di shell tetap menang).
 
 ## 1. Persyaratan
 
@@ -188,7 +189,7 @@ Workflow CI melakukan strict Dart analysis, test seluruh workspace member yang m
 |---|---|
 | `tiko: command not found` | prefix biner belum di PATH: `source ~/.bashrc` atau buka terminal baru; installer menambahkan `export PATH="$HOME/.local/bin:$PATH"` ke shell rc (jalankan ulang `bash install.sh` bila belum) |
 | Konfigurasi ditolak | `tiko config validate`; secret harus berupa `env:NAMA_VAR`, bukan nilai mentah |
-| Provider tidak tersedia | Periksa `providers.default_chat`, `providers.chat`, endpoint, model, dan variabel secret |
+| Provider tidak tersedia | Periksa `providers.default_chat`, `providers.chat`, endpoint, model, dan variabel secret. `gateway.env` (hasil wizard) dimuat otomatis saat runtime start — variabel yang di-export di shell tetap menang. Setelah mengubah config, jalankan `tiko daemon restart` agar tersens |
 | API port dipakai proses lain | `tiko doctor`; cek `api.port` atau `API_PORT`; jangan membunuh PID yang tidak dikenal |
 | UI offline | Periksa daemon, URL, token di Settings, dan `/health` |
 | SQLite gagal dibuka | `tiko doctor`; runtime dapat beralih ke JSON fallback dengan status degraded |

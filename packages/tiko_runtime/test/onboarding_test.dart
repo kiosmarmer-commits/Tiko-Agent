@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_providers/agent_providers.dart';
 import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:test/test.dart';
 
@@ -159,5 +160,75 @@ void main() {
     expect(OnboardingProfile.defaultApiKeyVar('openai'), 'OPENAI_API_KEY');
     expect(OnboardingProfile.defaultApiKeyVar('openai-compat'), 'OPENAI_COMPAT_API_KEY');
     expect(OnboardingProfile.defaultApiKeyVar('zai'), 'ZAI_API_KEY');
+  });
+
+  group('gateway.env', () {
+    test('parseEnvFile mem-parsing export, komentar, dan kutip', () {
+      final map = OnboardingWizard.parseEnvFile(
+        '# komentar\nexport A=1\n\nB="dua kata"\n'
+        'C=tiga kata\nexport D=\'quoted\'\nbaris_tanpa_samadengan\n',
+      );
+      expect(map, {
+        'A': '1',
+        'B': 'dua kata',
+        'C': 'tiga kata',
+        'D': 'quoted',
+      });
+    });
+
+    test('loadEnvFileSync: file absen -> map kosong', () {
+      expect(OnboardingWizard.loadEnvFileSync('/nonexistent-tiko-dir'), isEmpty);
+    });
+
+    test('TikoRuntime.create memuat gateway.env: provider gemini terbangun',
+        () async {
+      final root = Directory.systemTemp.createTempSync('tiko_envfile_rt_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/data').createSync();
+      await File('${root.path}/config/agent.yaml').writeAsString('''
+providers:
+  default_chat: gemini
+  chat:
+    mock:
+      type: mock
+    gemini:
+      type: gemini
+      api_key: env:GEMINI_API_KEY
+''');
+      await File('${root.path}/data/gateway.env')
+          .writeAsString('export GEMINI_API_KEY=envfile-key-123\n');
+
+      final rt = await TikoRuntime.create(
+        configPath: '${root.path}/config/agent.yaml',
+        env: {'TIKO_FORCE_JSON_MEMORY': '1'},
+      );
+      addTearDown(rt.close);
+      final gemini = rt.providerById('gemini') as GeminiProvider;
+      expect(gemini.apiKey, 'envfile-key-123');
+    });
+
+    test('env proses menang atas nilai gateway.env', () async {
+      final root = Directory.systemTemp.createTempSync('tiko_envfile_win_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/data').createSync();
+      await File('${root.path}/config/agent.yaml').writeAsString('''
+providers:
+  default_chat: gemini
+  chat:
+    gemini:
+      type: gemini
+      api_key: env:GEMINI_API_KEY
+''');
+      await File('${root.path}/data/gateway.env')
+          .writeAsString('export GEMINI_API_KEY=envfile-key-123\n');
+
+      final rt = await TikoRuntime.create(
+        configPath: '${root.path}/config/agent.yaml',
+        env: {'GEMINI_API_KEY': 'proses-env-key'},
+      );
+      addTearDown(rt.close);
+      expect((rt.providerById('gemini') as GeminiProvider).apiKey,
+          'proses-env-key');
+    });
   });
 }
