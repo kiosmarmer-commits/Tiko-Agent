@@ -7,6 +7,7 @@ import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:tiko_tui/tiko_tui.dart';
+import 'package:tiko/batch_cli.dart';
 import 'package:tiko/settings_menu.dart';
 import 'package:tiko/tiko_cli.dart';
 
@@ -63,6 +64,15 @@ IDE / API:
 
 Evaluation:
   eval <cases.json> [--label L]   jalankan suite evaluasi, laporan JSON
+
+Batch:
+  batch run --tasks tasks.jsonl [--concurrency N] [--label L]
+                             jalankan task JSONL paralel, tiap turn dicatat
+                             ke trajektori (data/trajectories)
+  batch export --out out.jsonl [--sharegpt] [--no-redact]
+               [--exclude-session ID]
+                             ekspor trajektori untuk eval/training (redaksi
+                             secret aktif secara default)
 
 Opsi: --config PATH  --json  --no-safe  --mode auto|embedded
 ''';
@@ -669,6 +679,142 @@ Future<void> main(List<String> argv) async {
       );
       emit(evalReport.toJson(),
           'eval: ${evalCases.length} kasus, laporan disimpan di $artifact');
+      return;
+
+    case 'batch':
+      // P5 Hermes-parity: batch processing + trajektori export.
+      if (args.isEmpty) {
+        stderr.writeln('subcommand batch wajib: run | export');
+        exitCode = 2;
+        return;
+      }
+      final batchSub = args.first;
+      final batchArgs = args.skip(1).toList();
+      if (batchSub == 'run') {
+        final tasksPath = optValue(batchArgs, '--tasks');
+        if (tasksPath == null || tasksPath.trim().isEmpty) {
+          stderr.writeln('batch run membutuhkan --tasks <file.jsonl>');
+          exitCode = 2;
+          return;
+        }
+        final tasksFile = File(tasksPath);
+        if (!tasksFile.existsSync()) {
+          stderr.writeln('file tasks tidak ditemukan: $tasksPath');
+          exitCode = 2;
+          return;
+        }
+        final rawLabel = optValue(batchArgs, '--label')?.trim() ?? '';
+        final label = (rawLabel.isNotEmpty
+                ? rawLabel
+                : p.basenameWithoutExtension(tasksPath))
+            .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        final concurrencyRaw = optValue(batchArgs, '--concurrency');
+        var concurrency = 1;
+        if (concurrencyRaw != null) {
+          concurrency = int.tryParse(concurrencyRaw) ?? -1;
+          if (concurrency < 1 || concurrency > maxConcurrency) {
+            stderr.writeln('--concurrency harus 1..$maxConcurrency');
+            exitCode = 2;
+            return;
+          }
+        }
+        final List<BatchTaskSpec> specs;
+        try {
+          specs = parseBatchTasksJsonl(tasksFile.readAsStringSync());
+        } on FormatException catch (e) {
+          stderr.writeln('tasks JSONL tidak valid: ${e.message}');
+          exitCode = 2;
+          return;
+        }
+        final outcome = await runBatch(
+          specs: specs,
+          label: label,
+          concurrency: concurrency,
+          logger: TrajectoryLogger(
+            directory: p.join(rt.dataDir, 'trajectories'),
+          ),
+          executor: (spec, sessionId) async {
+            final sw = Stopwatch()..start();
+            final res = await rt.chatWithStatus(
+              spec.prompt,
+              sessionId: sessionId,
+              channel: 'batch',
+              userKey: 'batch',
+            );
+            sw.stop();
+            return (
+              output: res.text,
+              tools: [for (final t in res.toolCallTraces) t.name],
+              success: res.success,
+              latencyMs: sw.elapsedMilliseconds,
+              tokensUsed: res.tokensUsed,
+            );
+          },
+        );
+        final report = buildBatchReport(
+          label: label,
+          concurrency: concurrency,
+          outcome: outcome,
+        );
+        final artifact = batchArtifactPath(dataDir: rt.dataDir, label: label);
+        Directory(p.dirname(artifact)).createSync(recursive: true);
+        File(artifact).writeAsStringSync(
+          const JsonEncoder.withIndent('  ').convert(report),
+        );
+        emit(report, 'batch: ${specs.length} task, laporan disimpan di $artifact');
+        return;
+      }
+      if (batchSub == 'export') {
+        final outPath = optValue(batchArgs, '--out');
+        if (outPath == null || outPath.trim().isEmpty) {
+          stderr.writeln('batch export membutuhkan --out <file.jsonl>');
+          exitCode = 2;
+          return;
+        }
+        if (File(outPath).existsSync()) {
+          stderr.writeln(
+              'file output sudah ada; pilih nama lain agar data lama tidak tertimpa: $outPath');
+          exitCode = 2;
+          return;
+        }
+        final sharegpt = hasFlag(batchArgs, '--sharegpt');
+        final redact = !hasFlag(batchArgs, '--no-redact');
+        final exclude = <String>{
+          for (var i = 0; i < batchArgs.length; i++)
+            if (batchArgs[i] == '--exclude-session' &&
+                i + 1 < batchArgs.length)
+              batchArgs[i + 1],
+        };
+        final logger = TrajectoryLogger(
+          directory: p.join(rt.dataDir, 'trajectories'),
+        );
+        final count = sharegpt
+            ? await logger.exportShareGpt(
+                outputPath: outPath,
+                excludeSessions: exclude,
+                redactSecrets: redact,
+              )
+            : await logger.exportForTraining(
+                outputPath: outPath,
+                excludeSessions: exclude,
+                redactSecrets: redact,
+              );
+        final format = sharegpt ? 'sharegpt' : 'jsonl';
+        emit(
+          {
+            'ok': true,
+            'exported': count,
+            'out': outPath,
+            'format': format,
+            'redact': redact,
+          },
+          'batch export: $count entri ditulis ke $outPath '
+              '($format${redact ? '' : ', tanpa redaksi'})',
+        );
+        return;
+      }
+      stderr.writeln("subcommand batch tidak dikenal: '$batchSub' (run | export)");
+      exitCode = 2;
       return;
 
     case 'acp':

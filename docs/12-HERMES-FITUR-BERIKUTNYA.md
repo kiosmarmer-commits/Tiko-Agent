@@ -56,10 +56,11 @@
 - **Streaming:** `text/event-stream` satu delta berisi jawaban penuh + delta `finish_reason: stop` + `data: [DONE]` (progressive-delivery satu potong, bukan token-level).
 - **Error shape:** OpenAI `{error:{message,type,code}}` agar klien pihak ketiga menampilkan apa adanya; cap prompt terkomposisi 400.000 karakter.
 
-### P5 — Batch processing + trajektori export (eval/self-learning)
+### P5 — Batch processing + trajektori export (eval/self-learning) — **Implemented**
 - **Hermes:** jalankan agent atas ribuan prompt paralel; ekspor trajektori terstruktur untuk eval/training.
-- **Fondasi Tiko:** self-learning/reflection + audit store + runs API sudah merekam aktivitas.
-- **Desain sarankan:** command `tiko batch run --tasks file.jsonl --concurrency N` + ekspor JSONL trajektori dari runs/audit; gate concurrency mengikuti budget provider.
+- **Implementasi Tiko:** command `tiko batch run --tasks file.jsonl [--concurrency N] [--label L]` — task JSONL (`{"id": opsional, "prompt": wajib}`) dijalankan paralel lewat `BatchRolloutRunner` (agent_core, urutan hasil deterministik) di atas `rt.chatWithStatus`, tiap turn tercatat ke `data/trajectories/traj-<tanggal>.jsonl`, laporan agregat tersimpan di `data/batch/`.
+- **Gate concurrency:** `--concurrency` divalidasi 1..16 (di luar rentang ditolak, bukan diam-diam dicekam); budget per-turn tetap ditegakkan `BudgetGuard` di dalam tiap turn.
+- **Export:** `tiko batch export --out out.jsonl [--sharegpt] [--no-redact] [--exclude-session ID]` — ekspor JSONL trajektori (atau format ShareGPT untuk SFT/RL) dengan redaksi secret aktif secara default; file output yang sudah ada ditolak agar tidak tertimpa.
 
 ### P6 — Kontrol routing per provider (sort/whitelist/cost)
 - **Hermes:** whitelists/blacklists, sorting, prioritas per permintaan.
@@ -77,4 +78,5 @@
 2. ~~P2 pause/resume job~~ — **selesai**: `Job.paused` + endpoint `/v1/jobs/<id>/pause|resume` + `Job.skill` (fail-closed lewat skill registry) + `last_status`/`failure_streak` dengan penanda `[CRON_FAILURE]`.
 3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip indikator UI web menyusul.
 4. ~~P4 endpoint OpenAI-compat~~ — **selesai**: `POST /v1/chat/completions` (system+transcript+user-terakhir, stream/non-stream, error shape OpenAI, cap 400k karakter).
-5. P5–P6 menyusul; masing-masing berdiri sendiri.
+5. ~~P5 batch processing + trajektori export~~ — **selesai**: `tiko batch run --tasks/--concurrency/--label` (BatchRolloutRunner + trajektori JSONL + laporan `data/batch/`) dan `tiko batch export --out` (JSONL/ShareGPT, redaksi aktif).
+6. P6 menyusul; berdiri sendiri.
