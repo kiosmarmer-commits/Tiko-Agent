@@ -27,5 +27,8 @@ export 'src/script_repair_advisor.dart';
 export 'src/idle_consolidation.dart';
 export 'src/context_refs.dart';
 export 'src/attachments.dart';
+export 'src/attachment_ingest.dart';
+export 'src/context_file.dart';
+export 'src/doc_extract.dart';
 export 'src/event_hooks.dart';
 export 'src/smart_home_tool.dart';

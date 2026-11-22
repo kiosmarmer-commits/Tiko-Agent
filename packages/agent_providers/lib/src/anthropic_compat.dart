@@ -46,6 +46,26 @@ class AnthropicProvider implements LlmProvider {
           system = (system == null) ? m.content : '$system\n${m.content}';
           continue;
         }
+        final imgs = m.images;
+        if (m.role == 'user' && imgs != null && imgs.isNotEmpty) {
+          // Vision Anthropic: content berupa blok (text + image base64).
+          messages.add({
+            'role': 'user',
+            'content': [
+              {'type': 'text', 'text': m.content},
+              for (final img in imgs)
+                {
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': img.mime,
+                    'data': img.base64,
+                  },
+                },
+            ],
+          });
+          continue;
+        }
         messages.add({
           'role': m.role == 'assistant' ? 'assistant' : 'user',
           'content': m.content,

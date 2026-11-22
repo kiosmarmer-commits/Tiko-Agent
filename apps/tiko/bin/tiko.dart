@@ -31,6 +31,8 @@ Perintah utama:
 Config:
   settings                   menu pengaturan interaktif (provider, model,
                              keamanan, port) — bisa juga `/settings` di chat
+  context                    tampilkan project context file aktif
+                             (TIKO.md | AGENTS.md | CLAUDE.md | GEMINI.md)
   config show|validate
   config get <path>
   config set <path> <value>
@@ -839,6 +841,35 @@ Future<void> main(List<String> argv) async {
         },
       );
       await acp.serve();
+      return;
+
+    case 'context':
+      // A.1: tampilkan project context file yang aktif untuk turn berikut.
+      final proj = resolveProjectContextFile(workspaceRoot: rt.workspace);
+      if (proj == null) {
+        final names = kProjectContextCandidates.join(' | ');
+        stdout.writeln(
+          'Tidak ada project context file. Buat salah satu: $names '
+          'di root workspace (${rt.workspace}) — isi otomatis masuk system '
+          'prompt setiap turn (batas 12.000 karakter).',
+        );
+        return;
+      }
+      if (jsonOut) {
+        emit({
+          'ok': true,
+          'file': proj.fileName,
+          'path': proj.filePath,
+          'chars': proj.content.length,
+          'truncated': proj.truncated,
+        }, 'project context: ${proj.fileName}');
+        return;
+      }
+      stdout.writeln(
+        'Project context aktif: ${proj.fileName} (${proj.filePath}, '
+        '${proj.content.length} karakter${proj.truncated ? ', dipotong ke 12.000' : ''})',
+      );
+      stdout.writeln(proj.content);
       return;
 
     case 'chat':

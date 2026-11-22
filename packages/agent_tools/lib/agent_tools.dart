@@ -37,6 +37,7 @@ export 'src/patch_file.dart';
 export 'src/readability.dart';
 export 'src/direct_commands.dart';
 export 'src/path_safety.dart';
+export 'src/archive_tool.dart';
 export 'src/checkpoint.dart';
 export 'src/cdp_browser.dart';
 export 'src/browser_cdp_tool.dart';

@@ -44,10 +44,18 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
               ? m.content
               : '$instructions\n${m.content}';
         case 'user':
+          final imgs = m.images;
           input.add({
             'role': 'user',
             'content': [
               {'type': 'input_text', 'text': m.content},
+              // Vision Responses API: input_image dengan data URL.
+              if (imgs != null)
+                for (final img in imgs)
+                  {
+                    'type': 'input_image',
+                    'image_url': 'data:${img.mime};base64,${img.base64}',
+                  },
             ],
           });
         case 'assistant':
