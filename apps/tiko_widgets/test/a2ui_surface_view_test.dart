@@ -357,6 +357,39 @@ void main() {
     expect(find.text('panel ringkas'), findsNothing);
   });
 
+  testWidgets('Modal konten tersembunyi sampai pengguna membukanya (E8)',
+      (tester) async {
+    final messages = parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-modal',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'Modal',
+            'title': 'Rincian langkah',
+            'children': ['t1'],
+          },
+          {'id': 't1', 'component': 'Text', 'text': 'isi modal'},
+        ],
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: messages),
+      ),
+    ));
+
+    expect(find.text('Rincian langkah'), findsOneWidget);
+    expect(find.text('isi modal'), findsNothing);
+    await tester.tap(find.text('Rincian langkah'));
+    await tester.pumpAndSettle();
+    expect(find.text('isi modal'), findsOneWidget);
+    await tester.tap(find.text('Rincian langkah'));
+    await tester.pumpAndSettle();
+    expect(find.text('isi modal'), findsNothing);
+  });
+
   testWidgets('List horizontal merender children sejajar (E7)', (tester) async {
     final messages = parseA2uiMessages({
       'version': '1.0',

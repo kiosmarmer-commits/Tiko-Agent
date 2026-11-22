@@ -102,6 +102,7 @@ const Set<String> a2uiAllowedComponents = {
   'ApprovalSheet',
   'List',
   'Tabs',
+  'Modal',
 };
 
 final RegExp _a2uiSafeId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
@@ -140,6 +141,7 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
   'ApprovalSheet': {'risk', 'summary', 'commands'},
   'List': {'axis'},
   'Tabs': {'labels'},
+  'Modal': {'title'},
 };
 
 const Set<String> _a2uiButtonVariants = {'primary', 'secondary', 'danger'};
@@ -1188,6 +1190,12 @@ class A2uiSurfaceSet {
               '${c.childIds.length} children)');
         }
       }
+      if (c.type == 'Modal') {
+        if (c.childIds.isEmpty) {
+          throw FormatException(
+              'a2ui: Modal "${c.id}" wajib punya minimal satu children');
+        }
+      }
       for (final ref in c.childIds) {
         if (!components.containsKey(ref)) {
           throw FormatException(
@@ -1330,7 +1338,9 @@ Pesan berformat A2UI v1.0: {"version":"1.0","createSurface":{...}} dst. Komponen
 {"id":"root","component":"Column","children":["t1","b1"]}.
 Whitelist komponen: Row, Column, Card, Divider, Text, Image, Icon, Button, TextField,
 CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard, ApprovalSheet,
-List (axis horizontal|vertical), Tabs (labels sejumlah children, maks 8).
+List (axis horizontal|vertical), Tabs (labels sejumlah children, maks 8),
+Modal (title string, konten hanya terlihat setelah pengguna membukanya
+— host yang mengontrol tampilan, agen tidak dapat memaksa dialog terbuka).
 - createSurface wajib tepat satu komponen id "root"; updateComponents untuk memperbarui.
 - updateDataModel {"path":"/a/b","value":...} untuk data; teks komponen bisa
   berupa {"@path":"/a/b"} terikat data model.
