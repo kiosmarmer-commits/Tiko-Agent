@@ -107,15 +107,30 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
   menjalankan turn separuh (setelah penambahan lampiran gagal, pesan tidak
   pernah sampai agent).
 
-### Fase C3 — Embedded file view (artifacts/pane) + kartu diff
-- **Panel kanan (desktop ≥1200px):** daftar file workspace/artifacts terkini
-  untuk sesi aktif; klik `@file:` di pesan atau path di tool trace membuka file
-  di panel (code preview, line number, copy, download).
-- **Kartu file/diff dalam chat:** tool trace yang menyentuh file menghasilkan
-  kartu ringkas (nama + status) dengan tombol "Lihat" (panel) dan "Diff"
-  (`/v1/artifacts/diff`) untuk change yang ada approval-nya — serupa pola
-  *review-before-apply* Cursor, diarahkan ke approval flow yang sudah ada.
-- Mobile: panel menjadi lembar penuh (bottom sheet), serupa artifact Claude mobile.
+### Fase C3 — Embedded file view (artifacts/pane) + kartu diff — **Implemented**
+- **Panel file di dalam chat:** tombol folder di header chat (`btn-chat-files`)
+  membuka `ChatArtifactPanel` — di layar lebar (≥1100px) panel kanan 380px
+  side-by-side, di layar sempit overlay penuh (menggantikan bottom sheet agar
+  sederhana). Panel read-only dari endpoint artifacts yang sudah ada
+  (`GET /v1/artifacts` listing + navigasi folder + tombol naik + refresh;
+  `GET /v1/artifacts/read|diff` untuk preview).
+- **Chip `@file:` di pesan:** referensi `@file:` dalam pesan (user maupun
+  assistant) dirender sebagai chip monospace (`chip-file-ref-*`) — tap membuka
+  file di panel. Parsing di `collectFileRefs` (chat_artifact_panel.dart):
+  unik, maks 6, skip `..` dan backslash (fail-closed), tanda baca di akhir
+  dipangkas agar ekstensi tidak terpotong; path tetap divalidasi server.
+- **Kartu file/diff dalam chat:** pesan dengan field `files` (JSON daftar
+  `{path, changed}`) merender kartu `_FileCard` (ikon file/diff, label
+  "berubah", tombol "Lihat" + "Diff") — tap Diff membuka panel dengan tampilan
+  diff vs `.bak` langsung (`_openArtifact`).
+- **Catatan jujur (batasan C3 saat ini):**
+  - Kartu file/diff **sudah dirender** bila `message['files']` ada, tetapi
+    sumber otomatis dari tool trace (WS frames) dikerjakan di **C4** — data
+    kartu belum diisi otomatis oleh backend.
+  - Panel memakai listing global `/v1/artifacts`, bukan per-sesi filter —
+    endpoint filter per-sesi belum ada.
+  - Tidak ada download/thumbnail; preview hanya teks + diff (file biner
+    ditandai tanpa isi, sesuai endpoint).
 
 ### Fase C4 — Process running/debugging di dalam chat
 - **WS richer frames:** dari `ChatRunResult.toolCallTraces` + event bus runtime,

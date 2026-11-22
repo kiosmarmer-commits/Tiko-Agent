@@ -52,6 +52,13 @@ dart run apps/agentd/bin/agentd.dart --api
 - Runtime membaca dokumen teks sebagai konteks inline `[lampiran: nama] … [/lampiran: nama]` (cap 64 KiB/file, 128 KiB total); gambar/biner  hanya menghasilkan metadata jujur (vision provider belum didukung runtime).
 - Platform: pemilih file aktif di Web (input file browser, tanpa dependency baru); desktop gagal jujur dan mengarahkan ke referensi `@file:` dari P3.
 
+### 4.4 Panel file + chips @file + kartu diff di chat (C3)
+
+- Header chat punya tombol folder (`btn-chat-files`) untuk membuka `ChatArtifactPanel`: daftar file artifacts read-only dengan navigasi folder, tombol naik (`..`), refresh, dan preview file (isi teks + diff vs `.bak` bila tersedia) lewat `ArtifactPreviewPanel` (termasuk tombol salin isi file).
+- Layout: layar lebar (≥1100px) panel kanan 380px; layar sempit overlay penuh di atas chat. Read-only — tidak ada endpoint tulis.
+- Referensi `@file:` dalam pesan dirender sebagai chip monospace; tap membuka file di panel. Parsing fail-closed di `collectFileRefs` (skip `..`/backslash, maks 6, tanda baca akhir dipangkas).
+- Pesan dengan field `files` (daftar `{path, changed}`) merender kartu file ("Lihat" + "Diff"); sumber otomatis dari tool trace dikerjakan di C4.
+
 ## 5. Batasan dan test
 
 - Memerlukan Flutter SDK untuk build; tanpa build, UI statis 404 dengan instruksi di log daemon. Renderer Canvaskit postematik aset engine dari CDN saat pertama kali dibuka, jadi browser pengguna memerlukan akses jaringan keluar; untuk lingkungan offline, pertimbangkan self-host aset Canvaskit pada konfigurasi build Flutter Web.

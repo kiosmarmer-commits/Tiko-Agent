@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/models.dart';
 import '../ui/theme.dart';
@@ -144,6 +145,51 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
   }
 }
 
+/// Widget preview publik (C3 Chat-UX): wrapper stateful di atas
+/// [_PreviewCard] agar panel chat (dan target lain) dapat menampilkan
+/// isi file + toggle diff tanpa mengelola state toggle sendiri.
+class ArtifactPreviewPanel extends StatefulWidget {
+  const ArtifactPreviewPanel({
+    super.key,
+    required this.content,
+    this.diff,
+    this.initialShowDiff = false,
+    this.onClose,
+  });
+
+  final ArtifactContent content;
+  final ArtifactDiff? diff;
+  final bool initialShowDiff;
+  final VoidCallback? onClose;
+
+  @override
+  State<ArtifactPreviewPanel> createState() => _ArtifactPreviewPanelState();
+}
+
+class _ArtifactPreviewPanelState extends State<ArtifactPreviewPanel> {
+  late bool _showDiff = widget.initialShowDiff;
+
+  @override
+  void didUpdateWidget(ArtifactPreviewPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.content.path != widget.content.path ||
+        oldWidget.initialShowDiff != widget.initialShowDiff) {
+      _showDiff = widget.initialShowDiff;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PreviewCard(
+      content: widget.content,
+      diff: widget.diff,
+      showDiff: _showDiff,
+      onToggleDiff: (v) => setState(() => _showDiff = v),
+      onClose: widget.onClose,
+    );
+  }
+}
+
 class _PreviewCard extends StatelessWidget {
   const _PreviewCard({
     required this.content,
@@ -182,6 +228,25 @@ class _PreviewCard extends StatelessWidget {
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
+              if (!content.binary)
+                IconButton(
+                  key: const Key('btn-artifact-copy'),
+                  tooltip: 'Salin isi file',
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: content.content),
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('File tersalin'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                ),
               if (content.bakExists && diff != null)
                 ToggleButtons(
                   isSelected: [!showDiff, showDiff],

@@ -24,6 +24,7 @@ import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
 import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
+import 'ui/chat_artifact_panel.dart';
 import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
 import 'ui/multi_pane_view.dart';
@@ -132,6 +133,7 @@ class _AgentAppState extends State<AgentApp> {
   ArtifactDiff? artifactDiff;
   bool loadingArtifacts = false;
   String? artifactsError;
+  bool artifactPreviewShowDiff = false;
   RunsSnapshot? runsSnapshot;
   bool runsLoading = false;
   String? runsError;
@@ -295,7 +297,7 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
-  Future<void> _openArtifact(String path) async {
+  Future<void> _openArtifact(String path, {bool showDiff = false}) async {
     if (path.isEmpty) {
       setState(() {
         artifactContent = null;
@@ -306,6 +308,7 @@ class _AgentAppState extends State<AgentApp> {
     setState(() {
       artifactsError = null;
       loadingArtifacts = true;
+      artifactPreviewShowDiff = showDiff;
     });
     try {
       final content = await repo.artifactRead(path);
@@ -323,6 +326,13 @@ class _AgentAppState extends State<AgentApp> {
     } finally {
       if (mounted) setState(() => loadingArtifacts = false);
     }
+  }
+
+  /// C3 Chat-UX: tombol "Diff" pada kartu file chat — buka file di panel
+  /// dengan tampilan diff langsung (bila `.bak` ada), kalau tidak preview.
+  Future<void> _openArtifactDiff(String path) async {
+    if (path.isEmpty) return;
+    await _openArtifact(path, showDiff: true);
   }
 
   /// Memory Explorer (GUI-P1-12): kurasi + lapisan + RAG dimuat paralel.
@@ -701,6 +711,19 @@ class _AgentAppState extends State<AgentApp> {
           providerSnapshot: providerSnapshot,
           onNewChat: _newChatSession,
           onSelectProvider: _selectChatProvider,
+          artifactsListing: artifactsListing,
+          artifactsDir: artifactsDir,
+          artifactsLoading: loadingArtifacts,
+          artifactsError: artifactsError,
+          previewContent: artifactContent,
+          previewDiff: artifactDiff,
+          previewLoading: loadingArtifacts,
+          previewShowDiff: artifactPreviewShowDiff,
+          onLoadArtifacts: () => unawaited(_loadArtifacts()),
+          onOpenArtifactDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
+          onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
+          onOpenArtifactDiff: (path) => unawaited(_openArtifactDiff(path)),
+          onCloseArtifactFile: () => _openArtifact(''),
         );
         // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
         if (!settings.multiPane) return chatPage;
@@ -1042,6 +1065,19 @@ class _ChatPage extends StatefulWidget {
     this.providerSnapshot,
     this.onNewChat,
     this.onSelectProvider,
+    this.artifactsListing,
+    this.artifactsDir = '',
+    this.artifactsLoading = false,
+    this.artifactsError,
+    this.previewContent,
+    this.previewDiff,
+    this.previewLoading = false,
+    this.previewShowDiff = false,
+    this.onLoadArtifacts,
+    this.onOpenArtifactDir,
+    this.onOpenArtifactFile,
+    this.onOpenArtifactDiff,
+    this.onCloseArtifactFile,
   });
   final ChatController chat;
   final String sessionKey;
@@ -1054,13 +1090,36 @@ class _ChatPage extends StatefulWidget {
   final VoidCallback? onNewChat;
   final Future<void> Function(String providerId)? onSelectProvider;
 
+  /// C3 Chat-UX: panel file artifacts terintegrasi di chat (read-only).
+  final ArtifactsListing? artifactsListing;
+  final String artifactsDir;
+  final bool artifactsLoading;
+  final String? artifactsError;
+  final ArtifactContent? previewContent;
+  final ArtifactDiff? previewDiff;
+  final bool previewLoading;
+  final bool previewShowDiff;
+  final VoidCallback? onLoadArtifacts;
+  final ValueChanged<String>? onOpenArtifactDir;
+  final ValueChanged<String>? onOpenArtifactFile;
+  final ValueChanged<String>? onOpenArtifactDiff;
+  final VoidCallback? onCloseArtifactFile;
+
   @override
   State<_ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<_ChatPage> {
   late final ScrollController _scrollController;
+  bool _filesOpen = false;
 
+  /// C3: buka/tutup panel file; panel pertama kali dibuka memicu muat
+  /// daftar artifacts bila belum ada.
+  void _toggleFilesPane() {
+    final opening = !_filesOpen;
+    setState(() => _filesOpen = opening);
+    if (opening) widget.onLoadArtifacts?.call();
+  }
   @override
   void initState() {
     super.initState();
@@ -1128,6 +1187,52 @@ class _ChatPageState extends State<_ChatPage> {
         ).showSnackBar(SnackBar(content: Text('TTS tidak tersedia: $error')));
       }),
     );
+  }
+
+  /// C3: chip `@file:` — logika parsingnya di `collectFileRefs`
+  /// (chat_artifact_panel.dart); karakter berisiko dilewati fail-closed.
+  List<String> _collectFileRefs(String text) => collectFileRefs(text);
+
+  /// C3: kartu file yang disentuh tool turn aktif (`message['files']` berupa
+  /// daftar {path, changed}); wiring sumbernya menyusul di C4 (WS frames).
+  List<Widget> _fileCards(Map<String, String> message, int i) {
+    List<ChatFileCardData> parsed;
+    try {
+      parsed = parseMessageFileCards(message['files']);
+    } catch (_) {
+      return const [];
+    }
+    if (parsed.isEmpty) return const [];
+    return [
+      Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (var j = 0; j < parsed.length; j++)
+              _FileCard(
+                key: Key('card-file-$i-$j'),
+                path: parsed[j].path,
+                changed: parsed[j].changed,
+                onOpen: widget.onOpenArtifactFile == null
+                    ? null
+                    : () => widget.onOpenArtifactFile!(parsed[j].path),
+                onOpenDiff: widget.onOpenArtifactFile == null
+                    ? null
+                    : () => _openArtifactDiffView(parsed[j].path),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  void _openArtifactDiffView(String path) {
+    // Diff langsung dari kartu chat: panel dibuka dengan tampilan diff
+    // (turunan _openArtifact via callback root bila tersedia).
+    widget.onOpenArtifactDiff?.call(path);
   }
 
   String _chatProviderLabel() {
@@ -1214,9 +1319,14 @@ class _ChatPageState extends State<_ChatPage> {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: widget.chat,
-      builder: (context, _) {
-        final chat = widget.chat;
-        return Column(
+      builder: (context, _) => _layoutWithPanel(context, widget.chat),
+    );
+  }
+
+  /// C3 Chat-UX: chat dapat memakai panel file di kanan (lebar ≥1100px) atau
+  /// overlay penuh (layar sempit). Panel read-only dari data nama yang sama.
+  Widget _layoutWithPanel(BuildContext context, ChatController chat) {
+    final chatColumn = Column(
           children: [
             PageHeader(
               title: 'Chat',
@@ -1231,6 +1341,19 @@ class _ChatPageState extends State<_ChatPage> {
                       tooltip: 'Chat baru',
                       icon: const Icon(Icons.add_comment_outlined),
                       onPressed: widget.onNewChat,
+                    ),
+                  if (widget.onOpenArtifactFile != null)
+                    IconButton(
+                      key: const Key('btn-chat-files'),
+                      tooltip: _filesOpen
+                          ? 'Tutup panel file workspace'
+                          : 'Buka panel file workspace',
+                      icon: Icon(
+                        _filesOpen
+                            ? Icons.close
+                            : Icons.folder_open_outlined,
+                      ),
+                      onPressed: _toggleFilesPane,
                     ),
                   if (widget.onSelectProvider != null &&
                       (widget.providerSnapshot?.providers.isNotEmpty ?? false))
@@ -1296,6 +1419,10 @@ class _ChatPageState extends State<_ChatPage> {
                             : VoiceService.speakableReply([message]);
                         final messageText =
                             (message['text'] ?? '').toString();
+                        final fileRefs =
+                            widget.onOpenArtifactFile == null
+                                ? const <String>[]
+                                : _collectFileRefs(messageText);
                         return Align(
                           alignment: user
                               ? Alignment.centerRight
@@ -1348,6 +1475,24 @@ class _ChatPageState extends State<_ChatPage> {
                                         style: SimpulTheme.body,
                                       ),
                               ),
+                              ..._fileCards(message, i),
+                              for (var j = 0; j < fileRefs.length; j++)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: ActionChip(
+                                    key: Key('chip-file-ref-$i-$j'),
+                                    visualDensity: VisualDensity.compact,
+                                    label: Text(
+                                      '@file:${fileRefs[j]}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                    onPressed: () =>
+                                        widget.onOpenArtifactFile!(fileRefs[j]),
+                                  ),
+                                ),
                               if (speakable != null && speakable.isNotEmpty)
                                 TextButton.icon(
                                   key: Key('btn-speak-msg-$i'),
@@ -1422,6 +1567,40 @@ class _ChatPageState extends State<_ChatPage> {
                 ),
               ),
             _Composer(onSend: _onSend, voice: widget.voice),
+          ],
+        );
+    if (!_filesOpen || widget.onOpenArtifactFile == null) return chatColumn;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 1100;
+        final panel = ChatArtifactPanel(
+          online: chat.online,
+          listing: widget.artifactsListing,
+          dir: widget.artifactsDir,
+          listingLoading: widget.artifactsLoading,
+          listingError: widget.artifactsError,
+          preview: widget.previewContent,
+          diff: widget.previewDiff,
+          previewLoading: widget.previewLoading,
+          previewShowDiff: widget.previewShowDiff,
+          onOpenDir: widget.onOpenArtifactDir,
+          onOpenFile: widget.onOpenArtifactFile,
+          onClosePreview: widget.onCloseArtifactFile,
+          onRefresh: widget.onLoadArtifacts,
+        );
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: chatColumn),
+              SizedBox(width: 380, child: Material(child: panel)),
+            ],
+          );
+        }
+        return Stack(
+          children: [
+            Positioned.fill(child: chatColumn),
+            Positioned.fill(child: Material(child: panel)),
           ],
         );
       },
@@ -2809,6 +2988,83 @@ class _Card extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// C3 Chat-UX: kartu ringkas file yang disentuh tool turn aktif — pola
+/// review-before-apply (serupa kartu file/diff Cursor). Tombol "Lihat"
+/// membuka isi file di panel chat; "Diff" membuka perbandingan vs `.bak`
+/// bila ada. Kartu hanya tampil bila data file tersedia dari turn; sumber
+/// otomatisnya menyusul di C4 (WS frames dari tool trace).
+class _FileCard extends StatelessWidget {
+  const _FileCard({
+    super.key,
+    required this.path,
+    required this.changed,
+    this.onOpen,
+    this.onOpenDiff,
+  });
+
+  final String path;
+  final bool changed;
+  final VoidCallback? onOpen;
+  final VoidCallback? onOpenDiff;
+
+  @override
+  Widget build(BuildContext context) {
+    final safePath = path.trim();
+    if (safePath.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: context.simpulPanel,
+        borderRadius: BorderRadius.circular(SimpulTheme.radiusSmall),
+        border: Border.all(color: context.simpulBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            changed ? Icons.difference_outlined : Icons.insert_drive_file_outlined,
+            size: 16,
+            color: changed ? context.simpulWarn : context.simpulMuted,
+          ),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Text(
+              safePath,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          if (changed)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Text(
+                'berubah',
+                style: TextStyle(fontSize: 10, color: context.simpulWarn),
+              ),
+            ),
+          if (onOpen != null)
+            IconButton(
+              tooltip: 'Lihat isi file di panel',
+              icon: const Icon(Icons.visibility_outlined, size: 16),
+              onPressed: onOpen,
+            ),
+          if (onOpenDiff != null)
+            IconButton(
+              tooltip: 'Lihat diff vs .bak',
+              icon: const Icon(Icons.difference_outlined, size: 16),
+              onPressed: onOpenDiff,
+            ),
+        ],
+      ),
     );
   }
 }
