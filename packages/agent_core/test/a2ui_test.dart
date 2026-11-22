@@ -226,6 +226,32 @@ void main() {
       );
     });
 
+    test('Chart kind area|donut diterima, kind asing ditolak', () {
+      Map<String, Object> chart(String kind) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-ch',
+              'components': [
+                {
+                  'id': 'root',
+                  'component': 'Chart',
+                  'kind': kind,
+                  'points': [
+                    {'label': 'L1', 'value': 10},
+                    {'label': 'L2', 'value': 24},
+                  ],
+                },
+              ],
+            },
+          };
+      expect(parseA2uiMessages(chart('area')), isNotEmpty);
+      expect(parseA2uiMessages(chart('donut')), isNotEmpty);
+      expect(
+        () => parseA2uiMessages(chart('scatter')),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('Image.src hanya https/http atau file://data/uploads', () {
       Map<String, Object> build(String src) => {
             'version': '1.0',
@@ -529,6 +555,27 @@ void main() {
       expect(segs[0], isA<String>());
       expect(segs[1], isA<List<A2uiMessage>>());
       expect(segs[2], isA<String>());
+    });
+
+    test('includeStreaming: fence belum tertutup jadi blok complete:false', () {
+      final text = 'teks\n\`\`\`a2ui\n'
+          '{"version":"1.0","createSurface":{"surfaceId":"s-stream",'
+          '"components":[{"id":"root","component":"Division"}]}}';
+      expect(extractA2uiBlocks(text), isEmpty);
+      final streaming = extractA2uiBlocks(text, includeStreaming: true);
+      expect(streaming, hasLength(1));
+      expect(streaming.first.complete, isFalse);
+      expect(streaming.first.messages, isEmpty);
+      expect(streaming.first.end, text.length);
+
+      final segs = splitA2uiSegments(text, includeStreaming: true);
+      expect(segs, hasLength(2));
+      expect(segs[1], isA<A2uiBlock>());
+    });
+
+    test('fence streaming melebihi 24KiB tetap diabaikan', () {
+      final text = '\`\`\`a2ui\n${'x' * 25000}';
+      expect(extractA2uiBlocks(text, includeStreaming: true), isEmpty);
     });
   });
 

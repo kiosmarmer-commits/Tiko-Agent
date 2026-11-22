@@ -137,7 +137,7 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
 
 const Set<String> _a2uiButtonVariants = {'primary', 'secondary', 'danger'};
 const Set<String> _a2uiTones = {'primary', 'neutral', 'error'};
-const Set<String> _a2uiChartKinds = {'bar', 'line'};
+const Set<String> _a2uiChartKinds = {'bar', 'line', 'area', 'donut'};
 const Set<String> _a2uiTextVariants = {'heading', 'body', 'caption', 'mono'};
 
 /// Satu aksi tombol yang tervalidasi: `{"name": ..., "payload": {...}}`.
@@ -1061,24 +1061,38 @@ class A2uiSurfaceSet {
 
 /// Satu blok ```a2ui yang diekstrak dari teks chat.
 class A2uiBlock {
-  const A2uiBlock(this.start, this.end, this.messages);
+  const A2uiBlock(this.start, this.end, this.messages, {this.complete = true});
 
   final int start;
   final int end;
   final List<A2uiMessage> messages;
+
+  /// false = fence terakhir masih mengalir (belum tertutup); host
+  /// menampilkan skeleton streaming, bukan teks mentah.
+  final bool complete;
 }
 
 /// Mengekstrak blok fenced ```a2ui (info-string `a2ui` atau `a2ui v1`)
-/// dari [text]. Blok tak valid / tak tertutup dibiarkan sebagai teks biasa
-/// (fail-closed, konsisten dengan [extractGenUiBlocks]).
-List<A2uiBlock> extractA2uiBlocks(String text) {
+/// dari [text]. Blok tak valid dibiarkan sebagai teks biasa (fail-closed,
+/// konsisten dengan [extractGenUiBlocks]). Dengan `includeStreaming` fence
+/// terakhir yang belum tertutup dikembalikan sebagai blok `complete: false`
+/// (tanpa pesan) agar host menampilkan skeleton saat balasan sedang mengalir.
+List<A2uiBlock> extractA2uiBlocks(String text,
+    {bool includeStreaming = false}) {
   final blocks = <A2uiBlock>[];
   final pattern = RegExp(r'^```a2ui(?: v1)?[ \t]*\r?\n', multiLine: true);
   for (final open in pattern.allMatches(text)) {
     if (blocks.length >= a2uiMaxBlocksPerMessage) break;
     final closePattern = RegExp(r'^```[ \t]*\r?$', multiLine: true);
     final close = closePattern.firstMatch(text.substring(open.end));
-    if (close == null) continue;
+    if (close == null) {
+      if (includeStreaming && text.length - open.end <= a2uiMaxFenceBytes) {
+        blocks.add(
+            A2uiBlock(open.start, text.length, const [], complete: false));
+        break;
+      }
+      continue;
+    }
     final body = text.substring(open.end, open.end + close.start);
     if (body.length > a2uiMaxFenceBytes) continue;
     try {
@@ -1092,14 +1106,17 @@ List<A2uiBlock> extractA2uiBlocks(String text) {
 }
 
 /// Memecah teks chat menjadi segmen teks biasa dan blok UI A2UI berurutan.
-List<Object> splitA2uiSegments(String text) {
-  final blocks = extractA2uiBlocks(text);
+/// Segmen berupa `String`, `List<A2uiMessage>` (blok tuntas), atau
+/// [A2uiBlock] dengan `complete: false` (masih mengalir).
+List<Object> splitA2uiSegments(String text, {bool includeStreaming = false}) {
+  final blocks =
+      extractA2uiBlocks(text, includeStreaming: includeStreaming);
   if (blocks.isEmpty) return [text];
   final segments = <Object>[];
   var cursor = 0;
   for (final b in blocks) {
     if (b.start > cursor) segments.add(text.substring(cursor, b.start));
-    segments.add(b.messages);
+    segments.add(b.complete ? b.messages : b);
     cursor = b.end;
   }
   if (cursor < text.length) segments.add(text.substring(cursor));
@@ -1122,5 +1139,6 @@ CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard.
   action.name = snake_case 2-65 karakter; payload kecil; aksi diteruskan ke pipeline
   tool/approvals Tiko (bukan eksekusi langsung).
 Batas: 24 pesan/panggilan, 120 komponen/surface, depth 8, teks 4000 char, 8 aksi/surface.
-Untuk ringkasan angka gunakan Metric; untuk seri waktu gunakan Chart (kind bar|line, maks 31 titik).
+Untuk ringkasan angka gunakan Metric; untuk seri waktu gunakan Chart (kind
+bar|line|area|donut, maks 31 titik).
 ''';

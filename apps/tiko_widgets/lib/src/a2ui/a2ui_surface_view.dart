@@ -299,17 +299,67 @@ class A2uiSurfaceView extends StatelessWidget {
         .reduce((a, b) => a < b ? a : b);
     final span = (maxVal - minVal).abs() < 0.0001 ? 1.0 : maxVal - minVal;
 
-    if (p['kind'] == 'line') {
+    final kind = p['kind']?.toString() ?? 'bar';
+    if (kind == 'line' || kind == 'area') {
+      final values =
+          points.map((x) => (x['value'] as num).toDouble()).toList();
       return SizedBox(
         height: 120,
         width: double.infinity,
         child: CustomPaint(
-          painter: _A2uiLinePainter(
-            values: points.map((x) => (x['value'] as num).toDouble()).toList(),
-            min: minVal,
-            span: span,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          painter: kind == 'area'
+              ? _A2uiAreaPainter(
+                  values: values,
+                  min: minVal,
+                  span: span,
+                  color: Theme.of(context).colorScheme.primary,
+                )
+              : _A2uiLinePainter(
+                  values: values,
+                  min: minVal,
+                  span: span,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+        ),
+      );
+    }
+    if (kind == 'donut') {
+      final values =
+          points.map((x) => (x['value'] as num).toDouble()).toList();
+      return SizedBox(
+        height: 140,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 120,
+              height: 140,
+              child: CustomPaint(
+                painter: _A2uiDonutPainter(
+                  values: values,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final x in points)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Text(
+                        '${x['label']} · ${x['value']}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -619,6 +669,103 @@ class _A2uiLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _A2uiLinePainter oldDelegate) =>
+      oldDelegate.values.length != values.length;
+}
+
+/// Area chart: isian di bawah kurva + garis atas (warisan _A2uiLinePainter).
+class _A2uiAreaPainter extends CustomPainter {
+  _A2uiAreaPainter({
+    required this.values,
+    required this.min,
+    required this.span,
+    required this.color,
+  });
+
+  final List<double> values;
+  final double min;
+  final double span;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * i / (values.length - 1);
+      final y = size.height - (values[i] - min) / span * size.height;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(
+        path..
+          lineTo(size.width, size.height)..lineTo(0, size.height)..close(),
+        Paint()
+          ..color = color.withValues(alpha: 0.18)
+          ..style = PaintingStyle.fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _A2uiAreaPainter oldDelegate) =>
+      oldDelegate.values.length != values.length;
+}
+
+/// Donut chart: bagian proporsional terhadap |value| (min 1 segmen tetap
+/// digambar bila total 0); warna: primary + gradasi hue sederhana.
+class _A2uiDonutPainter extends CustomPainter {
+  _A2uiDonutPainter({required this.values, required this.color});
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius =
+        (size.height < size.width ? size.height : size.width) / 2;
+    final center = Offset(size.width / 2, size.height / 2);
+    final total = values.fold(0.0, (a, b) => a + b.abs());
+    final stroke = (radius * 0.25).clamp(6.0, 18.0);
+    final rect = Rect.fromCircle(center: center, radius: radius - stroke / 2);
+    if (total <= 0) {
+      canvas.drawArc(rect, 0, 6.2832, false,
+          Paint()
+            ..color = Colors.grey.shade300
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = stroke);
+      return;
+    }
+    var start = -3.14159 / 2;
+    for (var i = 0; i < values.length; i++) {
+      final sweep = 6.2832 * values[i].abs() / total;
+      final hue = (HSLColor.fromColor(color).hue + i * 47.0) % 360;
+      final segment = HSLColor.fromAHSL(
+              1, hue, 0.6, (HSLColor.fromColor(color).lightness + i * 0.05) % 1.0)
+          .toColor();
+      canvas.drawArc(
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = segment
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _A2uiDonutPainter oldDelegate) =>
       oldDelegate.values.length != values.length;
 }
 
