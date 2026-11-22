@@ -61,6 +61,8 @@ Migration:
 
 IDE / API:
   acp                        sajikan agent via ACP (JSON-RPC 2.0 stdio)
+  mcp                        sajikan agent via MCP server (stdio) — untuk AI
+                             agent lain (Claude Desktop, Hermes, dll.)
 
 Evaluation:
   eval <cases.json> [--label L]   jalankan suite evaluasi, laporan JSON
@@ -839,6 +841,156 @@ Future<void> main(List<String> argv) async {
         },
       );
       await acp.serve();
+      return;
+
+    case 'mcp':
+      // MCP server side (stdio): AI agent lain (Claude Desktop, Hermes, dll.)
+      // menjalankan `tiko mcp` sebagai subprocess dan mengendalikan Tiko
+      // sepenuhnya. Sesi memakai prefix `mcp:` dan channel `mcp` supaya
+      // terpisah rapi dari chat CLI/web/gateway lain.
+      Future<McpToolResult> mcpChat(Map<String, dynamic> args) async {
+        final text = (args['text'] as String?)?.trim() ?? '';
+        if (text.isEmpty) {
+          return const McpToolResult(
+            text: 'Parameter wajib `text` kosong atau bukan string.',
+            isError: true,
+          );
+        }
+        final sessionKey = (args['session_key'] as String?)?.trim();
+        final session =
+            (sessionKey == null || sessionKey.isEmpty) ? 'default' : sessionKey;
+        final res = await rt.chatWithStatus(
+          text,
+          sessionId: 'mcp:$session',
+          channel: 'mcp',
+          userKey: 'mcp',
+        );
+        final footer = '\n\n[status: ${res.success ? 'ok' : 'error'}; '
+            'tool_calls: ${res.toolCallCount}; tokens: ${res.tokensUsed}; '
+            'retryable: ${res.retryable}]';
+        return McpToolResult(
+          text: '${res.text}$footer',
+          isError: !res.success,
+        );
+      }
+
+      Future<McpToolResult> mcpCancel(Map<String, dynamic> args) async {
+        final sessionKey = (args['session_key'] as String?)?.trim();
+        final session =
+            (sessionKey == null || sessionKey.isEmpty) ? 'default' : sessionKey;
+        final ok = rt.cancelTurn('mcp:$session');
+        return McpToolResult(
+          text: ok
+              ? 'Sinyal pembatalan dikirim untuk sesi mcp:$session (kooperatif).'
+              : 'Tidak ada turn aktif untuk sesi mcp:$session.',
+          isError: false,
+        );
+      }
+
+      String mcpToolsListing() {
+        final specs = rt.registry.specs;
+        final buf = StringBuffer(
+            'Tiko agent punya ${specs.length} tool internal (dieksekusi lewat '
+            'agent loop dengan gate approval — bukan eksekusi langsung tanpa '
+            'gate):\n');
+        for (final s in specs) {
+          final desc = s.description.trim().isEmpty
+              ? '(tanpa deskripsi)'
+              : s.description.trim().split('\n').first;
+          buf.writeln('- ${s.name} [risk: ${s.risk}] — $desc');
+        }
+        buf.write(
+            'Turn memakai tool-tool ini otomatis via tiko_chat; approval '
+            'fail-closed diselesaikan dengan `tiko approve <id>` di terminal '
+            'Tiko.');
+        return buf.toString();
+      }
+
+      final mcp = McpAgent(
+        serverName: 'tiko-agent',
+        serverVersion: tikoVersion,
+        tools: [
+          McpAgentTool(
+            name: 'tiko_chat',
+            description:
+                'Jalankan satu turn chat penuh pada Tiko agent (ReAct agent '
+                'loop dengan seluruh tool internal + gate approval). Parameter: '
+                'text (wajib), session_key (opsional, default "default"). '
+                'Tanpa confirm — approval tool berisiko fail-closed dan harus '
+                'disetujui dengan `tiko approve <id>` di terminal Tiko.',
+            inputSchema: {
+              'type': 'object',
+              'properties': {
+                'text': {
+                  'type': 'string',
+                  'description': 'Pesan/prompt pengguna untuk Tiko agent.',
+                },
+                'session_key': {
+                  'type': 'string',
+                  'description':
+                      'Kunci sesi logis; dipetakan ke sesi `mcp:<session_key>`.',
+                },
+              },
+              'required': ['text'],
+            },
+            handler: mcpChat,
+          ),
+          McpAgentTool(
+            name: 'tiko_cancel',
+            description:
+                'Batalkan turn yang sedang berjalan pada sesi Tiko '
+                '(kooperatif). Parameter: session_key (opsional).',
+            inputSchema: {
+              'type': 'object',
+              'properties': {
+                'session_key': {
+                  'type': 'string',
+                  'description': 'Kunci sesi yang sama dengan tiko_chat.',
+                },
+              },
+            },
+            handler: mcpCancel,
+          ),
+          McpAgentTool(
+            name: 'tiko_tools',
+            description:
+                'Daftar tool internal Tiko (nama, deskripsi, level risiko) '
+                'yang dipakai agent loop saat turn berjalan.',
+            inputSchema: {'type': 'object', 'properties': {}},
+            handler: (_) async => McpToolResult(text: mcpToolsListing()),
+          ),
+          McpAgentTool(
+            name: 'tiko_sessions',
+            description: 'Daftar sesi Tiko yang tersimpan (id, channel, judul).',
+            inputSchema: {'type': 'object', 'properties': {}},
+            handler: (_) async {
+              final all = await rt.sessions.list();
+              if (all.isEmpty) {
+                return const McpToolResult(text: 'Belum ada sesi tersimpan.');
+              }
+              final buf = StringBuffer('Sesi tersimpan (${all.length}):\n');
+              for (final s in all) {
+                final title = (s.title == null || s.title!.isEmpty)
+                    ? '(tanpa judul)'
+                    : s.title;
+                buf.writeln(
+                    '- ${s.id} [channel: ${s.channel}, turn: ${s.turns}] — $title');
+              }
+              return McpToolResult(text: buf.toString());
+            },
+          ),
+          McpAgentTool(
+            name: 'tiko_status',
+            description: 'Status runtime Tiko (versi, jumlah tool terdaftar).',
+            inputSchema: {'type': 'object', 'properties': {}},
+            handler: (_) async => McpToolResult(
+              text: 'Tiko v$tikoVersion; runtime: local-first; '
+                  'tool_count: ${rt.registry.specs.length}.',
+            ),
+          ),
+        ],
+      );
+      await mcp.serve();
       return;
 
     case 'chat':
