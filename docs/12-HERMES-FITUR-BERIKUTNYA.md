@@ -67,6 +67,16 @@
 - **Fondasi Tiko:** tiers + preferredProviderId/session override + fallback chain sudah ada.
 - **Desain sarankan:** cukup tambah `providers.chat.<id>.weight/cost` opsional ke urutan fallback bila fitur dianggap perlu; jangan ubah kontrak Router tanpa kebutuhan nyata.
 
+### P7 — Orkestra bot team satu panggilan (Fase C) — **Implemented**
+- **Hermes/Claude Code:** planner mendekomposisi tujuan, anggota tim
+  terspesialisasi bekerja paralel dengan konteks dibagi, hasil disintesis dan
+  dikritik.
+- **Implementasi Tiko:** tool `bot_team` + `runBotTeam` (tiko_runtime) —
+  plan → DAG paralel → sintesis → review → gate verifikasi objektif opsional
+  (mewarisi kontrak exit-0 Fase B); tim tersimpan (`tiko team save`, REST
+  `/v1/teams`) dengan anggota `AgentSpec` penuh; laporan run di
+  `data/teams/runs/`; event `team.*`. Detail algoritma: dok 06 §10.
+
 ## 3. Yang sengaja tidak diadopsi
 
 - **Chronos (cron via infra pihak ketiga scale-to-zero):** Tiko daemon self-host; ticker in-process sudah memadai dan tanpa ketergantungan infra eksternal.

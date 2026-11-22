@@ -929,6 +929,52 @@ Future<void> main(List<String> args) async {
           await rt.botStore.unbind(sessionId);
           return true;
         },
+        teamsProvider: () async => [
+          for (final t in rt.botTeamStore.list()) t.toJson(),
+        ],
+        getTeam: (id) async => rt.botTeamStore.get(id)?.toJson(),
+        createTeam: (body) async {
+          final id = body['id'] as String;
+          if (rt.botTeamStore.get(id) != null) {
+            throw ApiRequestException(409, 'conflict', 'team "$id" sudah ada');
+          }
+          return (await _saveTeam(rt, id, body)).toJson();
+        },
+        updateTeam: (id, body) async {
+          final current = rt.botTeamStore.get(id);
+          if (current == null) return null;
+          final members = body.containsKey('members')
+              ? _parseTeamMembers(body['members'])
+              : current.members;
+          final name = ((body['name'] as String?) ?? current.name).trim();
+          if (name.isEmpty) {
+            throw ApiRequestException(
+              400,
+              'invalid_request',
+              'name wajib diisi',
+            );
+          }
+          final doc = BotTeamDoc(
+            id: id,
+            name: name,
+            description:
+                (body['description'] as String?) ?? current.description,
+            members: members,
+          );
+          await rt.botTeamStore.save(doc);
+          return doc.toJson();
+        },
+        deleteTeam: (id) => rt.botTeamStore.delete(id),
+        teamRunsProvider: () => rt.botTeamStore.listRunReports(),
+        teamRunStarter: (body) => rt
+            .runBotTeam(
+              goal: (body['goal'] as String).trim(),
+              teamId: body['team_id'] as String?,
+              verifyCommand: body['verify_command'] as String?,
+              maxConcurrency:
+                  (body['max_concurrency'] as int?) ?? 4,
+            )
+            .then((r) => r.toJson()),
         providersProvider: () async {
           final health = rt.providerHealth();
           return {
@@ -998,6 +1044,7 @@ Future<void> main(List<String> args) async {
           return {'ok': result.ok, 'message': result.message};
         },
         jobsProvider: () async => [
+          // (wiring teams berada di atas; helper _saveTeam di bawah)
           for (final job in rt.jobs.all)
             {
               'id': job.id,
@@ -1563,4 +1610,82 @@ class _CollectGateway implements Gateway {
 String _baseName(String path) {
   final idx = path.lastIndexOf('/');
   return idx < 0 ? path : path.substring(idx + 1);
+}
+
+/// Fase C — mapper payload tim REST → [BotTeamDoc] tersimpan. Persona
+/// wajib (satu-satunya pembeda perilaku antar anggota); tanpa allowlist
+/// berarti anggota berjalan tanpa tool (fail-closed, kontrak agent_team).
+Future<BotTeamDoc> _saveTeam(
+  TikoRuntime rt,
+  String id,
+  Map<String, dynamic> body,
+) async {
+  final name = ((body['name'] as String?) ?? '').trim();
+  final membersBody = body['members'];
+  final members = membersBody is List
+      ? _parseTeamMembers(membersBody)
+      : const <AgentSpec>[];
+  if (name.isEmpty) {
+    throw ApiRequestException(400, 'invalid_request', 'name wajib diisi');
+  }
+  if (members.isEmpty) {
+    throw ApiRequestException(
+      400,
+      'invalid_request',
+      'members wajib berupa daftar 1..12 anggota ({id, prompt, ...})',
+    );
+  }
+  final doc = BotTeamDoc(
+    id: id,
+    name: name,
+    description: (body['description'] as String?) ?? '',
+    members: members,
+  );
+  await rt.botTeamStore.save(doc);
+  return doc;
+}
+
+List<AgentSpec> _parseTeamMembers(Object? raw) {
+  if (raw is! List) {
+    throw ApiRequestException(
+      400,
+      'invalid_request',
+      'members wajib berupa daftar',
+    );
+  }
+  if (raw.isEmpty || raw.length > 12) {
+    throw ApiRequestException(
+      400,
+      'invalid_request',
+      'members wajib 1..12 anggota',
+    );
+  }
+  final out = <AgentSpec>[];
+  for (final item in raw) {
+    if (item is! Map) {
+      throw ApiRequestException(400, 'invalid_request', 'member harus objek');
+    }
+    final m = Map<String, dynamic>.from(item);
+    m['system_prompt'] ??= m.remove('prompt');
+    m['tool_allowlist'] ??= m.remove('tools');
+    m['model_tier'] ??= m.remove('tier');
+    m['max_turns'] ??= m.remove('max_turns');
+    final spec = AgentSpec.fromJson(m);
+    if (spec.id.trim().isEmpty || spec.systemPrompt.trim().isEmpty) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'member butuh id dan prompt',
+      );
+    }
+    out.add(AgentSpec(
+      id: spec.id.trim(),
+      role: spec.role,
+      systemPrompt: spec.systemPrompt.trim(),
+      toolAllowlist: spec.toolAllowlist,
+      modelTier: spec.modelTier,
+      maxTurns: spec.maxTurns,
+    ));
+  }
+  return out;
 }

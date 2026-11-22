@@ -69,6 +69,13 @@ class HttpApiServer {
     this.listBotBindings,
     this.bindBot,
     this.unbindBot,
+    this.teamsProvider,
+    this.getTeam,
+    this.createTeam,
+    this.updateTeam,
+    this.deleteTeam,
+    this.teamRunsProvider,
+    this.teamRunStarter,
     this.providersProvider,
     this.providerModels,
     this.sessionProviderSetter,
@@ -864,6 +871,56 @@ class HttpApiServer {
     }
   }
 
+  static final RegExp _teamIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
+  static const Set<String> _teamUpdateKeys = {'name', 'description', 'members'};
+
+  void _validateTeamPayload(
+    Map<String, dynamic> body, {
+    required bool forCreate,
+  }) {
+    final allowed = forCreate ? {'id', 'name', 'description', 'members'} : _teamUpdateKeys;
+    for (final key in body.keys) {
+      if (!allowed.contains(key)) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'field tidak dikenal: $key',
+        );
+      }
+    }
+    if (forCreate) {
+      final id = body['id'];
+      if (id is! String || !_teamIdPattern.hasMatch(id)) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'id team wajib [a-z0-9][a-z0-9_-]{0,63}',
+        );
+      }
+    }
+    if (forCreate && (body['name'] is! String || (body['name'] as String).trim().isEmpty)) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'name wajib diisi',
+      );
+    }
+    if (forCreate || body.containsKey('members')) {
+      final members = body['members'];
+      if (members is! List ||
+          members.isEmpty ||
+          members.length > 12 ||
+          members.any((e) => e is! Map)) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'members wajib berupa daftar 1..12 objek anggota '
+          '({id, prompt, role?, tools?, tier?, max_turns?})',
+        );
+      }
+    }
+  }
+
   /// Skill management callbacks (P1-03).
   final SkillApi? skillApi;
 
@@ -887,6 +944,23 @@ class HttpApiServer {
   final Future<Map<String, String>> Function()? listBotBindings;
   final Future<bool> Function(String botId, String sessionId)? bindBot;
   final Future<bool> Function(String botId, String sessionId)? unbindBot;
+
+  /// Fase C — orkestra bot team. Callback yang null membuat endpoint
+  /// terkait merespons 501 not_implemented. `teamRunStarter` berjalan
+  /// sinkron (orkestra bisa berjalan lama; progress via `/v1/stream`).
+  final Future<List<Map<String, dynamic>>> Function()? teamsProvider;
+  final Future<Map<String, dynamic>?> Function(String id)? getTeam;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+  createTeam;
+  final Future<Map<String, dynamic>?> Function(
+    String id,
+    Map<String, dynamic> body,
+  )?
+  updateTeam;
+  final Future<bool> Function(String id)? deleteTeam;
+  final Future<List<Map<String, dynamic>>> Function()? teamRunsProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+  teamRunStarter;
 
   /// Provider & model manager callbacks (GUI-P1-05). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
@@ -1851,6 +1925,112 @@ class HttpApiServer {
           _error(req, 404, 'not_found', 'bot or binding not found');
         } else {
           _json(req, {'ok': true, 'bound': bind});
+        }
+        // Fase C — bot team endpoints
+      } else if (path == '/v1/teams' && req.method == 'GET') {
+        final teams =
+            await (teamsProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot team manager not configured',
+                )));
+        _json(req, {'teams': teams});
+      } else if (path == '/v1/teams' && req.method == 'POST') {
+        if (createTeam == null) {
+          _error(req, 501, 'not_implemented', 'bot team manager not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateTeamPayload(body, forCreate: true);
+        final doc = await createTeam!(body);
+        req.response.statusCode = 201;
+        _json(req, doc);
+      } else if (path == '/v1/teams/runs' && req.method == 'GET') {
+        final runs =
+            await (teamRunsProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot team manager not configured',
+                )));
+        _json(req, {'runs': runs});
+      } else if (path == '/v1/teams/run' && req.method == 'POST') {
+        if (teamRunStarter == null) {
+          _error(req, 501, 'not_implemented', 'bot team manager not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final goal = (body['goal'] as String?)?.trim() ?? '';
+        if (goal.isEmpty) {
+          _error(req, 400, 'invalid_request', 'goal wajib diisi');
+          return;
+        }
+        final concurrencyRaw = body['max_concurrency'];
+        if (concurrencyRaw != null &&
+            (concurrencyRaw is! int || concurrencyRaw < 1 || concurrencyRaw > 8)) {
+          _error(req, 400, 'invalid_request', 'max_concurrency harus 1..8');
+          return;
+        }
+        _json(req, await teamRunStarter!(body));
+      } else if (path.startsWith('/v1/teams/') && req.method == 'GET') {
+        final id = path.substring('/v1/teams/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid team id');
+          return;
+        }
+        final doc =
+            await (getTeam?.call(id) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'bot team manager not configured',
+                )));
+        if (doc == null) {
+          _error(req, 404, 'not_found', 'team not found');
+        } else {
+          _json(req, doc);
+        }
+      } else if (path.startsWith('/v1/teams/') &&
+          (req.method == 'PUT' || req.method == 'PATCH')) {
+        if (updateTeam == null) {
+          _error(req, 501, 'not_implemented', 'bot team manager not configured');
+          return;
+        }
+        final id = path.substring('/v1/teams/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid team id');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        _validateTeamPayload(body, forCreate: false);
+        final updated = await updateTeam!(id, body);
+        if (updated == null) {
+          _error(req, 404, 'not_found', 'team not found');
+        } else {
+          _json(req, updated);
+        }
+      } else if (path.startsWith('/v1/teams/') && req.method == 'DELETE') {
+        if (deleteTeam == null) {
+          _error(req, 501, 'not_implemented', 'bot team manager not configured');
+          return;
+        }
+        final id = path.substring('/v1/teams/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid team id');
+          return;
+        }
+        final ok = await deleteTeam!(id);
+        if (!ok) {
+          _error(req, 404, 'not_found', 'team not found');
+        } else {
+          _json(req, {'ok': true, 'id': id, 'deleted': true});
         }
         // Provider & model manager endpoints (GUI-P1-05)
       } else if (path == '/v1/providers' && req.method == 'GET') {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agent_core/agent_core.dart';
 
 /// Runs one prompt as a specific team member and returns the final text.
@@ -175,6 +177,89 @@ class AgentTeamTool implements Tool {
       );
     } on StateError catch (e) {
       return ToolResult(callId: '', content: e.message, isError: true);
+    }
+  }
+}
+
+/// Fase C — starter dipakai [BotTeamTool] menjalankan orkestra tim penuh;
+/// host menyuntikkan ke `TikoRuntime.runBotTeam`.
+typedef BotTeamStarter = Future<Map<String, dynamic>> Function({
+  required String goal,
+  String? teamId,
+  String? verifyCommand,
+  int? maxConcurrency,
+});
+
+/// Orkestra bot team tingkat tinggi (Fase C): beda dengan [AgentTeamTool]
+/// yang minta DAG eksplisit dari model — tool ini otomatis mendekomposisi
+/// tujuan (planner), mengeksekusi DAG paralel, menyintesis, mereview, dan
+/// (opsional) menggate keluaran dengan verifikasi objektif Fase B.
+class BotTeamTool implements Tool {
+  BotTeamTool({required this.starter});
+
+  final BotTeamStarter starter;
+
+  @override
+  ToolSpec get spec => const ToolSpec(
+        name: 'bot_team',
+        description:
+            'Jalankan tim bot pada satu tujuan: dekomposisi otomatis '
+            '(planner) -> DAG tugas paralel anggota terspesialisasi -> '
+            'sintesis -> review critic. Input: goal wajib; team_id tim '
+            'tersimpan (opsional); verify_command gate objektif (opsional).',
+        inputSchema: {
+          'type': 'object',
+          'properties': {
+            'goal': {'type': 'string'},
+            'team_id': {
+              'type': 'string',
+              'description': 'Id tim tersimpan; kosong = tim bawaan.',
+            },
+            'verify_command': {
+              'type': 'string',
+              'description':
+                  'Perintah verifikasi objektif (exit 0 = sukses) yang '
+                  'dijalankan setelah eksekusi.',
+            },
+            'max_concurrency': {'type': 'integer'},
+          },
+          'required': ['goal'],
+        },
+        risk: 'medium',
+        timeoutSec: 1200,
+        maxOutputChars: 60000,
+      );
+
+  @override
+  Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
+    final goal = (args['goal'] as String?)?.trim() ?? '';
+    if (goal.isEmpty) {
+      return const ToolResult(
+        callId: '',
+        content: 'goal wajib: tujuan utama yang didelegasikan ke tim.',
+        isError: true,
+      );
+    }
+    final concurrencyRaw = args['max_concurrency'];
+    final concurrency = concurrencyRaw is int ? concurrencyRaw : null;
+    try {
+      final result = await starter(
+        goal: goal,
+        teamId: (args['team_id'] as String?)?.trim(),
+        verifyCommand: (args['verify_command'] as String?)?.trim(),
+        maxConcurrency: concurrency,
+      );
+      return ToolResult(
+        callId: '',
+        content: const JsonEncoder.withIndent('  ').convert(result),
+        isError: result['success'] != true,
+      );
+    } catch (e) {
+      return ToolResult(
+        callId: '',
+        content: 'orkestra tim gagal dijalankan: $e',
+        isError: true,
+      );
     }
   }
 }
