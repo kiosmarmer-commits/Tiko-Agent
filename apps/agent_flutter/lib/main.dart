@@ -136,6 +136,7 @@ class _AgentAppState extends State<AgentApp> {
   String? artifactsError;
   bool artifactPreviewShowDiff = false;
   RunsSnapshot? runsSnapshot;
+  List<Map<String, dynamic>>? teamRunsSnapshot;
   bool runsLoading = false;
   String? runsError;
   List<Map<String, dynamic>>? surfacesSnapshot;
@@ -412,6 +413,16 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  /// E5 — DAG run team: gagal muat tidak ikut menandai halaman Runs gagal;
+  /// bagian run tim hanya sembunyi (best-effort).
+  Future<void> _loadTeamRuns() async {
+    try {
+      final reports = await repo.teamRuns();
+      if (!mounted) return;
+      setState(() => teamRunsSnapshot = reports);
+    } catch (_) {}
+  }
+
   Future<void> _loadSurfaces() async {
     setState(() {
       surfacesLoading = true;
@@ -650,6 +661,9 @@ class _AgentAppState extends State<AgentApp> {
     }
     if (next == AppRoute.runs && runsSnapshot == null) {
       unawaited(_loadRuns());
+    }
+    if (next == AppRoute.runs && teamRunsSnapshot == null) {
+      unawaited(_loadTeamRuns());
     }
     if (next == AppRoute.surfaces && surfacesSnapshot == null) {
       unawaited(_loadSurfaces());
@@ -1029,6 +1043,7 @@ class _AgentAppState extends State<AgentApp> {
           loading: runsLoading,
           error: runsError,
           onRefresh: _loadRuns,
+          teamRuns: teamRunsSnapshot,
         );
       case AppRoute.surfaces:
         return SurfacesPage(
