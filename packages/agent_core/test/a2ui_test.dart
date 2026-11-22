@@ -793,6 +793,88 @@ void main() {
       expect(set.inputTargetOf('s-tidak-ada', 'f1'), isNull);
     });
 
+    test('List & Tabs diterima; labels wajib sejumlah children', () {
+      final msgs = parseA2uiMessages({
+        'version': '1.0',
+        'createSurface': {
+          'surfaceId': 's-tabs',
+          'components': [
+            {
+              'id': 'root',
+              'component': 'Tabs',
+              'labels': ['Ringkas', 'Detail'],
+              'children': ['p1', 'p2'],
+            },
+            {
+              'id': 'p1',
+              'component': 'List',
+              'children': ['t1', 't2'],
+            },
+            {'id': 't1', 'component': 'Text', 'text': 'satuuuu1'},
+            {'id': 't2', 'component': 'Text', 'text': 'duaaaa'},
+            {
+              'id': 'p2',
+              'component': 'List',
+              'axis': 'horizontal',
+              'children': ['t1'],
+            },
+          ],
+        },
+      });
+      final set = A2uiSurfaceSet();
+      expect(set.apply(msgs), isNotEmpty);
+
+      expect(
+        () => A2uiSurfaceSet().apply(parseA2uiMessages({
+              'version': '1.0',
+              'createSurface': {
+                'surfaceId': 's-bad',
+                'components': [
+                  {
+                    'id': 'root',
+                    'component': 'Tabs',
+                    'labels': ['satu'],
+                    'children': ['p1', 'p2'],
+                  },
+                  {'id': 'p1', 'component': 'Card'},
+                  {'id': 'p2', 'component': 'Card'},
+                ],
+              },
+            })),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Tabs labels divalidasi (kosong, non-string, >8 tab)', () {
+      Map<String, dynamic> env(List<dynamic> labels) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-lbl',
+              'components': [
+                {
+                  'id': 'root',
+                  'component': 'Tabs',
+                  'labels': labels,
+                  'children': ['p1'],
+                },
+                {'id': 'p1', 'component': 'Card'},
+              ],
+            },
+          };
+      expect(
+        () => parseA2uiMessages(env([])),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(env([1, 2])),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(env(List.generate(9, (i) => 't$i'))),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('writeInputValue menulis data model via @path', () {
       final set = A2uiSurfaceSet()..apply(formMessages());
       final path = set.writeInputValue('s-form', 'f1', 'Budi');

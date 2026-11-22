@@ -41,6 +41,7 @@ const int a2uiMaxActions = 8;
 const int a2uiMaxSurfaces = 8;
 const int a2uiMaxChartPoints = 31;
 const int a2uiMaxOptions = 16;
+const int a2uiMaxTabs = 8;
 const int a2uiMaxChildren = 20;
 const int a2uiMaxFenceBytes = 24 * 1024;
 const int a2uiMaxBlocksPerMessage = genuiMaxBlocksPerMessage;
@@ -99,6 +100,8 @@ const Set<String> a2uiAllowedComponents = {
   'Chart',
   'KanbanCard',
   'ApprovalSheet',
+  'List',
+  'Tabs',
 };
 
 final RegExp _a2uiSafeId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
@@ -135,6 +138,8 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
   'Chart': {'kind', 'points'},
   'KanbanCard': {'title', 'status', 'detail'},
   'ApprovalSheet': {'risk', 'summary', 'commands'},
+  'List': {'axis'},
+  'Tabs': {'labels'},
 };
 
 const Set<String> _a2uiButtonVariants = {'primary', 'secondary', 'danger'};
@@ -759,6 +764,26 @@ dynamic _validateProperty(String type, String key, dynamic value) {
         throw FormatException('a2ui: tone harus salah satu dari $_a2uiTones');
       }
       return v;
+    case 'labels':
+      if (value is! List || value.isEmpty) {
+        throw const FormatException(
+            'a2ui: Tabs wajib punya labels[] non-kosong');
+      }
+      if (value.length > a2uiMaxTabs) {
+        throw FormatException('a2ui: Tabs maksimal $a2uiMaxTabs tab');
+      }
+      final labels = <String>[];
+      for (final l in value) {
+        if (l is! String ||
+            l.isEmpty ||
+            l.length > a2uiMaxLabelChars ||
+            _a2uiControlChars.hasMatch(l)) {
+          throw const FormatException(
+              'a2ui: label tab harus string non-kosong <= maks');
+        }
+        labels.add(l);
+      }
+      return labels;
     case 'kind':
       final v = str(value);
       if (!_a2uiChartKinds.contains(v)) {
@@ -1154,6 +1179,15 @@ class A2uiSurfaceSet {
             'a2ui: komponen "${c.id}" menunjuk child "${c.childId}" yang '
             'tidak ada');
       }
+      if (c.type == 'Tabs') {
+        final labels = c.properties['labels'];
+        if (labels is! List || labels.length != c.childIds.length) {
+          throw FormatException(
+              'a2ui: Tabs "${c.id}" wajib labels sejumlah children '
+              '(${labels is List ? labels.length : 0} label vs '
+              '${c.childIds.length} children)');
+        }
+      }
       for (final ref in c.childIds) {
         if (!components.containsKey(ref)) {
           throw FormatException(
@@ -1295,7 +1329,8 @@ Kamu bisa membuat UI interaktif dengan tool `render_a2ui` atau blok fence \`\`\`
 Pesan berformat A2UI v1.0: {"version":"1.0","createSurface":{...}} dst. Komponen FLAT per id:
 {"id":"root","component":"Column","children":["t1","b1"]}.
 Whitelist komponen: Row, Column, Card, Divider, Text, Image, Icon, Button, TextField,
-CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard, ApprovalSheet.
+CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard, ApprovalSheet,
+List (axis horizontal|vertical), Tabs (labels sejumlah children, maks 8).
 - createSurface wajib tepat satu komponen id "root"; updateComponents untuk memperbarui.
 - updateDataModel {"path":"/a/b","value":...} untuk data; teks komponen bisa
   berupa {"@path":"/a/b"} terikat data model.
