@@ -521,6 +521,7 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 |---|---|
 | Form input dua arah (E6) | `a2ui_test.dart` (repeatable vs sekali pakai, `inputTargetOf`, `writeInputValue` tipe + kontrol chars), `a2ui_bridge_test.dart` (`applyInput` model/snapshot/event + reject), `a2ui_surface_view_test.dart` (`CheckBox` → `onInput`; TextField tanpa `onInput` tetap lokal) |
 | Komponen `List` + `Tabs` (E7) | `a2ui_test.dart` (whitelist + labels sejumlah children + validasi labels), `a2ui_surface_view_test.dart` (pindah tab memindah pane; List horizontal) |
+| E2E form → agen | `a2ui_form_e2e_test.dart` (`tiko_runtime`): input `TextField`/`Slider` → `applyInput` → write-back `@path` di data model → aksi `onChanged` repeatable diteruskan sebagai turn `/surface ...` (mock `assisted` memantulkan isi payload); isolasi sesi/komponen asing & tombol ditolak |
 | `agent_a2ui.dart` | JSONL/array, root tunggal, duplikat id, tipe whitelist, action regex, batas (24 pesan/120 node/depth 8/24 KiB), fallback parse error |
 | `a2ui_bridge.dart` | tool render → event `surface.created/updated`; store atomik + LRU + TTL; aksi map ke `approvals`; failure tak mengunci turn |
 | `render_a2ui` tool | valid → fence teks; tak valid → pesan error + `success:false`; alias render_ui tetap jalan |
