@@ -778,6 +778,42 @@ Future<void> main(List<String> args) async {
             throw const GenUiActionRejected(
                 'url tidak diizinkan oleh allowlist a2ui.open_url_allow');
           }
+          if (surfaceId != null && actionId == 'a2ui_input') {
+            // Update input form (Fase E6): tulis balik @path ke data model
+            // surface + teruskan aksi onChanged (bila komponen membawanya)
+            // ke percakapan. Repeatable — tidak memakai hak sekali-pakai.
+            final componentId = values['componentId']?.toString() ?? '';
+            if (componentId.isEmpty || componentId.length > 64) {
+              throw const GenUiActionRejected('componentId tidak valid');
+            }
+            try {
+              final result = rt.a2ui.applyInput(
+                sessionKey,
+                surfaceId,
+                componentId,
+                values['value'],
+              );
+              if (result.action == null) {
+                return {
+                  'ok': true,
+                  'text': 'Isian form tersimpan ke surface.',
+                };
+              }
+              final text =
+                  '/surface $surfaceId ${result.action} ${jsonEncode({'value': values['value']})}';
+              final answer = await httpMessage(
+                InboundMessage(
+                  channel: 'http',
+                  userKey: 'ui-action',
+                  sessionKey: sessionKey,
+                  text: text,
+                ),
+              );
+              return {'ok': true, 'text': answer};
+            } on FormatException catch (e) {
+              throw GenUiActionRejected(e.message);
+            }
+          }
           if (surfaceId != null) {
             // Aksi dari surface A2UI: validasi ownership + anti-replay via
             // surface bridge; gagal → GenUiActionRejected (400 di gateway).

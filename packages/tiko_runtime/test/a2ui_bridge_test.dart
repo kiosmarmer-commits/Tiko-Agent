@@ -173,4 +173,56 @@ void main() {
     final ids = bridge.list().map((e) => e['surfaceId']).toSet();
     expect(ids, {'s1', 's2'});
   });
+
+  group('applyInput (Fase E6)', () {
+    final formMessages = () => parseA2uiMessages({
+          'version': '1.0',
+          'createSurface': {
+            'surfaceId': 's-form',
+            'components': [
+              {
+                'id': 'root',
+                'component': 'Column',
+                'children': ['f1'],
+              },
+              {
+                'id': 'f1',
+                'component': 'TextField',
+                'label': 'Nama',
+                'value': {'@path': '/form/name'},
+                'action': {'name': 'form_changed'},
+              },
+            ],
+          },
+        });
+
+    test('tulis data model + snapshot + event origin input', () {
+      final bridge = A2uiToolBridge(
+          dataDir: tmp.path,
+          onEvent: (type, [data]) => events.add((type: type, data: data)),
+        );
+      bridge.ingest('web:form', formMessages());
+      final result = bridge.applyInput('web:form', 's-form', 'f1', 'Budi');
+      expect(result.action, 'form_changed');
+      expect(result.path, '/form/name');
+      final body = bridge.get('s-form')!;
+      expect((body['dataModel'] as Map)['form'], {'name': 'Budi'});
+      final last = events.last;
+      expect(last.type, 'surface.updated');
+      expect(last.data?['origin'], 'input');
+    });
+
+    test('surface asing / komponen asing ditolak', () {
+      final bridge = A2uiToolBridge(dataDir: tmp.path);
+      bridge.ingest('web:form', formMessages());
+      expect(
+        () => bridge.applyInput('web:lain', 's-form', 'f1', 'x'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => bridge.applyInput('web:form', 's-form', 'tidak-ada', 'x'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
 }

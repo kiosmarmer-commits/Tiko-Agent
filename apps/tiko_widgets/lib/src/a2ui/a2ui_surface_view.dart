@@ -1,16 +1,31 @@
+import 'dart:async';
+
 import 'package:agent_core/agent_core.dart';
 import 'package:flutter/material.dart';
 
 /// Merender hasil apply sejumlah pesan A2UI menjadi satu tampilan surface
 /// (pola yang dipakai chat inline: pesan tool diubah fence, host mengekstrak
 /// dan mem-parse sebelum masuk sini).
+typedef A2uiInputCallback = void Function(
+    String surfaceId, String componentId, String? actionName, Object? value);
+
 class A2uiSurfaceStreamView extends StatefulWidget {
-  const A2uiSurfaceStreamView({super.key, required this.messages, this.onAction});
+  const A2uiSurfaceStreamView({
+    super.key,
+    required this.messages,
+    this.onAction,
+    this.onInput,
+  });
 
   final List<A2uiMessage> messages;
   final void Function(
           String surfaceId, String actionName, Map<String, dynamic> payload)?
       onAction;
+
+  /// Update input form (Fase E6): (surfaceId, componentId, actionName,
+  /// value) — dipicu tiap perubahan isian input yang menyertakan `action`.
+  /// Tanpa callback ini, input tetap editable lokal tanpa laporan.
+  final A2uiInputCallback? onInput;
 
   @override
   State<A2uiSurfaceStreamView> createState() => _A2uiSurfaceStreamViewState();
@@ -59,6 +74,7 @@ class _A2uiSurfaceStreamViewState extends State<A2uiSurfaceStreamView> {
             child: A2uiSurfaceView(
               surface: surface,
               onAction: widget.onAction,
+              onInput: widget.onInput,
             ),
           ),
       ],
@@ -68,12 +84,20 @@ class _A2uiSurfaceStreamViewState extends State<A2uiSurfaceStreamView> {
 
 /// Merender satu [A2uiSurface] (komponen tervalidasi + data model).
 class A2uiSurfaceView extends StatelessWidget {
-  const A2uiSurfaceView({super.key, required this.surface, this.onAction});
+  const A2uiSurfaceView({
+    super.key,
+    required this.surface,
+    this.onAction,
+    this.onInput,
+  });
 
   final A2uiSurface surface;
   final void Function(
           String surfaceId, String actionName, Map<String, dynamic> payload)?
       onAction;
+
+  /// Update input form (Fase E6): lihat [A2uiSurfaceStreamView.onInput].
+  final A2uiInputCallback? onInput;
 
   dynamic _resolve(dynamic value) {
     if (value is Map && value.containsKey('@path')) {
@@ -197,11 +221,19 @@ class A2uiSurfaceView extends StatelessWidget {
           label: _resolve(p['label'])?.toString() ?? '',
           initial: _resolve(p['value'])?.toString() ?? '',
           multiline: p['variant'] == 'multiline',
+          onCommit: onInput == null
+              ? null
+              : (v) => onInput!(
+                  surface.surfaceId, node.id, node.action?.name, v),
         );
       case 'CheckBox':
         return _A2uiCheckBox(
           label: _resolve(p['label'])?.toString() ?? '',
           initial: _resolve(p['value']) == true,
+          onCommit: onInput == null
+              ? null
+              : (v) => onInput!(
+                  surface.surfaceId, node.id, node.action?.name, v),
         );
       case 'ChoicePicker':
         return _A2uiChoicePicker(
@@ -209,6 +241,10 @@ class A2uiSurfaceView extends StatelessWidget {
           options: (p['options'] as List?)?.cast<Map<String, dynamic>>() ??
               const <Map<String, dynamic>>[],
           initial: _resolve(p['value'])?.toString(),
+          onCommit: onInput == null
+              ? null
+              : (v) => onInput!(
+                  surface.surfaceId, node.id, node.action?.name, v),
         );
       case 'Slider':
         return _A2uiSlider(
@@ -216,10 +252,19 @@ class A2uiSurfaceView extends StatelessWidget {
           min: (p['min'] as num?)?.toDouble() ?? 0,
           max: (p['max'] as num?)?.toDouble() ?? 100,
           initial: ((p['value'] as num?) ?? p['min'] as num? ?? 0).toDouble(),
+          onCommit: onInput == null
+              ? null
+              : (v) => onInput!(
+                  surface.surfaceId, node.id, node.action?.name, v),
         );
       case 'DateTimeInput':
         return _A2uiDateTimeInput(
           label: _resolve(p['label'])?.toString() ?? '',
+          initial: _resolve(p['value'])?.toString(),
+          onCommit: onInput == null
+              ? null
+              : (v) => onInput!(
+                  surface.surfaceId, node.id, node.action?.name, v),
         );
       case 'Metric':
         return _buildMetric(context, p);
@@ -506,11 +551,13 @@ class _A2uiTextField extends StatefulWidget {
     required this.label,
     required this.initial,
     required this.multiline,
+    this.onCommit,
   });
 
   final String label;
   final String initial;
   final bool multiline;
+  final ValueChanged<String>? onCommit;
 
   @override
   State<_A2uiTextField> createState() => _A2uiTextFieldState();
@@ -519,9 +566,23 @@ class _A2uiTextField extends StatefulWidget {
 class _A2uiTextFieldState extends State<_A2uiTextField> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.initial);
+  Timer? _debounce;
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      if (mounted && value.isNotEmpty) widget.onCommit?.call(value);
+    });
+  }
+
+  void _onSubmitted(String value) {
+    _debounce?.cancel();
+    if (value.isNotEmpty) widget.onCommit?.call(value);
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -531,6 +592,8 @@ class _A2uiTextFieldState extends State<_A2uiTextField> {
     return TextField(
       controller: _controller,
       maxLines: widget.multiline ? 3 : 1,
+      onChanged: widget.onCommit == null ? null : _onChanged,
+      onSubmitted: widget.onCommit == null ? null : _onSubmitted,
       decoration: InputDecoration(
         labelText: widget.label.isEmpty ? null : widget.label,
         border: const OutlineInputBorder(),
@@ -541,10 +604,15 @@ class _A2uiTextFieldState extends State<_A2uiTextField> {
 }
 
 class _A2uiCheckBox extends StatefulWidget {
-  const _A2uiCheckBox({required this.label, required this.initial});
+  const _A2uiCheckBox({
+    required this.label,
+    required this.initial,
+    this.onCommit,
+  });
 
   final String label;
   final bool initial;
+  final ValueChanged<bool>? onCommit;
 
   @override
   State<_A2uiCheckBox> createState() => _A2uiCheckBoxState();
@@ -555,13 +623,19 @@ class _A2uiCheckBoxState extends State<_A2uiCheckBox> {
 
   @override
   Widget build(BuildContext context) {
-    return CheckboxListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      controlAffinity: ListTileControlAffinity.leading,
-      title: Text(widget.label),
-      value: _value,
-      onChanged: (v) => setState(() => _value = v ?? false),
+    return Material(
+      type: MaterialType.transparency,
+      child: CheckboxListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(widget.label),
+        value: _value,
+        onChanged: (v) {
+          setState(() => _value = v ?? false);
+          widget.onCommit?.call(_value);
+        },
+      ),
     );
   }
 }
@@ -571,11 +645,13 @@ class _A2uiChoicePicker extends StatefulWidget {
     required this.label,
     required this.options,
     this.initial,
+    this.onCommit,
   });
 
   final String label;
   final List<Map<String, dynamic>> options;
   final String? initial;
+  final ValueChanged<String>? onCommit;
 
   @override
   State<_A2uiChoicePicker> createState() => _A2uiChoicePickerState();
@@ -589,7 +665,10 @@ class _A2uiChoicePickerState extends State<_A2uiChoicePicker> {
     final groupValue = _value ?? widget.initial;
     return RadioGroup<String>(
       groupValue: groupValue,
-      onChanged: (v) => setState(() => _value = v),
+      onChanged: (v) {
+        setState(() => _value = v);
+        if (v != null && v.isNotEmpty) widget.onCommit?.call(v);
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -614,12 +693,14 @@ class _A2uiSlider extends StatefulWidget {
     required this.min,
     required this.max,
     required this.initial,
+    this.onCommit,
   });
 
   final String label;
   final double min;
   final double max;
   final double initial;
+  final ValueChanged<double>? onCommit;
 
   @override
   State<_A2uiSlider> createState() => _A2uiSliderState();
@@ -642,16 +723,44 @@ class _A2uiSliderState extends State<_A2uiSlider> {
           divisions: (max - widget.min).clamp(1, 100).round(),
           value: _value.clamp(widget.min, max).toDouble(),
           onChanged: (v) => setState(() => _value = v),
+          onChangeEnd: (v) => widget.onCommit?.call(v),
         ),
       ],
     );
   }
 }
 
-class _A2uiDateTimeInput extends StatelessWidget {
-  const _A2uiDateTimeInput({required this.label});
+class _A2uiDateTimeInput extends StatefulWidget {
+  const _A2uiDateTimeInput({
+    required this.label,
+    this.initial,
+    this.onCommit,
+  });
 
   final String label;
+  final String? initial;
+  final ValueChanged<String>? onCommit;
+
+  @override
+  State<_A2uiDateTimeInput> createState() => _A2uiDateTimeInputState();
+}
+
+class _A2uiDateTimeInputState extends State<_A2uiDateTimeInput> {
+  late String? _value = widget.initial;
+
+  Future<void> _pick() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(_value ?? '') ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked == null || !mounted) return;
+    final iso = picked.toIso8601String().substring(0, 10);
+    setState(() => _value = iso);
+    widget.onCommit?.call(iso);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -660,8 +769,9 @@ class _A2uiDateTimeInput extends StatelessWidget {
       child: ListTile(
         dense: true,
         leading: const Icon(Icons.event_outlined),
-        title: Text(label.isEmpty ? 'Waktu' : label),
-        subtitle: const Text('belum diatur'),
+        title: Text(widget.label.isEmpty ? 'Waktu' : widget.label),
+        subtitle: Text(_value == null ? 'belum diatur' : _value!),
+        onTap: widget.onCommit == null ? null : _pick,
       ),
     );
   }

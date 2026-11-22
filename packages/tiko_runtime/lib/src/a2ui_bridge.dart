@@ -263,4 +263,37 @@ class A2uiToolBridge {
     String actionName,
   ) =>
       sessionSet(sessionKey).consumeAction(surfaceId, actionName);
+
+  /// Update input form (Fase E6): tulis nilai [value] ke data model bila
+  /// properti `value` komponen terikat `@path`, simpan snapshot, dan
+  /// kembalikan (action: nama aksi `onChanged` komponen bila ada, path:
+  /// path data model yang ditulis bila ada). Melempar [FormatException]
+  /// bila surface/komponen tidak valid atau nilai salah tipe.
+  ({String? action, String? path}) applyInput(
+    String sessionKey,
+    String surfaceId,
+    String componentId,
+    Object? value,
+  ) {
+    _prune();
+    if (sessionSet(sessionKey).surface(surfaceId) == null) {
+      throw FormatException(
+          'a2ui: surface "$surfaceId" tidak ada untuk sesi ini');
+    }
+    final path = sessionSet(sessionKey).writeInputValue(
+      surfaceId,
+      componentId,
+      value,
+    );
+    final surface = sessionSet(sessionKey).surface(surfaceId);
+    if (surface != null) _saveSnapshot(sessionKey, surface);
+    onEvent?.call('surface.updated', {
+      'surfaceId': surfaceId,
+      'sessionKey': sessionKey,
+      'origin': 'input',
+    });
+    final target =
+        sessionSet(sessionKey).inputTargetOf(surfaceId, componentId);
+    return (action: target?.actionName, path: path);
+  }
 }

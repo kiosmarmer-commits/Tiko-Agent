@@ -706,4 +706,125 @@ void main() {
       expect(p.allows('https://example.com'), isTrue);
     });
   });
+
+  group('A2uiSurfaceSet form input (Fase E6)', () {
+    final formMessages = () => parseA2uiMessages({
+          'version': '1.0',
+          'createSurface': {
+            'surfaceId': 's-form',
+            'components': [
+              {
+                'id': 'root',
+                'component': 'Column',
+                'children': ['f1', 's1', 'b1'],
+              },
+              {
+                'id': 'f1',
+                'component': 'TextField',
+                'label': 'Nama',
+                'value': {'@path': '/form/name'},
+                'action': {'name': 'form_changed'},
+              },
+              {
+                'id': 's1',
+                'component': 'Slider',
+                'label': 'Rating',
+                'action': {'name': 'rating_changed'},
+              },
+              {
+                'id': 'b1',
+                'component': 'Button',
+                'label': 'Kirim',
+                'action': {'name': 'submit_form'},
+              },
+            ],
+          },
+        });
+
+    test('aksi input repeatable; aksi tombol sekali pakai', () {
+      final set = A2uiSurfaceSet()..apply(formMessages());
+      expect(set.consumeAction('s-form', 'form_changed'), isTrue);
+      expect(set.consumeAction('s-form', 'form_changed'), isTrue);
+      expect(set.consumeAction('s-form', 'rating_changed'), isTrue);
+      expect(set.consumeAction('s-form', 'rating_changed'), isTrue);
+      expect(set.consumeAction('s-form', 'submit_form'), isTrue);
+      expect(set.consumeAction('s-form', 'submit_form'), isFalse);
+    });
+
+    test('nama yang dipakai tombol tidak jadi repeatable', () {
+      final msgs = parseA2uiMessages({
+        'version': '1.0',
+        'createSurface': {
+          'surfaceId': 's-mix',
+          'components': [
+            {
+              'id': 'root',
+              'component': 'Column',
+              'children': ['f1', 'b1'],
+            },
+            {
+              'id': 'f1',
+              'component': 'TextField',
+              'label': 'A',
+              'action': {'name': 'double_use'},
+            },
+            {
+              'id': 'b1',
+              'component': 'Button',
+              'label': 'B',
+              'action': {'name': 'double_use'},
+            },
+          ],
+        },
+      });
+      final set = A2uiSurfaceSet()..apply(msgs);
+      expect(set.consumeAction('s-mix', 'double_use'), isTrue);
+      expect(set.consumeAction('s-mix', 'double_use'), isFalse);
+    });
+
+    test('inputTargetOf membaca binding @path + aksi onChanged', () {
+      final set = A2uiSurfaceSet()..apply(formMessages());
+      final t = set.inputTargetOf('s-form', 'f1');
+      expect(t, isNotNull);
+      expect(t!.type, 'TextField');
+      expect(t.boundPath, '/form/name');
+      expect(t.actionName, 'form_changed');
+      expect(set.inputTargetOf('s-form', 'b1'), isNull);
+      expect(set.inputTargetOf('s-tidak-ada', 'f1'), isNull);
+    });
+
+    test('writeInputValue menulis data model via @path', () {
+      final set = A2uiSurfaceSet()..apply(formMessages());
+      final path = set.writeInputValue('s-form', 'f1', 'Budi');
+      expect(path, '/form/name');
+      expect(set.surface('s-form')!.dataModel['form']['name'], 'Budi');
+    });
+
+    test('writeInputValue tanpa binding @path tetap tervalidasi, tanpa tulis',
+        () {
+      final set = A2uiSurfaceSet()..apply(formMessages());
+      expect(set.writeInputValue('s-form', 's1', 4), isNull);
+      expect(
+        () => set.writeInputValue('s-form', 's1', 'bukan angka'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => set.writeInputValue('s-form', 'f1', 42),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('writeInputValue menolak komponen bukan input & nilai berkontrol',
+        () {
+      final set = A2uiSurfaceSet()..apply(formMessages());
+      expect(
+        () => set.writeInputValue('s-form', 'b1', 'x'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => set.writeInputValue('s-form', 'f1', 'baris\x01'),
+        throwsA(isA<FormatException>()),
+      );
+    });
+  });
 }

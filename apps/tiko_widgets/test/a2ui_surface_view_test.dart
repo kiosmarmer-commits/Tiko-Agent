@@ -249,6 +249,72 @@ void main() {
     expect(find.textContaining('Selesai'), findsOneWidget);
     expect(find.textContaining('```'), findsNothing);
   });
+
+  testWidgets('CheckBox input memicu onInput (Fase E6)', (tester) async {
+    final messages = parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-chk',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'Column',
+            'children': ['c1'],
+          },
+          {
+            'id': 'c1',
+            'component': 'CheckBox',
+            'label': 'Setuju',
+            'action': {'name': 'toggle_ok'},
+          },
+        ],
+      },
+    });
+    String? firedComponent;
+    String? firedAction;
+    Object? firedValue;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(
+          messages: messages,
+          onInput: (surfaceId, componentId, actionName, value) {
+            firedComponent = componentId;
+            firedAction = actionName;
+            firedValue = value;
+          },
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byType(Checkbox));
+    expect(firedComponent, 'c1');
+    expect(firedAction, 'toggle_ok');
+    expect(firedValue, isTrue);
+  });
+
+  testWidgets('TextField tanpa onInput tetap editable lokal', (tester) async {
+    final messages = parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-chk',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'Column',
+            'children': ['f1'],
+          },
+          {'id': 'f1', 'component': 'TextField', 'label': 'Nama'},
+        ],
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: messages),
+      ),
+    ));
+      await tester.enterText(find.byType(TextField), 'Budi');
+    expect(find.text('Budi'), findsOneWidget);
+  });
 }
 
 final jsonLine =
