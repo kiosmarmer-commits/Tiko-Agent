@@ -91,3 +91,4 @@
 5. ~~P5 batch processing + trajektori export~~ — **selesai**: `tiko batch run --tasks/--concurrency/--label` (BatchRolloutRunner + trajektori JSONL + laporan `data/batch/`) dan `tiko batch export --out` (JSONL/ShareGPT, redaksi aktif).
 6. P6 menyusul; berdiri sendiri.
 7. ~~Tugas terjadwal riset otomatis (Pulsa-parity + riset digest)~~ — **selesai (Fase D)**: lihat [13-TUGAS-TERJADWAL-RISET.md](13-TUGAS-TERJADWAL-RISET.md).
+8. **Generative UI standar A2UI (Fase E)** — rancangan lengkap: lihat [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md); pendekatan hibrida (grammar `genui` tetap didukung, protokol A2UI v1.0 sebagai target baru, adapter tunggal di `tiko_widgets`).
