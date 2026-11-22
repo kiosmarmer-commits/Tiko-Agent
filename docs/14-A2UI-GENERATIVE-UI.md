@@ -1,6 +1,6 @@
 # Fase E — Implementasi A2UI (Generative UI) untuk Tiko-Agent
 
-**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); tersisa sisa diferensiasi E5 (kanban surface dari research-run, DAG view, opsi `openUrl` allowlist).
+**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); sebagian E5 selesai (ApprovalSheet, surface ringkasan riset) — tersisa DAG view run team dan opsi `openUrl` allowlist.
 
 **Terakhir diperbarui:** November 2026 (setelah merge PR #146 / Fase D).
 
@@ -15,7 +15,8 @@
 | E4 — halaman panel Surface penuh | ✅ | `SurfacesPage` (`apps/agent_flutter/lib/ui/surfaces_view.dart`): daftar snapshot, detail bottom-sheet yang dirender ulang via `A2uiSurfaceRecordView` (`apps/tiko_widgets/lib/src/a2ui/a2ui_surface_view.dart`), hapus dengan konfirmasi; route `AppRoute.surfaces`; chat tetap menerima surface inline | 
 | E4 — skeleton streaming | ✅ (batch tetap diaplikasikan atomik di akhir turn) | `extractA2uiBlocks(includeStreaming:)` / `splitA2uiSegments` memandirikan blok `complete: false` (`agent_a2ui.dart`); `_A2uiStreamingSkeleton` di `tiko_message_view.dart` |
 | E5 — ApprovalSheet visual | ✅ | `ApprovalSheet` (risk low\|medium\|high, summary, commands[] ≤ 8) tervalidasi `_validateProperty` (`agent_a2ui.dart`), dirender `_buildApprovalSheet` (`a2ui_surface_view.dart`) dengan chip risiko + perintah mono; tombol setuju/tolak tetap `Button` terpisah agar anti-replay tetap berlaku; sistem prompt diarahkan |
-| E5 — kanban surface dari research-run, DAG view, `openUrl` allowlist | ❌ menyusul | — |
+| E5 — surface ringkasan dari research-run (Fase D) | ✅ | `researchRunSurfaceMessages(ResearchRunRecord)` (`packages/tiko_runtime/lib/src/a2ui_research.dart`): heading pertanyaan + metric status/token/tool + daftar query + laporan mono + error bila gagal; tervalidasi `parseA2uiMessages` (whitelist sama); scheduler job riset meng-ingest best-effort ke sesi milik job (`tiko_runtime.dart`) sehingga muncul di panel Surface & event `surface.created` |
+| E5 — DAG view run team, `openUrl` allowlist | ❌ menyusul | — |
 
 **Catatan penyimpangan dari desain awal:** implementasi memakai format wire A2UI v1.0 resmi (komponen `id`+`component`+properti flat, `child`/`children` per id, `version` pada envelope) dan renderer native milik Tiko (whitelist yang sama) sebagai pengganti dependensi `a2ui_flutter` — tetap di balas dengan lapisan ACL yang sama: hanya `apps/tiko_widgets/lib/src/a2ui/` yang menyentuh detail wire, sisanya menunggu tipe Tiko. Pesan RPC fungsi dua arah (`callRendererFunction`, `agentFunctionResponse`, dst.) ditolak dengan pesan jelas sampai fase berikutnya.
 
