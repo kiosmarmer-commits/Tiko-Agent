@@ -252,6 +252,51 @@ void main() {
       );
     });
 
+    test('ApprovalSheet: risk/summary/commands valid diterima, tak valid ditolak', () {
+      Map<String, Object> sheet(Map<String, Object> props) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-appr',
+              'components': [
+                {'id': 'root', 'component': 'ApprovalSheet', ...props},
+              ],
+            },
+          };
+      expect(
+        parseA2uiMessages(sheet({
+          'risk': 'high',
+          'summary': 'Hapus 3 kontainer produksi',
+          'commands': ['docker rm -f a', 'docker rm -f b'],
+        })),
+        isNotEmpty,
+      );
+      expect(
+        () => parseA2uiMessages(sheet({'risk': 'extreme'})),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(sheet({
+          'risk': 'low',
+          'commands': [for (var i = 0; i < 9; i++) 'x'],
+        })),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(sheet({
+          'risk': 'low',
+          'commands': ['cek${String.fromCharCode(1)}null'],
+        })),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(sheet({
+          'risk': 'low',
+          'summary': {'otomatis': true},
+        })),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('Image.src hanya https/http atau file://data/uploads', () {
       Map<String, Object> build(String src) => {
             'version': '1.0',
@@ -593,5 +638,6 @@ void main() {
     expect(prompt, contains('render_a2ui'));
     expect(prompt, contains('createSurface'));
     expect(prompt, contains('Metric'));
+    expect(prompt, contains('ApprovalSheet'));
   });
 }
