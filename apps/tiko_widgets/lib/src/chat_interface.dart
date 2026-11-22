@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'gen_ui_view.dart';
+import 'a2ui/tiko_message_view.dart';
 
 /// E4 — antarmuka chat generik untuk agen Tiko.
 ///
@@ -168,9 +168,10 @@ class _TikoChatInterfaceState extends State<TikoChatInterface> {
     );
   }
 
-  /// Body asisten dengan dukungan GenUI (D1): blok ```genui dirender
-  /// jadi widget; segmen teks biasa tetap selectable. Fail-closed sudah
-  /// ditangani di dalam [GenUiMessageView].
+  /// Body asisten dengan dukungan GenUI (D1) + A2UI (Fase E): blok
+  /// ```genui dan ```a2ui dirender jadi widget; segmen teks biasa tetap
+  /// selectable. Fail-closed sudah ditangani di dalam
+  /// [TikoSurfaceOrMessageView].
   Widget _assistantBody(BuildContext context, String text) =>
-      GenUiMessageView(text: text);
+      TikoSurfaceOrMessageView(text: text);
 }

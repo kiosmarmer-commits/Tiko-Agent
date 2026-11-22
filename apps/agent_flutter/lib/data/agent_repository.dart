@@ -90,8 +90,9 @@ abstract class AgentRepository {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  );
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  });
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey,
@@ -400,9 +401,15 @@ class HttpAgentRepository implements AgentRepository {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  ) =>
-      _guard(() => _client.submitUiAction(sessionKey, actionId, values));
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  }) =>
+      _guard(() => _client.submitUiAction(
+            sessionKey,
+            actionId,
+            values,
+            surfaceId: surfaceId,
+          ));
 
   @override
   Stream<Map<String, dynamic>> streamChat(

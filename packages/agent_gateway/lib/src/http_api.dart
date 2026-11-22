@@ -47,6 +47,10 @@ class HttpApiServer {
     this.listSessions,
     this.sessionMessages,
     this.uiActionHandler,
+    this.surfacesProvider,
+    this.surfaceGetter,
+    this.surfaceCreator,
+    this.surfaceDeleter,
     this.deleteSession,
     this.renameSession,
     this.doctorProvider,
@@ -139,12 +143,25 @@ class HttpApiServer {
   /// Typed GenUI action (GUI-P0-04): memvalidasi action id terhadap registry
   /// per sesi (ownership + expiry + single-use + nilai form), lalu meneruskan
   /// aksi ke agent loop. Melempar GenUiActionRejected bila tidak valid.
+  /// Fase E: [surfaceId] diisi klien bila aksi berasal dari surface A2UI;
+  /// host memvalidasi ownership + anti-replay aksi surface tersebut.
   final Future<Map<String, dynamic>> Function(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  )?
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  })?
   uiActionHandler;
+
+  /// A2UI surfaces (Fase E). Callback null membuat endpoint terkait
+  /// merespons 501 not_implemented (fail-closed, pola `/v1/teams`).
+  final Future<List<Map<String, dynamic>>> Function(String? sessionKey)?
+      surfacesProvider;
+  final Future<Map<String, dynamic>?> Function(String surfaceId)?
+      surfaceGetter;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      surfaceCreator;
+  final Future<bool> Function(String surfaceId)? surfaceDeleter;
   final Future<List<Map<String, dynamic>>> Function()? doctorProvider;
   final Map<String, Object?> Function()? capabilitiesProvider;
   final List<Map<String, dynamic>> Function()? eventsProvider;
@@ -1702,18 +1719,92 @@ class HttpApiServer {
         final values = rawValues is Map
             ? rawValues.map((k, v) => MapEntry(k.toString(), v))
             : <String, dynamic>{};
+        final surfaceIdRaw = body['surface_id'];
+        final surfaceId = surfaceIdRaw is String ? surfaceIdRaw : null;
         if (sessionKey.isEmpty ||
             sessionKey.length > 128 ||
-            !_safeActionId.hasMatch(actionId)) {
+            !_safeActionId.hasMatch(actionId) ||
+            (surfaceId != null && !_safeActionId.hasMatch(surfaceId))) {
           _error(req, 400, 'invalid_request', 'invalid ui action request');
           return;
         }
         try {
-          final result = await handler(sessionKey, actionId, values);
+          final result =
+              await handler(sessionKey, actionId, values, surfaceId: surfaceId);
           _json(req, result);
         } on GenUiActionRejected catch (e) {
           _error(req, 400, 'invalid_request', e.message);
         }
+      } else if (path == '/v1/surfaces' && req.method == 'GET') {
+        final provider = surfacesProvider;
+        if (provider == null) {
+          _error(req, 501, 'not_implemented', 'a2ui surfaces not configured');
+          return;
+        }
+        final sessionParam = req.uri.queryParameters['session_key'];
+        _json(req, {'surfaces': await provider(sessionParam)});
+      } else if (path == '/v1/surfaces' && req.method == 'POST') {
+        final creator = surfaceCreator;
+        if (creator == null) {
+          _error(req, 501, 'not_implemented', 'a2ui surfaces not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final doc = await creator(body);
+        req.response.statusCode = doc['exists'] == true ? 200 : 201;
+        _json(req, doc);
+      } else if (path == '/v1/surfaces/catalogs' && req.method == 'GET') {
+        _json(req, {
+          'version': a2uiVersion,
+          'catalogs': [
+            for (final id in a2uiAllowedCatalogIds)
+              {
+                'catalogId': id,
+                'components': a2uiAllowedComponents.toList()..sort(),
+              },
+          ],
+        });
+      } else if (path.startsWith('/v1/surfaces/') &&
+          req.method == 'GET' &&
+          !path.contains('/catalogs')) {
+        final id =
+            Uri.decodeComponent(path.substring('/v1/surfaces/'.length));
+        final getter = surfaceGetter;
+        if (getter == null) {
+          _error(req, 501, 'not_implemented', 'a2ui surfaces not configured');
+          return;
+        }
+        if (!_safeActionId.hasMatch(id)) {
+          _error(req, 400, 'invalid_request', 'invalid surface id');
+          return;
+        }
+        final doc = await getter(id);
+        if (doc == null) {
+          _error(req, 404, 'not_found', 'surface "$id" tidak ditemukan');
+          return;
+        }
+        _json(req, doc);
+      } else if (path.startsWith('/v1/surfaces/') &&
+          req.method == 'DELETE') {
+        final id =
+            Uri.decodeComponent(path.substring('/v1/surfaces/'.length));
+        final deleter = surfaceDeleter;
+        if (deleter == null) {
+          _error(req, 501, 'not_implemented', 'a2ui surfaces not configured');
+          return;
+        }
+        if (!_safeActionId.hasMatch(id)) {
+          _error(req, 400, 'invalid_request', 'invalid surface id');
+          return;
+        }
+        final ok = await deleter(id);
+        if (!ok) {
+          _error(req, 404, 'not_found', 'surface "$id" tidak ditemukan');
+          return;
+        }
+        _json(req, {'ok': true, 'id': id});
       } else if (path == '/v1/confirm' && req.method == 'POST') {
         final body =
             jsonDecode(await utf8.decoder.bind(req).join())

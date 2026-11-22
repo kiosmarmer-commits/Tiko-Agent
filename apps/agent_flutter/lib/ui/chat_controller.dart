@@ -246,17 +246,23 @@ class ChatController extends ChangeNotifier {
     String actionId,
     Map<String, dynamic> values, {
     String? sessionKey,
+    String? surfaceId,
   }) async {
     final sk = sessionKey ?? this.sessionKey;
     if (busy) return;
     final echo = values.isEmpty ? actionId : '$actionId ${jsonEncode(values)}';
     busy = true;
-    messages.add({'role': 'user', 'text': echo});
+    messages.add({
+      'role': 'user',
+      'text': echo,
+      if (surfaceId != null) 'surface_id': surfaceId,
+    });
     messages.add({'role': 'assistant', 'text': '…'});
     notifyListeners();
     final aiIndex = messages.length - 1;
     try {
-      final reply = await repo.submitUiAction(sk, actionId, values);
+      final reply =
+          await repo.submitUiAction(sk, actionId, values, surfaceId: surfaceId);
       messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
     } catch (e) {
       messages.removeRange(messages.length - 2, messages.length);

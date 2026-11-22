@@ -1457,7 +1457,7 @@ class _ChatPageState extends State<_ChatPage> {
                                   ),
                                 ),
                                 child: message['role'] == 'assistant'
-                                    ? GenUiMessageView(
+                                    ? TikoSurfaceOrMessageView(
                                         text: (message['text'] ?? '')
                                             .toString(),
                                         onAction: (actionId, values) {
@@ -1466,6 +1466,17 @@ class _ChatPageState extends State<_ChatPage> {
                                               actionId,
                                               values,
                                               sessionKey: widget.sessionKey,
+                                            ),
+                                          );
+                                        },
+                                        onSurfaceAction:
+                                            (surfaceId, actionName, payload) {
+                                          unawaited(
+                                            chat.sendUiAction(
+                                              actionName,
+                                              payload,
+                                              sessionKey: widget.sessionKey,
+                                              surfaceId: surfaceId,
                                             ),
                                           );
                                         },

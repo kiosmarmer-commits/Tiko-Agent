@@ -678,6 +678,21 @@ Future<void> main(List<String> args) async {
     // didaftarkan per sesi sehingga POST /v1/ui/actions bisa memvalidasi
     // ownership, expiry, single-use, dan nilai form sebelum diteruskan.
     final uiActions = GenUiActionRegistry();
+
+    /// Fase E (A2UI): daftarkan surface yang dirender agen dari balasan
+    /// chat agar state tersimpan, event `surface.*` dipancarkan, dan aksi
+    /// tombol bisa divalidasi (anti-replay) di POST /v1/ui/actions.
+    void ingestA2uiSurfaces(String sessionKey, String reply) {
+      for (final block in extractA2uiBlocks(reply)) {
+        try {
+          rt.a2ui.ingest(sessionKey, block.messages);
+        } on FormatException {
+          // event surface.rejected sudah dipancarkan bridge; balasan chat
+          // tetap terkirim tanpa mengunci turn (fail-closed).
+        }
+      }
+    }
+
     Future<String> httpMessage(InboundMessage m) async {
       final c = Completer<String>();
       await handleMessage(m, replyVia: _CollectGateway(c));
@@ -690,6 +705,7 @@ Future<void> main(List<String> args) async {
       for (final block in extractGenUiBlocks(reply)) {
         uiActions.register(m.sessionKey, block.spec);
       }
+      ingestA2uiSurfaces(m.sessionKey, reply);
       return reply;
     }
 
@@ -729,6 +745,7 @@ Future<void> main(List<String> args) async {
       for (final block in extractGenUiBlocks(reply)) {
         uiActions.register(m.sessionKey, block.spec);
       }
+      ingestA2uiSurfaces(m.sessionKey, reply);
       progress({
         'type': 'chat.status',
         'state': 'done',
@@ -748,7 +765,31 @@ Future<void> main(List<String> args) async {
         onMessage: httpMessage,
         onMessageWithProgress: wsMessage,
         onCancelTurn: (sessionKey) async => rt.cancelTurn(sessionKey),
-        uiActionHandler: (sessionKey, actionId, values) async {
+        surfacesProvider: (sessionKey) async => rt.a2ui.list(sessionKey),
+        surfaceGetter: (id) async => rt.a2ui.get(id),
+        surfaceDeleter: (id) => rt.a2ui.delete(id),
+        uiActionHandler: (sessionKey, actionId, values, {surfaceId}) async {
+          if (surfaceId != null) {
+            // Aksi dari surface A2UI: validasi ownership + anti-replay via
+            // surface bridge; gagal → GenUiActionRejected (400 di gateway).
+            if (!rt.a2ui.consumeAction(sessionKey, surfaceId, actionId)) {
+              throw const GenUiActionRejected(
+                  'aksi surface tidak dikenal untuk sesi ini (tidak pernah '
+                  'dirender, sudah dipakai, atau surface sudah dihapus)');
+            }
+            final text = values.isEmpty
+                ? '/surface $surfaceId $actionId'
+                : '/surface $surfaceId $actionId ${jsonEncode(values)}';
+            final answer = await httpMessage(
+              InboundMessage(
+                channel: 'http',
+                userKey: 'ui-action',
+                sessionKey: sessionKey,
+                text: text,
+              ),
+            );
+            return {'ok': true, 'text': answer};
+          }
           uiActions.validateAndConsume(sessionKey, actionId, values);
           final text = values.isEmpty
               ? '/ui $actionId'

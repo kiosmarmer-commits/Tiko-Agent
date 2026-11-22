@@ -629,8 +629,9 @@ class AgentApiClient {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  ) async {
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  }) async {
     final res = await _http
         .post(
           _u('/v1/ui/actions'),
@@ -639,6 +640,7 @@ class AgentApiClient {
             'session_key': sessionKey,
             'action_id': actionId,
             'values': values,
+            if (surfaceId != null) 'surface_id': surfaceId,
           }),
         )
         .timeout(const Duration(seconds: 180));
