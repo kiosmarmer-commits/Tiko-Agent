@@ -13,8 +13,6 @@ import 'dart:io';
 import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
 
-import 'event_bus.dart';
-
 final RegExp _unsafePathChars = RegExp(r'[^A-Za-z0-9_.\-]');
 
 /// Menyimpan satu snapshot surface A2UI: perwakilan file di disk.

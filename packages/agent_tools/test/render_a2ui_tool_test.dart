@@ -69,7 +69,8 @@ void main() {
     expect(extractA2uiBlocks(res.content), isEmpty);
   });
 
-  test('update sebelum create ditolak', () async {
+  test('update mandiri lolos validasi tool — urutan divalidasi saat apply',
+      () async {
     final res = await tool.run({
       'messages': [
         {
@@ -83,8 +84,8 @@ void main() {
         },
       ],
     }, ctx);
-    expect(res.isError, isTrue);
-    expect(res.content, contains('belum dibuat'));
+    expect(res.isError, isFalse);
+    expect(extractA2uiBlocks(res.content), isNotEmpty);
   });
 
   test('messages kosong ditolak', () async {

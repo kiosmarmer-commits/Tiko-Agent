@@ -429,11 +429,6 @@ A2uiMessage _parseMessageBody(
             rawModel == null ? null : Map<String, dynamic>.from(rawModel),
       );
     case 'updateComponents':
-      final known = componentsFromCreate[surfaceId];
-      if (known == null) {
-        throw FormatException(
-            'a2ui: surface "$surfaceId" belum dibuat (createSurface dulu)');
-      }
       final rawComponents = body['components'];
       if (rawComponents is! List || rawComponents.isEmpty) {
         throw const FormatException('a2ui: components wajib array non-kosong');
@@ -445,9 +440,6 @@ A2uiMessage _parseMessageBody(
         actionsPerSurface,
         allowRootLoop: false,
       );
-      for (final c in components) {
-        known.add(c.id);
-      }
       return A2uiUpdateComponents(surfaceId: surfaceId, components: components);
     case 'updateDataModel':
       final path = body['path'];
@@ -925,6 +917,9 @@ class A2uiSurfaceSet {
           final map = <String, A2uiComponent>{
             for (final c in create.components) c.id: c,
           };
+          if (!map.containsKey('root')) {
+            throw const FormatException('a2ui: createSurface wajib memuat "root"');
+          }
           a2uiGraphDepth(map, 'root');
           _validateRefs(map);
           _surfaces[create.surfaceId] = A2uiSurface._(
@@ -957,6 +952,7 @@ class A2uiSurfaceSet {
           changes
               .add(A2uiSurfaceChange(data.surfaceId, 'surface.updated'));
         case A2uiDeleteSurface delete:
+          _requireSurface(delete.surfaceId);
           _surfaces.remove(delete.surfaceId);
           _surfaceActions.remove(delete.surfaceId);
           changes
