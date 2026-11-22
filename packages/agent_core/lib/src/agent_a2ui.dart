@@ -1116,7 +1116,7 @@ List<Object> splitA2uiSegments(String text, {bool includeStreaming = false}) {
   var cursor = 0;
   for (final b in blocks) {
     if (b.start > cursor) segments.add(text.substring(cursor, b.start));
-    segments.add(b.messages);
+    segments.add(b.complete ? b.messages : b);
     cursor = b.end;
   }
   if (cursor < text.length) segments.add(text.substring(cursor));
