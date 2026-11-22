@@ -898,6 +898,24 @@ class A2uiSurfaceSet {
     return true;
   }
 
+  /// Salinan mendalam state untuk validasi atomik (scratch set): batch
+  /// divalidasi ke salinan ini dulu sebelum diterapkan ke set asli.
+  A2uiSurfaceSet clone() {
+    final copy = A2uiSurfaceSet(maxSurfaces: maxSurfaces);
+    for (final entry in _surfaces.entries) {
+      copy._surfaces[entry.key] = A2uiSurface._(
+        entry.value.surfaceId,
+        entry.value.catalogId,
+        Map<String, A2uiComponent>.of(entry.value.components),
+        _copyDataModel(entry.value.dataModel),
+      );
+    }
+    for (final entry in _surfaceActions.entries) {
+      copy._surfaceActions[entry.key] = {...entry.value};
+    }
+    return copy;
+  }
+
   /// Menerapkan pesan tervalidasi; melempar [FormatException] bila urutan
   /// tidak valid (mis. update sebelum create, create ganda).
   List<A2uiSurfaceChange> apply(List<A2uiMessage> messages) {
@@ -969,6 +987,19 @@ class A2uiSurfaceSet {
           'a2ui: surface "$surfaceId" belum dibuat (createSurface dulu)');
     }
     return surface;
+  }
+
+  Map<String, dynamic> _copyDataModel(Map<String, dynamic> model) =>
+      model.map((k, v) => MapEntry(k, _copyDataValue(v)));
+
+  dynamic _copyDataValue(dynamic v) {
+    if (v is Map) {
+      return v.map((k, val) => MapEntry(k.toString(), _copyDataValue(val)));
+    }
+    if (v is List) {
+      return [for (final e in v) _copyDataValue(e)];
+    }
+    return v;
   }
 
   void _validateRefs(Map<String, A2uiComponent> components) {

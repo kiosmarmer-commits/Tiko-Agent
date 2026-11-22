@@ -158,9 +158,10 @@ class A2uiToolBridge {
   ) {
     _prune();
     try {
-      // Validasi dulu ke set scratch agar state sesi tidak berubah parsial
-      // bila pesan di tengah batch tidak valid (atomik, fail-closed).
-      A2uiSurfaceSet().apply(messages);
+      // Validasi dulu ke set scratch (salinan state sesi) agar state tidak
+      // berubah parsial bila pesan di tengah batch tidak valid (atomik,
+      // fail-closed).
+      sessionSet(sessionKey).clone().apply(messages);
       final changes = sessionSet(sessionKey).apply(messages);
       for (final change in changes) {
         final surface = sessionSet(sessionKey).surface(change.surfaceId);
