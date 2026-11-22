@@ -1,6 +1,6 @@
 # Fase E — Implementasi A2UI (Generative UI) untuk Tiko-Agent
 
-**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); sebagian E4/E5 tersisa.
+**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); tersisa diferensiasi E5 (approval sheet, kanban surface, dsb.).
 
 **Terakhir diperbarui:** November 2026 (setelah merge PR #146 / Fase D).
 
@@ -13,7 +13,7 @@
 | E3 — tool + runtime + gateway | ✅ | Tool `render_a2ui` (`packages/agent_tools/lib/src/render_a2ui_tool.dart`); `A2uiToolBridge` + snapshot atomik `<dataDir>/surfaces/` + TTL/LRU + event `surface.created/updated/deleted/rejected` (`packages/tiko_runtime/lib/src/a2ui_bridge.dart`); REST `GET/POST /v1/surfaces`, `GET/DELETE /v1/surfaces/<id>`, `GET /v1/surfaces/catalogs`, `surface_id` di `POST /v1/ui/actions` (`packages/agent_gateway/lib/src/http_api.dart`); wiring `apps/agentd/bin/agentd.dart` (ingest fence dari balasan chat + validasi aksi anti-replay) |
 | E3 — CLI `tiko surface list/show/delete/catalogs` | ✅ | `TikoRemoteClient.surfaces/surface/deleteSurface/surfaceCatalogs` (`packages/tiko_runtime/lib/src/remote_client.dart`); handler `_handleRemoteSurfaces` di `apps/tiko/bin/tiko.dart` (semua perintah `tiko surface*` via API daemon, fail-closed bila tak aktif) |
 | E4 — halaman panel Surface penuh | ✅ | `SurfacesPage` (`apps/agent_flutter/lib/ui/surfaces_view.dart`): daftar snapshot, detail bottom-sheet yang dirender ulang via `A2uiSurfaceRecordView` (`apps/tiko_widgets/lib/src/a2ui/a2ui_surface_view.dart`), hapus dengan konfirmasi; route `AppRoute.surfaces`; chat tetap menerima surface inline | 
-| E4 — skeleton streaming | ❌ menyusul (batch diaplikasikan atomik di akhir turn) | — |
+| E4 — skeleton streaming | ✅ (batch tetap diaplikasikan atomik di akhir turn) | `extractA2uiBlocks(includeStreaming:)` / `splitA2uiSegments` memandirikan blok `complete: false` (`agent_a2ui.dart`); `_A2uiStreamingSkeleton` di `tiko_message_view.dart` |
 | E5 — diferensiasi (approval sheet, kanban surface, dsb.) | ❌ menyusul | — |
 
 **Catatan penyimpangan dari desain awal:** implementasi memakai format wire A2UI v1.0 resmi (komponen `id`+`component`+properti flat, `child`/`children` per id, `version` pada envelope) dan renderer native milik Tiko (whitelist yang sama) sebagai pengganti dependensi `a2ui_flutter` — tetap di balas dengan lapisan ACL yang sama: hanya `apps/tiko_widgets/lib/src/a2ui/` yang menyentuh detail wire, sisanya menunggu tipe Tiko. Pesan RPC fungsi dua arah (`callRendererFunction`, `agentFunctionResponse`, dst.) ditolak dengan pesan jelas sampai fase berikutnya.
@@ -243,7 +243,7 @@ apps/tiko_widgets/lib/src/
   - Bila `a2ui_flutter` gagal (versi API berubah, komponen tak dikenal) → **fallback otomatis** ke renderer lama `GenUiMessageView` bila payload bisa dipetakan, else teks error. Fail-closed dua tingkat.
 - Katalog kustom Tiko = komponen `ComponentImplementation` bawaan A2UI dengan props dari `CommonSchemasV1`:
   - `Metric` (label, value, delta) — port dari `GenUiView` case `metric`.
-  - `Chart` (bar|line, points ≤31) — port chart lama.
+  - `Chart` (bar|line|area|donut, points ≤31) — port chart lama + area/donut dari `_A2uiAreaPainter`/`_A2uiDonutPainter`.
   - `KanbanCard` (column, title, state, labels, taskId) — untuk tampilan tugas.
   - `ApprovalSheet` (risk, summary, commands…) — tampilan approval meminta konfirmasi user.
 

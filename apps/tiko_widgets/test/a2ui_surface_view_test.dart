@@ -120,6 +120,51 @@ void main() {
     expect(find.textContaining('tidak dapat dirender'), findsOneWidget);
   });
 
+  testWidgets('Chart kind donut dan area dirender tanpa exception',
+      (tester) async {
+    Widget chart(String kind) => A2uiSurfaceStreamView(messages: parseA2uiMessages({
+          'version': '1.0',
+          'createSurface': {
+            'surfaceId': 's-ch',
+            'components': [
+              {
+                'id': 'root',
+                'component': 'Chart',
+                'kind': kind,
+                'points': [
+                  {'label': 'A', 'value': 10},
+                  {'label': 'B', 'value': 24},
+                  {'label': 'C', 'value': 6},
+                ],
+              },
+            ],
+          },
+        }));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: chart('donut'))));
+    await tester.pumpAndSettle();
+    expect(find.byType(CustomPaint), findsWidgets);
+    expect(find.textContaining('A · 10'), findsOneWidget);
+
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: chart('area'))));
+    await tester.pumpAndSettle();
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  testWidgets('fence a2ui yang belum tertutup menampilkan skeleton streaming',
+      (tester) async {
+    final text = 'Mulai:\n```a2ui\n'
+        '{"version":"1.0","createSurface":{"surfaceId":"s-stream",'
+        '"components":[{"id":"root","component":"Division"}]}}';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: TikoSurfaceOrMessageView(text: text)),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('sedang dibuat'), findsOneWidget);
+    expect(find.byType(A2uiSurfaceStreamView), findsNothing);
+  });
+
   testWidgets('A2uiSurfaceRecordView: record valid dirender, tampered gagal aman',
       (tester) async {
     final valid = {

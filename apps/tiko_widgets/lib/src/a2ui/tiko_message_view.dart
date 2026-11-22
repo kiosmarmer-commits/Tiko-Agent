@@ -46,8 +46,8 @@ class TikoSurfaceOrMessageView extends StatelessWidget {
   List<Widget> _segments(BuildContext context) {
     final widgets = <Widget>[];
     final cursorOut = <(int, int, Object)>[];
-    for (final b in extractA2uiBlocks(text)) {
-      cursorOut.add((b.start, b.end, b.messages));
+    for (final b in extractA2uiBlocks(text, includeStreaming: true)) {
+      cursorOut.add((b.start, b.end, b.complete ? b.messages : b));
     }
     for (final b in extractGenUiBlocks(text)) {
       cursorOut.add((b.start, b.end, b.spec));
@@ -60,6 +60,8 @@ class TikoSurfaceOrMessageView extends StatelessWidget {
       }
       if (payload is GenUiSpec) {
         widgets.add(GenUiView(spec: payload, onAction: onAction));
+      } else if (payload is A2uiBlock) {
+        widgets.add(const _A2uiStreamingSkeleton());
       } else if (payload is List) {
         try {
           final messages =
@@ -78,5 +80,40 @@ class TikoSurfaceOrMessageView extends StatelessWidget {
       widgets.add(TikoMarkdownView(text: text.substring(cursor)));
     }
     return widgets;
+  }
+}
+
+/// Skeleton temat A2UI saat fence masih mengalir (E4): placeholder netral
+/// tanpa komponen yang dirender — batch tetap divalidasi atomik di akhir.
+class _A2uiStreamingSkeleton extends StatelessWidget {
+  const _A2uiStreamingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: scheme.primary),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Surface sedang dibuat... (A2UI)',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
   }
 }
