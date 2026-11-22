@@ -57,7 +57,14 @@ dart run apps/agentd/bin/agentd.dart --api
 - Header chat punya tombol folder (`btn-chat-files`) untuk membuka `ChatArtifactPanel`: daftar file artifacts read-only dengan navigasi folder, tombol naik (`..`), refresh, dan preview file (isi teks + diff vs `.bak` bila tersedia) lewat `ArtifactPreviewPanel` (termasuk tombol salin isi file).
 - Layout: layar lebar (≥1100px) panel kanan 380px; layar sempit overlay penuh di atas chat. Read-only — tidak ada endpoint tulis.
 - Referensi `@file:` dalam pesan dirender sebagai chip monospace; tap membuka file di panel. Parsing fail-closed di `collectFileRefs` (skip `..`/backslash, maks 6, tanda baca akhir dipangkas).
-- Pesan dengan field `files` (daftar `{path, changed}`) merender kartu file ("Lihat" + "Diff"); sumber otomatis dari tool trace dikerjakan di C4.
+- Pesan dengan field `files` (daftar `{path, changed}`) merender kartu file ("Lihat" + "Diff"); sejak C4 field ini terisi otomatis dari frame `chat.tool` (4.5).
+
+### 4.5 Status proses turn + tombol Stop (C4)
+
+- Saat turn berjalan (streaming WS), chat menampilkan strip status di atas composer: "Menyusun…" / "Menjalankan <tool>…" + tombol Stop. Frame progress (`chat.status`, `chat.toolStart`, `chat.tool`) dikirim daemon via WS hanya ke klien yang meminta; HTTP `/v1/messages` tetap sinkron.
+- Setelah turn selesai, strip menjadi ringkasan collapsible: N tool calls, durasi total, jumlah error, dengan detail per tool (nama + durasi ms).
+- Tombol Stop mengirim frame `{type: cancel}` via WS sekali-pakai; daemon memanggil `rt.cancelTurn` (pembatalan kooperatif — tool panjang berhenti di boundary cancel token). Gelembung jawaban menampilkan "(turn dihentikan)" bila hasil akhir kosong setelah stop.
+- Kartu file/diff dalam chat (4.4) kini terisi otomatis: `chat.tool` dengan `path` (tool file builtin, args tersanitasi server) dikumpulkan menjadi field `files` pesan assistant.
 
 ## 5. Batasan dan test
 

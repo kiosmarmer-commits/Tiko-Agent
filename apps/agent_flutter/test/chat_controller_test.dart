@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agent_flutter/agent_api_client.dart';
 import 'package:agent_flutter/data/agent_repository.dart';
 import 'package:agent_flutter/ui/chat_controller.dart';
@@ -10,6 +12,7 @@ class _FakeAgentApiClient extends AgentApiClient {
   final recordedAttachments = <List<ChatAttachmentPayload>>[];
   final decisions = <({String id, bool allow})>[];
   bool failDecision = false;
+  int cancelCalls = 0;
   Stream<Map<String, dynamic>> Function(String text)? streamHandler;
 
   @override
@@ -36,6 +39,12 @@ class _FakeAgentApiClient extends AgentApiClient {
   Future<bool> decideApproval(String id, bool approve) async {
     if (failDecision) throw StateError('network unavailable');
     decisions.add((id: id, allow: approve));
+    return true;
+  }
+
+  @override
+  Future<bool> cancelTurn(String sessionKey) async {
+    cancelCalls++;
     return true;
   }
 }
@@ -129,5 +138,78 @@ void main() {
       isTrue,
     );
     expect(controller.messages.last['text'], 'hasil lampiran');
+  });
+
+  test('C4: frame chat.tool* mengisi trace dan kartu file otomatis muncul',
+      () async {
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        yield {'type': 'chat.status', 'state': 'running'};
+        yield {'type': 'chat.toolStart', 'name': 'write_file'};
+        yield {
+          'type': 'chat.tool',
+          'name': 'write_file',
+          'is_error': false,
+          'duration_ms': 24,
+          'path': 'catatan.txt',
+        };
+        yield {'type': 'chat.toolStart', 'name': 'read_file'};
+        yield {
+          'type': 'chat.tool',
+          'name': 'read_file',
+          'is_error': true,
+          'duration_ms': 3,
+          'path': 'catatan.txt',
+        };
+        yield {'type': 'text', 'text': 'selesai menulis'};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    await controller.send('tulis catatan');
+
+    expect(controller.lastTurnTrace, hasLength(2));
+    expect(controller.lastTurnTrace.first['name'], 'write_file');
+    expect(controller.lastTurnTrace.last['is_error'], isTrue);
+    expect(controller.activeTool, isNull);
+    final files = jsonDecode(controller.messages.last['files']!) as List;
+    expect(files, hasLength(1));
+    expect((files.single as Map)['path'], 'catatan.txt');
+    expect((files.single as Map)['changed'], isTrue);
+  });
+
+  test('C4: stop() mengirim cancelTurn dan menandai strip jika busy',
+      () async {
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        yield {'type': 'chat.status', 'state': 'running'};
+        // Turn panjang: tungguingga cancel dikirim sebelum stream lanjut.
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        yield {'type': 'text', 'text': ''};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    final turn = controller.send('kerja panjang');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(controller.busy, isTrue);
+    await controller.stop();
+    expect(controller.stopRequested, isTrue);
+    expect(client.cancelCalls, 1);
+    await turn;
+    expect(controller.busy, isFalse);
+    expect(controller.messages.last['text'], '(turn dihentikan)');
+  });
+
+  test('C4: stop() saat idle tidak mengirim apa pun', () async {
+    final controller =
+        ChatController(HttpAgentRepository(_FakeAgentApiClient()));
+    addTearDown(controller.dispose);
+
+    await controller.stop();
+
+    expect(controller.stopRequested, isFalse);
   });
 }
