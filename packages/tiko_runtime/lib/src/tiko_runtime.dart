@@ -42,6 +42,7 @@ part 'tiko_runtime_internals.dart';
 part 'code_loop.dart';
 part 'bot_team.dart';
 part 'research.dart';
+part 'a2ui_research.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -4189,6 +4190,12 @@ class TikoRuntime {
               );
             }
             jobs.recordSuccess(job.id);
+            // E5 — surface ringkasan riset tersedia di panel Surface;
+            // best-effort: kegagalan UI tidak menggagalkan job riset.
+            try {
+              a2ui.ingest(
+                  message.sessionKey, researchRunSurfaceMessages(record));
+            } catch (_) {}
             if (deliver != null) {
               await jobs.awaitDelivery(
                 job.id,
