@@ -98,6 +98,7 @@ const Set<String> a2uiAllowedComponents = {
   'Metric',
   'Chart',
   'KanbanCard',
+  'ApprovalSheet',
 };
 
 final RegExp _a2uiSafeId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
@@ -133,10 +134,12 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
   'Metric': {'label', 'value', 'delta', 'tone'},
   'Chart': {'kind', 'points'},
   'KanbanCard': {'title', 'status', 'detail'},
+  'ApprovalSheet': {'risk', 'summary', 'commands'},
 };
 
 const Set<String> _a2uiButtonVariants = {'primary', 'secondary', 'danger'};
 const Set<String> _a2uiTones = {'primary', 'neutral', 'error'};
+const Set<String> _a2uiApprovalRisks = {'low', 'medium', 'high'};
 const Set<String> _a2uiChartKinds = {'bar', 'line', 'area', 'donut'};
 const Set<String> _a2uiTextVariants = {'heading', 'body', 'caption', 'mono'};
 
@@ -800,6 +803,47 @@ dynamic _validateProperty(String type, String key, dynamic value) {
         out.add({'label': label, 'value': m['value']?.toString() ?? ''});
       }
       return out;
+    case 'risk':
+      final v = str(value);
+      if (!_a2uiApprovalRisks.contains(v)) {
+        throw FormatException(
+            'a2ui: risk harus salah satu dari $_a2uiApprovalRisks');
+      }
+      return v;
+    case 'summary':
+      if (value is Map && value.containsKey('@path')) return value;
+      final v = str(value);
+      if (v.length > a2uiMaxTextChars) {
+        throw const FormatException(
+            'a2ui: summary melebihi $a2uiMaxTextChars karakter');
+      }
+      if (_a2uiControlChars.hasMatch(v)) {
+        throw const FormatException('a2ui: summary memuat karakter kontrol');
+      }
+      return v;
+    case 'commands':
+      if (value is! List) {
+        throw const FormatException('a2ui: commands harus list string');
+      }
+      if (value.length > a2uiMaxActions) {
+        throw const FormatException(
+            'a2ui: commands maksimal $a2uiMaxActions item');
+      }
+      final commands = <String>[];
+      for (final c in value) {
+        if (c is! String ||
+            c.isEmpty ||
+            c.length > a2uiMaxLabelChars) {
+          throw const FormatException(
+              'a2ui: item commands wajib string 1-$a2uiMaxLabelChars');
+        }
+        if (_a2uiControlChars.hasMatch(c)) {
+          throw const FormatException(
+              'a2ui: commands memuat karakter kontrol');
+        }
+        commands.add(c);
+      }
+      return commands;
     case 'action':
       final m = obj(value);
       for (final k in m.keys) {
@@ -1131,7 +1175,7 @@ Kamu bisa membuat UI interaktif dengan tool `render_a2ui` atau blok fence \`\`\`
 Pesan berformat A2UI v1.0: {"version":"1.0","createSurface":{...}} dst. Komponen FLAT per id:
 {"id":"root","component":"Column","children":["t1","b1"]}.
 Whitelist komponen: Row, Column, Card, Divider, Text, Image, Icon, Button, TextField,
-CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard.
+CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard, ApprovalSheet.
 - createSurface wajib tepat satu komponen id "root"; updateComponents untuk memperbarui.
 - updateDataModel {"path":"/a/b","value":...} untuk data; teks komponen bisa
   berupa {"@path":"/a/b"} terikat data model.
@@ -1141,4 +1185,7 @@ CheckBox, ChoicePicker, Slider, DateTimeInput, Metric, Chart, KanbanCard.
 Batas: 24 pesan/panggilan, 120 komponen/surface, depth 8, teks 4000 char, 8 aksi/surface.
 Untuk ringkasan angka gunakan Metric; untuk seri waktu gunakan Chart (kind
 bar|line|area|donut, maks 31 titik).
+Untuk permintaan persetujuan berisiko gunakan ApprovalSheet (risk low|medium|high,
+summary, commands[] berupa string); tombol setuju/tolak tetap komponen Button
+dengan action terpisah.
 ''';

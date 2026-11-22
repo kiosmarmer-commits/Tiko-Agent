@@ -152,6 +152,45 @@ void main() {
     expect(find.byType(CustomPaint), findsWidgets);
   });
 
+  testWidgets('ApprovalSheet dirender: chip risiko, ringkasan, dan perintah',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: parseA2uiMessages({
+          'version': '1.0',
+          'createSurface': {
+            'surfaceId': 's-appr',
+            'components': [
+              {
+                'id': 'root',
+                'component': 'Column',
+                'children': ['ap1', 'b1'],
+              },
+              {
+                'id': 'ap1',
+                'component': 'ApprovalSheet',
+                'risk': 'high',
+                'summary': 'Hapus 3 kontainer produksi',
+                'commands': ['docker rm -f a', 'docker rm -f b'],
+              },
+              {
+                'id': 'b1',
+                'component': 'Button',
+                'label': 'Setujui',
+                'action': {'name': 'approve_delete'},
+              },
+            ],
+          },
+        })),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('persetujuan'), findsOneWidget);
+    expect(find.textContaining('Hapus 3 kontainer'), findsOneWidget);
+    expect(find.text('docker rm -f a'), findsOneWidget);
+    expect(find.text('Setujui'), findsOneWidget);
+  });
+
   testWidgets('fence a2ui yang belum tertutup menampilkan skeleton streaming',
       (tester) async {
     final text = 'Mulai:\n```a2ui\n'

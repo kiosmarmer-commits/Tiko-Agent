@@ -227,6 +227,8 @@ class A2uiSurfaceView extends StatelessWidget {
         return _buildChart(context, p);
       case 'KanbanCard':
         return _buildKanbanCard(context, p);
+      case 'ApprovalSheet':
+        return _buildApprovalSheet(context, p);
       default:
         return _ErrorCard(message: 'komponen tidak didukung (${node.type})');
     }
@@ -394,6 +396,71 @@ class A2uiSurfaceView extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  /// ApprovalSheet (E5): kartu permintaan persetujuan dengan chip risiko,
+  /// ringkasan, dan daftar perintah berfont mono. Tombol setuju/tolak tetap
+  /// komponen Button terpisah agar aksi lewat pipeline anti-replay Tiko.
+  Widget _buildApprovalSheet(BuildContext context, Map<String, dynamic> p) {
+    final scheme = Theme.of(context).colorScheme;
+    final risk = p['risk']?.toString() ?? 'low';
+    final summary = _resolve(p['summary'])?.toString() ?? '';
+    final commands =
+        (p['commands'] as List?)?.cast<String>() ?? const <String>[];
+    final color = switch (risk) {
+      'high' => scheme.error,
+      'medium' => Colors.orange,
+      _ => scheme.primary,
+    };
+    final icon = switch (risk) {
+      'high' => Icons.gpp_bad_outlined,
+      'medium' => Icons.warning_amber_outlined,
+      _ => Icons.verified_user_outlined,
+    };
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Permintaan persetujuan \u00b7 risiko $risk',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            if (summary.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SelectableText(summary),
+            ],
+            if (commands.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final c in commands)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    c,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
