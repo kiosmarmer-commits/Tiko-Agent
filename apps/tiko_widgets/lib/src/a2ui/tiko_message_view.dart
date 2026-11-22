@@ -66,7 +66,18 @@ class TikoSurfaceOrMessageView extends StatelessWidget {
         try {
           final messages =
               payload.whereType<A2uiMessage>().toList(growable: false);
-          widgets.add(A2uiSurfaceStreamView(messages: messages));
+          widgets.add(A2uiSurfaceStreamView(
+            messages: messages,
+            onAction: onSurfaceAction,
+            onInput: onSurfaceAction == null
+                ? null
+                : (surfaceId, componentId, actionName, value) =>
+                    onSurfaceAction!(surfaceId, 'a2ui_input', {
+                      'componentId': componentId,
+                      'value': value,
+                      if (actionName != null) 'onChanged': actionName,
+                    }),
+          ));
         } on FormatException catch (e) {
           widgets.add(Text(
             'a2ui: surface tidak dapat dirender (${e.message})',

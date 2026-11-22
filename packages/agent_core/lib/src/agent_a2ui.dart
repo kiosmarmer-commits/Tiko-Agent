@@ -126,11 +126,11 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
   'Image': {'src', 'fit'},
   'Icon': {'name'},
   'Button': {'label', 'action', 'variant'},
-  'TextField': {'label', 'value', 'variant', 'placeholder'},
-  'CheckBox': {'label', 'value'},
-  'ChoicePicker': {'label', 'options', 'value'},
-  'Slider': {'label', 'min', 'max', 'step', 'value'},
-  'DateTimeInput': {'label', 'value'},
+  'TextField': {'label', 'value', 'variant', 'placeholder', 'action'},
+  'CheckBox': {'label', 'value', 'action'},
+  'ChoicePicker': {'label', 'options', 'value', 'action'},
+  'Slider': {'label', 'min', 'max', 'step', 'value', 'action'},
+  'DateTimeInput': {'label', 'value', 'action'},
   'Metric': {'label', 'value', 'delta', 'tone'},
   'Chart': {'kind', 'points'},
   'KanbanCard': {'title', 'status', 'detail'},
@@ -142,6 +142,29 @@ const Set<String> _a2uiTones = {'primary', 'neutral', 'error'};
 const Set<String> _a2uiApprovalRisks = {'low', 'medium', 'high'};
 const Set<String> _a2uiChartKinds = {'bar', 'line', 'area', 'donut'};
 const Set<String> _a2uiTextVariants = {'heading', 'body', 'caption', 'mono'};
+
+/// Komponen input form (Fase E6): aksinya repeatable — tiap perubahan isian
+/// dikirim ulang ke host (beda dengan aksi tombol yang sekali pakai).
+const Set<String> _a2uiInputComponents = {
+  'TextField',
+  'CheckBox',
+  'ChoicePicker',
+  'Slider',
+  'DateTimeInput',
+};
+
+/// Target tulis-balik satu komponen input (Fase E6).
+class A2uiInputTarget {
+  const A2uiInputTarget(this.type, this.boundPath, {this.actionName});
+
+  final String type;
+
+  /// Path data model bila properti `value` terikat `@path`, selain itu null.
+  final String? boundPath;
+
+  /// Nama aksi `onChanged` (repeatable) bila komponen membawa `action`.
+  final String? actionName;
+}
 
 /// Satu aksi tombol yang tervalidasi: `{"name": ..., "payload": {...}}`.
 class A2uiAction {
@@ -927,6 +950,10 @@ class A2uiSurfaceSet {
   final Map<String, A2uiSurface> _surfaces = {};
   final Map<String, Set<String>> _surfaceActions = {};
 
+  /// Nama aksi input (Fase E6) yang boleh dipicu berulang: dihitung ulang
+  /// dari pool komponen setelah tiap create/update.
+  final Map<String, Set<String>> _surfaceRepeatable = {};
+
   Map<String, A2uiSurface> get surfaces => Map.unmodifiable(_surfaces);
 
   A2uiSurface? surface(String surfaceId) => _surfaces[surfaceId];
@@ -936,11 +963,79 @@ class A2uiSurfaceSet {
 
   /// Anti-replay: memakai satu kali hak eksekusi [actionName] pada surface.
   /// Render ulang surface yang memuat aksi tersebut mengaktifkannya kembali.
+  /// Aksi input (Fase E6) repeatable: cukup terdaftar, tidak dihabiskan.
   bool consumeAction(String surfaceId, String actionName) {
     final bucket = _surfaceActions[surfaceId];
-    if (bucket == null || !bucket.remove(actionName)) return false;
+    if (bucket == null || !bucket.contains(actionName)) return false;
+    if (_surfaceRepeatable[surfaceId]?.contains(actionName) ?? false) {
+      return true;
+    }
+    bucket.remove(actionName);
     return true;
   }
+
+  /// Target tulis-balik [componentId] pada surface, atau null bila bukan
+  /// komponen input / surface tak dikenal.
+  A2uiInputTarget? inputTargetOf(String surfaceId, String componentId) {
+    final c = _surfaces[surfaceId]?.components[componentId];
+    if (c == null || !_a2uiInputComponents.contains(c.type)) return null;
+    final valueProp = c.properties['value'];
+    final boundPath = valueProp is Map && valueProp['@path'] is String
+        ? valueProp['@path'] as String
+        : null;
+    return A2uiInputTarget(
+      c.type,
+      boundPath,
+      actionName: c.action?.name,
+    );
+  }
+
+  /// Tulis balik nilai input (Fase E6) ke data model bila `value` terikat
+  /// `@path`; mengembalikan path yang ditulis (null bila tidak terikat).
+  /// Melempar [FormatException] bila surface/komponen tak valid atau nilai
+  /// tidak sesuai tipe komponen.
+  String? writeInputValue(
+    String surfaceId,
+    String componentId,
+    dynamic value,
+  ) {
+    final target = inputTargetOf(surfaceId, componentId);
+    if (target == null) {
+      throw FormatException(
+          'a2ui: komponen "$componentId" bukan input yang teregister di '
+          'surface "$surfaceId"');
+    }
+    if (!_isValidInputValue(target.type, value)) {
+      throw FormatException(
+          'a2ui: nilai tidak sesuai tipe komponen ${target.type}');
+    }
+    if (target.boundPath == null) return null;
+    final surface = _surfaces[surfaceId]!;
+    surface.dataModel =
+        _applyPointer(surface.dataModel, target.boundPath!, value);
+    return target.boundPath;
+  }
+
+  static bool _isValidInputValue(String type, dynamic v) {
+    switch (type) {
+      case 'TextField':
+      case 'DateTimeInput':
+        return v is String &&
+            v.isNotEmpty &&
+            v.length <= a2uiMaxTextChars &&
+            !_hasControlChars(v);
+      case 'CheckBox':
+        return v is bool;
+      case 'ChoicePicker':
+        return v is String && v.length <= 256;
+      case 'Slider':
+        return v is num;
+    }
+    return false;
+  }
+
+  static bool _hasControlChars(String s) =>
+      _a2uiControlChars.hasMatch(s);
 
   /// Salinan mendalam state untuk validasi atomik (scratch set): batch
   /// divalidasi ke salinan ini dulu sebelum diterapkan ke set asli.
@@ -956,6 +1051,9 @@ class A2uiSurfaceSet {
     }
     for (final entry in _surfaceActions.entries) {
       copy._surfaceActions[entry.key] = {...entry.value};
+    }
+    for (final entry in _surfaceRepeatable.entries) {
+      copy._surfaceRepeatable[entry.key] = {...entry.value};
     }
     return copy;
   }
@@ -993,6 +1091,7 @@ class A2uiSurfaceSet {
                 : Map<String, dynamic>.from(create.dataModel!),
           );
           _collectActions(create.surfaceId, create.components);
+          _recomputeRepeatable(create.surfaceId);
           changes.add(A2uiSurfaceChange(create.surfaceId, 'surface.created'));
         case A2uiUpdateComponents update:
           final surface = _requireSurface(update.surfaceId);
@@ -1002,6 +1101,7 @@ class A2uiSurfaceSet {
           a2uiGraphDepth(surface.components, 'root');
           _validateRefs(surface.components);
           _collectActions(update.surfaceId, update.components);
+          _recomputeRepeatable(update.surfaceId);
           changes
               .add(A2uiSurfaceChange(update.surfaceId, 'surface.updated'));
         case A2uiUpdateDataModel data:
@@ -1017,6 +1117,7 @@ class A2uiSurfaceSet {
           _requireSurface(delete.surfaceId);
           _surfaces.remove(delete.surfaceId);
           _surfaceActions.remove(delete.surfaceId);
+          _surfaceRepeatable.remove(delete.surfaceId);
           changes
               .add(A2uiSurfaceChange(delete.surfaceId, 'surface.deleted'));
       }
@@ -1073,6 +1174,25 @@ class A2uiSurfaceSet {
             'a2ui: aksi surface "$surfaceId" melebihi $a2uiMaxActions');
       }
     }
+  }
+
+  /// Nama = repeatable hanya bila dideklarasikan komponen input dan tidak
+  /// ada di komponen non-input mana pun (aksi tombol tetap sekali pakai).
+  void _recomputeRepeatable(String surfaceId) {
+    final surface = _surfaces[surfaceId];
+    if (surface == null) return;
+    final counts = <String, int>{};
+    final inputNames = <String>{};
+    for (final c in surface.components.values) {
+      final action = c.action?.name;
+      if (action == null) continue;
+      counts[action] = (counts[action] ?? 0) + 1;
+      if (_a2uiInputComponents.contains(c.type)) inputNames.add(action);
+    }
+    _surfaceRepeatable[surfaceId] = {
+      for (final name in inputNames)
+        if ((counts[name] ?? 0) == 1) name,
+    };
   }
 
   static Map<String, dynamic> _applyPointer(
@@ -1191,6 +1311,11 @@ dengan action terpisah.
 Tombol link memakai action.name `open_url` dengan payload {"url":"https://host/path"};
 hanya URL https yang cocok dengan allowlist host (config
 a2ui.open_url_allow) yang dibuka, URL lain ditolak (fail-closed).
+Komponen input (TextField, CheckBox, ChoicePicker, Slider, DateTimeInput) boleh
+bawa `action` (onChanged): saat user mengubah isian, host mengirim action
+tersebut dengan payload {"value": <isian baru>} — isian tidak otomatis masuk
+konteks, jadi tanggapi aksinya. Bindung `value` via {"@path":...} membuat
+tulis-balik user tersimpan ke data model surface otomatis.
 ''';
 
 /// Satu entri allowlist URL [A2uiOpenUrlPolicy] setelah dinormalisasi.
