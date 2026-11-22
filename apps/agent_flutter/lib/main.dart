@@ -1566,6 +1566,10 @@ class _ChatPageState extends State<_ChatPage> {
                   ],
                 ),
               ),
+            AnimatedBuilder(
+              animation: chat,
+              builder: (context, _) => _TurnProgressStrip(chat: chat),
+            ),
             _Composer(onSend: _onSend, voice: widget.voice),
           ],
         );
@@ -2997,6 +3001,115 @@ class _Card extends StatelessWidget {
 /// membuka isi file di panel chat; "Diff" membuka perbandingan vs `.bak`
 /// bila ada. Kartu hanya tampil bila data file tersedia dari turn; sumber
 /// otomatisnya menyusul di C4 (WS frames dari tool trace).
+/// C4 Chat-UX: strip proses turn — spinner + tool aktif ("Menjalankan X…")
+/// atau "Menyusun…" saat busy, dengan tombol Stop (pembatalan kooperatif
+/// via cancel token runtime — tidak ada jaminan langsung). Setelah turn,
+/// jadi ringkasan collapsible: jumlah tool + durasi total + status error.
+class _TurnProgressStrip extends StatelessWidget {
+  const _TurnProgressStrip({required this.chat});
+
+  final ChatController chat;
+
+  @override
+  Widget build(BuildContext context) {
+    if (chat.busy) {
+      final tool = chat.activeTool;
+      final label = chat.stopRequested
+          ? 'Menghentikan…'
+          : (tool == null || tool.isEmpty)
+              ? 'Menyusun…'
+              : 'Menjalankan $tool…';
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: context.simpulMuted),
+              ),
+            ),
+            IconButton(
+              key: const Key('btn-chat-stop'),
+              tooltip: 'Hentikan turn (kooperatif)',
+              icon: Icon(
+                Icons.stop_circle_outlined,
+                size: 20,
+                color: context.simpulDanger,
+              ),
+              onPressed: chat.stop,
+            ),
+          ],
+        ),
+      );
+    }
+    if (chat.lastTurnTrace.isEmpty) return const SizedBox.shrink();
+    final errCount = chat.lastTurnTrace
+        .where((t) => t['is_error'] == true)
+        .length;
+    final totalMs = chat.lastTurnTrace.fold<int>(
+      0,
+      (s, t) => s + ((t['duration_ms'] as num?)?.toInt() ?? 0),
+    );
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const Key('strip-turn-summary'),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        dense: true,
+        title: Text(
+          'Turn selesai — ${chat.lastTurnTrace.length} tool calls '
+          '(total ${(totalMs / 1000).toStringAsFixed(1)}s)'
+          '${errCount > 0 ? ' · $errCount error' : ''}',
+          style: TextStyle(fontSize: 12, color: context.simpulMuted),
+        ),
+        children: [
+          for (final t in chat.lastTurnTrace)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(
+                    t['is_error'] == true
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
+                    size: 14,
+                    color: t['is_error'] == true
+                        ? context.simpulDanger
+                        : context.simpulMuted,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${t['name']}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${t['duration_ms']} ms',
+                    style: TextStyle(fontSize: 11, color: context.simpulMuted),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FileCard extends StatelessWidget {
   const _FileCard({
     super.key,

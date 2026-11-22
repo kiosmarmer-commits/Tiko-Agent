@@ -739,6 +739,44 @@ class AgentApiClient {
     }
   }
 
+  /// C4 Chat-UX: minta pembatalan turn aktif via WS `{type: cancel}` di
+  /// koneksi sekali-pakai (pembatalan registri per-sesi di daemon, jadi
+  /// tidak harus lewat koneksi turn yang sedang berjalan). Return true bila
+  /// daemon mengonfirmasi sinyal stop terkirim — kooperatif, bukan paksa.
+  Future<bool> cancelTurn(String sessionKey) async {
+    final base = baseUrl.replaceAll(RegExp(r'/$'), '');
+    final wsBase = base.startsWith('https')
+        ? base.replaceFirst('https', 'wss')
+        : base.replaceFirst('http', 'ws');
+    final ticket = await _requestStreamTicket(base);
+    final uri = Uri.parse('$wsBase/v1/stream').replace(
+      queryParameters: ticket == null ? {} : {'ticket': ticket},
+    );
+    WebSocketChannel? channel;
+    try {
+      channel = WebSocketChannel.connect(uri);
+      await channel.ready.timeout(const Duration(seconds: 5));
+      channel.sink.add(jsonEncode({
+        'type': 'cancel',
+        'session_key': sessionKey,
+      }));
+      final raw = await channel.stream.first.timeout(const Duration(seconds: 5));
+      if (raw is! String) return false;
+      final frame = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      return frame['type'] == 'cancel_ack' && frame['ok'] == true;
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        await channel?.sink
+            .close()
+            .timeout(const Duration(seconds: 3), onTimeout: () {});
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
+
   void _throwIf(http.Response res, String what) {
     if (res.statusCode >= 400) {
       throw ApiError.fromResponse(res.statusCode, res.body);

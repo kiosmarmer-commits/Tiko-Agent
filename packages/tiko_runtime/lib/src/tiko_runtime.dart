@@ -1782,6 +1782,8 @@ class TikoRuntime {
     Future<bool> Function(ToolCall call, Session session, String approvalId)?
         confirm,
     void Function(String delta)? onTextDelta,
+    void Function(ToolCallTrace trace)? onToolTrace,
+    void Function(String toolName)? onToolStart,
     List<Attachment> attachments = const [],
   }) async => (await chatWithStatus(
         text,
@@ -1790,6 +1792,8 @@ class TikoRuntime {
         userKey: userKey,
         confirm: confirm,
         onTextDelta: onTextDelta,
+        onToolTrace: onToolTrace,
+        onToolStart: onToolStart,
         attachments: attachments,
       )).text;
 
@@ -1808,6 +1812,14 @@ class TikoRuntime {
     AgentConfig? configOverride,
     Set<String>? toolFilter,
     void Function(String delta)? onTextDelta,
+
+  /// C4 Chat-UX: hook live per tool turn (trace tersanitasi; durasi nyata).
+  /// Kegagalan callback pemanggil tidak diteruskan runtime.
+    void Function(ToolCallTrace trace)? onToolTrace,
+
+  /// C4 Chat-UX: nama tool tepat sebelum dieksekusi (start). Eksekusi
+  /// paralel berarti beberapa start bisa aktif bersamaan.
+    void Function(String toolName)? onToolStart,
     bool internalCommand = false,
     String? interruptNote,
     String? personaPrompt,
@@ -1872,6 +1884,8 @@ class TikoRuntime {
         configOverride: configOverride,
         toolFilter: toolFilter,
         onTextDelta: onTextDelta,
+        onToolTrace: onToolTrace,
+        onToolStart: onToolStart,
         internalCommand: internalCommand,
         interruptNote: interruptNote,
         personaPrompt: personaPrompt,
@@ -1908,6 +1922,8 @@ class TikoRuntime {
     String? interruptNote,
     String? personaPrompt,
     InspectedRun? turnEntry,
+    void Function(ToolCallTrace trace)? onToolTrace,
+    void Function(String toolName)? onToolStart,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
     // luarnya — SessionLock tidak re-entrant.
@@ -2094,6 +2110,9 @@ class TikoRuntime {
         // the final reply is additionally guarded below as usual.
         onTextDelta:
             onTextDelta == null ? null : (d) => onTextDelta(_sanitizer.output(d)),
+        onToolCallStart:
+            onToolStart == null ? null : (call) => onToolStart(call.name),
+        onToolTrace: onToolTrace,
         audit: (call, verdict, result) {
           final entry = turnEntry;
           if (entry != null) {

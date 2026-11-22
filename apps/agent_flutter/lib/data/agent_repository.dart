@@ -98,6 +98,10 @@ abstract class AgentRepository {
     List<ChatAttachmentPayload> attachments,
   });
 
+  /// C4 Chat-UX: minta pembatalan turn aktif per-sesi (kooperatif). Return
+  /// true bila daemon mengonfirmasi sinyal stop.
+  Future<bool> cancelTurn(String sessionKey);
+
   /// Live push event runtime via WebSocket admin feed (GUI-P2-06).
   Stream<Map<String, dynamic>> runtimeEvents();
 }
@@ -411,6 +415,10 @@ class HttpAgentRepository implements AgentRepository {
         sessionKey: sessionKey,
         attachments: attachments,
       );
+
+  @override
+  Future<bool> cancelTurn(String sessionKey) =>
+      _guard(() => _client.cancelTurn(sessionKey));
 
   @override
   Stream<Map<String, dynamic>> runtimeEvents() => _client.streamEvents();

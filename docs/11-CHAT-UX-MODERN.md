@@ -124,27 +124,44 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
   "berubah", tombol "Lihat" + "Diff") — tap Diff membuka panel dengan tampilan
   diff vs `.bak` langsung (`_openArtifact`).
 - **Catatan jujur (batasan C3 saat ini):**
-  - Kartu file/diff **sudah dirender** bila `message['files']` ada, tetapi
-    sumber otomatis dari tool trace (WS frames) dikerjakan di **C4** — data
-    kartu belum diisi otomatis oleh backend.
+  - Kartu file/diff **sudah dirender** bila `message['files']` ada; sejak C4
+    field ini terisi otomatis dari frame `chat.tool` (lihat fase C4).
   - Panel memakai listing global `/v1/artifacts`, bukan per-sesi filter —
     endpoint filter per-sesi belum ada.
   - Tidak ada download/thumbnail; preview hanya teks + diff (file biner
     ditandai tanpa isi, sesuai endpoint).
 
-### Fase C4 — Process running/debugging di dalam chat
-- **WS richer frames:** dari `ChatRunResult.toolCallTraces` + event bus runtime,
-  WS mengemit `chat.status` (mulai turn), `chat.tool` (tool mulai/selesai + nama +
-  durasi, tanpa argumen sensitif — args sudah disanitasi lewat sanitizer),
-  `chat.diff` (opsional), lalu `text`/`done` seperti sekarang. HTTP `/v1/messages`
-  tetap sinkron untuk klien sederhana.
-- **UI:** selama turn berjalan tampil **status strip** (ikon spinner + nama tool
-  terakhir + durasi); setelah selesai strip menjadi ringkasan collapsible
-  (n tool calls, durasi, token) yang bisa dibuka → detail trace + link ke Runs.
-- **Cancel:** tombol Stop memakai mekanisme cancellation yang sudah ada di
-  agent_core; status strip berakhir dengan label jujur ("dibatalkan").
-- **Honest streaming:** efek pengetikan menampilkan jawaban yang tersedia
-  (satu potong) dengan label "menyusun…", tidak pura-pura token-level.
+### Fase C4 — Process running/debugging di dalam chat — **Implemented**
+- **WS richer frames (`/v1/stream`):** param baru `onMessageWithProgress` di
+  `HttpApiServer` — agentd mengirim frame progress live ke klien WS yang
+  meminta: `chat.status` (`running` di awal, `done` di akhir turn),
+  `chat.toolStart` (nama tool yang MULAI dieksekusi — tanpa args), dan
+  `chat.tool` (tool selesai: nama, `is_error`, `duration_ms` nyata, plus
+  `path` bila tool file builtin punya args `path` — args sudah tersanitasi
+  sanitizer runtime). Lalu `text`/`done` seperti sebelumnya. Plumbing:
+  AgentLoop punya hook `onToolCallStart` + `onToolTrace` yang diteruskan
+  `rt.chat(..., onToolStart:, onToolTrace:)` oleh agentd.
+- **UI:** selama turn berjalan tampil **status strip** di atas composer
+  (spinner + "Menyusun…" / "Menjalankan <tool>…" / "Menghentikan…") dengan
+  tombol **Stop** (`btn-chat-stop`); setelah selesai strip menjadi ringkasan
+  collapsible (N tool calls, durasi total, jumlah error) dengan detail per
+  tool (nama + durasi ms + status).
+- **Kartu file/diff otomatis (menuntaskan sisa C3):** frame `chat.tool` dengan
+  `path` dikumpulkan ChatController → field `files` pesan assistant
+  (`[{path, changed}]`) — kartu C3 kini terisi otomatis dari tool trace;
+  `changed` hanya untuk tool tulis (`write_file`, `patch_file`).
+- **Cancel:** frame WS `{type: cancel, session_key}` → `cancel_ack` —
+  daemon memakai `rt.cancelTurn(sessionKey)` (CancellationRegistry
+  agent_core, kooperatif). Klien mengirim via koneksi WS sekali-pakai
+  (`cancelTurn`), strip beralih ke "Menghentikan…"; bila teks akhir kosong,
+  gelembung menampilkan "(turn dihentikan)" — jujur, tidak mengarang isi.
+- **Honest streaming:** tidak ada efek token-level; selama turn tampil
+  "Menyusun…" lalu tool aktif; jawaban tetap datang sekali (`text`).
+- **Batasan jujur:** HTTP `/v1/messages` tetap sinkron tanpa frame progress
+  (jalur WS saja); `chat.tool` tidak menyertakan args sensitif (hanya `path`
+  tool file); start tool paralel tidak bergaransi urutan; Stop kooperatif —
+  tool panjang harus menghargai cancel token untuk benar-benar berhenti;
+  ringkasan tidak menampilkan token (hanya tool + durasi).
 
 ## 4. Prinsip yang dipertahankan dari desain sebelumnya (docs/09)
 - Flat, modern, simple: token `SimpulTheme`, tanpa shadow berlapis, radius
