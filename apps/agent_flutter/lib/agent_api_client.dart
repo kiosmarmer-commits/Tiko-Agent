@@ -6,6 +6,26 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'data/api_error.dart';
 
+/// Payload lampiran chat (C2 Chat-UX): inline base64, divalidasi daemon
+/// (maks 4 file, 2 MiB/file, mime text/* + subset application + image).
+class ChatAttachmentPayload {
+  ChatAttachmentPayload({
+    required this.name,
+    required this.mime,
+    required this.dataBase64,
+  });
+
+  final String name;
+  final String mime;
+  final String dataBase64;
+
+  Map<String, String> toPayload() => {
+        'name': name,
+        'mime': mime,
+        'data_base64': dataBase64,
+      };
+}
+
 /// HTTP/WS client for Tiko control plane API.
 class AgentApiClient {
   AgentApiClient({required this.baseUrl, required this.token});
@@ -583,6 +603,7 @@ class AgentApiClient {
   Future<String> sendMessage(
     String text, {
     String sessionKey = 'flutter:default',
+    List<ChatAttachmentPayload> attachments = const [],
   }) async {
     final res = await _http
         .post(
@@ -592,6 +613,8 @@ class AgentApiClient {
             'text': text,
             'session_key': sessionKey,
             'user_key': 'flutter',
+            if (attachments.isNotEmpty)
+              'attachments': [for (final a in attachments) a.toPayload()],
           }),
         )
         .timeout(const Duration(seconds: 180));
@@ -674,6 +697,7 @@ class AgentApiClient {
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey = 'flutter:default',
+    List<ChatAttachmentPayload> attachments = const [],
   }) async* {
     final base = baseUrl.replaceAll(RegExp(r'/$'), '');
     final wsBase = base.startsWith('https')
@@ -690,6 +714,8 @@ class AgentApiClient {
         'text': text,
         'session_key': sessionKey,
         'user_key': 'flutter',
+        if (attachments.isNotEmpty)
+          'attachments': [for (final a in attachments) a.toPayload()],
       }));
       await for (final raw in channel.stream.timeout(const Duration(seconds: 180))) {
         if (raw is String) {

@@ -82,13 +82,21 @@ abstract class AgentRepository {
   Future<LayerEntry> addLayerEntry(Map<String, dynamic> body);
   Future<bool> deleteLayerEntry(String id);
   Future<RagSourcesInfo> ragSources();
-  Future<String> sendMessage(String text, {String sessionKey});
+  Future<String> sendMessage(
+    String text, {
+    String sessionKey,
+    List<ChatAttachmentPayload> attachments,
+  });
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
     Map<String, dynamic> values,
   );
-  Stream<Map<String, dynamic>> streamChat(String text, {String sessionKey});
+  Stream<Map<String, dynamic>> streamChat(
+    String text, {
+    String sessionKey,
+    List<ChatAttachmentPayload> attachments,
+  });
 
   /// Live push event runtime via WebSocket admin feed (GUI-P2-06).
   Stream<Map<String, dynamic>> runtimeEvents();
@@ -372,8 +380,17 @@ class HttpAgentRepository implements AgentRepository {
       RagSourcesInfo.fromMap(await _guard(_client.memoryRag));
 
   @override
-  Future<String> sendMessage(String text, {String sessionKey = 'flutter:default'}) =>
-      _guard(() => _client.sendMessage(text, sessionKey: sessionKey));
+  @override
+  Future<String> sendMessage(
+    String text, {
+    String sessionKey = 'flutter:default',
+    List<ChatAttachmentPayload> attachments = const [],
+  }) =>
+      _guard(() => _client.sendMessage(
+            text,
+            sessionKey: sessionKey,
+            attachments: attachments,
+          ));
 
   @override
   Future<String> submitUiAction(
@@ -387,8 +404,13 @@ class HttpAgentRepository implements AgentRepository {
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey = 'flutter:default',
+    List<ChatAttachmentPayload> attachments = const [],
   }) =>
-      _client.streamChat(text, sessionKey: sessionKey);
+      _client.streamChat(
+        text,
+        sessionKey: sessionKey,
+        attachments: attachments,
+      );
 
   @override
   Stream<Map<String, dynamic>> runtimeEvents() => _client.streamEvents();

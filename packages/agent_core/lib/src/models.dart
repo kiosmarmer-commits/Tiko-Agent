@@ -25,10 +25,20 @@ class InboundMessage {
 }
 
 class Attachment {
-  const Attachment({required this.type, required this.urlOrBytes, this.mime});
+  const Attachment({
+    required this.type,
+    required this.urlOrBytes,
+    this.mime,
+    this.name,
+  });
   final String type; // image | audio | document
   final Object urlOrBytes;
   final String? mime;
+
+  /// Nama tampilan asli dari pengirim (mis. `laporan.md`); runtime memakai
+  /// ini untuk penanda `[lampiran: <name>]` di konteks. Null bila gateway
+  /// tidak menyediakannya.
+  final String? name;
 }
 
 class OutboundMessage {
