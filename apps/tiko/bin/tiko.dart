@@ -34,6 +34,14 @@ Config:
   context                    tampilkan project context file aktif
                              (TIKO.md | AGENTS.md | CLAUDE.md | GEMINI.md)
   fix "<tugas>" --verify "<cmd>" [--iter 1-8]
+  research "<pertanyaan>" [--concurrency N]
+                             riset otomatis: plan → gather → sintesis →
+                             review; laporan di data/research (Fase D)
+  research runs | show <id>
+                             daftar / baca laporan run riset
+  research schedule "<pertanyaan>" --cron "0 8 * * *"
+                             jadwalkan riset berkala — digest dikirim ke
+                             channel; progres live di papan Kanban
                              loop coding/debugging otomatis: edit → verifikasi
                              objektif → umpan balik error (terbatas iterasi)
   team list|show <id>|delete <id>
@@ -1150,6 +1158,151 @@ Future<void> main(List<String> argv) async {
           return;
         default:
           await helpTeam();
+          return;
+      }
+
+
+    case 'research':
+      // Fase D — riset otomatis: run satu kali atau terjadwal via scheduler
+      // (job ber-prefix [RISET]); laporan tersimpan di data/research dan
+      // tiap run dicerminkan ke papan Kanban data/kanban.json.
+      final rSub = args.isEmpty ? 'run' : args.first.trim();
+      final rArgs = rSub == 'run' ? args.toList() : args.skip(1).toList();
+      Future<void> helpResearch() async {
+        stderr.writeln(
+          'pemakaian: tiko research "<pertanyaan>" [--concurrency N] | '
+          "runs | show <id> | "
+          'schedule "<pertanyaan>" --cron "0 8 * * *" [--tz Zona]');
+        exitCode = 2;
+      }
+      switch (rSub) {
+        case 'runs':
+          final runs = rt.researchRunStore.runs;
+          if (jsonOut) {
+            emit({
+              'runs': [for (final r in runs) r.toJson()],
+            }, '');
+          } else if (runs.isEmpty) {
+            stdout.writeln(
+              'Belum ada run riset. Mulai: tiko research "<pertanyaan>" '
+              'atau tiko research schedule.');
+          } else {
+            for (final r in runs) {
+              final q = r.question.length > 48
+                  ? '${r.question.substring(0, 47)}…'
+                  : r.question;
+              stdout.writeln(
+                '${r.runId.padRight(14)} ${r.status.padRight(7)} '
+                '${r.finishedAt.toLocal().toIso8601String()} $q');
+            }
+          }
+          return;
+        case 'show':
+          final id = rArgs.isEmpty ? '' : rArgs.first.trim();
+          final record = id.isEmpty ? null : rt.researchRunStore.get(id);
+          if (record == null) {
+            emit({'ok': false, 'error': 'run "$id" tidak ditemukan'},
+                'Run riset "$id" tidak ditemukan (tiko research runs).');
+            exitCode = 1;
+            return;
+          }
+          final report =
+              await rt.researchRunStore.readReport(record.reportName);
+          emit(record.toJson(),
+              report ?? '(laporan tidak ditemukan)');
+          return;
+        case 'schedule':
+          final qArgs = <String>[];
+          String? cron;
+          String? tz;
+          for (var i = 0; i < rArgs.length; i++) {
+            if (rArgs[i] == '--cron' && i + 1 < rArgs.length) {
+              cron = rArgs[++i];
+            } else if (rArgs[i] == '--tz' && i + 1 < rArgs.length) {
+              tz = rArgs[++i];
+            } else {
+              qArgs.add(rArgs[i]);
+            }
+          }
+          final question = qArgs.join(' ').trim();
+          if (question.isEmpty || (cron ?? '').trim().isEmpty) {
+            stderr.writeln(
+              'pemakaian: tiko research schedule "<pertanyaan>" '
+              '--cron "0 8 * * *" [--tz Asia/Jakarta]');
+            exitCode = 2;
+            return;
+          }
+          try {
+            final job = await rt.scheduleResearch(
+              question: question,
+              cron: cron!,
+              timezone: (tz ?? '').trim().isEmpty ? 'UTC' : tz!.trim(),
+            );
+            emit(job.toJson(),
+              'Riset terjadwal job=${job.id} cron=${job.cron} '
+              'tz=${job.timezone} next=${job.nextRun.toIso8601String()}');
+          } catch (e) {
+            emit({'ok': false, 'error': '$e'}, 'Gagal membuat job riset: $e');
+            exitCode = 1;
+          }
+          return;
+        case 'jobs':
+          final jobs = rt.researchJobs();
+          if (jsonOut) {
+            emit({
+              'jobs': [for (final j in jobs) j.toJson()],
+            }, '');
+          } else if (jobs.isEmpty) {
+            stdout.writeln(
+              'Belum ada riset terjadwal. tiko research schedule '
+              '"<pertanyaan>" --cron "0 8 * * *".');
+          } else {
+            for (final j in jobs) {
+              stdout.writeln(
+                '${j.id.padRight(14)} ${j.enabled ? "ON " : "OFF"} '
+                '${j.cron} tz=${j.timezone} '
+                'next=${j.nextRun.toIso8601String()}');
+            }
+          }
+          return;
+        case 'run':
+        default:
+          final qArgs = <String>[];
+          var concurrency = 3;
+          final scan = rSub == 'run' ? rArgs.skip(1).toList() : rArgs;
+          for (var i = 0; i < scan.length; i++) {
+            if (scan[i] == '--concurrency' && i + 1 < scan.length) {
+              concurrency = int.tryParse(scan[++i]) ?? -1;
+              if (concurrency < 1 || concurrency > 4) {
+                stderr.writeln('--concurrency harus 1..4');
+                exitCode = 2;
+                return;
+              }
+            } else {
+              qArgs.add(scan[i]);
+            }
+          }
+          final question = qArgs.join(' ').trim();
+          if (question.isEmpty) {
+            await helpResearch();
+            return;
+          }
+          if (!jsonOut) {
+            stdout.writeln(
+              'Riset dimulai (plan → gather → sintesis → review) '
+              '— pertanyaan: $question');
+          }
+          final res = await rt.runResearch(
+            question: question,
+            maxConcurrency: concurrency,
+          );
+          emit(res.toJson(),
+              res.status == 'ok'
+                  ? 'SELESAI ${res.runId} — laporan: '
+                      'data/research/reports/${res.reportName}\n'
+                      '${res.summary}'
+                  : 'GAGAL ${res.runId}: ${res.error}');
+          exitCode = res.status == 'ok' ? 0 : 1;
           return;
       }
 

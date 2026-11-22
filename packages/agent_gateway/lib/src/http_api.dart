@@ -88,6 +88,9 @@ class HttpApiServer {
     this.deleteJob,
     this.runJobNow,
     this.pauseJob,
+    this.researchRunsProvider,
+    this.researchRunGetter,
+    this.researchStarter,
     this.securityProvider,
     this.auditQueryProvider,
     this.artifactsListProvider,
@@ -985,6 +988,14 @@ class HttpApiServer {
   /// Channels setup (GUI-P1-07): status channel gateway aktif + nama env
   /// yang mengonfigurasinya (read-only; env + restart untuk mengubah).
   final Future<Map<String, dynamic>> Function()? channelsProvider;
+
+  /// Riset otomatis (Fase D). Callback yang null membuat endpoint
+  /// `/v1/research/*` merespons 501 not_implemented.
+  final Future<List<Map<String, dynamic>>> Function()? researchRunsProvider;
+  final Future<Map<String, dynamic>?> Function(String runId)?
+      researchRunGetter;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      researchStarter;
 
   /// Automation / cron CRUD callbacks (GUI-P1-09). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
@@ -2310,6 +2321,53 @@ class HttpApiServer {
                 )));
         _json(req, result);
         // Automation / cron CRUD endpoints (GUI-P1-09)
+      } else if (path == '/v1/research/runs' && req.method == 'GET') {
+        final runs = await (researchRunsProvider?.call() ??
+            (throw ApiRequestException(
+              501,
+              'not_implemented',
+              'research runner not configured',
+            )));
+        _json(req, {'runs': runs});
+      } else if (path.startsWith('/v1/research/runs/') && req.method == 'GET') {
+        final id = path.substring('/v1/research/runs/'.length);
+        if (id.isEmpty || id.contains('/')) {
+          _error(req, 400, 'invalid_request', 'invalid run id');
+          return;
+        }
+        final entry = await (researchRunGetter?.call(id) ??
+            (throw ApiRequestException(
+              501,
+              'not_implemented',
+              'research runner not configured',
+            )));
+        if (entry == null) {
+          _error(req, 404, 'not_found', 'run not found');
+        } else {
+          _json(req, entry);
+        }
+      } else if (path == '/v1/research/run' && req.method == 'POST') {
+        if (researchStarter == null) {
+          _error(req, 501, 'not_implemented', 'research runner not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final question = (body['question'] as String?)?.trim() ?? '';
+        if (question.isEmpty) {
+          _error(req, 400, 'invalid_request', 'question wajib diisi');
+          return;
+        }
+        final concurrencyRaw = body['max_concurrency'];
+        if (concurrencyRaw != null &&
+            (concurrencyRaw is! int ||
+                concurrencyRaw < 1 ||
+                concurrencyRaw > 4)) {
+          _error(req, 400, 'invalid_request', 'max_concurrency harus 1..4');
+          return;
+        }
+        _json(req, await researchStarter!(body));
       } else if (path == '/v1/jobs' && req.method == 'GET') {
         final jobs =
             await (jobsProvider?.call() ??

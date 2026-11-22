@@ -40,6 +40,7 @@ import 'team_tool.dart';
 part 'tiko_runtime_internals.dart';
 part 'code_loop.dart';
 part 'bot_team.dart';
+part 'research.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -317,6 +318,7 @@ class TikoRuntime {
     required this.turnRedirects,
     required this.botStore,
     required this.botTeamStore,
+    required this.researchRunStore,
     required this.pluginConsents,
     required this.ragPipeline,
     this.reflectionEngine,
@@ -549,6 +551,11 @@ class TikoRuntime {
   /// REST `/v1/teams`; tersimpan di `<dataDir>/teams/`.
   final BotTeamStore botTeamStore;
 
+  /// Indeks + laporan run riset otomatis (Fase D): `tiko research` /
+  /// REST `/v1/research/runs`; tersimpan di `<dataDir>/research/`.
+  /// Setiap run juga dicerminkan ke papan Kanban `<dataDir>/kanban.json`.
+  final ResearchRunStore researchRunStore;
+
   /// Capability consent plugin (rekomendasi #5): izin per plugin disetujui
   /// eksplisit; default fail-closed.
   final PluginConsentStore pluginConsents;
@@ -741,6 +748,7 @@ class TikoRuntime {
     await botStore.load();
     final botTeamStore = BotTeamStore(dataDir: dataDir);
     await botTeamStore.load();
+    final researchRunStore = ResearchRunStore(dataDir: dataDir);
 
     // Capability consent plugin (rekomendasi #5): fail-closed — permission
     // yang belum disetujui administrator menahan registrasi plugin.
@@ -1038,6 +1046,7 @@ class TikoRuntime {
       turnRedirects: TurnRedirectCoordinator(),
       botStore: botStore,
       botTeamStore: botTeamStore,
+      researchRunStore: researchRunStore,
       pluginConsents: pluginConsents,
       ragPipeline: rag,
       reflectionEngine: reflection,
@@ -1047,6 +1056,30 @@ class TikoRuntime {
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
+    // Fase D — riset otomatis butuh runtime yang sudah jadi (starter
+    // menyusun turn di atas chatWithStatus), jadi didaftarkan di sini.
+    rt.registry
+      ..register(DeepResearchTool(
+        (question) => rt.runResearch(question: question),
+      ))
+      ..register(ScheduleResearchTool(
+        (
+          {
+            required String question,
+            required String cron,
+            required String timezone,
+            required String channel,
+            required String userKey,
+          }
+        ) =>
+            rt.scheduleResearch(
+              question: question,
+              cron: cron,
+              timezone: timezone,
+              channel: channel,
+              userKey: userKey,
+            ),
+      ));
     if (rt.smartHomeTool != null && rt.registry.get('smart_home') == null) {
       rt.registry.register(rt.smartHomeTool!);
     }
@@ -4133,6 +4166,42 @@ class TikoRuntime {
           'scheduled_at': job.scheduledAt?.toIso8601String(),
         });
         try {
+          // Fase D — job riset (prompt ber-prefix [RISET]): jalankan
+          // pipeline riset penuh, bukan turn chat biasa. Digest dikirim
+          // via channel milik job; laporan markdown tetap tersimpan.
+          if (isResearchJobPrompt(message.text)) {
+            final record = await runResearch(
+              question: researchQuestionFromPrompt(message.text),
+              jobId: job.id,
+            );
+            if (record.status != 'ok') {
+              throw StateError(
+                record.error ?? 'pipeline riset tidak menghasilkan laporan',
+              );
+            }
+            jobs.recordSuccess(job.id);
+            if (deliver != null) {
+              await jobs.awaitDelivery(
+                job.id,
+                message.meta['run_id'] as String? ?? '',
+                '${record.summary}\n\n'
+                    'Laporan lengkap: data/research/reports/${record.reportName}',
+              );
+            }
+            events.emit('job.completed', {
+              'job_id': job.id,
+              'channel': job.channel,
+              'user_key': job.userKey,
+              'session_id': message.sessionKey,
+              'kind': 'research',
+              'run_id': record.runId,
+              'run': record.toJson(),
+              'text': record.summary,
+              'scheduled_at': job.scheduledAt?.toIso8601String(),
+              'delivery_pending': deliver != null,
+            });
+            return;
+          }
           // Attach skill (Hermes-parity P2): fail-closed — skill hilang/
           // retired membuat run gagal dengan pesan eksplisit, bukan
           // dijalankan tanpa skill.
