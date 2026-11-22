@@ -14,6 +14,7 @@ Semua tool diregistrasi sebagai `ToolSpec` dan dijalankan melalui `RegistryToolE
 |---|---|---|
 | Built-in | `datetime`, `calc`, `list_dir`, `grep`, `probe`, `read_file`, `write_file`, `shell`, `web_fetch`, `web_search` | Dibuat oleh `createBuiltinTools`; kalkulator memakai `agent_calc` sandbox |
 | Arsip | `unzip_archive` | Ekstrak zip di dalam workspace (Fase A.2); anti path-traversal, batas 500 entry / 16 MiB per-entry / 64 MiB total |
+| Verifikasi | `verify_project` | Jalankan perintah build/test/analyze (Fase B); exit code + output tail; metachar dilarang, argv-exec tanpa shell bila tidak ada sandbox; gate objektif loop `tiko fix` |
 | HTTP | `http_request` | Domain allowlist dan SSRF guard sesuai implementasi adapter |
 | Memory | `memory_search`, `memory_add` | Melalui `MemoryStore` runtime |
 | File recovery | `patch_file`, `rollback`, `list_checkpoints` | Checkpoint workspace dan rollback |

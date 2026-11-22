@@ -38,6 +38,7 @@ import 'character_card.dart';
 import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
+part 'code_loop.dart';
 
 const tikoVersion = '0.2.0';
 
