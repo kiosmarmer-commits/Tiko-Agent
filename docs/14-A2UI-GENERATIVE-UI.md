@@ -1,6 +1,6 @@
 # Fase E — Implementasi A2UI (Generative UI) untuk Tiko-Agent
 
-**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); sebagian E5 selesai (ApprovalSheet, surface ringkasan riset, DAG view run team) — tersisa opsi `openUrl` allowlist.
+**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); E5 selesai (ApprovalSheet, surface ringkasan riset, DAG view run team, `openUrl` allowlist).
 
 **Terakhir diperbarui:** November 2026 (setelah merge PR #146 / Fase D).
 
@@ -17,7 +17,7 @@
 | E5 — ApprovalSheet visual | ✅ | `ApprovalSheet` (risk low\|medium\|high, summary, commands[] ≤ 8) tervalidasi `_validateProperty` (`agent_a2ui.dart`), dirender `_buildApprovalSheet` (`a2ui_surface_view.dart`) dengan chip risiko + perintah mono; tombol setuju/tolak tetap `Button` terpisah agar anti-replay tetap berlaku; sistem prompt diarahkan |
 | E5 — surface ringkasan dari research-run (Fase D) | ✅ | `researchRunSurfaceMessages(ResearchRunRecord)` (`packages/tiko_runtime/lib/src/a2ui_research.dart`): heading pertanyaan + metric status/token/tool + daftar query + laporan mono + error bila gagal; tervalidasi `parseA2uiMessages` (whitelist sama); scheduler job riset meng-ingest best-effort ke sesi milik job (`tiko_runtime.dart`) sehingga muncul di panel Surface & event `surface.created` |
 | E5 — DAG view run team | ✅ | halaman Runs (`apps/agent_flutter/lib/ui/runs_page.dart`): bagian “RUN TEAM (Fase C)” dari `GET /v1/teams/runs` (`teamRuns()` di `agent_api_client.dart`/`agent_repository.dart`, muat lazy + best-effort di `main.dart`); sheet DAG `teamRunPlanTasks` — hitung level dependency, indentasi, status per node, deps, sintesis/review; fail-closed terhadap laporan korup |
-| E5 — `openUrl` allowlist (opsi ekstra) | ❌ menyusul | — |
+| E5 — `openUrl` allowlist (opsi ekstra) | ✅ | proxy generatif `Button` + `action.name open_url` (payload `{"url":...}`) — renderer tetap meneruskan aksi seperti action lain lewat `onAction` (tanpa eksekusi lokal); eksekusi di host: `A2uiOpenUrlPolicy` (`agent_a2ui.dart`) memvalidasi hanya https, host match persis/`*.wildcard`, prefix path, tanpa userinfo, port 443; config `a2ui.open_url_allow` (`tiko_config.dart`, default kosong = semua ditolak); handler `uiActionHandler` di `agentd.dart` memediasi sebelum anti-replay `consumeAction`, emit event `ui.open_url` |
 
 **Catatan penyimpangan dari desain awal:** implementasi memakai format wire A2UI v1.0 resmi (komponen `id`+`component`+properti flat, `child`/`children` per id, `version` pada envelope) dan renderer native milik Tiko (whitelist yang sama) sebagai pengganti dependensi `a2ui_flutter` — tetap di balas dengan lapisan ACL yang sama: hanya `apps/tiko_widgets/lib/src/a2ui/` yang menyentuh detail wire, sisanya menunggu tipe Tiko. Pesan RPC fungsi dua arah (`callRendererFunction`, `agentFunctionResponse`, dst.) ditolak dengan pesan jelas sampai fase berikutnya.
 
@@ -92,7 +92,7 @@ Row, Column, List, Card, Tabs, Modal, Divider; Text (markdown via `A2uiMarkdown`
 ### 2.4 Model keamanan A2UI
 
 - **Agen tidak tepercaya**: semua UI hanyalah data yang divalidasi skema; tidak ada kode yang dieksekusi.
-- `openUrl` **butuh callback eksplisit dari host** (mis. url_launcher) — default tidak ada.
+- `openUrl` **hanya tersedia sebagai aksi `open_url` pada Button A2UI** yang dimediasi host: allowlist aktif dari `a2ui.open_url_allow` (`A2uiOpenUrlPolicy`, hanya https, host + prefix path, wildcard `*.host`, tanpa userinfo, port 443); **default kosong = semua URL ditolak** (fail-closed).
 - Validasi input lewat `checks` (severity `warning`/`info`).
 - Atribut aksesibilitas dipetakan ke Semantics/ARIA.
 
@@ -464,7 +464,7 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 3. **Aksi = tool call.** `action`:
    - diperlakukan sebagai tool call melalui `approvals`; risiko dihitung tool target.
    - Aksi manajemen surface (salin JSON, muat ulang, hapus milik sendiri) tidak memicu tool.
-4. **Tanpa `openUrl` callback di Fase E**(jika kemudian diaktifkan, harus allowlist host) — mengikuti model A2UI.
+4. **`open_url` selalu dimediasi allowlist host.** Aksi `open_url` pada Button A2UI diperiksa `A2uiOpenUrlPolicy` (hanya https; host match persis atau wildcard `*.host`; prefix path; tanpa userinfo; port selain 443 ditolak) sebelum anti-replay `consumeAction`; sumber allowlist = `a2ui.open_url_allow` (default kosong → semua URL ditolak); yang lolos memicu event `ui.open_url` untuk host/telemetri, bukan eksekusi lokal oleh agen.
 5. **XSS/markdown injection.** `A2uiMarkdown` dirender oleh widget resminya (bukan innerHTML) sehingga tidak mengeksekusi markup; output hanya teks bergaya; `checks` severity `warning`/`info` dihormati di UI.
 6. **Sesi terisolasi.** Surface milik satu `sessionKey`; halaman J2 hanya membaca surface sesi milik user web (cookie sesi dari sistem auth tokenless local yang sudah ada).
 7. **Rate limit.** Maks 8 surface aktif/sesi, 24 pesan/turn, 24 KiB/blok, total 96 KiB/turn.
@@ -497,7 +497,7 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 
 ### Fase E5 — Diferensiasi & polish
 - Surface dari runner riset Fase D (opsional `researchRunStore → surface ringkasan`), DAG view untuk run team, dokumentasi `docs` → update [00-INDEX.md](00-INDEX.md) + [10-WEB-UI.md](10-WEB-UI.md).
-- Opsi ekstra (dialog kecil setelah E5): `openUrl` allowlist; katalog chart lanjutan (VegaChart-style) bila dibutuhkan.
+- Opsi ekstra (dialog kecil setelah E5): `openUrl` allowlist (✅ — proxy generatif Button `open_url` + `a2ui.open_url_allow`); katalog chart lanjutan (VegaChart-style) bila dibutuhkan.
 
 ---
 

@@ -1188,4 +1188,101 @@ bar|line|area|donut, maks 31 titik).
 Untuk permintaan persetujuan berisiko gunakan ApprovalSheet (risk low|medium|high,
 summary, commands[] berupa string); tombol setuju/tolak tetap komponen Button
 dengan action terpisah.
+Tombol link memakai action.name `open_url` dengan payload {"url":"https://host/path"};
+hanya URL https yang cocok dengan allowlist host (config
+a2ui.open_url_allow) yang dibuka, URL lain ditolak (fail-closed).
 ''';
+
+/// Satu entri allowlist URL [A2uiOpenUrlPolicy] setelah dinormalisasi.
+class _A2uiOpenUrlEntry {
+  const _A2uiOpenUrlEntry(this.host, {this.wildcard = false, this.path = ''});
+
+  final String host;
+
+  /// true = entri `*.host` (hanya subdomain, bukan host itu sendiri).
+  final bool wildcard;
+
+  /// '' = seluruh host; string mulai '/' = prefix path wajib.
+  final String path;
+}
+
+/// Kebijakan allowlist URL untuk aksi `open_url` pada surface A2UI (E5).
+/// Host memediasi setiap aksi `open_url` lewat kebijakan ini — fail-closed:
+/// allowlist kosong berarti semua URL ditolak. Aturan:
+/// - hanya skema `https`; port selain 443 ditolak; userinfo (`user@`) ditolak;
+/// - entri berupa `host`, `https://host/path`, atau wildcard `*.host`;
+/// - path entri kosong/'/' = seluruh host; selain itu prefix path
+///   ('/docs' mencocokkan '/docs' dan '/docs/a', bukan '/docs-rm');
+/// - kuery dan fragment diabaikan; entri tidak valid diabaikan.
+class A2uiOpenUrlPolicy {
+  A2uiOpenUrlPolicy({List<String> allow = const []}) {
+    final entries = <_A2uiOpenUrlEntry>[];
+    for (final raw in allow) {
+      final entry = _parseEntry(raw);
+      if (entry != null) entries.add(entry);
+    }
+    _entries = List.unmodifiable(entries);
+  }
+
+  late final List<_A2uiOpenUrlEntry> _entries;
+
+  _A2uiOpenUrlEntry? _parseEntry(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return null;
+    s = s.replaceFirst(RegExp(r'^https://', caseSensitive: false), '');
+    if (s.contains('://') || s.startsWith('*') && !s.startsWith('*.')) {
+      return null;
+    }
+    final slash = s.indexOf('/');
+    var hostPart = slash == -1 ? s : s.substring(0, slash);
+    final pathPart = slash == -1 ? '' : s.substring(slash);
+    hostPart = hostPart.toLowerCase();
+    if (hostPart.endsWith(':443')) {
+      hostPart = hostPart.substring(0, hostPart.length - 4);
+    } else if (hostPart.contains(':')) {
+      return null;
+    }
+    var wildcard = false;
+    if (hostPart.startsWith('*.')) {
+      wildcard = true;
+      hostPart = hostPart.substring(2);
+    }
+    if (hostPart.isEmpty || hostPart.contains('*')) return null;
+    String path;
+    if (pathPart.isEmpty || pathPart == '/') {
+      path = '';
+    } else {
+      path = pathPart.endsWith('/')
+          ? pathPart.substring(0, pathPart.length - 1)
+          : pathPart;
+      if (!path.startsWith('/') || path.length < 2) return null;
+    }
+    return _A2uiOpenUrlEntry(hostPart, wildcard: wildcard, path: path);
+  }
+
+  /// true bila [url] boleh dibuka sesuai allowlist.
+  bool allows(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    if (uri.scheme != 'https') return false;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (uri.userInfo.isNotEmpty) return false;
+    if (uri.port != 443) return false;
+    final p = uri.path;
+    final path = p.isEmpty || p == '/'
+        ? ''
+        : (p.endsWith('/') ? p.substring(0, p.length - 1) : p);
+    for (final e in _entries) {
+      final hostOk = e.wildcard
+          ? host.endsWith('.${e.host}') && host.length > e.host.length + 1
+          : host == e.host;
+      if (!hostOk) continue;
+      final pathOk = e.path.isEmpty ||
+          path == e.path ||
+          path.startsWith('${e.path}/');
+      if (pathOk) return true;
+    }
+    return false;
+  }
+}
