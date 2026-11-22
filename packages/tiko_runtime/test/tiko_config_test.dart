@@ -847,5 +847,40 @@ scheduler:
         isTrue,
       );
     });
+
+    test('a2ui.open_url_allow di-parse sebagai daftar string', () {
+      final (cfg, issues) = TikoConfig.parse('''
+providers:
+  default_chat: m
+  chat:
+    m:
+      type: mock
+a2ui:
+  open_url_allow:
+    - docs.example.com/docs
+    - "*.example.com"
+''');
+      expect(issues, isEmpty);
+      expect(cfg.a2uiOpenUrlAllow, [
+        'docs.example.com/docs',
+        '*.example.com',
+      ]);
+    });
+
+    test('a2ui.open_url_allow menolak non-daftar', () {
+      final (_, issues) = TikoConfig.parse('''
+providers:
+  default_chat: m
+  chat:
+    m:
+      type: mock
+a2ui:
+  open_url_allow: "not a list"
+''');
+      expect(
+        issues.any((i) => i.path == 'a2ui.open_url_allow'),
+        isTrue,
+      );
+    });
   });
 }

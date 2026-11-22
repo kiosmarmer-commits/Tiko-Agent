@@ -769,6 +769,15 @@ Future<void> main(List<String> args) async {
         surfaceGetter: (id) async => rt.a2ui.get(id),
         surfaceDeleter: (id) => rt.a2ui.delete(id),
         uiActionHandler: (sessionKey, actionId, values, {surfaceId}) async {
+          final openUrl = actionId == 'open_url'
+              ? values['url']?.toString() ?? ''
+              : null;
+          if (openUrl != null &&
+              !A2uiOpenUrlPolicy(allow: rt.config.a2uiOpenUrlAllow)
+                  .allows(openUrl)) {
+            throw const GenUiActionRejected(
+                'url tidak diizinkan oleh allowlist a2ui.open_url_allow');
+          }
           if (surfaceId != null) {
             // Aksi dari surface A2UI: validasi ownership + anti-replay via
             // surface bridge; gagal → GenUiActionRejected (400 di gateway).
@@ -776,6 +785,18 @@ Future<void> main(List<String> args) async {
               throw const GenUiActionRejected(
                   'aksi surface tidak dikenal untuk sesi ini (tidak pernah '
                   'dirender, sudah dipakai, atau surface sudah dihapus)');
+            }
+            if (openUrl != null) {
+              rt.events.emit('ui.open_url', {
+                'session_key': sessionKey,
+                'surface_id': surfaceId,
+                'url': openUrl,
+              });
+              return {
+                'ok': true,
+                'open_url': openUrl,
+                'text': 'Link dibuka: $openUrl',
+              };
             }
             final text = values.isEmpty
                 ? '/surface $surfaceId $actionId'

@@ -639,5 +639,71 @@ void main() {
     expect(prompt, contains('createSurface'));
     expect(prompt, contains('Metric'));
     expect(prompt, contains('ApprovalSheet'));
+    expect(prompt, contains('open_url'));
+  });
+
+  group('A2uiOpenUrlPolicy', () {
+    test('allowlist kosong menolak semua URL (fail-closed)', () {
+      final p = A2uiOpenUrlPolicy();
+      expect(p.allows('https://example.com'), isFalse);
+      expect(p.allows('https://docs.example.com/api'), isFalse);
+    });
+
+    test('hanya skema https dan host yang cocok persis', () {
+      final p = A2uiOpenUrlPolicy(allow: ['docs.example.com']);
+      expect(p.allows('https://docs.example.com'), isTrue);
+      expect(p.allows('https://docs.example.com/a/path?q=1#x'), isTrue);
+      expect(p.allows('http://docs.example.com'), isFalse);
+      expect(p.allows('ftp://docs.example.com'), isFalse);
+      expect(p.allows('https://example.com'), isFalse);
+      expect(p.allows('https://docs.example.com.evil.io'), isFalse);
+      expect(p.allows('not a url'), isFalse);
+    });
+
+    test('entri https://host/path memakai prefix path', () {
+      final p = A2uiOpenUrlPolicy(allow: ['https://example.com/docs']);
+      expect(p.allows('https://example.com/docs'), isTrue);
+      expect(p.allows('https://example.com/docs/guide'), isTrue);
+      expect(p.allows('https://example.com/docsrole'), isFalse);
+      expect(p.allows('https://example.com/'), isFalse);
+    });
+
+    test('entri path kosong atau "/" berarti seluruh host', () {
+      final p = A2uiOpenUrlPolicy(allow: ['https://example.com/']);
+      expect(p.allows('https://example.com/etc/passwd?x=1#f'), isTrue);
+    });
+
+    test('entri wildcard *.host hanya mencocokkan subdomain', () {
+      final p = A2uiOpenUrlPolicy(allow: ['*.example.com']);
+      expect(p.allows('https://example.com'), isFalse);
+      expect(p.allows('https://example.com/etc/passwd'), isFalse);
+      expect(p.allows('https://a.example.com'), isTrue);
+      expect(p.allows('https://b.c.example.com/stuff'), isTrue);
+      expect(p.allows('https://sub.example.com.evil.com'), isFalse);
+    });
+
+    test('menolak userinfo dan port selain 443', () {
+      final p = A2uiOpenUrlPolicy(allow: ['example.com']);
+      expect(p.allows('https://user:pass@example.com'), isFalse);
+      expect(p.allows('https://user@example.com'), isFalse);
+      expect(p.allows('https://user:pass@example.com'), isFalse);
+      expect(p.allows('https://example.com:443'), isTrue);
+    });
+
+    test('entri tidak valid diabaikan', () {
+      final p = A2uiOpenUrlPolicy(allow: [
+        'no-scheme://x',
+        'http://a.example.com',
+        '*star.example.com',
+        'example.com:8443',
+        '  ',
+      ]);
+      expect(p.allows('https://example.com'), isFalse);
+    });
+
+    test('port eksplisit 443 pada entri diterima', () {
+      final p = A2uiOpenUrlPolicy(allow: ['example.com:443']);
+      expect(p.allows('https://example.com'), isTrue);
+    });
   });
 }

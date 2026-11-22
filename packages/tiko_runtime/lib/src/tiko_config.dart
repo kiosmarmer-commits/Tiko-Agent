@@ -377,6 +377,7 @@ class TikoConfig {
       'schedule_job',
     ],
     this.httpDomainAllowlist = const [],
+    this.a2uiOpenUrlAllow = const [],
     this.mcpServers = const [],
     this.mcpAnswerServerRequests = false,
     this.decision = const DecisionConfig(),
@@ -423,6 +424,11 @@ class TikoConfig {
   final List<String> shellAllowlist;
   final List<String> requireConfirm;
   final List<String> httpDomainAllowlist;
+
+  /// Allowlist URL untuk aksi `open_url` pada surface A2UI (E5); entri
+  /// `host`, `https://host/path`, atau wildcard `*.host`. Kosong = semua URL
+  /// ditolak (fail-closed, diperiksa `A2uiOpenUrlPolicy`).
+  final List<String> a2uiOpenUrlAllow;
   final List<McpServerConfig> mcpServers;
 
   /// Opt-in (C2): jawab request JSON-RPC ber-ID yang diinisiasi server MCP
@@ -600,6 +606,7 @@ class TikoConfig {
     final providersSec = sec('providers');
     final storage = sec('storage');
     final http = sec('http');
+    final a2ui = sec('a2ui');
     final search = sec('search');
     final api = sec('api');
     final mcp = sec('mcp');
@@ -711,6 +718,7 @@ class TikoConfig {
       ('security.shell_allowlist', security['shell_allowlist']),
       ('security.require_confirm', security['require_confirm']),
       ('http.domain_allowlist', http['domain_allowlist']),
+      ('a2ui.open_url_allow', a2ui['open_url_allow']),
     ]) {
       final value = entry.$2;
       if (value != null &&
@@ -1255,6 +1263,7 @@ class TikoConfig {
         'schedule_job',
       ]),
       httpDomainAllowlist: strList(http['domain_allowlist'], const []),
+      a2uiOpenUrlAllow: strList(a2ui['open_url_allow'], const []),
       mcpServers: mcpServers,
       mcpAnswerServerRequests: mcpAnswerServerRequests,
       scriptSelfRepair: scriptSelfRepair,
@@ -1835,6 +1844,8 @@ search:
   searxng_base_url: "http://127.0.0.1:8080"
 http:
   domain_allowlist: []
+a2ui:
+  open_url_allow: []
 mcp:
   servers: []
 decision:
