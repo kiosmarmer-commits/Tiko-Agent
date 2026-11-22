@@ -148,3 +148,33 @@ evolusi diri: trajectory → reward → arbitrase → kurasi skill.
 Batas yang jujur: ini bukan fine-tuning model dan bukan RL neural —
 sinyalnya terukur (hasil tool, feedback user, judge LLM beranggaran) dan
 semua gagalan bersifat best-effort sehingga tidak pernah merusak turn.
+
+## 10. Orkestra bot team (Fase C, 2026-11-21)
+
+Paritas pola bot teams Hermes/Claude Code dalam satu panggilan:
+
+1. **Plan** — planner anggota (tanpa tool) mendekomposisi tujuan menjadi JSON
+   DAG. Parser `parseBotTeamPlan` fail-closed: id/prompt wajib, agent wajib
+   anggota tim, dependensi wajib dikenal dan asiklik, maksimum 12 node —
+   pelanggaran apa pun jatuh ke fallback satu node (tujuan dijalankan apa
+   adanya), bukan rencana karangan.
+2. **Execute** — `AgentSpec`/`TaskGraph`/`Blackboard` (agent_core) dieksekusi
+   `TeamOrchestrator`: node independen berjalan paralel per-wave (konkurensi
+   1..8), dependen menerima output upstream lewat prefix konteks. Persona,
+   allowlist tool (null = tanpa tool), tier model, dan budget turn per
+   anggota ditegakkan `chatWithStatus` (session `team:<team>:<node>`).
+3. **Synthesize** — turn summarizer bila ada; tanpa summarizer → gabungan
+   deterministik (tidak pernah mengklaim hasil yang tidak ada).
+4. **Review** — anggota critic mengulas sintesis; advisory, bukan gate.
+5. **Verify (opsional)** — `verify_command` dijalankan `runVerification`
+   (kontrak Fase B: exit 0 satu-satunya bukti sukses; metachar dilarang;
+   argv-exec tanpa shell bila tidak ada OS sandbox); gagal → maksimum 3 turn
+   perbaikan anggota coder dengan tail output sebagai umpan balik.
+6. **Persist + observability** — `success` akhir = semua node sukses DAN
+   verify lulus; laporan JSON disimpan `data/teams/runs/`; event
+   `team.plan_started/planned/node_started/node_finished/review_done/verify/finished`
+   mengalir ke EventBus → `/v1/stream`.
+
+Tim tersimpan `BotTeamStore` (`data/teams/<id>.json`) dipakai CLI
+(`tiko team`) dan REST (`/v1/teams`); tim tanpa konfigurasi memakai roster
+bawaan (planner, researcher, coder, critic, summarizer).

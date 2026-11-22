@@ -39,6 +39,7 @@ import 'team_tool.dart';
 
 part 'tiko_runtime_internals.dart';
 part 'code_loop.dart';
+part 'bot_team.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -315,6 +316,7 @@ class TikoRuntime {
     required this.memoryNudge,
     required this.turnRedirects,
     required this.botStore,
+    required this.botTeamStore,
     required this.pluginConsents,
     required this.ragPipeline,
     this.reflectionEngine,
@@ -543,6 +545,10 @@ class TikoRuntime {
   /// Persona bot persisten per chat (`/bot use <id>`); null = tanpa bot.
   final BotStore botStore;
 
+  /// Tim bot persisten + laporan run orkestra (Fase C): `tiko team` /
+  /// REST `/v1/teams`; tersimpan di `<dataDir>/teams/`.
+  final BotTeamStore botTeamStore;
+
   /// Capability consent plugin (rekomendasi #5): izin per plugin disetujui
   /// eksplisit; default fail-closed.
   final PluginConsentStore pluginConsents;
@@ -733,6 +739,8 @@ class TikoRuntime {
     // Bot Mode: persona persisten per chat (Hermes-parity).
     final botStore = BotStore(dataDir: dataDir);
     await botStore.load();
+    final botTeamStore = BotTeamStore(dataDir: dataDir);
+    await botTeamStore.load();
 
     // Capability consent plugin (rekomendasi #5): fail-closed — permission
     // yang belum disetujui administrator menahan registrasi plugin.
@@ -1029,6 +1037,7 @@ class TikoRuntime {
       memoryNudge: memoryNudge,
       turnRedirects: TurnRedirectCoordinator(),
       botStore: botStore,
+      botTeamStore: botTeamStore,
       pluginConsents: pluginConsents,
       ragPipeline: rag,
       reflectionEngine: reflection,
@@ -1233,6 +1242,26 @@ class TikoRuntime {
           );
           return outcome.text;
         },
+      ));
+    }
+    // Fase C — orkestra bot team satu panggilan: goal → plan → DAG paralel
+    // → sintesis → review → gate verifikasi opsional (Fase B).
+    if (rt.registry.get('bot_team') == null) {
+      rt.registry.register(BotTeamTool(
+        starter: ({
+          required String goal,
+          String? teamId,
+          String? verifyCommand,
+          int? maxConcurrency,
+        }) =>
+            rt
+                .runBotTeam(
+                  goal: goal,
+                  teamId: teamId,
+                  verifyCommand: verifyCommand,
+                  maxConcurrency: maxConcurrency ?? 4,
+                )
+                .then((r) => r.toJson()),
       ));
     }
     final snap = ResourceMonitor.capture(dataDir: dataDir);

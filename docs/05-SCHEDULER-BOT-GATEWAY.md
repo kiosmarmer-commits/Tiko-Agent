@@ -67,6 +67,10 @@ API menggunakan Bearer token pada endpoint admin/operasional. `/health` dikecual
 | PATCH/DELETE | `/v1/jobs/{id}` | Update parsial (termasuk `paused`, `skill`) / hapus job |
 | POST | `/v1/jobs/{id}/run\|pause\|resume` | Run-now, pause/resume (Hermes-parity P2) |
 | POST | `/v1/chat/completions` | Endpoint OpenAI-compat (Hermes-parity P4): non-stream + SSE, auth sama seperti `/v1` lain |
+| GET/POST | `/v1/teams` | Daftar/simpan tim bot orkestra (Fase C) |
+| GET/PUT/DELETE | `/v1/teams/{id}` | Detail, update, hapus tim tersimpan |
+| GET | `/v1/teams/runs` | Laporan run orkestra terbaru (`data/teams/runs/`) |
+| POST | `/v1/teams/run` | Jalankan orkestra tim (goal wajib; sinkron — progress via `/v1/stream` event `team.*`) |
 
 Webhook WhatsApp/Slack dipasang pada server yang sama jika gateway dikonfigurasi.
 

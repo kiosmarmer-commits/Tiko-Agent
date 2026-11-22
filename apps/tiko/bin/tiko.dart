@@ -36,6 +36,14 @@ Config:
   fix "<tugas>" --verify "<cmd>" [--iter 1-8]
                              loop coding/debugging otomatis: edit → verifikasi
                              objektif → umpan balik error (terbatas iterasi)
+  team list|show <id>|delete <id>
+                             kelola tim bot tersimpan (Fase C)
+  team save <id> --name N [--desc D] --member '<json>'...
+                             simpan tim; member JSON: {id, role?, prompt,
+                             tools? [nama tool], tier?, max_turns?}
+  team run "<tujuan>" [--team ID] [--verify "<cmd>"] [--concurrency N]
+                             orkestra tim: plan → DAG paralel → sintesis →
+                             review → gate verifikasi objektif (Fase B)
   config show|validate
   config get <path>
   config set <path> <value>
@@ -938,6 +946,212 @@ Future<void> main(List<String> argv) async {
           : 'GAGAL: ${fixRes.summary}');
       exitCode = fixRes.success ? 0 : 1;
       return;
+
+    case 'team':
+      // Fase C — orkestra bot team: plan → DAG paralel → sintesis → review
+      // → gate verifikasi opsional. Tim tersimpan di data/teams/<id>.json.
+      final sub = args.isEmpty ? 'help' : args.first.trim();
+      final teamArgs = args.skip(1).toList();
+      Future<void> helpTeam() async {
+        stderr.writeln(
+          "pemakaian: tiko team list | show <id> | delete <id> | "
+          "save <id> --name N --member '<json>' ... | "
+          'run "<tujuan>" [--team ID] [--verify "<cmd>"] [--concurrency N]',
+        );
+        exitCode = 2;
+      }
+      switch (sub) {
+        case 'list':
+          final saved = rt.botTeamStore.list();
+          if (jsonOut) {
+            emit({
+              'teams': [for (final t in saved) t.toJson()],
+              'builtin_members':
+                  [for (final m in AgentTeamTool.defaultRegistry.all) m.id],
+            }, '');
+          } else if (saved.isEmpty) {
+            stdout.writeln(
+              "Belum ada tim tersimpan. Tim bawaan tersedia always-on: "
+              '${AgentTeamTool.defaultRegistry.all.map((m) => m.id).join(', ')} '
+              "(id per node). Simpan tim: tiko team save <id> --name N "
+              "--member '<json>'.",
+            );
+          } else {
+            for (final t in saved) {
+              stdout.writeln(
+                '${t.id.padRight(20)} ${t.name} '
+                '(${t.members.length} anggota: '
+                '${t.members.map((m) => m.id).join(', ')})',
+              );
+            }
+          }
+          return;
+        case 'show':
+          final id = teamArgs.isEmpty ? '' : teamArgs.first.trim();
+          final doc = id.isEmpty ? null : rt.botTeamStore.get(id);
+          if (doc == null) {
+            emit(
+              {'ok': false, 'error': 'team "$id" tidak ditemukan'},
+              'Tim "$id" tidak ditemukan.');
+            exitCode = 1;
+            return;
+          }
+          emit(doc.toJson(),
+              const JsonEncoder.withIndent('  ').convert(doc.toJson()));
+          return;
+        case 'delete':
+          final id = teamArgs.isEmpty ? '' : teamArgs.first.trim();
+          if (id.isEmpty) {
+            stderr.writeln('pemakaian: tiko team delete <id>');
+            exitCode = 2;
+            return;
+          }
+          final removed = await rt.botTeamStore.delete(id);
+          emit(
+            {'ok': removed, 'id': id},
+            removed ? 'Tim "$id" dihapus.' : 'Tim "$id" tidak ditemukan.');
+          exitCode = removed ? 0 : 1;
+          return;
+        case 'save':
+          final id = teamArgs.isEmpty ? '' : teamArgs.first.trim();
+          if (id.isEmpty || !BotTeamDoc.isValidId(id)) {
+            stderr.writeln(
+              'id tim harus cocok [a-z0-9][a-z0-9_-]{0,63}');
+            exitCode = 2;
+            return;
+          }
+          String? name;
+          var desc = '';
+          final memberJsons = <String>[];
+          for (var i = 0; i < teamArgs.length; i++) {
+            if (teamArgs[i] == '--name' && i + 1 < teamArgs.length) {
+              name = teamArgs[++i];
+            } else if (teamArgs[i] == '--desc' && i + 1 < teamArgs.length) {
+              desc = teamArgs[++i];
+            } else if (teamArgs[i] == '--member' &&
+                i + 1 < teamArgs.length) {
+              memberJsons.add(teamArgs[++i]);
+            }
+          }
+          if ((name ?? '').trim().isEmpty || memberJsons.isEmpty) {
+            stderr.writeln(
+              '--name dan minimal satu --member wajib. contoh member: '
+              '{"id":"coder","prompt":"Kamu coder ...","tools":'
+              '["read_file","write_file","patch_file"],"max_turns":6}');
+            exitCode = 2;
+            return;
+          }
+          final members = <AgentSpec>[];
+          for (final raw in memberJsons) {
+            try {
+              final map = jsonDecode(raw);
+              if (map is! Map) {
+                stderr.writeln('member harus objek JSON: $raw');
+                exitCode = 2;
+                return;
+              }
+              final m = Map<String, dynamic>.from(map);
+              m['system_prompt'] ??= m.remove('prompt');
+              m['tool_allowlist'] ??= m.remove('tools');
+              m['model_tier'] ??= m.remove('tier');
+              m['max_turns'] ??= m.remove('max_turns');
+              final spec = AgentSpec.fromJson(m);
+              if (spec.id.trim().isEmpty ||
+                  spec.systemPrompt.trim().isEmpty) {
+                stderr.writeln('member butuh id dan prompt: $raw');
+                exitCode = 2;
+                return;
+              }
+              members.add(AgentSpec(
+                id: spec.id.trim(),
+                role: spec.role,
+                systemPrompt: spec.systemPrompt.trim(),
+                toolAllowlist: spec.toolAllowlist,
+                modelTier: spec.modelTier,
+                maxTurns: spec.maxTurns,
+              ));
+            } on FormatException catch (e) {
+              stderr.writeln('member JSON tidak valid: $e');
+              exitCode = 2;
+              return;
+            }
+          }
+          final savedDoc = await rt.botTeamStore.save(BotTeamDoc(
+            id: id,
+            name: (name ?? '').trim(),
+            description: desc,
+            members: members,
+          ));
+          emit(
+            savedDoc.toJson(),
+            'Tim "${savedDoc.id}" tersimpan '
+            '(${savedDoc.members.length} anggota).');
+          return;
+        case 'run':
+          final goalArgs = <String>[];
+          String? runTeam;
+          String? runVerify;
+          var concurrency = 4;
+          for (var i = 0; i < teamArgs.length; i++) {
+            if (teamArgs[i] == '--team' && i + 1 < teamArgs.length) {
+              runTeam = teamArgs[++i];
+            } else if (teamArgs[i] == '--verify' &&
+                i + 1 < teamArgs.length) {
+              runVerify = teamArgs[++i];
+            } else if (teamArgs[i] == '--concurrency' &&
+                i + 1 < teamArgs.length) {
+              concurrency = int.tryParse(teamArgs[++i]) ?? -1;
+              if (concurrency < 1 || concurrency > 8) {
+                stderr.writeln('--concurrency harus 1..8');
+                exitCode = 2;
+                return;
+              }
+            } else {
+              goalArgs.add(teamArgs[i]);
+            }
+          }
+          final goal = goalArgs.join(' ').trim();
+          if (goal.isEmpty) {
+            stderr.writeln(
+              'pemakaian: tiko team run "<tujuan>" [--team ID] '
+              '[--verify "<cmd>"] [--concurrency N]');
+            exitCode = 2;
+            return;
+          }
+          if (runTeam != null && rt.botTeamStore.get(runTeam) == null) {
+            stderr.writeln('tim "$runTeam" tidak ditemukan (tiko team list)');
+            exitCode = 2;
+            return;
+          }
+          if (!jsonOut) {
+            stdout.writeln(
+              'Orkestra tim dimulai${runTeam == null ? '' : ' ($runTeam)'} '
+              '— tujuan: $goal');
+          }
+          final teamRes = await rt.runBotTeam(
+            goal: goal,
+            teamId: runTeam,
+            verifyCommand: (runVerify ?? '').trim().isEmpty
+                ? null
+                : (runVerify ?? '').trim(),
+            maxConcurrency: concurrency,
+            onNodeEvent: jsonOut
+                ? null
+                : (node, agent, starting) => stdout.writeln(
+                    starting
+                        ? '[team] node $node dimulai oleh $agent …'
+                        : '[team] node $node selesai ($agent)',
+                  ),
+          );
+          emit(teamRes.toJson(), teamRes.success
+              ? 'OK: ${teamRes.synthesis}'
+              : 'GAGAL: ${teamRes.review ?? teamRes.synthesis}');
+          exitCode = teamRes.success ? 0 : 1;
+          return;
+        default:
+          await helpTeam();
+          return;
+      }
 
     case 'mcp':
       // MCP server side (stdio): AI agent lain (Claude Desktop, Hermes, dll.)
