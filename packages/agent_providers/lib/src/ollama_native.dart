@@ -72,6 +72,9 @@ class OllamaNativeProvider implements LlmProvider, ModelDiscovery {
               'role': m.role == 'tool' ? 'tool' : m.role,
               'content': m.content,
               if (m.name != null) 'name': m.name,
+              // Vision Ollama native: array gambar base64 per pesan.
+              if (m.images != null && m.images!.isNotEmpty && m.role == 'user')
+                'images': [for (final i in m.images!) i.base64],
             },
           )
           .toList();

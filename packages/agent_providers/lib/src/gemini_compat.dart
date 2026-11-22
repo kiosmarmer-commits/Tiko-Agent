@@ -40,11 +40,19 @@ class GeminiProvider implements LlmProvider {
           });
           continue;
         }
+        final imgs = m.images;
+        final parts = <Map<String, dynamic>>[
+          {'text': m.content},
+          // Vision Gemini: inline_data base64 per gambar.
+          if (m.role == 'user' && imgs != null)
+            for (final img in imgs)
+              {
+                'inline_data': {'mime_type': img.mime, 'data': img.base64},
+              },
+        ];
         contents.add({
           'role': m.role == 'assistant' ? 'model' : 'user',
-          'parts': [
-            {'text': m.content},
-          ],
+          'parts': parts,
         });
       }
 

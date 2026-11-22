@@ -94,6 +94,19 @@ class Session {
   DateTime updatedAt;
 }
 
+/// Satu gambar inline (base64) pada pesan — untuk provider multimodal
+/// (vision). Bersifat transient per-turn: tidak diserialisasi oleh
+/// [ChatMessage.toJson] (sesi persisten tetap teks) dan hanya dikirim ke
+/// provider yang mendukung vision.
+class ChatImage {
+  const ChatImage({required this.base64, this.mime = 'image/png'});
+
+  final String base64;
+
+  /// e.g. `image/png`, `image/jpeg`, `image/webp`<br>— tanpa parameter.
+  final String mime;
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.role,
@@ -101,6 +114,7 @@ class ChatMessage {
     this.toolCallId,
     this.toolCalls,
     this.name,
+    this.images,
   });
 
   final String role; // system | user | assistant | tool
@@ -108,6 +122,9 @@ class ChatMessage {
   final String? toolCallId;
   final List<ToolCall>? toolCalls;
   final String? name;
+
+  /// Gambar (vision) yang melekat pada pesan ini; null/kosong = teks saja.
+  final List<ChatImage>? images;
 
   Map<String, dynamic> toJson() => {
     'role': role,

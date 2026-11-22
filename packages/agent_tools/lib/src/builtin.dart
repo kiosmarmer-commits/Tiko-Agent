@@ -12,6 +12,7 @@ import 'probe.dart';
 import 'ssrf.dart';
 import 'web_search.dart';
 import 'path_safety.dart';
+import 'archive_tool.dart';
 import 'sandbox.dart';
 import 'readability.dart';
 import 'browser_tool.dart';
@@ -104,6 +105,7 @@ List<Tool> createBuiltinTools({
     ProbeTool(workspaceRoot: root),
     ReadFileTool(workspaceRoot: root),
     WriteFileTool(workspaceRoot: root),
+    UnzipArchiveTool(workspaceRoot: root),
     ShellTool(
       sandbox:
           sandbox ?? SandboxRunner(kind: SandboxKind.none, workspacePath: root),

@@ -120,6 +120,28 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
   bool _shouldRotate(String? code) =>
       code == '401' || code == '403' || code == '429';
 
+  /// Vision: message dengan [ChatMessage.images] dikirim sebagai content
+  /// array (text + image_url data URL); pesan biasa tetap bentuk lama.
+  Map<String, dynamic> _openAiMessage(ChatMessage m) {
+    final images = m.images;
+    if (images == null || images.isEmpty) return m.toJson();
+    if (m.role != 'user') {
+      // Hanya pesan user yang memuat gambar (konvensi semua API vision).
+      final stripped = m.toJson();
+      return stripped;
+    }
+    final withTools = m.toJson();
+    withTools['content'] = [
+      {'type': 'text', 'text': m.content},
+      for (final img in images)
+        {
+          'type': 'image_url',
+          'image_url': {'url': 'data:${img.mime};base64,${img.base64}'},
+        },
+    ];
+    return withTools;
+  }
+
   Stream<LlmEvent> _chat(
     ChatRequest req,
     Map<String, String> headers,
@@ -138,7 +160,9 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
     }
     final body = <String, dynamic>{
       'model': req.model ?? model,
-      'messages': req.messages.map((m) => m.toJson()).toList(),
+      // Vision (ChatImage): pesan ber-gambar dikirim sebagai content array
+      // (text + image_url data URL) sesuai format OpenAI-compatible.
+      'messages': req.messages.map(_openAiMessage).toList(),
       'stream': req.stream,
       if (cacheKey != null) 'prompt_cache_key': cacheKey,
       if (req.maxTokens != null) 'max_tokens': req.maxTokens,

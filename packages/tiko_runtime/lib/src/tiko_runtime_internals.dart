@@ -254,6 +254,8 @@ class RuntimeContext extends ContextBuilder {
     super.expander,
     this.toolFilter,
     this.personaPrompt,
+    this.projectContextName,
+    this.projectContextBlock,
     this.reflectionEngine,
     this.ragPipeline,
     this.layeredMemory,
@@ -267,6 +269,11 @@ class RuntimeContext extends ContextBuilder {
   final ToolRegistry registry;
   final Set<String>? toolFilter;
   final String? personaPrompt;
+
+  /// A.1 — project context file (TIKO.md/AGENTS.md/...) untuk turn ini:
+  /// nama file dan blok isinya (sudah dipotong ke batas di resolver).
+  final String? projectContextName;
+  final String? projectContextBlock;
   final String? curatedMemoryBlock;
   final String? nudgeDirective;
   final String? interruptNote;
@@ -306,6 +313,17 @@ class RuntimeContext extends ContextBuilder {
     if (bot != null && bot.isNotEmpty) {
       system = '$system\n\nBot persona (wajib diikuti untuk sesi ini):\n$bot';
     }
+    final projName = projectContextName;
+    final projBlock = projectContextBlock;
+    if (projName != null && projBlock != null && projBlock.isNotEmpty) {
+      system = '$system\n\nPanduan proyek ($projName, file di root workspace '
+          '— instruksi operasional proyek ini; ikuti kecuali konflik dengan '
+          'keamanan):\n$projBlock';
+    }
+    // A.4 — vision: gambar dari lampiran user ditempelkan ke pesan user
+    // terakhir. Fail-closed: hanya byte raw + mime image/*, dibatasi jumlah
+    // dan ukuran; sesi persisten tetap teks (transien per-turn).
+    _attachImages(ctx.messages, m.attachments);
     final curated = curatedMemoryBlock;
     if (curated != null && curated.isNotEmpty) {
       system = '$system\n\nMemori terkurasi lintas sesi:\n$curated';
@@ -352,6 +370,38 @@ class RuntimeContext extends ContextBuilder {
       if (seen.add(s.name)) out.add(s);
     }
     return (out, true);
+  }
+
+  /// A.4 — lampirkan gambar dari attachment user ke pesan user terakhir.
+  /// Batas fail-closed (Hermes/Claude-parity): maks 4 gambar, maks 4 MiB
+  /// per gambar, hanya mime image/*, hanya byte raw; sisanya dilewati
+  /// dengan aman (tidak gagal turn).
+  void _attachImages(List<ChatMessage> msgs, List<Attachment> attachments) {
+    final imgs = <ChatImage>[];
+    for (final a in attachments) {
+      if (imgs.length >= 4) break;
+      final mime = (a.mime ?? '').toLowerCase().trim();
+      if (a.type != 'image' || !mime.startsWith('image/')) continue;
+      final raw = a.urlOrBytes;
+      if (raw is! Uint8List) continue;
+      if (raw.length > 4 * 1024 * 1024) continue;
+      final b64 = base64.encode(raw);
+      imgs.add(ChatImage(base64: b64, mime: mime));
+    }
+    if (imgs.isEmpty) return;
+    for (final m in msgs.reversed) {
+      if (m.role == 'user') {
+        msgs[msgs.indexOf(m)] = ChatMessage(
+          role: m.role,
+          content: m.content,
+          toolCallId: m.toolCallId,
+          toolCalls: m.toolCalls,
+          name: m.name,
+          images: imgs,
+        );
+        return;
+      }
+    }
   }
 
   Future<String> _retrievedContext(String query) async {

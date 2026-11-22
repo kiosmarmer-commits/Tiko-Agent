@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_memory/agent_memory.dart';
@@ -15,7 +16,8 @@ import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'idle_consolidation.dart';
 import 'context_refs.dart';
-import 'attachments.dart';
+import 'attachment_ingest.dart';
+import 'context_file.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
@@ -1863,7 +1865,17 @@ class TikoRuntime {
       // internal (perintah actions) tidak menyertakan attachment, jadi tanpa
       // guard internal pun blok tetap tidak terbentuk.
       if (attachments.isNotEmpty) {
-        final expansion = expandAttachments(attachments);
+        // A.2/A.3: ingest penuh — teks inline, zip diekstrak ke folder,
+        // dokumen diekstrak teksnya, file biner disimpan ke uploads (path
+        // dirujuk; gambar dibawa ke provider vision via RuntimeContext).
+        final expansion = ingestAttachments(
+          attachments,
+          uploadsDirPath: p.join(
+            dataDir,
+            'uploads',
+            sanitizeSessionDirName(sessionId),
+          ),
+        );
         if (expansion.text.isNotEmpty) {
           prompt = prompt.isEmpty
               ? expansion.text
@@ -1889,6 +1901,7 @@ class TikoRuntime {
         internalCommand: internalCommand,
         interruptNote: interruptNote,
         personaPrompt: personaPrompt,
+        attachments: attachments,
         turnEntry: entry,
       );
       turnInspector.finish(
@@ -1921,6 +1934,7 @@ class TikoRuntime {
     bool internalCommand = false,
     String? interruptNote,
     String? personaPrompt,
+    List<Attachment> attachments = const [],
     InspectedRun? turnEntry,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String toolName)? onToolStart,
@@ -2058,6 +2072,7 @@ class TikoRuntime {
           maxWallClockSec: resourceProfile == 'eco' ? 120 : config.maxWallClockSec,
           maxToolCalls: resourceProfile == 'eco' ? 12 : config.maxToolCalls,
         );
+      final projCtx = resolveProjectContextFile(workspaceRoot: workspace);
       final loop = AgentLoop(
         router: _router,
         contextBuilder: RuntimeContext(
@@ -2079,6 +2094,10 @@ class TikoRuntime {
               : null,
           interruptNote: interruptNote,
           botPersona: botStore.botFor(sessionId)?.persona,
+          // A.1 — project context file TIKO.md/AGENTS.md/... dari root
+          // workspace, dibaca per-turn (murah, selalu fresh), fail-closed.
+          projectContextName: projCtx?.fileName,
+          projectContextBlock: projCtx?.content,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
         ),
@@ -2257,6 +2276,9 @@ class TikoRuntime {
           userKey: userKey,
           sessionKey: sessionId,
           text: effectiveText,
+          // Gambar mentah diteruskan untuk vision (RuntimeContext membaca
+          // attachment type image di sini); teks sudah diekspansi di prompt.
+          attachments: attachments,
         ),
         session,
         cancelToken: cancelToken,

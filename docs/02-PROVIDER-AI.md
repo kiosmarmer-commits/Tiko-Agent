@@ -86,6 +86,10 @@ Memory embedder opsional dikonstruksi dari `memory.embed` melalui `OllamaEmbedde
 
 API key pada config wajib berbentuk `env:NAMA_VAR`. Nilai secret dibaca dari environment saat runtime. Jangan menulis token/API key mentah di YAML, README, log, contoh commit, atau test fixture.
 
-## 7. Keterbatasan verifikasi
+## 7. Vision/multimodal (Fase A.4)
+
+`ChatImage` (base64 + mime) pada `ChatMessage` dikirim ke provider dalam bentuk API aslinya: openai_compat/azure OpenAI (`image_url` data URL), openai_responses (`input_image`), anthropic (blok `image` base64), gemini (`inline_data`), ollama_native (`images[]`). Sifat transient per-turn (tidak dipersist ke sesi); pasangan field `images` tidak masuk `ChatMessage.toJson`. Batas runtime: maks 4 gambar/turn, 4 MiB/gambar, mime `image/*`. Uji kontrak tiap provider ada di `packages/agent_providers/test/vision_providers_test.dart` (mock loopback, tanpa jaringan eksternal).
+
+## 8. Keterbatasan verifikasi
 
 CI memakai mock untuk smoke CLI; CI hijau bukan bukti bahwa akun provider cloud, Ollama lokal, Laya/Jev eksternal, atau embedding server telah diuji end-to-end. Uji koneksi provider nyata secara terpisah dan jangan mencantumkan hasil akurasi model tanpa dataset dan hasil evaluasi yang dapat diulang.

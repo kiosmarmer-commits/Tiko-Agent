@@ -180,3 +180,39 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
 
 Setiap fase: test widget/repo sesuai pola yang ada, update docs/00-INDEX +
 docs/10-WEB-UI, label jujur, tanpa dependency baru.
+
+## 6. Fase A — konteks proyek, dokumen, arsip, vision (Implemented)
+
+Ekstensi dari C2 mengikuti cara Claude Code / Codex / Gemini CLI menangani
+"/runtime sudah memahami lingkungan + payload user secara menyeluruh":
+
+- **A.1 Project context file** (`context_file.dart`): TIKO.md / AGENTS.md /
+  CLAUDE.md / GEMINI.md di root workspace (urutan itu, satu sumber kebenaran)
+  disuntik ke system prompt tiap turn tanpa perlu user mereferensikannya.
+  Cap 12.000 karakter dengan penanda jujur; fail-closed. CLI: `tiko context`.
+- **A.2 Zip auto-extract** (`attachment_ingest.dart`): lampiran zip disimpan
+  ke `data/uploads/<sesi-ter-sanitasi>/` lalu diekstrak aman ke folder
+  `<nama-tanpa-ekstensi>/` — penolakan entry absolut/`..`, batas 500 entry,
+  16 MiB/entry, 64 MiB total ter-ekspansi (zip bomb), listing 30 entry teratas
+  inline. Agent menerima path folder hasil ekstraksi untuk dijelajah dengan
+  `list_dir`/`grep`/`read_file`. Tool `unzip_archive` (agent_tools) tersedia
+  untuk ekstraksi di turn agent biasa dengan jaminan PathSafety yang sama.
+- **A.3 Ekstraksi teks dokumen** (`doc_extract.dart`): PDF (header `%PDF`,
+  stream FlateDecode di-inflate, operator `Tj`/`TJ`/hex-string), DOCX
+  (`word/document.xml`), ODT (`content.xml`), XLSX (`xl/sharedStrings.xml`),
+  PPTX (`ppt/slides/slideN.xml`), teks passthrough (mime `text/` atau
+  ekstensi teks umum, `.html` dikecualikan). Pure-Dart (`package:archive`),
+  fail-closed; file mentah selalu disimpan di uploads sebagai path referensi
+  (pola Files API Claude) sehingga turn berikutnya bisa membacanya via tool.
+- **A.4 Vision/multimodal** (provider-level): `ChatImage` (base64 + mime) di
+  `ChatMessage` — transient per-turn, tidak dipersist ke sesi — dikirim ke
+  provider sesuai bentuk API aslinya: openai_compat/azure (`image_url` data
+  URL), anthropic (blok `image` base64), gemini (`inline_data`),
+  ollama_native (`images[]`), openai_responses (`input_image`). Runtime
+  melampirkan maks 4 gambar/turn, 4 MiB/gambar, mime `image/*` saja.
+  Catatan jujur: passthrough bergantung gateway mengirim bytes raw (web chat
+  mengirim base64 → bytes); provider mock tetap teks.
+
+Batas tetap: lampiran teks 64 KiB/file + 128 KiB total (turun dari kontrak
+C2), semua kegagalan per-file menjadi penanda inline jujur dan pesan tetap
+terkirim.
