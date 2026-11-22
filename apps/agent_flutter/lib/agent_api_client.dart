@@ -455,6 +455,17 @@ class AgentApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Laporan run team Fase C (GUI): `GET /v1/teams/runs` terbaru dulu.
+  Future<List<Map<String, dynamic>>> listTeamRuns() async {
+    final res = await _http
+        .get(_u('/v1/teams/runs'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'team runs');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['runs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   /// Detail surface (dengan body komponen + data model); null bila 404.
   Future<Map<String, dynamic>?> getSurface(String surfaceId) async {
     final safeId = Uri.encodeComponent(surfaceId);

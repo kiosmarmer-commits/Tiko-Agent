@@ -5,7 +5,8 @@ import '../ui/theme.dart';
 import 'page_header.dart';
 
 /// Run-inspector (GUI-P2-04): snapshot turn agent aktif + riwayat terbaru
-/// dengan langkah tool per run — read-only via `GET /v1/runs`.
+/// dengan langkah tool per run — read-only via `GET /v1/runs`. Dibawahnya
+/// DAG run team Fase C (E5) — read-only via `GET /v1/teams/runs`.
 class RunsPage extends StatelessWidget {
   const RunsPage({
     super.key,
@@ -14,6 +15,7 @@ class RunsPage extends StatelessWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.teamRuns,
   });
 
   final RunsSnapshot? snapshot;
@@ -21,6 +23,9 @@ class RunsPage extends StatelessWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Laporan run team (`BotTeamStore.listRunReports`); null = belum dimuat.
+  final List<Map<String, dynamic>>? teamRuns;
 
   @override
   Widget build(BuildContext context) {
@@ -47,28 +52,38 @@ class RunsPage extends StatelessWidget {
             child: Text(error!, style: TextStyle(color: context.simpulDanger)),
           ),
         Expanded(
-          child: snap == null
+          child: !hasContent(snap, teamRuns)
               ? Center(
-                  child: Text('Belum ada snapshot \u2014 tekan refresh.',
+                  child: Text(
+                      snap == null
+                          ? 'Belum ada snapshot \u2014 tekan refresh.'
+                          : 'Belum ada run terekam.',
                       style: TextStyle(color: context.simpulMuted)),
                 )
-              : (snap.active.isEmpty && snap.recent.isEmpty)
-                  ? Center(
-                      child: Text('Belum ada run terekam.',
-                          style: TextStyle(color: context.simpulMuted)),
-                    )
-                  : ListView(
+              : ListView(
                       padding: const EdgeInsets.only(bottom: 16),
                       children: [
-                        if (snap.active.isNotEmpty) ...[
+                        if (snap != null && snap.active.isNotEmpty) ...[
                           _SectionLabel('AKTIF'),
                           for (final run in snap.active)
                             _RunTile(run: run, active: true),
                         ],
-                        if (snap.recent.isNotEmpty) ...[
+                        if (snap != null && snap.recent.isNotEmpty) ...[
                           _SectionLabel('RIWAYAT'),
                           for (final run in snap.recent)
                             _RunTile(run: run, active: false),
+                        ],
+                        if (teamRuns != null) ...[
+                          _SectionLabel('RUN TEAM (Fase C)'),
+                          if (teamRuns!.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                              child: Text('Belum ada run tim terekam.',
+                                  style: TextStyle(
+                                      color: context.simpulMuted)),
+                            ),
+                          for (final report in teamRuns!)
+                            _TeamRunTile(report: report),
                         ],
                       ],
                     ),
@@ -77,6 +92,12 @@ class RunsPage extends StatelessWidget {
     );
   }
 }
+
+/// Bila kedua sumber kosong (turn & team run) → halaman menampilkan empty
+/// state; run-team section tampil walau snapshot turn kosong/nnull.
+bool hasContent(RunsSnapshot? snap, List<Map<String, dynamic>>? teamRuns) =>
+    (snap != null && (snap.active.isNotEmpty || snap.recent.isNotEmpty)) ||
+    (teamRuns != null && teamRuns.isNotEmpty);
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
@@ -197,4 +218,309 @@ class _RunTile extends StatelessWidget {
       ],
     );
   }
+}
+
+/// E5 — DAG view run team: laporan orkestrasi Fase C (`/v1/teams/runs`)
+/// dirender read-only; ketuk untuk membuka DAG rencana per task.
+class _TeamRunTile extends StatelessWidget {
+  const _TeamRunTile({required this.report});
+
+  final Map<String, dynamic> report;
+
+  @override
+  Widget build(BuildContext context) {
+    final success = report['success'] == true;
+    final badgeColor = success ? context.simpulSuccess : context.simpulDanger;
+    final plan = (report['plan'] as List? ?? const []).length;
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.account_tree_outlined),
+      title: Text(
+        report['goal']?.toString().isEmpty ?? true
+            ? '(tanpa tujuan)'
+            : report['goal'].toString(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        '${report['run_id'] ?? '-'} · rencana $plan tugas · '
+        '${report['tokens_used'] ?? 0} token',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: context.simpulMuted, fontSize: 12),
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: badgeColor.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          success ? 'SUKSES' : 'GAGAL',
+          style: TextStyle(
+              color: badgeColor, fontSize: 10, fontWeight: FontWeight.w700),
+        ),
+      ),
+      onTap: () {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (sheetContext) => DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.75,
+            maxChildSize: 0.95,
+            builder: (sheetContext, controller) => _TeamRunDagSheet(
+              report: report,
+              scrollController: controller,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TeamRunDagSheet extends StatelessWidget {
+  const _TeamRunDagSheet({required this.report, required this.scrollController});
+
+  final Map<String, dynamic> report;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    final tasks = teamRunPlanTasks(report);
+    final danger = context.simpulDanger;
+    final success = context.simpulSuccess;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_tree_outlined, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'DAG run ${report['run_id'] ?? '-'}',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${report['goal'] ?? '-'} · rencana: '
+            '${report['plan_source'] ?? '-'}',
+            style: TextStyle(color: context.simpulMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView(
+              controller: scrollController,
+              children: [
+                if (tasks.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Rencana DAG tidak tersedia pada laporan ini.',
+                      style: TextStyle(color: context.simpulMuted),
+                    ),
+                  )
+                else
+                  for (final task in tasks) ...[
+                    Padding(
+                      padding: EdgeInsets.only(left: task.level * 24.0),
+                      child: Row(
+                        children: [
+                          Text(
+                            task.level == 0 ? '\u25cf' : '\u2514\u2500',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: task.ok == null
+                                  ? context.simpulMuted
+                                  : task.ok == true
+                                      ? success
+                                      : danger,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            task.id,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (task.agentId != null &&
+                              task.agentId!.isNotEmpty)
+                            Text(
+                              task.agentId!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.simpulInfo,
+                              ),
+                            ),
+                          const Spacer(),
+                          if (task.ok != null)
+                            Text(
+                              task.ok == true ? 'ok' : 'gagal',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: task.ok == true ? success : danger,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(
+                          left: task.level * 24.0 + 20, bottom: 2),
+                      child: Text(
+                        task.prompt,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: context.simpulMuted, fontSize: 12),
+                      ),
+                    ),
+                    if (task.dependsOn.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(
+                            left: task.level * 24.0 + 20, bottom: 6),
+                        child: Text(
+                          'depends: ${task.dependsOn.join(', ')}',
+                          style: TextStyle(
+                              color: context.simpulMuted,
+                              fontSize: 11,
+                              fontFamily: 'monospace'),
+                        ),
+                      ),
+                  ],
+                const Divider(height: 24),
+                Text('Sintesis',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: context.simpulMuted)),
+                const SizedBox(height: 4),
+                Text(
+                  (report['synthesis'] as String?)?.trim().isEmpty ?? true
+                      ? '(synthesis kosong)'
+                      : report['synthesis'].toString(),
+                ),
+                if (report['review'] != null &&
+                    (report['review'] as String).trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Review',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: context.simpulMuted)),
+                  const SizedBox(height: 4),
+                  Text(report['review'].toString()),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Satu baris task DAG (terurai dari laporan run team).
+class TeamRunPlanTask {
+  TeamRunPlanTask({
+    required this.id,
+    required this.prompt,
+    required this.agentId,
+    required this.dependsOn,
+    required this.level,
+    this.ok,
+  });
+
+  final String id;
+  final String prompt;
+  final String? agentId;
+  final List<String> dependsOn;
+
+  /// Kedalaman dependensi (0 = tanpa depends_on) — untuk indentasi pohon.
+  final int level;
+
+  /// null = task belum dieksekusi / tidak ada node record.
+  final bool? ok;
+}
+
+/// Mengurai `plan` + `nodes` dari laporan run team menjadi barisan task
+/// terurut level DAG (lalu urut rencana). Membersih prompt pendek & aman
+/// terhadap laporan korup (fail-closed: task tanpa id dilompati).
+List<TeamRunPlanTask> teamRunPlanTasks(Map<String, dynamic> report) {
+  final plan = (report['plan'] as List? ?? const []);
+  final deps = <String, List<String>>{};
+  final order = <String>[];
+  for (final raw in plan) {
+    if (raw is! Map) continue;
+    final id = raw['id']?.toString() ?? '';
+    if (id.isEmpty || order.contains(id)) continue;
+    order.add(id);
+    deps[id] = [
+      for (final d in (raw['depends_on'] as List? ?? const []))
+        if (d.toString().isNotEmpty) d.toString(),
+    ];
+  }
+  bool? statusOf(String id) {
+    for (final n in (report['nodes'] as List? ?? const [])) {
+      if (n is! Map) continue;
+      if (n['node_id']?.toString() == id) return n['ok'] == true;
+    }
+    return null;
+  }
+
+  final tasks = <TeamRunPlanTask>[];
+  for (final id in order) {
+    Map? spec;
+    for (final raw in plan) {
+      if (raw is Map && raw['id']?.toString() == id) spec = raw;
+    }
+    final dependsOn = deps[id] ?? const <String>[];
+    tasks.add(
+      TeamRunPlanTask(
+        id: id,
+        prompt:
+            (spec?['prompt']?.toString() ?? '').trim(),
+        agentId: spec?['agent_id']?.toString(),
+        dependsOn: dependsOn,
+        level: _dagLevel(id, deps),
+        ok: statusOf(id),
+      ),
+    );
+  }
+  tasks.sort((a, b) {
+    final c = a.level.compareTo(b.level);
+    return c != 0 ? c : order.indexOf(a.id).compareTo(order.indexOf(b.id));
+  });
+  return tasks;
+}
+
+int _dagLevel(String id, Map<String, List<String>> deps,
+    {Set<String>? visiting}) {
+  final direct = deps[id];
+  if (direct == null || direct.isEmpty) return 0;
+  final seen = visiting ?? <String>{};
+  if (!seen.add(id)) return 0;
+  var max = -1;
+  for (final dep in direct) {
+    if (!deps.containsKey(dep)) continue;
+    final l = _dagLevel(dep, deps, visiting: seen);
+    if (l > max) max = l;
+  }
+  return max + 1;
 }

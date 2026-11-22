@@ -1,6 +1,6 @@
 # Fase E — Implementasi A2UI (Generative UI) untuk Tiko-Agent
 
-**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); sebagian E5 selesai (ApprovalSheet, surface ringkasan riset) — tersisa DAG view run team dan opsi `openUrl` allowlist.
+**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); sebagian E5 selesai (ApprovalSheet, surface ringkasan riset, DAG view run team) — tersisa opsi `openUrl` allowlist.
 
 **Terakhir diperbarui:** November 2026 (setelah merge PR #146 / Fase D).
 
@@ -16,7 +16,8 @@
 | E4 — skeleton streaming | ✅ (batch tetap diaplikasikan atomik di akhir turn) | `extractA2uiBlocks(includeStreaming:)` / `splitA2uiSegments` memandirikan blok `complete: false` (`agent_a2ui.dart`); `_A2uiStreamingSkeleton` di `tiko_message_view.dart` |
 | E5 — ApprovalSheet visual | ✅ | `ApprovalSheet` (risk low\|medium\|high, summary, commands[] ≤ 8) tervalidasi `_validateProperty` (`agent_a2ui.dart`), dirender `_buildApprovalSheet` (`a2ui_surface_view.dart`) dengan chip risiko + perintah mono; tombol setuju/tolak tetap `Button` terpisah agar anti-replay tetap berlaku; sistem prompt diarahkan |
 | E5 — surface ringkasan dari research-run (Fase D) | ✅ | `researchRunSurfaceMessages(ResearchRunRecord)` (`packages/tiko_runtime/lib/src/a2ui_research.dart`): heading pertanyaan + metric status/token/tool + daftar query + laporan mono + error bila gagal; tervalidasi `parseA2uiMessages` (whitelist sama); scheduler job riset meng-ingest best-effort ke sesi milik job (`tiko_runtime.dart`) sehingga muncul di panel Surface & event `surface.created` |
-| E5 — DAG view run team, `openUrl` allowlist | ❌ menyusul | — |
+| E5 — DAG view run team | ✅ | halaman Runs (`apps/agent_flutter/lib/ui/runs_page.dart`): bagian “RUN TEAM (Fase C)” dari `GET /v1/teams/runs` (`teamRuns()` di `agent_api_client.dart`/`agent_repository.dart`, muat lazy + best-effort di `main.dart`); sheet DAG `teamRunPlanTasks` — hitung level dependency, indentasi, status per node, deps, sintesis/review; fail-closed terhadap laporan korup |
+| E5 — `openUrl` allowlist (opsi ekstra) | ❌ menyusul | — |
 
 **Catatan penyimpangan dari desain awal:** implementasi memakai format wire A2UI v1.0 resmi (komponen `id`+`component`+properti flat, `child`/`children` per id, `version` pada envelope) dan renderer native milik Tiko (whitelist yang sama) sebagai pengganti dependensi `a2ui_flutter` — tetap di balas dengan lapisan ACL yang sama: hanya `apps/tiko_widgets/lib/src/a2ui/` yang menyentuh detail wire, sisanya menunggu tipe Tiko. Pesan RPC fungsi dua arah (`callRendererFunction`, `agentFunctionResponse`, dst.) ditolak dengan pesan jelas sampai fase berikutnya.
 
@@ -257,7 +258,7 @@ apps/tiko_widgets/lib/src/
 | **Bot Manager** (`bot_manager_view.dart`) | tab baru **Kartu dari Bot**: semua surface yang `origin=bot:<id>` terkumpul; klik kartu → detail `TikoSurfaceView`. Bot bisa "menampilkan status sendiri" tanpa mengubah kode halaman. |
 | **Kanban / Tasks** (`tasks_view.dart`) | kartu kolom tertentu dirender `KanbanCard` via surface bila tersedia; trik: task riset Fase D yang selesai menyisipkan surface ringkasan (dibuat `ResearchKanbanTracker`, opsional) sehingga kolom selesai bisa diklik → panel laporan. |
 | **Automation** (`automation_view.dart`) | agen bisa men-generate **form terjadwal** (cron, tz, pertanyaan) — tombol kirim langsung memanggil `POST`/`PUT` job yang sudah ada (mengembalikan pertanyaan cron yang biasanya harus diinput manual). |
-| **Team run** (`runs_page.dart`) | laporan run Fase C dilengkapi surface DAG ringkas (katalog kustom `Chart` + `KanbanCard`) bila generator mengirimnya; fallback markdown seperti sekarang. |
+| **Team run** (`runs_page.dart`) | ✅ E5: bagian “RUN TEAM (Fase C)” — laporan `/v1/teams/runs` dengan DAG sheet (`teamRunPlanTasks`: level dependency untuk indentasi, status node, deps, sintesis/review); load lazy + best-effort. |
 | **MCP / Security** | permintaan approval dirender `ApprovalSheet` (tetap ada tombol approve/deny backend lama). |
 | **Panel Surface global** | halaman baru kecil (`surfaces_view.dart`): daftar semua surface aktif + filter sesi; pintu masuk J2. |
 

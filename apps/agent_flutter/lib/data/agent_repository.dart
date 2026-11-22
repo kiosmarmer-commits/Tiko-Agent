@@ -79,6 +79,9 @@ abstract class AgentRepository {
   Future<List<Map<String, dynamic>>> surfaces({String? sessionKey});
   Future<Map<String, dynamic>?> surface(String surfaceId);
   Future<bool> deleteSurface(String surfaceId);
+
+  /// Laporan run team Fase C untuk DAG view halaman Runs (read-only).
+  Future<List<Map<String, dynamic>>> teamRuns();
   Future<CuratedMemoryInfo> curatedMemory();
   Future<CuratedMemoryInfo> setCuratedMemory({required String file, required String text});
   Future<LayersSnapshot> layered({String? query, int? limit});
@@ -370,6 +373,10 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<bool> deleteSurface(String surfaceId) =>
       _guard(() => _client.deleteSurface(surfaceId));
+
+  @override
+  Future<List<Map<String, dynamic>>> teamRuns() =>
+      _guard(_client.listTeamRuns);
 
   @override
   Future<CuratedMemoryInfo> curatedMemory() async => CuratedMemoryInfo.fromMap(
