@@ -12,6 +12,13 @@ import 'skill_api.dart';
 
 typedef MessageHandler = Future<String> Function(InboundMessage message);
 
+/// C4 Chat-UX: handler dengan jalur progress — frame `Map` dikirim langsung
+/// ke klien WS pemesan saat turn berjalan (`chat.status`, `chat.tool`, dll).
+typedef MessageHandlerWithProgress = Future<String> Function(
+  InboundMessage message,
+  void Function(Map<String, dynamic> frame) progress,
+);
+
 /// Exception yang dilempar callback API untuk memetakan kegagalan domain
 /// (convlict/not found/dsb.) ke respons HTTP typed via [_error] alih-alih
 /// 500 generik. (GUI-P1-04)
@@ -86,9 +93,19 @@ class HttpApiServer {
     this.memoryLayerAddProvider,
     this.memoryLayerDeleteProvider,
     this.memoryRagProvider,
+    this.onMessageWithProgress,
+    this.onCancelTurn,
   });
 
   final MessageHandler onMessage;
+
+  /// C4 Chat-UX: bila diset, WS `/v1/stream` memakainya (menggantikan
+  /// [onMessage]) dan meneruskan frame progress ke klien yang meminta.
+  final MessageHandlerWithProgress? onMessageWithProgress;
+
+  /// C4 Chat-UX: permintaan stop dari WS (`{type: cancel, session_key}`);
+  /// kembalikan true bila sinyal pembatalan terkirim (kooperatif).
+  final Future<bool> Function(String sessionKey)? onCancelTurn;
   final String authToken;
   final String host;
   final int port;
@@ -1178,6 +1195,20 @@ class HttpApiServer {
         (data) async {
           try {
             final json = jsonDecode(data as String) as Map<String, dynamic>;
+            // C4 Chat-UX: permintaan stop kooperatif. Frame cancel diproses
+            // lewat callback meskipun ada turn lain pada koneksi yang sama
+            // yang sedang berjalan (callback listen tidak saling blokir).
+            if (json['type'] == 'cancel') {
+              if (onCancelTurn == null) {
+                _sendWsEvent(ws, {'type': 'cancel_ack', 'ok': false});
+                return;
+              }
+              final ok = await onCancelTurn!(
+                json['session_key'] as String? ?? 'ws:default',
+              );
+              _sendWsEvent(ws, {'type': 'cancel_ack', 'ok': ok});
+              return;
+            }
             if (json['type'] == 'confirm_response') {
               final id = json['id'] as String? ?? '';
               final allow = json['allow'] == true;
@@ -1195,15 +1226,20 @@ class HttpApiServer {
             if (text.isEmpty) return;
             final attachments = _parseAttachments(json['attachments']);
             _sendWsEvent(ws, {'type': 'typing'});
-            final answer = await onMessage(
-              InboundMessage(
-                channel: 'http',
-                userKey: userKey,
-                sessionKey: sessionKey,
-                text: text,
-                attachments: attachments,
-              ),
+            final inbound = InboundMessage(
+              channel: 'http',
+              userKey: userKey,
+              sessionKey: sessionKey,
+              text: text,
+              attachments: attachments,
             );
+            final withProgress = onMessageWithProgress;
+            final answer = withProgress == null
+                ? await onMessage(inbound)
+                : await withProgress(
+                    inbound,
+                    (frame) => _sendWsEvent(ws, frame),
+                  );
             _sendWsEvent(ws, {'type': 'text', 'text': answer});
             _sendWsEvent(ws, {'type': 'done'});
             await ws.close();

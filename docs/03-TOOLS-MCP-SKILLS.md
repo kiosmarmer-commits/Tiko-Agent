@@ -90,6 +90,35 @@ Setiap proxy diberi nama `mcp_<serverId>_<originalToolName>`. Built-in tidak dap
 
 **Belum didukung:** resume/cursor untuk GET SSE; OAuth dynamic client registration. Retry `tools/call` sengaja tidak transparan karena operasi bisa non-idempotent. Auth tetap header SecretRef statis. URL HTTP admin-configured menolak user-info/fragment/control chars, tetapi loader tidak menerapkan `SsrfGuard`; hanya operator tepercaya boleh mengubah URL dan jaringan deployment harus membatasi egress. Jalur aktif adalah `http_client.dart` (`HttpMcpClient`); API standalone legacy `mcp/streamable_http.dart` sudah dihapus karena tidak pernah dipakai `McpToolLoader`.
 
+### Tiko sebagai MCP Server
+
+Kebalikan dari MCP client di atas: Tiko juga bisa **menjadi** server MCP sehingga AI agent lain (Claude Desktop, Hermes, editor dengan klien MCP, dll.) dapat mengendalikan Tiko secara penuh melalui protokol standar. Implementasi: `McpAgent` di `packages/agent_tools/lib/src/mcp/agent_server.dart`, diekspos lewat command CLI `tiko mcp`. Status: **Implemented (stdio saja)**.
+
+- **Transport**: JSON-RPC 2.0 newline-delimited stdio. Log hanya boleh ke stderr — stdout murni framing JSON-RPC. Belum ada Streamable HTTP transport untuk jalur server.
+- **Handshake**: `initialize` menjawab `protocolVersion` (echo versi klien bila termasuk yang didukung, else `2024-11-05`), `capabilities: {tools: {listChanged: false}}`, `serverInfo: {name: tiko-agent, version: tikoVersion}`. `notifications/initialized` dan `notifications/cancelled` diabaikan tanpa respons. `ping` menjawab `{}`. Method/JSON tidak valid memakai error JSON-RPC standar (`-32601`/`-32700`).
+- **Tools yang diekspos** (masing-masing membungkus runtime Tiko penuh, bukan mode degraded):
+  - `tiko_chat {text, session_key?}` — satu turn ReAct agent loop penuh via `rt.chatWithStatus` (sesi `mcp:<session_key>`, channel `mcp`), termasuk semua tool internal, memory, skill, dan gate. Footer status jujur ditambahkan pada jawaban: `[status: ok/error; tool_calls: N; tokens: T; retryable: …]`.
+  - `tiko_cancel {session_key?}` — sinyal pembatalan turn kooperatif via `rt.cancelTurn`.
+  - `tiko_tools` — daftar tool internal Tiko (nama, deskripsi, level risiko) dari `rt.registry.specs`. Ini daftar kapabilitas agent loop, bukan pintu eksekusi tool tanpa gate.
+  - `tiko_sessions` — daftar sesi tersimpan (id, channel, judul, jumlah turn).
+  - `tiko_status` — versi runtime dan jumlah tool terdaftar.
+- **Approval fail-closed**: `tiko_chat` tidak mengoper `confirm`, jadi tool berisiko masuk antrian approval dan harus disetujui secara eksplisit dengan `tiko approve <id>` di terminal Tiko (atau panel web). Ini konsisten dengan jalur headless HTTP.
+- **Contoh konfigurasi klien** (mis. Claude Desktop / Hermes / klien MCP lain):
+
+```json
+{
+  "mcpServers": {
+    "tiko": {
+      "command": "tiko",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+- **Batasan jujur**: hanya stdio (t belum ada Streamable HTTP server transport); progres turn tidak di-stream ke klien MCP (satu respons final per `tools/call`); klien MCP lain tidak bisa mengintip frame tool per-tool seperti GUI web; sesi MCP terpisah dari sesi CLI/web (`mcp:` prefix) sehingga memori/riwayat lintas kanalan tidak bercampur.
+- **Test**: `packages/agent_tools/test/mcp_agent_server_test.dart` — handshake, tools/list, tools/call (sukses, tool tak dikenal, handler lempar exception), ping, -32601, notification tanpa output, -32700.
+
 ## 5. Skills lifecycle
 
 Skill disimpan sebagai `skills/<slug>/SKILL.md`. Runtime memuat skill dari workspace. Status di frontmatter bukan bukti approval: saat load status dinormalisasi kembali menjadi draft; status approved/trial/retired dipulihkan hanya dari ledger jika fingerprint konten masih cocok.

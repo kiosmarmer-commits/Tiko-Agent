@@ -45,6 +45,7 @@ export 'src/browser_dialog_tool.dart';
 export 'src/browser_vault_tool.dart';
 export 'src/openai_api.dart';
 export 'src/acp_agent.dart';
+export 'src/mcp/agent_server.dart';
 export 'src/ide_integration.dart';
 export 'src/skills_hub.dart';
 export 'src/skills_hub_tool.dart';

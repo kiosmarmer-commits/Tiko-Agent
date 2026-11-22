@@ -488,7 +488,12 @@ Future<void> main(List<String> args) async {
     return 'Feedback ${positive ? '👍' : '👎'} untuk skill "$slug" dicatat.';
   }
 
-  Future<void> handleMessage(InboundMessage m, {Gateway? replyVia}) async {
+  Future<void> handleMessage(
+    InboundMessage m, {
+    Gateway? replyVia,
+    void Function(String toolName)? onToolStart,
+    void Function(ToolCallTrace trace)? onToolTrace,
+  }) async {
     if (!rateLimiter.allow(m.userKey)) {
       await replyVia?.send(
         OutboundMessage(
@@ -595,6 +600,8 @@ Future<void> main(List<String> args) async {
       userKey: m.userKey,
       confirm: confirm,
       onTextDelta: streamer?.add,
+      onToolStart: onToolStart,
+      onToolTrace: onToolTrace,
       attachments: m.attachments,
     );
 
@@ -686,6 +693,50 @@ Future<void> main(List<String> args) async {
       return reply;
     }
 
+    /// C4 Chat-UX: jalur WS dengan frame progress live — status mulai/selesai
+    /// turn, nama tool yang mulai dieksekusi, dan per-tool selesai (durasi
+    /// nyata, args tersanitasi runtime; hanya `path` yang diteruskan untuk
+    /// kartu file). Socket ditutup gateway setelah `done` seperti biasa.
+    Future<String> wsMessage(
+      InboundMessage m,
+      void Function(Map<String, dynamic> frame) progress,
+    ) async {
+      progress({
+        'type': 'chat.status',
+        'state': 'running',
+        'session': m.sessionKey,
+      });
+      final c = Completer<String>();
+      await handleMessage(
+        m,
+        replyVia: _CollectGateway(c),
+        onToolStart: (name) =>
+            progress({'type': 'chat.toolStart', 'name': name}),
+        onToolTrace: (t) => progress({
+              'type': 'chat.tool',
+              'name': t.name,
+              'is_error': t.isError,
+              'duration_ms': t.durationMs,
+              if (t.args['path'] is String) 'path': t.args['path'],
+            }),
+      );
+      String reply;
+      try {
+        reply = await c.future.timeout(const Duration(seconds: 180));
+      } catch (_) {
+        reply = '(timeout)';
+      }
+      for (final block in extractGenUiBlocks(reply)) {
+        uiActions.register(m.sessionKey, block.spec);
+      }
+      progress({
+        'type': 'chat.status',
+        'state': 'done',
+        'session': m.sessionKey,
+      });
+      return reply;
+    }
+
     final webRootDir = _findWebRoot();
     try {
       api = HttpApiServer(
@@ -695,6 +746,8 @@ Future<void> main(List<String> args) async {
         webhookEndpoint: webhooks,
         webRoot: webRootDir,
         onMessage: httpMessage,
+        onMessageWithProgress: wsMessage,
+        onCancelTurn: (sessionKey) async => rt.cancelTurn(sessionKey),
         uiActionHandler: (sessionKey, actionId, values) async {
           uiActions.validateAndConsume(sessionKey, actionId, values);
           final text = values.isEmpty

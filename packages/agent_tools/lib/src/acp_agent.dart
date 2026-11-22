@@ -274,7 +274,11 @@ class AcpAgent {
     this.sessionLoader,
     Stream<String>? input,
     void Function(String line)? output,
-  })  : _input = input ?? stdin.transform(utf8.decoder),
+  })  : _input = input ??
+            // stdin must be line-delimited: utf8.decoder alone emits decoded
+            // chunks (possibly several JSON messages at once), so a
+            // LineSplitter is required for real stdio pipes.
+            stdin.transform(utf8.decoder).transform(const LineSplitter()),
         _output = output ?? ((line) => stdout.writeln(line)) {
     _dispatcher = AcpDispatcher(
       handler: handler,

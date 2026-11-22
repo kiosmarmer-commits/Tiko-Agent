@@ -96,6 +96,8 @@ class AgentLoop {
     this.synthLlm,
     this.skillEval = const SkillEvalConfig(),
     this.onTextDelta,
+    this.onToolCallStart,
+    this.onToolTrace,
   });
 
   final Router router;
@@ -112,6 +114,16 @@ class AgentLoop {
   /// delta themselves; the final reply still passes through the normal
   /// output guard.
   final void Function(String delta)? onTextDelta;
+
+  /// C4 Chat-UX: dipanggil sebelum tiap tool dalam satu batch mulai dijalankan
+  /// (nama saja, tanpa args). Pemanggil memakainya untuk status strip live;
+  /// eksekusi paralel berarti urutan antar start tidak dijamin.
+  final void Function(ToolCall call)? onToolCallStart;
+
+  /// C4 Chat-UX: dipanggil setelah tiap tool selesai — trace berisi nama,
+  /// args tersanitasi, status error, dan durasi. Kegagalan callback TIDAK
+  /// diperbolehkan menghentikan turn (pemanggil wajib guard sendiri).
+  final void Function(ToolCallTrace trace)? onToolTrace;
   final AgentConfig config;
   final String workspacePath;
   final void Function(
@@ -407,6 +419,9 @@ class AgentLoop {
         // cancellation token: a cancelled turn stops waiting on tool results
         // (cooperative — long-running tools also observe the token via
         // ToolContext.cancelToken and should stop early on their own).
+        for (final call in allowed) {
+          onToolCallStart?.call(call);
+        }
         final runner = ParallelToolRunner(executor);
         final executed = await cancel.guard(
           runner.runAll(
@@ -429,15 +444,15 @@ class AgentLoop {
           if (result.isError) success = false;
           _lastToolNames.add(call.name);
           executedToolNames.add(call.name);
-          _lastToolTraces.add(
-            ToolCallTrace(
-              name: call.name,
-              args: sanitizer?.sanitizeArgs(call.args) ??
-                  Map<String, dynamic>.of(call.args),
-              isError: result.isError,
-              durationMs: result.durationMs ?? 0,
-            ),
+          final trace = ToolCallTrace(
+            name: call.name,
+            args: sanitizer?.sanitizeArgs(call.args) ??
+                Map<String, dynamic>.of(call.args),
+            isError: result.isError,
+            durationMs: result.durationMs ?? 0,
           );
+          _lastToolTraces.add(trace);
+          onToolTrace?.call(trace);
           if (!result.isError && ToolTrust.isExternalTaintSource(call.name)) {
             taintMark?.call(session.id);
           }

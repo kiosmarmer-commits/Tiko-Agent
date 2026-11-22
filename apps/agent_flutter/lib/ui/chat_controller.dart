@@ -34,6 +34,30 @@ class ChatController extends ChangeNotifier {
   ConfirmRequest? pendingConfirm;
   bool useStreaming = true;
 
+  /// C4 Chat-UX: status strip turn aktif — nama tool yang sedang dieksekusi
+  /// (dari frame `chat.toolStart`) dan sinyal stop yang sudah dikirim.
+  String? activeTool;
+  bool stopRequested = false;
+
+  /// C4 Chat-UX: trace tool turn terakhir (`chat.tool`) untuk ringkasan
+  /// collapsible + kartu file otomatis; nama + durasi + status error.
+  final List<Map<String, dynamic>> lastTurnTrace = [];
+
+  /// C4: minta daemon menghentikan turn aktif (kooperatif via cancel token
+  /// runtime). Tidak ada jaminan langsung; UI menampilkan "Menghentikan…"
+  /// sampai frame akhir (done/error) datang.
+  Future<void> stop() async {
+    if (!busy || stopRequested) return;
+    stopRequested = true;
+    notifyListeners();
+    try {
+      await repo.cancelTurn(sessionKey);
+    } catch (_) {
+      // Kegagalan jaringan saat cancel tidak mengubah hasil turn yang
+      // tetap mengalir lewat frame done/error; strip menandai jujur.
+    }
+  }
+
   Future<void> checkOnline() async {
     online = await repo.health();
     if (online) {
@@ -68,6 +92,9 @@ class ChatController extends ChangeNotifier {
     messages.add({'role': 'assistant', 'text': '…'});
     notifyListeners();
     final aiIndex = messages.length - 1;
+    activeTool = null;
+    stopRequested = false;
+    lastTurnTrace.clear();
 
     try {
       if (useStreaming) {
@@ -78,8 +105,27 @@ class ChatController extends ChangeNotifier {
           if (type == 'typing') {
             messages[aiIndex]['text'] = 'Menulis…';
             notifyListeners();
+          } else if (type == 'chat.status') {
+            final state = ev['state'] as String? ?? '';
+            if (state == 'running') {
+              messages[aiIndex]['text'] = 'Menyusun…';
+              notifyListeners();
+            }
+          } else if (type == 'chat.toolStart') {
+            activeTool = ev['name'] as String? ?? '';
+            notifyListeners();
+          } else if (type == 'chat.tool') {
+            activeTool = null;
+            lastTurnTrace.add({
+              'name': ev['name'] as String? ?? '',
+              'is_error': ev['is_error'] == true,
+              'duration_ms': (ev['duration_ms'] as num?)?.toInt() ?? 0,
+              'path': ev['path'] as String?,
+            });
+            notifyListeners();
           } else if (type == 'text') {
-            messages[aiIndex]['text'] = ev['text'] as String? ?? '';
+            final t = ev['text'] as String? ?? '';
+            if (t.isNotEmpty) messages[aiIndex]['text'] = t;
             notifyListeners();
           } else if (type == 'confirm') {
             final id = ev['id'] as String? ?? '';
@@ -113,9 +159,12 @@ class ChatController extends ChangeNotifier {
             notifyListeners();
           } else if (type == 'done') {
             final cur = messages[aiIndex]['text'];
-            if (cur == '…' || cur == 'Menulis…') {
-              messages[aiIndex]['text'] = '(selesai)';
+            if (cur == '…' || cur == 'Menulis…' || cur == 'Menyusun…') {
+              messages[aiIndex]['text'] =
+                  stopRequested ? '(turn dihentikan)' : '(selesai)';
             }
+            _applyTurnFiles(aiIndex);
+            activeTool = null;
             notifyListeners();
           }
         }
@@ -133,7 +182,29 @@ class ChatController extends ChangeNotifier {
       notifyListeners();
     } finally {
       busy = false;
+      activeTool = null;
       notifyListeners();
+    }
+  }
+
+  /// C4 + C3: sumber OTOMATIS kartu file chat — path dari frame `chat.tool`
+  /// (arg `path` tool file builtin, sudah tersanitasi runtime); flag
+  /// "berubah" hanya untuk tool tulis. Kartu tetap read-only; Diff memakai
+  /// endpoint `/v1/artifacts/diff` yang memvalidasi path di server.
+  void _applyTurnFiles(int aiIndex) {
+    const writeTools = {'write_file', 'patch_file'};
+    final files = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    for (final t in lastTurnTrace) {
+      final path = t['path'] as String?;
+      if (path == null || path.isEmpty || !seen.add(path)) continue;
+      files.add({
+        'path': path,
+        'changed': writeTools.contains(t['name']),
+      });
+    }
+    if (files.isNotEmpty) {
+      messages[aiIndex]['files'] = jsonEncode(files);
     }
   }
 
@@ -162,6 +233,8 @@ class ChatController extends ChangeNotifier {
 
   void clearChat() {
     messages.clear();
+    lastTurnTrace.clear();
+    activeTool = null;
     notifyListeners();
   }
 
