@@ -315,6 +315,73 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Budi');
     expect(find.text('Budi'), findsOneWidget);
   });
+
+  testWidgets('Tabs merender label + pane, ganti tab memindah pane (E7)',
+      (tester) async {
+    final messages = parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-tabs',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'Tabs',
+            'labels': ['Ringkas', 'Detail'],
+            'children': ['p1', 'p2'],
+          },
+          {
+            'id': 'p1',
+            'component': 'Text',
+            'text': 'panel ringkas',
+          },
+          {
+            'id': 'p2',
+            'component': 'Text',
+            'text': 'panel detail',
+          },
+        ],
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: messages),
+      ),
+    ));
+
+    expect(find.text('Ringkas'), findsOneWidget);
+    expect(find.text('panel ringkas'), findsOneWidget);
+    expect(find.text('panel detail'), findsNothing);
+    await tester.tap(find.text('Detail'));
+    await tester.pumpAndSettle();
+    expect(find.text('panel detail'), findsOneWidget);
+    expect(find.text('panel ringkas'), findsNothing);
+  });
+
+  testWidgets('List horizontal merender children sejajar (E7)', (tester) async {
+    final messages = parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-chk',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'List',
+            'axis': 'horizontal',
+            'children': ['t1', 't2'],
+          },
+          {'id': 't1', 'component': 'Text', 'text': 'kiri'},
+          {'id': 't2', 'component': 'Text', 'text': 'kanan'},
+        ],
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: messages),
+      ),
+    ));
+    expect(find.text('kiri'), findsOneWidget);
+    expect(find.text('kanan'), findsOneWidget);
+  });
 }
 
 final jsonLine =

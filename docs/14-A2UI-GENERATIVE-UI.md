@@ -1,6 +1,6 @@
 # Fase E — Implementasi A2UI (Generative UI) untuk Tiko-Agent
 
-**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); E5 selesai (ApprovalSheet, surface ringkasan riset, DAG view run team, `openUrl` allowlist); E6 selesai (form input dua arah — write-back data model + aksi `onChanged` repeatable).
+**Status:** E1–E4 terimplementasi (lihat “Status implementasi” di bawah); E5 selesai (ApprovalSheet, surface ringkasan riset, DAG view run team, `openUrl` allowlist); E6 selesai (form input dua arah — write-back data model + aksi `onChanged` repeatable); E7 selesai (komponen `List` + `Tabs`).
 
 **Terakhir diperbarui:** November 2026 (setelah merge PR #146 / Fase D).
 
@@ -18,7 +18,8 @@
 | E5 — surface ringkasan dari research-run (Fase D) | ✅ | `researchRunSurfaceMessages(ResearchRunRecord)` (`packages/tiko_runtime/lib/src/a2ui_research.dart`): heading pertanyaan + metric status/token/tool + daftar query + laporan mono + error bila gagal; tervalidasi `parseA2uiMessages` (whitelist sama); scheduler job riset meng-ingest best-effort ke sesi milik job (`tiko_runtime.dart`) sehingga muncul di panel Surface & event `surface.created` |
 | E5 — DAG view run team | ✅ | halaman Runs (`apps/agent_flutter/lib/ui/runs_page.dart`): bagian “RUN TEAM (Fase C)” dari `GET /v1/teams/runs` (`teamRuns()` di `agent_api_client.dart`/`agent_repository.dart`, muat lazy + best-effort di `main.dart`); sheet DAG `teamRunPlanTasks` — hitung level dependency, indentasi, status per node, deps, sintesis/review; fail-closed terhadap laporan korup |
 | E5 — `openUrl` allowlist (opsi ekstra) | ✅ | proxy generatif `Button` + `action.name open_url` (payload `{"url":...}`) — renderer tetap meneruskan aksi seperti action lain lewat `onAction` (tanpa eksekusi lokal); eksekusi di host: `A2uiOpenUrlPolicy` (`agent_a2ui.dart`) memvalidasi hanya https, host match persis/`*.wildcard`, prefix path, tanpa userinfo, port 443; config `a2ui.open_url_allow` (`tiko_config.dart`, default kosong = semua ditolak); handler `uiActionHandler` di `agentd.dart` memediasi sebelum anti-replay `consumeAction`, emit event `ui.open_url` |
-| E6 — form input dua arah | ✅ | input `TextField`/`CheckBox`/`ChoicePicker`/`Slider`/`DateTimeInput` boleh bawa properti `action` (`agent_a2ui.dart`): renderer memicu `onInput` per perubahan (`a2ui_surface_view.dart` — TextField debounce 600 ms + submit, Slider `onChangeEnd`, CheckBox/ChoicePicker langsung, DateTimeInput date-picker ISO); aksi input **repeatable** (`_surfaceRepeatable`, anti-replay tombol tetap sekali pakai); `writeInputValue` menulis binding `@path` ke data model (validasi tipe per komponen + tolak kontrol chars); bridge `applyInput` (`a2ui_bridge.dart`) — snapshot + event `surface.updated` origin `input`; agentd menangani `a2ui_input` (`POST /v1/ui/actions`, payload `{componentId, value}`) dan meneruskan `onChanged` ke percakapan; `TikoSurfaceOrMessageView` menyintesis `onInput` dari `onSurfaceAction` (chat inline kini meneruskan `onAction` juga) |
+| E6 — form input dua arah | ✅ | (lihat §13 Fase E6 untuk detail) — input `TextField`/`CheckBox`/`ChoicePicker`/`Slider`/`DateTimeInput` bawa `action`, write-back `@path`, aksi input repeatable |
+| E7 — komponen `List` + `Tabs` | ✅ | `List` (axis horizontal|vertical, shrink-wrap) + `Tabs` (prop `labels` 1–8 string non-kosong ≤200 char, wajib sejumlah children — tervalidasi `_validateRefs`; renderer `_A2uiTabs` hanya menampilkan pane aktif agar aman di Column chat); katalog REST `/v1/surfaces/catalogs` otomatis ikut; `Video`/`AudioPlayer`/`Modal` masih menyusul (butuh dependency media / kebijakan host dialog) | input `TextField`/`CheckBox`/`ChoicePicker`/`Slider`/`DateTimeInput` boleh bawa properti `action` (`agent_a2ui.dart`): renderer memicu `onInput` per perubahan (`a2ui_surface_view.dart` — TextField debounce 600 ms + submit, Slider `onChangeEnd`, CheckBox/ChoicePicker langsung, DateTimeInput date-picker ISO); aksi input **repeatable** (`_surfaceRepeatable`, anti-replay tombol tetap sekali pakai); `writeInputValue` menulis binding `@path` ke data model (validasi tipe per komponen + tolak kontrol chars); bridge `applyInput` (`a2ui_bridge.dart`) — snapshot + event `surface.updated` origin `input`; agentd menangani `a2ui_input` (`POST /v1/ui/actions`, payload `{componentId, value}`) dan meneruskan `onChanged` ke percakapan; `TikoSurfaceOrMessageView` menyintesis `onInput` dari `onSurfaceAction` (chat inline kini meneruskan `onAction` juga) |
 
 **Catatan penyimpangan dari desain awal:** implementasi memakai format wire A2UI v1.0 resmi (komponen `id`+`component`+properti flat, `child`/`children` per id, `version` pada envelope) dan renderer native milik Tiko (whitelist yang sama) sebagai pengganti dependensi `a2ui_flutter` — tetap di balas dengan lapisan ACL yang sama: hanya `apps/tiko_widgets/lib/src/a2ui/` yang menyentuh detail wire, sisanya menunggu tipe Tiko. Pesan RPC fungsi dua arah (`callRendererFunction`, `agentFunctionResponse`, dst.) ditolak dengan pesan jelas sampai fase berikutnya.
 
@@ -507,6 +508,11 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 - Anti-replay tombol tetap sekali pakai; aksi input tidak memakai hak anti-replay (repeatable, tervalidasi komponen input teregister + tipe nilai).
 - Acceptance: unit test repeatable/write-back (`a2ui_test.dart`), bridge test (`a2ui_bridge_test.dart`), widget test input (`a2ui_surface_view_test.dart`).
 
+### Fase E7 — Komponen layout lanjutan
+- `List` (axis horizontal|vertical, shrink-wrap) dan `Tabs` (`labels` 1–8, wajib sejumlah children) masuk whitelist parser + renderer; tervalidasi fail-closed sama dengan komponen lain.
+- Tabs hanya merender pane aktif (bukan IndexedStack) — aman di dalam Column percakapan yang tingginya tak terbatas.
+- Acceptance: unit test labels/children (`a2ui_test.dart`), widget test pindah tab + List horizontal (`a2ui_surface_view_test.dart`).
+
 ---
 
 ## 14. Inventaris uji
@@ -514,6 +520,7 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 | Area | Uji |
 |---|---|
 | Form input dua arah (E6) | `a2ui_test.dart` (repeatable vs sekali pakai, `inputTargetOf`, `writeInputValue` tipe + kontrol chars), `a2ui_bridge_test.dart` (`applyInput` model/snapshot/event + reject), `a2ui_surface_view_test.dart` (`CheckBox` → `onInput`; TextField tanpa `onInput` tetap lokal) |
+| Komponen `List` + `Tabs` (E7) | `a2ui_test.dart` (whitelist + labels sejumlah children + validasi labels), `a2ui_surface_view_test.dart` (pindah tab memindah pane; List horizontal) |
 | `agent_a2ui.dart` | JSONL/array, root tunggal, duplikat id, tipe whitelist, action regex, batas (24 pesan/120 node/depth 8/24 KiB), fallback parse error |
 | `a2ui_bridge.dart` | tool render → event `surface.created/updated`; store atomik + LRU + TTL; aksi map ke `approvals`; failure tak mengunci turn |
 | `render_a2ui` tool | valid → fence teks; tak valid → pesan error + `success:false`; alias render_ui tetap jalan |

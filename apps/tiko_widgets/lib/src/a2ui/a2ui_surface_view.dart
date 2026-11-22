@@ -158,6 +158,16 @@ class A2uiSurfaceView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: _buildChildren(context, pool, node),
         );
+      case 'List':
+        return _A2uiList(
+          horizontal: p['axis'] == 'horizontal',
+          children: _buildChildren(context, pool, node),
+        );
+      case 'Tabs':
+        return _A2uiTabs(
+          labels: (p['labels'] as List?)?.cast<String>() ?? const [],
+          panes: _buildChildren(context, pool, node),
+        );
       case 'Card':
         final child = node.childId != null ? pool[node.childId] : null;
         return Card(
@@ -542,6 +552,83 @@ class A2uiSurfaceView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// List (E7): daftar children vertikal/horizontal; shrink-wrap agar aman
+/// di dalam Column percakapan (tanpa scroll sendiri).
+class _A2uiList extends StatelessWidget {
+  const _A2uiList({required this.horizontal, required this.children});
+
+  final bool horizontal;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (horizontal) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) const SizedBox(height: 8),
+        children[i],
+      ]],
+    );
+  }
+}
+
+/// Tabs (E7): label dari prop `labels`, pane dari children (sejumlah label,
+/// tervalidasi parser). Hanya pane aktif yang dirender (bukan IndexedStack)
+/// agar aman di dalam Column percakapan yang tingginya tidak terbatas.
+class _A2uiTabs extends StatefulWidget {
+  const _A2uiTabs({required this.labels, required this.panes});
+
+  final List<String> labels;
+  final List<Widget> panes;
+
+  @override
+  State<_A2uiTabs> createState() => _A2uiTabsState();
+}
+
+class _A2uiTabsState extends State<_A2uiTabs>
+    with SingleTickerProviderStateMixin {
+  late final TabController _controller = TabController(
+    length: widget.labels.length,
+    vsync: this,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = _controller.index.clamp(0, widget.panes.length - 1);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TabBar(
+          controller: _controller,
+          isScrollable: widget.labels.length > 3,
+          tabAlignment: widget.labels.length > 3
+              ? TabAlignment.start
+              : TabAlignment.fill,
+          labelStyle: const TextStyle(fontSize: 13),
+          onTap: (_) => setState(() {}),
+          tabs: [for (final l in widget.labels) Tab(text: l)],
+        ),
+        if (widget.panes.isNotEmpty) widget.panes[index],
+      ],
     );
   }
 }
