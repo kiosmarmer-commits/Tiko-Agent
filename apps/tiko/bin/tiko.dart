@@ -64,6 +64,12 @@ Safety:
   approve <id>               setujui melalui API daemon
   deny <id>                  tolak melalui API daemon
 
+Surface (A2UI, Fase E):
+  surface list [--session K] daftar surface tersimpan (default: semua sesi)
+  surface show <id>          detail surface: komponen + data model
+  surface delete <id>        hapus surface
+  surface catalogs           katalog komponen yang di-whitelist
+
 Direct (tanpa LLM):
   calc <ekspresi>
   datetime
@@ -147,6 +153,18 @@ Future<void> main(List<String> argv) async {
   // settle an approval held by the daemon process.
   if (cmd == 'approve' || cmd == 'deny' || cmd == 'approvals') {
     await _handleRemoteApprovals(configPath, cmd, args, jsonOut: jsonOut);
+    return;
+  }
+
+  // Surface A2UI juga milik daemon (state per sesi + snapshot disk) —
+  // runtime kedua lokal tidak punya state yang sama.
+  if (cmd == 'surface') {
+    await _handleRemoteSurfaces(
+      configPath,
+      args.isEmpty ? 'list' : args.first,
+      args.isEmpty ? const [] : args.sublist(1),
+      jsonOut: jsonOut,
+    );
     return;
   }
 
@@ -1738,6 +1756,140 @@ Future<void> _handleRemoteApprovals(
     }
   } catch (error) {
     stderr.writeln('Gagal mengakses approval daemon: $error');
+    exitCode = 1;
+  }
+}
+
+/// Handler perintah `tiko surface ...` (Fase E3): semua operasi memakai
+/// API daemon (`/v1/surfaces*`) karena state surface tersimpan di proses
+/// daemon (memori + snapshot disk), bukan di runtime CLI ini.
+Future<void> _handleRemoteSurfaces(
+  String configPath,
+  String command,
+  List<String> args, {
+  required bool jsonOut,
+}) async {
+  final (config, issues) = TikoConfig.load(configPath);
+  final fatal = issues.where((issue) => issue.fatal).toList();
+  if (fatal.isNotEmpty) {
+    for (final issue in fatal) {
+      stderr.writeln(issue);
+    }
+    stderr.writeln('Perbaiki config sebelum mengakses surface daemon.');
+    exitCode = 1;
+    return;
+  }
+
+  final configDir = p.dirname(p.absolute(configPath));
+  final root = p.basename(configDir) == 'config' ? p.dirname(configDir) : configDir;
+  final dataDir = p.isAbsolute(config.dataDir)
+      ? config.dataDir
+      : p.normalize(p.join(root, config.dataDir));
+  String? token;
+  try {
+    token = await ApiTokenStore.read(dataDir);
+  } catch (error) {
+    stderr.writeln('File token daemon tidak aman/tidak dapat dibaca: $error');
+    exitCode = 1;
+    return;
+  }
+  if (token == null || token.isEmpty) {
+    stderr.writeln('Token daemon tidak ditemukan di ${ApiTokenStore.pathFor(dataDir)}.');
+    stderr.writeln('Jalankan daemon dengan API aktif, lalu ulangi perintah.');
+    exitCode = 1;
+    return;
+  }
+
+  final lockInfo = await RuntimeLock(p.join(dataDir, 'tiko.lock')).read();
+  final lockPort = lockInfo != null && RuntimeLock.isAlive(lockInfo.pid)
+      ? lockInfo.port
+      : null;
+  final envPort = int.tryParse(Platform.environment['API_PORT'] ?? '');
+  final daemonPort = envPort != null && envPort >= 1 && envPort <= 65535
+      ? envPort
+      : lockPort ?? config.apiPort;
+  final remote = TikoRemoteClient(
+    baseUrl: 'http://127.0.0.1:$daemonPort',
+    token: token,
+  );
+
+  String? sessionFilter;
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] == '--session' && i + 1 < args.length) {
+      sessionFilter = args[++i];
+    }
+  }
+  final positional = [
+    for (var i = 0; i < args.length; i++)
+      if (args[i] != '--session' &&
+          (i == 0 || args[i - 1] != '--session'))
+        args[i]
+  ];
+
+  try {
+    switch (command) {
+      case 'list':
+        final list = await remote.surfaces(sessionKey: sessionFilter);
+        if (jsonOut) {
+          stdout.writeln(jsonEncode({'surfaces': list}));
+        } else if (list.isEmpty) {
+          stdout.writeln('(tidak ada surface)');
+        } else {
+          for (final item in list) {
+            stdout.writeln(
+              '${item['surfaceId']}\t${item['sessionKey']}\t'
+              '${item['updatedAt']}',
+            );
+          }
+        }
+      case 'show':
+        if (positional.isEmpty) {
+          stderr.writeln('tiko surface show <id>');
+          exitCode = 2;
+          return;
+        }
+        final doc = await remote.surface(positional.first);
+        if (doc == null) {
+          stderr.writeln('Surface tidak ditemukan: ${positional.first}');
+          exitCode = 1;
+          return;
+        }
+        stdout.writeln(jsonOut ? jsonEncode(doc) : const JsonEncoder.withIndent('  ').convert(doc));
+      case 'delete':
+        if (positional.isEmpty) {
+          stderr.writeln('tiko surface delete <id>');
+          exitCode = 2;
+          return;
+        }
+        final ok = await remote.deleteSurface(positional.first);
+        if (!ok) {
+          stderr.writeln('Surface tidak ditemukan atau gagal dihapus: ${positional.first}');
+          exitCode = 1;
+          return;
+        }
+        if (jsonOut) {
+          stdout.writeln(jsonEncode({'ok': true, 'id': positional.first}));
+        } else {
+          stdout.writeln('dihapus ${positional.first}');
+        }
+      case 'catalogs':
+        final res = await remote.surfaceCatalogs();
+        if (jsonOut) {
+          stdout.writeln(jsonEncode(res));
+        } else {
+          for (final cat in res['catalogs'] as List<dynamic>) {
+            final catMap = cat as Map<String, dynamic>;
+            stdout.writeln(
+              '${catMap['catalogId']}\t${(catMap['components'] as List).join(', ')}',
+            );
+          }
+        }
+      default:
+        stderr.writeln('surface list|show <id>|delete <id>|catalogs');
+        exitCode = 2;
+    }
+  } catch (error) {
+    stderr.writeln('Gagal mengakses surfaces daemon: $error');
     exitCode = 1;
   }
 }

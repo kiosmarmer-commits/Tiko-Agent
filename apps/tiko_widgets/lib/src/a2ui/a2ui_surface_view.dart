@@ -621,3 +621,47 @@ class _A2uiLinePainter extends CustomPainter {
   bool shouldRepaint(covariant _A2uiLinePainter oldDelegate) =>
       oldDelegate.values.length != values.length;
 }
+
+/// Merender satu surface dari bentuk snapshot REST (`/v1/surfaces/<id>`):
+/// komponen flat wire + data model di-parse ulang secara fail-closed —
+/// record yang di-opa/tampered akan jatuh ke kartu error, bukan crash.
+class A2uiSurfaceRecordView extends StatelessWidget {
+  const A2uiSurfaceRecordView({super.key, required this.record, this.onAction});
+
+  final Map<String, dynamic> record;
+
+  final void Function(
+          String surfaceId, String actionName, Map<String, dynamic> payload)?
+      onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      final surfaceId = record['surfaceId']?.toString() ?? '';
+      final rawComponents = record['components'];
+      if (surfaceId.isEmpty || rawComponents is! List || rawComponents.isEmpty) {
+        return const _ErrorCard(message: 'record surface tidak lengkap');
+      }
+      final set = A2uiSurfaceSet();
+      set.apply(parseA2uiMessages({
+        'version': a2uiVersion,
+        'createSurface': {
+          'surfaceId': surfaceId,
+          if (record['catalogId'] is String) 'catalogId': record['catalogId'],
+          'components': rawComponents,
+          if (record['dataModel'] is Map) 'dataModel': record['dataModel'],
+        },
+      }));
+      final surface = set.surface(surfaceId);
+      if (surface == null) {
+        return const _ErrorCard(message: 'surface tidak dapat dirender');
+      }
+      return A2uiSurfaceView(surface: surface, onAction: onAction);
+    } on FormatException catch (error) {
+      return _ErrorCard(
+          message: 'surface tidak dapat dirender: ${error.message}');
+    } catch (error) {
+      return _ErrorCard(message: 'surface tidak dapat dirender: $error');
+    }
+  }
+}

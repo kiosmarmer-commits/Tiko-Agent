@@ -29,6 +29,7 @@ import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
 import 'ui/multi_pane_view.dart';
 import 'ui/runs_page.dart';
+import 'ui/surfaces_view.dart';
 import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
@@ -137,6 +138,9 @@ class _AgentAppState extends State<AgentApp> {
   RunsSnapshot? runsSnapshot;
   bool runsLoading = false;
   String? runsError;
+  List<Map<String, dynamic>>? surfacesSnapshot;
+  bool surfacesLoading = false;
+  String? surfacesError;
   CuratedMemoryInfo? curatedMemoryInfo;
   LayersSnapshot? layersSnapshot;
   RagSourcesInfo? ragSources;
@@ -408,6 +412,22 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  Future<void> _loadSurfaces() async {
+    setState(() {
+      surfacesLoading = true;
+      surfacesError = null;
+    });
+    try {
+      final list = await repo.surfaces();
+      if (!mounted) return;
+      setState(() => surfacesSnapshot = list);
+    } catch (e) {
+      if (mounted) setState(() => surfacesError = e.toString());
+    } finally {
+      if (mounted) setState(() => surfacesLoading = false);
+    }
+  }
+
   void updateConnection({required String base, required String tok}) {
     setState(() {
       baseUrl = base;
@@ -630,6 +650,9 @@ class _AgentAppState extends State<AgentApp> {
     }
     if (next == AppRoute.runs && runsSnapshot == null) {
       unawaited(_loadRuns());
+    }
+    if (next == AppRoute.surfaces && surfacesSnapshot == null) {
+      unawaited(_loadSurfaces());
     }
     // GUI-P2-03: inspector pane di chat butuh snapshot runs saat pertama
     // kali ditampilkan pada mode multi-pane.
@@ -1006,6 +1029,20 @@ class _AgentAppState extends State<AgentApp> {
           loading: runsLoading,
           error: runsError,
           onRefresh: _loadRuns,
+        );
+      case AppRoute.surfaces:
+        return SurfacesPage(
+          surfaces: surfacesSnapshot,
+          online: chat.online,
+          loading: surfacesLoading,
+          error: surfacesError,
+          onRefresh: _loadSurfaces,
+          onShowDetail: repo.surface,
+          onDelete: (surfaceId) async {
+            final deleted = await repo.deleteSurface(surfaceId);
+            await _loadSurfaces();
+            return deleted;
+          },
         );
       case AppRoute.memory:
         return MemoryExplorerPage(

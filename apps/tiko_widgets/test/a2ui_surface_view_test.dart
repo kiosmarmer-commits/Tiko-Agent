@@ -120,6 +120,33 @@ void main() {
     expect(find.textContaining('tidak dapat dirender'), findsOneWidget);
   });
 
+  testWidgets('A2uiSurfaceRecordView: record valid dirender, tampered gagal aman',
+      (tester) async {
+    final valid = {
+      'surfaceId': 's-rec',
+      'catalogId': 'tiko.basic.v1',
+      'components': [
+        {'id': 'root', 'component': 'Metric', 'label': 'CPU', 'value': '87%'},
+      ],
+      'dataModel': <String, dynamic>{},
+    };
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: A2uiSurfaceRecordView(record: valid)),
+    ));
+    expect(find.textContaining('CPU'), findsOneWidget);
+
+    final tampered = {
+      ...valid,
+      'components': [
+        {'id': 'not-root', 'component': 'Divider'},
+      ],
+    };
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: A2uiSurfaceRecordView(record: tampered)),
+    ));
+    expect(find.textContaining('tidak dapat dirender'), findsOneWidget);
+  });
+
   testWidgets('TikoSurfaceOrMessageView mencampur markdown + genui + a2ui',
       (tester) async {
     final text = 'Ringkasan:\n'

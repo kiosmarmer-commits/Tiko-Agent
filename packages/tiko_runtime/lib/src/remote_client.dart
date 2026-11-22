@@ -71,6 +71,85 @@ class TikoRemoteClient {
     }
   }
 
+  /// A2UI surfaces (Fase E3): daftar snapshot surface per sesi.
+  Future<List<Map<String, dynamic>>> surfaces({String? sessionKey}) async {
+    final client = HttpClient();
+    try {
+      final q = sessionKey == null || sessionKey.isEmpty
+          ? ''
+          : '?session_key=${Uri.encodeQueryComponent(sessionKey)}';
+      final req = await client.getUrl(Uri.parse('$baseUrl/v1/surfaces$q'));
+      req.headers.set('Authorization', 'Bearer $token');
+      final res = await req.close().timeout(const Duration(seconds: 8));
+      final body = await res.transform(utf8.decoder).join();
+      if (res.statusCode >= 400) {
+        throw HttpException('HTTP ${res.statusCode}: $body');
+      }
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final items = (json['surfaces'] as List<dynamic>? ?? [])
+          .map((item) => Map<String, dynamic>.from(item as Map));
+      return items.toList();
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Detail surface (dengan body komponen + data model); null bila 404.
+  Future<Map<String, dynamic>?> surface(String surfaceId) async {
+    final client = HttpClient();
+    try {
+      final safeId = Uri.encodeComponent(surfaceId);
+      final req = await client.getUrl(Uri.parse('$baseUrl/v1/surfaces/$safeId'));
+      req.headers.set('Authorization', 'Bearer $token');
+      final res = await req.close().timeout(const Duration(seconds: 8));
+      final body = await res.transform(utf8.decoder).join();
+      if (res.statusCode == 404) return null;
+      if (res.statusCode >= 400) {
+        throw HttpException('HTTP ${res.statusCode}: $body');
+      }
+      return Map<String, dynamic>.from(jsonDecode(body) as Map);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Katalog komponen/katalog A2UI yang di-whitelist oleh validator.
+  Future<Map<String, dynamic>> surfaceCatalogs() async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(Uri.parse('$baseUrl/v1/surfaces/catalogs'));
+      req.headers.set('Authorization', 'Bearer $token');
+      final res = await req.close().timeout(const Duration(seconds: 8));
+      final body = await res.transform(utf8.decoder).join();
+      if (res.statusCode >= 400) {
+        throw HttpException('HTTP ${res.statusCode}: $body');
+      }
+      return Map<String, dynamic>.from(jsonDecode(body) as Map);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Hapus surface; false bila 404 / gagal HTTP >= 400.
+  Future<bool> deleteSurface(String surfaceId) async {
+    final client = HttpClient();
+    try {
+      final safeId = Uri.encodeComponent(surfaceId);
+      final req =
+          await client.deleteUrl(Uri.parse('$baseUrl/v1/surfaces/$safeId'));
+      req.headers.set('Authorization', 'Bearer $token');
+      final res = await req.close().timeout(const Duration(seconds: 8));
+      await res.drain<void>();
+      if (res.statusCode == 404) return false;
+      if (res.statusCode >= 400) {
+        throw HttpException('HTTP ${res.statusCode}');
+      }
+      return true;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<bool> shutdown() async {
     final client = HttpClient();
     try {

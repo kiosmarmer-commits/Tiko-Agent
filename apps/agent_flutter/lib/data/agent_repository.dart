@@ -76,6 +76,9 @@ abstract class AgentRepository {
   Future<bool> unbindBot(String botId, String sessionId);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
+  Future<List<Map<String, dynamic>>> surfaces({String? sessionKey});
+  Future<Map<String, dynamic>?> surface(String surfaceId);
+  Future<bool> deleteSurface(String surfaceId);
   Future<CuratedMemoryInfo> curatedMemory();
   Future<CuratedMemoryInfo> setCuratedMemory({required String file, required String text});
   Future<LayersSnapshot> layered({String? query, int? limit});
@@ -355,6 +358,18 @@ class HttpAgentRepository implements AgentRepository {
 
   @override
   Future<bool> deleteMemory(String id) => _guard(() => _client.deleteMemory(id));
+
+  @override
+  Future<List<Map<String, dynamic>>> surfaces({String? sessionKey}) =>
+      _guard(() => _client.listSurfaces(sessionKey: sessionKey));
+
+  @override
+  Future<Map<String, dynamic>?> surface(String surfaceId) =>
+      _guard(() => _client.getSurface(surfaceId));
+
+  @override
+  Future<bool> deleteSurface(String surfaceId) =>
+      _guard(() => _client.deleteSurface(surfaceId));
 
   @override
   Future<CuratedMemoryInfo> curatedMemory() async => CuratedMemoryInfo.fromMap(
