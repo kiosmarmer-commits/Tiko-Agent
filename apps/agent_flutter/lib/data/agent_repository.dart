@@ -76,6 +76,9 @@ abstract class AgentRepository {
   Future<bool> unbindBot(String botId, String sessionId);
   Future<List<MemoryFact>> memories();
   Future<bool> deleteMemory(String id);
+  Future<List<Map<String, dynamic>>> surfaces({String? sessionKey});
+  Future<Map<String, dynamic>?> surface(String surfaceId);
+  Future<bool> deleteSurface(String surfaceId);
   Future<CuratedMemoryInfo> curatedMemory();
   Future<CuratedMemoryInfo> setCuratedMemory({required String file, required String text});
   Future<LayersSnapshot> layered({String? query, int? limit});
@@ -90,8 +93,9 @@ abstract class AgentRepository {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  );
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  });
   Stream<Map<String, dynamic>> streamChat(
     String text, {
     String sessionKey,
@@ -356,6 +360,18 @@ class HttpAgentRepository implements AgentRepository {
   Future<bool> deleteMemory(String id) => _guard(() => _client.deleteMemory(id));
 
   @override
+  Future<List<Map<String, dynamic>>> surfaces({String? sessionKey}) =>
+      _guard(() => _client.listSurfaces(sessionKey: sessionKey));
+
+  @override
+  Future<Map<String, dynamic>?> surface(String surfaceId) =>
+      _guard(() => _client.getSurface(surfaceId));
+
+  @override
+  Future<bool> deleteSurface(String surfaceId) =>
+      _guard(() => _client.deleteSurface(surfaceId));
+
+  @override
   Future<CuratedMemoryInfo> curatedMemory() async => CuratedMemoryInfo.fromMap(
       await _guard(_client.memoryCurated));
 
@@ -400,9 +416,15 @@ class HttpAgentRepository implements AgentRepository {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  ) =>
-      _guard(() => _client.submitUiAction(sessionKey, actionId, values));
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  }) =>
+      _guard(() => _client.submitUiAction(
+            sessionKey,
+            actionId,
+            values,
+            surfaceId: surfaceId,
+          ));
 
   @override
   Stream<Map<String, dynamic>> streamChat(

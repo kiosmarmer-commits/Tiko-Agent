@@ -10,6 +10,7 @@ void main() {
   late String? capturedSession;
   late String? capturedAction;
   late Map<String, dynamic> capturedValues;
+  String? capturedSurfaceId;
   Object? handlerBehavior;
 
   setUp(() async {
@@ -21,10 +22,11 @@ void main() {
       onMessage: (_) async => 'ok',
       authToken: 'manager-token-0123456789abcdef',
       port: 0,
-      uiActionHandler: (sessionKey, actionId, values) async {
+      uiActionHandler: (sessionKey, actionId, values, {surfaceId}) async {
         capturedSession = sessionKey;
         capturedAction = actionId;
         capturedValues = values;
+        capturedSurfaceId = surfaceId;
         if (handlerBehavior is GenUiActionRejected) throw handlerBehavior!;
         if (handlerBehavior is Exception) throw handlerBehavior!;
         return {'ok': true, 'text': 'aksi $actionId dijalankan'};
@@ -122,5 +124,27 @@ void main() {
   test('endpoint memerlukan auth', () async {
     final result = await post({'session_key': 's', 'action_id': 'a'}, auth: false);
     expect(result['status'], 401);
+  });
+
+  test('surface_id dari aksi A2UI diteruskan ke handler', () async {
+    final result = await post({
+      'session_key': 'flutter:default',
+      'action_id': 'run_diag',
+      'values': {},
+      'surface_id': 's-ui-1',
+    });
+    expect(result['status'], 200);
+    expect(capturedSurfaceId, 's-ui-1');
+  });
+
+  test('surface_id karakter tidak aman ditolak 400', () async {
+    final result = await post({
+      'session_key': 'flutter:default',
+      'action_id': 'run_diag',
+      'values': {},
+      'surface_id': '../etc/passwd',
+    });
+    expect(result['status'], 400);
+    expect(result['body']['error'], 'invalid ui action request');
   });
 }

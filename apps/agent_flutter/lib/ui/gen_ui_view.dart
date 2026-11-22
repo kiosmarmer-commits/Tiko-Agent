@@ -3,4 +3,4 @@
 library;
 
 export 'package:tiko_widgets/tiko_widgets.dart'
-    show GenUiMessageView, GenUiView;
+    show GenUiMessageView, GenUiView, TikoSurfaceOrMessageView;

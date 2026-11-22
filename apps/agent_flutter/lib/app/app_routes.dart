@@ -7,6 +7,7 @@ enum AppRoute {
   chat,
   dashboard,
   approvals,
+  surfaces,
   sessions,
   tasks,
   skills,
@@ -46,6 +47,12 @@ const List<AppRouteInfo> kAppRoutes = [
   AppRouteInfo(AppRoute.chat, 'Chat', Icons.chat_bubble_outline),
   AppRouteInfo(AppRoute.dashboard, 'Dashboard', Icons.dashboard_outlined),
   AppRouteInfo(AppRoute.approvals, 'Approvals', Icons.verified_user_outlined),
+  AppRouteInfo(
+    AppRoute.surfaces,
+    'Surface',
+    Icons.web_asset_outlined,
+    primaryOnMobile: false,
+  ),
   AppRouteInfo(AppRoute.sessions, 'Sessions', Icons.forum_outlined),
   AppRouteInfo(
     AppRoute.tasks,

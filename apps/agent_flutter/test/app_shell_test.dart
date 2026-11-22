@@ -32,7 +32,7 @@ void main() {
           {AppRoute.tasks, AppRoute.skills, AppRoute.bots, AppRoute.providers,
               AppRoute.plugins, AppRoute.channels, AppRoute.automations,
               AppRoute.security, AppRoute.audit, AppRoute.artifacts,
-              AppRoute.runs, AppRoute.memory,
+              AppRoute.surfaces, AppRoute.runs, AppRoute.memory,
               AppRoute.events, AppRoute.logs, AppRoute.settings});
     });
   });

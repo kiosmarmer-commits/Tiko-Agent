@@ -23,7 +23,7 @@
 | 11 | [10-WEB-UI.md](10-WEB-UI.md) | Dashboard web agentd (Flutter Web), sesi cookie, auto-open |
 | 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
-| 15 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — rancangan A2UI generative-UI (desain, belum diimplementasikan) |
+| 15 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E4 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface) |
 
 ## Status implementasi
 
@@ -49,7 +49,7 @@
 | Embedded file view + kartu diff di chat (Chat-UX C3) | Implemented | `ChatArtifactPanel` di kanan chat (≥1100px) / overlay mobile; chip `@file:` di pesan; kartu file + Lihat/Diff vs `.bak`; listing global (filter per-sesi belum ada endpoint-nya); sumber otomatis kartu dari tool trace menyusul di C4 |
 | Status proses turn + tombol Stop (Chat-UX C4) | Implemented | WS frames `chat.status`/`chat.toolStart`/`chat.tool` (args tersanitasi, hanya `path` tool file); strip spinner + tool aktif; ringkasan collapsible N tool + durasi + error; Stop kooperatif via `rt.cancelTurn` (frame `cancel`/`cancel_ack`); HTTP `/v1/messages` tetap sinkron |
 | Batch processing + trajektori export (Hermes-parity P5) | Implemented | `tiko batch run --tasks JSONL --concurrency 1..16` (chatWithStatus + TrajectoryLogger + laporan `data/batch/`); `tiko batch export --out` JSONL/ShareGPT, redaksi secret default |
-| A2UI generative-UI (Fase E) | Planned (desain) | Rancangan lengkap di [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md): hibrida (grammar `genui` tetap, protokol A2UI v1.0 baru, adapter di `tiko_widgets`); implementasi menyusul per fase E1–E5 |
+| A2UI generative-UI (Fase E) | Partial (E1–E4) | Model pesan + validator fail-closed (`agent_core/agent_a2ui.dart`), tool `render_a2ui`, `A2uiToolBridge` + `SurfaceStore` + event `surface.*`, REST `/v1/surfaces*`, renderer chat `TikoSurfaceOrMessageView`, CLI `tiko surface*` (`remote_client.dart` + `bin/tiko.dart`), halaman Surface (`ui/surfaces_view.dart` + `A2uiSurfaceRecordView`). Sisanya: skeleton streaming, approval sheet, diferensiasi E5 |
 | Project context file TIKO.md/AGENTS.md/CLAUDE.md/GEMINI.md (Fase A.1) | Implemented | `resolveProjectContextFile` + CLI `tiko context`; disuntik ke system prompt tiap turn (prioritas TIKO.md > AGENTS.md > CLAUDE.md > GEMINI.md); cap 12.000 char penanda jujur; fail-closed |
 | Zip auto-extract saat attach (Fase A.2) | Implemented | `ingestAttachments` ekstrak zip ke `data/uploads/<sesi>/` (anti traversal/absolut, 500 entry, 16 MiB/entry, 64 MiB total) + tool `unzip_archive` untuk turn agent; listing teratas inline; fail-closed |
 | Ekstraksi teks dokumen PDF/DOCX/ODT/XLSX/PPTX (Fase A.3) | Implemented | `extractDocumentText` pure-Dart best-effort (`doc_extract.dart`, paket `archive`); file mentah juga disimpan ke uploads sebagai path referensi; budget 64 KiB/file; semua gagal → catatan juhur (“fail-closed”) |

@@ -8,3 +8,5 @@ export 'src/gen_ui_view.dart';
 export 'src/markdown_view.dart';
 export 'src/status_view.dart';
 export 'src/chat_interface.dart';
+export 'src/a2ui/a2ui_surface_view.dart';
+export 'src/a2ui/tiko_message_view.dart';

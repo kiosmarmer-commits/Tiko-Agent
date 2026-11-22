@@ -441,6 +441,42 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// A2UI surfaces (Fase E3): daftar snapshot surface per sesi.
+  Future<List<Map<String, dynamic>>> listSurfaces({String? sessionKey}) async {
+    final q = sessionKey == null || sessionKey.isEmpty
+        ? ''
+        : '?session_key=${Uri.encodeQueryComponent(sessionKey)}';
+    final res = await _http
+        .get(_u('/v1/surfaces$q'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'surfaces');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['surfaces'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Detail surface (dengan body komponen + data model); null bila 404.
+  Future<Map<String, dynamic>?> getSurface(String surfaceId) async {
+    final safeId = Uri.encodeComponent(surfaceId);
+    final res = await _http
+        .get(_u('/v1/surfaces/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode == 404) return null;
+    _throwIf(res, 'surface $surfaceId');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Hapus surface; false bila 404 / gagal HTTP >= 400.
+  Future<bool> deleteSurface(String surfaceId) async {
+    final safeId = Uri.encodeComponent(surfaceId);
+    final res = await _http
+        .delete(_u('/v1/surfaces/$safeId'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
   /// Automation / cron CRUD (GUI-P1-09). Backend memakai error model
   /// typed (400/404/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listJobs() async {
@@ -629,8 +665,9 @@ class AgentApiClient {
   Future<String> submitUiAction(
     String sessionKey,
     String actionId,
-    Map<String, dynamic> values,
-  ) async {
+    Map<String, dynamic> values, {
+    String? surfaceId,
+  }) async {
     final res = await _http
         .post(
           _u('/v1/ui/actions'),
@@ -639,6 +676,7 @@ class AgentApiClient {
             'session_key': sessionKey,
             'action_id': actionId,
             'values': values,
+            if (surfaceId != null) 'surface_id': surfaceId,
           }),
         )
         .timeout(const Duration(seconds: 180));

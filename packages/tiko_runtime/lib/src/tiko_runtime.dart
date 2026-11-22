@@ -23,6 +23,7 @@ import 'script_repair_advisor.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
 import 'event_bus.dart';
+import 'a2ui_bridge.dart';
 import 'approval_ledger.dart';
 import 'resource_monitor.dart';
 import 'offline_queue.dart';
@@ -584,6 +585,10 @@ class TikoRuntime {
   final CapabilityVault capabilities;
   final EventBus events = EventBus();
 
+  /// A2UI surface bridge (Fase E): state + store + event surface.* dan
+  /// validasi aksi anti-replay untuk POST /v1/ui/actions.
+  late final A2uiToolBridge a2ui;
+
   /// Hook lifecycle Hermes-parity (P1); null bila tanpa aturan `hooks:`.
   HookExecutor? hookExecutor;
   // Non-final agar tes dapat menyuntik broker dengan TTL pendek.
@@ -894,6 +899,7 @@ class TikoRuntime {
       ..register(VerifyClaimsTool(ledger: evidence))
       ..register(DeferQuestionTool(store: deferred))
       ..register(const RenderUiTool())
+      ..register(const RenderA2uiTool())
       ..register(AnswerDeferredTool(store: deferred))
       ..register(ListDeferredTool(store: deferred))
       ..register(const EffectPreviewTool())
@@ -1056,6 +1062,9 @@ class TikoRuntime {
     );
     rt.approvals = ApprovalBroker(p.join(dataDir, 'approvals.json'));
     await rt.approvals.load();
+    // Fase E — A2UI surface bridge: kaitkan event bus runtime setelah rt
+    // tersedia (pola sama dengan approvals/DeepResearchTool).
+    rt.a2ui = A2uiToolBridge(dataDir: dataDir, onEvent: rt.events.emit);
     // Fase D — riset otomatis butuh runtime yang sudah jadi (starter
     // menyusun turn di atas chatWithStatus), jadi didaftarkan di sini.
     rt.registry
