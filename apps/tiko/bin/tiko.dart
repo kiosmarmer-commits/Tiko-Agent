@@ -33,6 +33,9 @@ Config:
                              keamanan, port) — bisa juga `/settings` di chat
   context                    tampilkan project context file aktif
                              (TIKO.md | AGENTS.md | CLAUDE.md | GEMINI.md)
+  fix "<tugas>" --verify "<cmd>" [--iter 1-8]
+                             loop coding/debugging otomatis: edit → verifikasi
+                             objektif → umpan balik error (terbatas iterasi)
   config show|validate
   config get <path>
   config set <path> <value>
@@ -872,6 +875,70 @@ Future<void> main(List<String> argv) async {
         '${proj.content.length} karakter${proj.truncated ? ', dipotong ke 12.000' : ''})',
       );
       stdout.writeln(proj.content);
+      return;
+
+    case 'fix':
+      // Fase B — loop coding/debugging otomatis: tugas → edit → verify
+      // objektif → umpan balik error → selesai/terbatas iterasi.
+      final positional = <String>[];
+      String? verifyCmd;
+      var iters = 3;
+      for (var i = 0; i < args.length; i++) {
+        if (args[i] == '--verify') {
+          if (i + 1 >= args.length) {
+            stderr.writeln('--verify butuh nilai perintah');
+            exitCode = 2;
+            return;
+          }
+          verifyCmd = args[++i];
+        } else if (args[i] == '--iter') {
+          if (i + 1 >= args.length) {
+            stderr.writeln('--iter butuh angka');
+            exitCode = 2;
+            return;
+          }
+          iters = int.tryParse(args[++i]) ?? -1;
+          if (iters < 1 || iters > 8) {
+            stderr.writeln('--iter harus 1..8');
+            exitCode = 2;
+            return;
+          }
+        } else {
+          positional.add(args[i]);
+        }
+      }
+      final task = positional.join(' ').trim();
+      if (task.isEmpty) {
+        stderr.writeln('pemakaian: tiko fix "<tugas>" --verify "<perintah>" [--iter 1-8]');
+        stderr.writeln('contoh: tiko fix "rapikan lib/src/a.dart" --verify "dart analyze"');
+        exitCode = 2;
+        return;
+      }
+      final vcmd = (verifyCmd ?? '').trim();
+      if (vcmd.isEmpty) {
+        stderr.writeln('--verify wajib (gate objektif): tanpa perintah verifikasi, loop '
+            'tidak jujur menyatakan sukses. contoh: --verify "dart analyze"');
+        exitCode = 2;
+        return;
+      }
+      if (!jsonOut) {
+        stdout.writeln('Mulai loop fix ($iters iterasi maks) — gate: $vcmd');
+        stdout.writeln('Checkpoint dibuat sebelum edit pertama (.tiko/checkpoints).');
+      }
+      final fixRes = await rt.runCodeFixLoop(
+        task: task,
+        verifyCommand: vcmd,
+        maxIterations: iters,
+        onToolStart: jsonOut
+            ? null
+            : (tool) => stdout.writeln('[tool] $tool …'),
+      );
+      emit(fixRes.toJson(), fixRes.success
+          ? 'OK: ${fixRes.summary}'
+          : 'GAGAL: ${fixRes.summary}');
+      exitCode = fixRes.success ? 0 : 1;
+      return;
+
     case 'mcp':
       // MCP server side (stdio): AI agent lain (Claude Desktop, Hermes, dll.)
       // menjalankan `tiko mcp` sebagai subprocess dan mengendalikan Tiko

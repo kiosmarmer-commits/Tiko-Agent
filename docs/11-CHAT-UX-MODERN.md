@@ -216,3 +216,27 @@ Ekstensi dari C2 mengikuti cara Claude Code / Codex / Gemini CLI menangani
 Batas tetap: lampiran teks 64 KiB/file + 128 KiB total (turun dari kontrak
 C2), semua kegagalan per-file menjadi penanda inline jujur dan pesan tetap
 terkirim.
+
+## 7. Fase B — loop coding/debugging otomatis `tiko fix` (Implemented)
+
+Paritas loop "edit → jalankan → perbaiki" ala Claude Code / Codex, gate-nya
+objektif (bukan klaim model):
+
+- **Gate verifikasi nyata:** tool `verify_project` (agent_tools) menjalankan
+  perintah verifikasi (mis. `dart analyze`, `dart test`) dan melaporkan exit
+  code + output (tail). `exit 0` = satu-satunya definisi sukses loop.
+- **Loop terbatas:** `CodeLoopRunner` — turn 1 menerjemahkan tugas jadi edit
+  (tool difilter ke set coding: read/list/grep/write/patch/unzip/verify) →
+  verifikasi otomatis → bila gagal, tail output jadi umpan balik prompt
+  berikutnya → ulangi sampai lulus atau maks iterasi (clamp 1..8, default 3).
+- **Keamanan:** metacharacter shell dilarang (kontrak `shell`); argumen
+  path-like divalidasi PathSafety; eksekusi via SandboxRunner bila tersedia,
+  fallback argv-exec `Process.run` TANPA shell (cwd dijail workspace) bila
+  host tak punya docker/bwrap — dijelaskan jujur di dokumen.
+- **Checkpoint & pulih:** snapshot workspace (`.tiko/checkpoints`) dibuat
+  sebelum turn pertama; summary hasil selalu menyebut id checkpoint untuk
+  rollback via `rollback_checkpoint`.
+- **CLI:** `tiko fix "<tugas>" --verify "<perintah>" [--iter 1-8] [--json]`.
+  `--verify` wajib — tanpa gate objektif loop menolak jalan (jujur).
+- **Observabilitas:** event `code_loop.turn_started` / `code_loop.finished`;
+  sesi/channel `fix:*` terpisah dari chat biasa.
