@@ -23,6 +23,7 @@
 | 11 | [10-WEB-UI.md](10-WEB-UI.md) | Dashboard web agentd (Flutter Web), sesi cookie, auto-open |
 | 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
+| 14 | [13-TUGAS-TERJADWAL-RISET.md](13-TUGAS-TERJADWAL-RISET.md) | Fase D — riset otomatis terjadwal + papan Kanban |
 
 ## Status implementasi
 

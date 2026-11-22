@@ -90,3 +90,4 @@
 4. ~~P4 endpoint OpenAI-compat~~ — **selesai**: `POST /v1/chat/completions` (system+transcript+user-terakhir, stream/non-stream, error shape OpenAI, cap 400k karakter).
 5. ~~P5 batch processing + trajektori export~~ — **selesai**: `tiko batch run --tasks/--concurrency/--label` (BatchRolloutRunner + trajektori JSONL + laporan `data/batch/`) dan `tiko batch export --out` (JSONL/ShareGPT, redaksi aktif).
 6. P6 menyusul; berdiri sendiri.
+7. ~~Tugas terjadwal riset otomatis (Pulsa-parity + riset digest)~~ — **selesai (Fase D)**: lihat [13-TUGAS-TERJADWAL-RISET.md](13-TUGAS-TERJADWAL-RISET.md).

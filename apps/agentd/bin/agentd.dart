@@ -824,6 +824,25 @@ Future<void> main(List<String> args) async {
         skillApi: RuntimeSkillApi(rt),
         tasksProvider: () async =>
             (await tasksBoard.list()).map((t) => t.toJson()).toList(),
+        researchRunsProvider: () async =>
+            [for (final r in rt.researchRunStore.runs) r.toJson()],
+        researchRunGetter: (runId) async {
+          final record = rt.researchRunStore.get(runId);
+          if (record == null) return null;
+          final report =
+              await rt.researchRunStore.readReport(record.reportName);
+          return {
+            'run': record.toJson(),
+            'report': report,
+          };
+        },
+        researchStarter: (body) => rt
+            .runResearch(
+              question: (body['question'] as String).trim(),
+              maxConcurrency:
+                  (body['max_concurrency'] as int?) ?? 3,
+            )
+            .then((r) => r.toJson()),
         logsProvider: () async {
           if (!await logsDirectory.exists()) return <Map<String, dynamic>>[];
           final files = <File>[];
