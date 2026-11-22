@@ -469,22 +469,24 @@ class _A2uiChoicePickerState extends State<_A2uiChoicePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final initial = widget.initial;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (widget.label.isNotEmpty) Text(widget.label),
-        for (final o in widget.options)
-          RadioListTile<String>(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(o['label']?.toString() ?? ''),
-            value: o['value']?.toString() ?? '',
-            groupValue: _value ?? initial,
-            onChanged: (v) => setState(() => _value = v),
-          ),
-      ],
+    final groupValue = _value ?? widget.initial;
+    return RadioGroup<String>(
+      groupValue: groupValue,
+      onChanged: (v) => setState(() => _value = v),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.label.isNotEmpty) Text(widget.label),
+          for (final o in widget.options)
+            RadioListTile<String>(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(o['label']?.toString() ?? ''),
+              value: o['value']?.toString() ?? '',
+            ),
+        ],
+      ),
     );
   }
 }

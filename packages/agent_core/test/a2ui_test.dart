@@ -227,7 +227,7 @@ void main() {
     });
 
     test('Image.src hanya https/http atau file://data/uploads', () {
-      const build = (String src) => {
+      Map<String, Object> build(String src) => {
             'version': '1.0',
             'createSurface': {
               'surfaceId': 's1',

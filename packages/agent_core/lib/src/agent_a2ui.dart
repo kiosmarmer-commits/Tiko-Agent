@@ -606,7 +606,7 @@ List<A2uiComponent> _parseComponentList(
               'a2ui: "$key" melebihi $a2uiMaxLabelChars karakter');
         }
         if (_a2uiControlChars.hasMatch(v)) {
-          throw const FormatException('a2ui: "$key" memuat karakter kontrol');
+          throw FormatException('a2ui: "$key" memuat karakter kontrol');
         }
       }
     }

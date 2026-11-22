@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 
 void main() {
   late Directory tmp;
-  final events = <String>[];
+  final events = <({String type, Map<String, dynamic>? data})>[];
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('tiko-a2ui-test');
@@ -35,11 +35,14 @@ void main() {
 
   test('ingest menyimpan snapshot + memancarkan event surface.created',
       () async {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     final changes = bridge.ingest('web:abc', messages());
     expect(changes.single.event, 'surface.created');
     expect(
-      events.single,
+      events.single.type,
       'surface.created',
     );
     final file = File(
@@ -52,7 +55,10 @@ void main() {
   });
 
   test('list & get membaca snapshot tersimpan', () async {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     bridge.ingest('web:abc', messages());
     expect(bridge.list(), hasLength(1));
     expect(bridge.list('web:abc'), hasLength(1));
@@ -64,7 +70,10 @@ void main() {
   });
 
   test('update memperbarui snapshot + event surface.updated', () {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     bridge.ingest('web:abc', messages());
     bridge.ingest('web:abc', parseA2uiMessages({
       'version': '1.0',
@@ -75,14 +84,17 @@ void main() {
       },
     }));
     expect(
-      [events[0], events[1]],
+      [events[0].type, events[1].type],
       ['surface.created', 'surface.updated'],
     );
     expect(bridge.get('s-ui-1')!['dataModel']['cpu'], {'load': 91});
   });
 
   test('urutan tidak valid → surface.rejected dan tidak mengunci turn', () {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     expect(
       () => bridge.ingest('web:abc', parseA2uiMessages({
         'version': '1.0',
@@ -90,21 +102,27 @@ void main() {
       })),
       throwsA(isA<FormatException>()),
     );
-    expect(events.single['reason'], isNotEmpty);
+    expect(events.single.data!['reason'], isNotEmpty);
     expect(bridge.get('ghost'), isNull);
   });
 
   test('delete menghapus file + event surface.deleted', () async {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     bridge.ingest('web:abc', messages());
     expect(await bridge.delete('s-ui-1'), isTrue);
     expect(await bridge.delete('s-ui-1'), isFalse);
     expect(bridge.list(), isEmpty);
-    expect(events.last, 'surface.deleted');
+    expect(events.last.type, 'surface.deleted');
   });
 
   test('aksi: register lewat ingest lalu consumeAction anti-replay', () {
-    final bridge = A2uiToolBridge(dataDir: tmp.path, onEvent: events.add);
+    final bridge = A2uiToolBridge(
+        dataDir: tmp.path,
+        onEvent: (type, [data]) => events.add((type: type, data: data)),
+      );
     bridge.ingest('web:abc', parseA2uiMessages({
       'version': '1.0',
       'createSurface': {
@@ -126,7 +144,7 @@ void main() {
   test('TTL: snapshot kadaluarsa dihapus saat prune', () {
     final bridge = A2uiToolBridge(
       dataDir: tmp.path,
-      onEvent: events.add,
+      onEvent: (type, [data]) => events.add((type: type, data: data)),
       ttl: const Duration(microseconds: 1),
     );
     bridge.ingest('web:abc', messages());
@@ -138,7 +156,7 @@ void main() {
   test('LRU: snapshot lebih dari maksimum terbuang (tertua dulu)', () {
     final bridge = A2uiToolBridge(
       dataDir: tmp.path,
-      onEvent: events.add,
+      onEvent: (type, [data]) => events.add((type: type, data: data)),
       maxStored: 2,
     );
     for (var i = 0; i < 3; i++) {

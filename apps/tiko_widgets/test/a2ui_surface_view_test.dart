@@ -127,7 +127,7 @@ void main() {
         '{"type":"text","text":"halo genui"}\n'
         '```\n'
         '```a2ui\n'
-        '${jsonLine}\n'
+        '$jsonLine\n'
         '```\n'
         'Selesai.';
     await tester.pumpWidget(MaterialApp(
