@@ -7,6 +7,7 @@ class TikoArgs {
     this.jsonOut = false,
     this.safe = true,
     this.probe = false,
+    this.fix = false,
     this.mode = 'auto',
     this.help = false,
     this.rest = const [],
@@ -16,6 +17,10 @@ class TikoArgs {
   final bool jsonOut;
   final bool safe;
   final bool probe;
+
+  /// F8.4 — `tiko doctor --fix`: provisioning toolchain registry setelah
+  /// konfirmasi user.
+  final bool fix;
   final String mode;
   final bool help;
   final List<String> rest;
@@ -28,6 +33,7 @@ TikoArgs parseTikoArgs(List<String> argv) {
   var jsonOut = false;
   var safe = true;
   var probe = false;
+  var fix = false;
   var mode = 'auto';
   var help = false;
   final rest = <String>[];
@@ -41,6 +47,8 @@ TikoArgs parseTikoArgs(List<String> argv) {
       safe = false;
     } else if (a == '--probe') {
       probe = true;
+    } else if (a == '--fix') {
+      fix = true;
     } else if (a == '--mode' && i + 1 < argv.length) {
       mode = argv[++i];
     } else if (a == '-h' || a == '--help') {
@@ -54,6 +62,7 @@ TikoArgs parseTikoArgs(List<String> argv) {
     jsonOut: jsonOut,
     safe: safe,
     probe: probe,
+    fix: fix,
     mode: mode,
     help: help,
     rest: rest,

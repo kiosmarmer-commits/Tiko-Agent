@@ -23,7 +23,7 @@ Perintah utama:
   run <prompt>
   daemon start|stop|restart|status
   ui                         cetak URL UI
-  doctor [--probe]
+  doctor [--probe] [--fix]
   route explain --task "..."
   status
   version
@@ -103,7 +103,7 @@ Batch:
                              ekspor trajektori untuk eval/training (redaksi
                              secret aktif secara default)
 
-Opsi: --config PATH  --json  --no-safe  --mode auto|embedded
+Opsi: --config PATH  --json  --no-safe  --fix  --mode auto|embedded
 ''';
 
 String? _siblingAgentdBinary() {
@@ -118,6 +118,7 @@ Future<void> main(List<String> argv) async {
   final jsonOut = parsed.jsonOut;
   final safe = parsed.safe;
   final probe = parsed.probe;
+  final fix = parsed.fix;
   final mode = parsed.mode;
   if (parsed.help) {
     stdout.write(_usage);
@@ -345,6 +346,37 @@ Future<void> main(List<String> argv) async {
                   : 'FAIL';
           stdout.writeln('[$mark] ${c.name}: ${c.detail}');
         }
+      }
+      // F8.4 — `doctor --fix`: provisioning toolchain registry secara
+      // interaktif (human-in-loop; tidak pernah auto-install diam-diam).
+      if (fix) {
+        final plan = buildToolchainPlan();
+        if (jsonOut) {
+          emit({
+            'fix_plan': {
+              'apt': plan.aptInstallable.map((r) => r.bin).toList(),
+              'manual': plan.manual.map((r) => r.bin).toList(),
+            },
+          }, const JsonEncoder.withIndent('  ').convert({
+            'fix_plan': {
+              'apt': plan.aptInstallable.map((r) => r.bin).toList(),
+              'manual': plan.manual.map((r) => r.bin).toList(),
+            },
+          }));
+        } else {
+          stdout.writeln('\n[tiko doctor --fix] rencana provisioning:');
+          stdout.writeln(plan.describe());
+        }
+        stdout.write('Pasang paket apt (human-in-loop)? [y/N] ');
+        final answer = stdin.readLineSync()?.trim().toLowerCase();
+        final confirmed = answer == 'y' || answer == 'yes';
+        final result = await applyToolchainPlan(
+          plan,
+          confirm: (_) async => confirmed,
+          dryRun: jsonOut,
+        );
+        stdout.writeln(result.message);
+        if (!result.success) exitCode = 1;
       }
       if (checks.any((c) => c.status == CheckStatus.fail)) exitCode = 1;
       return;

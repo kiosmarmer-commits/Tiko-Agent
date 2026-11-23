@@ -48,6 +48,7 @@ part 'a2ui_research.dart';
 part 'cost_ledger.dart';
 part 'eval_gate.dart';
 part 'approval_rules.dart';
+part 'toolchain_recipe.dart';
 
 const tikoVersion = '0.2.0';
 

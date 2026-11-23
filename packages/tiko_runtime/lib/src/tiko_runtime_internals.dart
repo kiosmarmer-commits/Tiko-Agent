@@ -7,6 +7,7 @@ extension TikoRuntimeDoctor on TikoRuntime {
     bool probe = false,
     int? apiPort,
     LockInfo? lock,
+    ToolchainPlan? toolchainPlan,
   }) async {
     final out = <DoctorCheck>[];
 
@@ -183,6 +184,28 @@ extension TikoRuntimeDoctor on TikoRuntime {
         }
       }
     }
+
+    // Fase F8.4 — toolchain registry: ketersediaan interpreter/compiler 100
+    // bahasa + arah provisioning (apt atau manual) untuk `tiko doctor --fix`.
+    final toolchains = toolchainPlan ?? buildToolchainPlan();
+    if (toolchains.empty) {
+      out.add(const DoctorCheck(
+        'toolchains',
+        CheckStatus.ok,
+        'semua toolchain registry tersedia',
+      ));
+    } else {
+      final aptBins = toolchains.aptInstallable.map((r) => r.bin).toList();
+      final manualBins = toolchains.manual.map((r) => r.bin).toList();
+      out.add(DoctorCheck(
+        'toolchains',
+        CheckStatus.warn,
+        '${aptBins.length} biner apt-installable + ${manualBins.length} manual '
+            'belum ada — jalankan `tiko doctor --fix` untuk provisioning '
+            '(apt: ${aptBins.join(", ")}; manual: ${manualBins.join(", ")})',
+      ));
+    }
+
     return out;
   }
 
