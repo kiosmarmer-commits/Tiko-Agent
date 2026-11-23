@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
 
+import 'language_registry.dart';
 import 'sandbox.dart';
 
 /// Generate a random ID (B-11: CSPRNG)
@@ -92,6 +93,7 @@ class CodeExecutionConfig {
     this.timeoutSeconds = 30,
     this.maxOutputBytes = 1024 * 1024, // 1MB
     this.allowedLanguages = ExecutionLanguage.values,
+    this.allowedLanguageNames = const [],
     this.sandboxKind = SandboxKind.none,
     this.dockerImage = 'python:3.13-alpine',
     this.tempDirectory,
@@ -106,6 +108,10 @@ class CodeExecutionConfig {
   final int timeoutSeconds;
   final int maxOutputBytes;
   final List<ExecutionLanguage> allowedLanguages;
+
+  /// Whitelist nama registry (F8.3b) bila tidak kosong; kosong = semua
+  /// bahasa registry yang didukung diizinkan.
+  final List<String> allowedLanguageNames;
   final SandboxKind sandboxKind;
   final String dockerImage;
   final String? tempDirectory;
@@ -124,6 +130,7 @@ class CodeExecutionConfig {
     int? timeoutSeconds,
     int? maxOutputBytes,
     List<ExecutionLanguage>? allowedLanguages,
+    List<String>? allowedLanguageNames,
     SandboxKind? sandboxKind,
     String? dockerImage,
     String? tempDirectory,
@@ -138,6 +145,8 @@ class CodeExecutionConfig {
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       maxOutputBytes: maxOutputBytes ?? this.maxOutputBytes,
       allowedLanguages: allowedLanguages ?? this.allowedLanguages,
+      allowedLanguageNames:
+          allowedLanguageNames ?? this.allowedLanguageNames,
       sandboxKind: sandboxKind ?? this.sandboxKind,
       dockerImage: dockerImage ?? this.dockerImage,
       tempDirectory: tempDirectory ?? this.tempDirectory,
@@ -280,6 +289,95 @@ class LocalCodeExecutionProvider implements CodeExecutionProvider {
 
   @override
   Future<bool> isAvailable() async => true;
+
+  /// F8.3b — path registry (di luar 9 bahasa enum inti): fail-soft bila
+  /// toolchain absen; cwd selalu temp dir agar artefak (mis. `tiko_prog`)
+  /// tidak jatuh ke workspace.
+  Future<CodeExecutionResult> executeSpec({
+    required LanguageSpec spec,
+    required String code,
+    required CodeExecutionConfig config,
+    String? workingDirectory,
+    Map<String, String>? environment,
+    Duration? timeout,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    Future<CodeExecutionResult> fail(String reason) async =>
+        CodeExecutionResult(
+          success: false,
+          error: reason,
+          exitCode: -1,
+          executionTimeMs: stopwatch.elapsedMilliseconds,
+        );
+
+    if (!spec.supported) {
+      return fail('bahasa ${spec.name} tidak dieksekusi: '
+          '${spec.unsupportedReason}');
+    }
+    if (spec.name == 'brainfuck') {
+      try {
+        final out = BrainfuckInterpreter.run(code);
+        return CodeExecutionResult(
+          success: true,
+          output: out,
+          exitCode: 0,
+          executionTimeMs: stopwatch.elapsedMilliseconds,
+        );
+      } catch (e) {
+        return fail('brainfuck: $e');
+      }
+    }
+    if (!LanguageRegistry.interpreterAvailable(spec)) {
+      return fail('toolchain "${spec.interpreter}" tidak tersedia di host — '
+          'pasang manual atau gunakan provider docker');
+    }
+    final env = <String, String>{...?environment};
+    final tempDir = Directory.systemTemp.createTempSync();
+    final absPath = p.join(tempDir.path, 'script.${spec.ext}');
+    final file = File(absPath);
+    await file.writeAsString(code);
+    try {
+      final template = spec.compileCmd ?? spec.runCmd;
+      final cmd = template!.replaceAll('{file}', absPath);
+      final result = await Process.run(
+        'sh',
+        ['-c', cmd],
+        workingDirectory: tempDir.path,
+        environment: env,
+      ).timeout(
+        timeout ?? Duration(seconds: config.timeoutSeconds),
+        onTimeout: () => ProcessResult(-1, -1, '', ''),
+      );
+      var output = result.stdout.toString();
+      var error = result.stderr.toString();
+      if (output.length > config.maxOutputBytes) {
+        output = output.substring(0, config.maxOutputBytes);
+      }
+      if (error.length > config.maxOutputBytes) {
+        error = error.substring(0, config.maxOutputBytes);
+      }
+      return CodeExecutionResult(
+        success: result.exitCode == 0,
+        output: output,
+        error: error,
+        exitCode: result.exitCode,
+        executionTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } catch (e) {
+      return CodeExecutionResult(
+        success: false,
+        error: e.toString(),
+        exitCode: -1,
+        executionTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } finally {
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
 
   @override
   Future<CodeExecutionResult> execute({
@@ -518,6 +616,106 @@ class DockerCodeExecutionProvider implements CodeExecutionProvider {
     }
   }
 
+  /// F8.3b — path registry via docker; bahasa tanpa image baku menolak
+  /// dengan pesan eksplisit (hostOnly), builtin (brainfuck) dieksekusi
+  /// native tanpa docker.
+  Future<CodeExecutionResult> executeSpec({
+    required LanguageSpec spec,
+    required String code,
+    required CodeExecutionConfig config,
+    Map<String, String>? environment,
+    Duration? timeout,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    Future<CodeExecutionResult> fail(String reason) async => CodeExecutionResult(
+          success: false,
+          error: reason,
+          exitCode: -1,
+          executionTimeMs: stopwatch.elapsedMilliseconds,
+        );
+
+    if (!spec.supported) {
+      return fail('bahasa ${spec.name} tidak dieksekusi: '
+          '${spec.unsupportedReason}');
+    }
+    if (spec.name == 'brainfuck') {
+      try {
+        final out = BrainfuckInterpreter.run(code);
+        return CodeExecutionResult(
+          success: true,
+          output: out,
+          exitCode: 0,
+          executionTimeMs: stopwatch.elapsedMilliseconds,
+        );
+      } catch (e) {
+        return fail('brainfuck: $e');
+      }
+    }
+    if (spec.dockerImage == null) {
+      return fail('bahasa ${spec.name} hostOnly (tidak ada image docker '
+          'baku) — jalankan di host via provider local');
+    }
+    final tempDir = Directory.systemTemp.createTempSync();
+    final absPath = p.join(tempDir.path, 'script.${spec.ext}');
+    final file = File(absPath);
+    await file.writeAsString(code);
+
+    try {
+      final mounted = '/tmp/tiko_code/script.${spec.ext}';
+      final cmd = (spec.compileCmd ?? spec.runCmd)!
+          .replaceAll('{file}', mounted);
+      final List<String> dockerArgs = [
+        'run',
+        '--rm',
+        '-i',
+        '--network=none',
+        '-m=${config.maxMemoryMb}m',
+        '-v',
+        '${tempDir.path}:/tmp/tiko_code',
+        '-w',
+        '/tmp/tiko_code',
+      ];
+      if (environment != null && environment.isNotEmpty) {
+        for (final entry in environment.entries) {
+          dockerArgs.addAll(['-e', '${entry.key}=${entry.value}']);
+        }
+      }
+      dockerArgs.addAll([spec.dockerImage!, 'sh', '-c', cmd]);
+      final result = await Process.run('docker', dockerArgs).timeout(
+        timeout ?? Duration(seconds: config.timeoutSeconds),
+        onTimeout: () => ProcessResult(-1, -1, '', ''),
+      );
+      var output = result.stdout.toString();
+      var error = result.stderr.toString();
+      if (output.length > config.maxOutputBytes) {
+        output = output.substring(0, config.maxOutputBytes);
+      }
+      if (error.length > config.maxOutputBytes) {
+        error = error.substring(0, config.maxOutputBytes);
+      }
+      return CodeExecutionResult(
+        success: result.exitCode == 0,
+        output: output,
+        error: error,
+        exitCode: result.exitCode,
+        executionTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } catch (e) {
+      return CodeExecutionResult(
+        success: false,
+        error: e.toString(),
+        exitCode: -1,
+        executionTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } finally {
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {
+        // best-effort
+      }
+    }
+  }
+
   @override
   Future<CodeExecutionResult> execute({
     required String code,
@@ -649,11 +847,16 @@ class CodeExecutionTool implements Tool {
   String get name => 'code_execution';
 
   String get description =>
-      'Execute code in a sandboxed environment. Supports Python, JavaScript, '
-      'Bash, Dart, Java, Go, C, C++, and Rust (compiled languages are first '
-      'compiled from a single file, then run). Code is executed with timeout '
-      'and resource limits; unsupported languages on the active provider '
-      'fail-soft with an explicit error.';
+      'Execute code in a sandboxed environment. Core languages: Python, '
+      'JavaScript, Bash, Dart, Java, Go, C, C++, Rust (compiled languages '
+      'are compiled from a single file first, then run). Registry languages '
+      '(F8.3b): C#, TypeScript, SQL, PHP, Swift, Kotlin, R, Ruby, Lua, '
+      'PowerShell, Perl, Haskell, Julia, Elixir, Clojure, Groovy, F#, '
+      'Fortran, COBOL, Ada, Objective-C, Common Lisp, Scheme, Prolog, '
+      'Erlang, OCaml, Crystal, Nim, Zig, D, Forth, Factor, PostScript, Awk, '
+      'Tcl, Brainfuck (keseluruhan ~50+ didukung; sisanya ditolak eksplisit '
+      'dengan alasan: runtime proprietary/GUI/mainframe). Toolchain absen '
+      'fail-soft dengan pesan jelas; bahasa beda provider juga fail-soft.';
 
   @override
   ToolSpec get spec => ToolSpec(
@@ -668,8 +871,13 @@ class CodeExecutionTool implements Tool {
             },
             'language': {
               'type': 'string',
-              'enum': ExecutionLanguage.values.map((e) => e.name).toList(),
-              'description': 'Programming language to use',
+              'enum': [
+                ...ExecutionLanguage.values.map((e) => e.name),
+                ...LanguageRegistry.names,
+              ],
+              'description': 'Programming language to use (enum inti + '
+                  'registry F8.3b; alias umum seperti c++/c#/sh/ts juga '
+                  'diterima)',
               'default': 'python',
             },
             'timeout': {
@@ -718,11 +926,32 @@ class CodeExecutionTool implements Tool {
       }
 
       // Parse language
-      final languageInput = args['language'] as String? ?? 'python';
-      ExecutionLanguage language;
+      final languageInput =
+          (args['language'] as String? ?? 'python').trim().toLowerCase();
+      ExecutionLanguage? language;
       try {
         language = ExecutionLanguage.fromName(languageInput);
       } catch (_) {
+        language = null;
+      }
+      LanguageSpec? spec;
+      if (language == null) {
+        spec = LanguageRegistry.lookup(languageInput);
+        if (spec == null) {
+          // Alias menunjuk bahasa enum inti (mis. c++ -> cpp) — resolusi
+          // kanonik lalu coba enum lagi.
+          final alias = LanguageRegistry.aliases[languageInput];
+          if (alias != null) {
+            try {
+              language = ExecutionLanguage.fromName(alias);
+              spec = null;
+            } catch (_) {
+              spec = LanguageRegistry.lookup(alias);
+            }
+          }
+        }
+      }
+      if (language == null && spec == null) {
         return ToolResult(
           callId: '',
           content: jsonEncode({
@@ -734,7 +963,7 @@ class CodeExecutionTool implements Tool {
       }
 
       // Check if language is allowed
-      if (!config.allowedLanguages.contains(language)) {
+      if (language != null && !config.allowedLanguages.contains(language)) {
         return ToolResult(
           callId: '',
           content: jsonEncode({
@@ -744,14 +973,37 @@ class CodeExecutionTool implements Tool {
           isError: true,
         );
       }
+      if (spec != null &&
+          config.allowedLanguageNames.isNotEmpty &&
+          !config.allowedLanguageNames.contains(spec.name)) {
+        return ToolResult(
+          callId: '',
+          content: jsonEncode({
+            'success': false,
+            'error': 'Language ${spec.name} is not allowed. Allowed: ${config.allowedLanguageNames.join(", ")}',
+          }),
+          isError: true,
+        );
+      }
 
       // Check if provider supports this language
-      if (!_effectiveProvider.supportedLanguages.contains(language)) {
+      if (language != null &&
+          !_effectiveProvider.supportedLanguages.contains(language)) {
         return ToolResult(
           callId: '',
           content: jsonEncode({
             'success': false,
             'error': 'Language ${language.name} is not supported by ${_effectiveProvider.name} provider',
+          }),
+          isError: true,
+        );
+      }
+      if (spec != null && _effectiveProvider.name == 'sandboxed') {
+        return ToolResult(
+          callId: '',
+          content: jsonEncode({
+            'success': false,
+            'error': 'Language ${spec.name} is not supported by sandboxed provider (hanya python/bash)',
           }),
           isError: true,
         );
@@ -763,17 +1015,46 @@ class CodeExecutionTool implements Tool {
       // Parse working directory
       final workDir = args['workingDirectory'] as String? ?? workingDirectory;
 
-      // Execute code
-      final result = await _effectiveProvider.execute(
-        code: code,
-        language: language,
-        config: config.copyWith(
-          timeoutSeconds: timeout,
+      // Execute code (F8.3b: dispatch enum inti atau registry)
+      final CodeExecutionResult result;
+      final effective = _effectiveProvider;
+      if (spec != null) {
+        if (effective is LocalCodeExecutionProvider) {
+          result = await effective.executeSpec(
+            spec: spec,
+            code: code,
+            config: config.copyWith(timeoutSeconds: timeout),
+            timeout: Duration(seconds: timeout),
+          );
+        } else if (effective is DockerCodeExecutionProvider) {
+          result = await effective.executeSpec(
+            spec: spec,
+            code: code,
+            config: config.copyWith(timeoutSeconds: timeout),
+            timeout: Duration(seconds: timeout),
+          );
+        } else {
+          return ToolResult(
+            callId: '',
+            content: jsonEncode({
+              'success': false,
+              'error': 'Language ${spec.name} is not supported by ${effective.name} provider',
+            }),
+            isError: true,
+          );
+        }
+      } else {
+        result = await effective.execute(
+          code: code,
+          language: language!,
+          config: config.copyWith(
+            timeoutSeconds: timeout,
+            workingDirectory: workDir,
+          ),
           workingDirectory: workDir,
-        ),
-        workingDirectory: workDir,
-        timeout: Duration(seconds: timeout),
-      );
+          timeout: Duration(seconds: timeout),
+        );
+      }
 
       // Format output
       final output = result.output.isNotEmpty ? result.output : null;
