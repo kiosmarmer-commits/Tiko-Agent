@@ -39,6 +39,8 @@ export 'src/direct_commands.dart';
 export 'src/path_safety.dart';
 export 'src/archive_tool.dart';
 export 'src/verify_tool.dart';
+export 'src/code_context_tool.dart';
+export 'src/git_tools.dart';
 export 'src/checkpoint.dart';
 export 'src/cdp_browser.dart';
 export 'src/browser_cdp_tool.dart';

@@ -924,6 +924,13 @@ class TikoRuntime {
       ))
       ..register(KanbanTool(KanbanBoard(p.join(dataDir, 'kanban.json'))))
       ..register(WorktreeTool(WorktreeManager(repoRoot: workspace)));
+    final gitRunner = GitCommandRunner(workspaceRoot: workspace);
+    registry
+      ..register(CodeContextTool(workspaceRoot: workspace))
+      ..register(GitStatusTool(runner: gitRunner))
+      ..register(GitDiffTool(runner: gitRunner))
+      ..register(GitLogTool(runner: gitRunner))
+      ..register(GitCommitTool(runner: gitRunner));
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
