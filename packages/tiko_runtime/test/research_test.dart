@@ -225,6 +225,277 @@ void main() {
     });
   });
 
+
+  group('F4 — refine loop (critique -> re-plan -> gather -> synth)', () {
+    test('satu putaran refine: gap dikritik, query baru digather, laporan diperbaiki', () async {
+      final plannerQuestions = <String>[];
+      final criticPrompts = <String>[];
+      final gatherSlots = <String>[];
+      final runner = ResearchRunner(
+        plannerTurn: (prompt) {
+          plannerQuestions.add(prompt);
+          if (prompt.contains('Kritik reviewer')) {
+            return Future.value(_turn('{"queries":["gap laten"]}'));
+          }
+          return Future.value(_turn('{"queries":["q1"]}'));
+        },
+        researcherTurn: (slot, prompt) {
+          if (slot.startsWith('q') || RegExp(r'^r\d+q').hasMatch(slot)) {
+            gatherSlots.add(slot);
+            return Future.value(_turn('temuan $slot: [sumber web]'));
+          }
+          if (slot == '__synthesis') {
+            return Future.value(
+              _turn(
+                '## Ringkasan\n- inti\n\n## Kesimpulan\njawab\n\n'
+                '## Sumber\n- http://a\n',
+              ),
+            );
+          }
+          if (slot == '__review') {
+            criticPrompts.add(prompt);
+            return Future.value(
+              _turn(criticPrompts.length == 1
+                  ? 'laporan belum menutup gap X'
+                  : 'LAPORAN_OK'),
+            );
+          }
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        maxConcurrency: 2,
+        maxRefineRounds: 2,
+      );
+      final res = await runner.run(question: 'pertanyaan riset f4');
+      expect(res.success, isTrue);
+      expect(res.refineRounds, 1);
+      expect(plannerQuestions.length, 2);
+      expect(plannerQuestions[1], contains('gap X'));
+      expect(gatherSlots, ['q1', 'r1q1']);
+      expect(res.queries, ['q1', 'gap laten']);
+      // Reviewer kedualah sukses -> tanpa bagian Catatan Review.
+      expect(res.report.contains('## Catatan Review'), isFalse);
+    });
+
+    test('budget guard: token habis -> tidak ada putaran refine', () async {
+      final runner = ResearchRunner(
+        plannerTurn: (prompt) {
+          return Future.value(
+            _turn(prompt.contains('Kritik reviewer')
+                ? '{"queries":["gap a"]}'
+                : '{"queries":["q1"]}'),
+          );
+        },
+        researcherTurn: (slot, prompt) async {
+          if (slot.startsWith('q')) return _turn('temuan $slot');
+          if (slot == '__synthesis') return _turn('laporan riset');
+          if (slot == '__review') {
+            return _turn('masih ada gap');
+          }
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        maxRefineRounds: 2,
+        tokenBudget: 10,
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.success, isTrue);
+      expect(res.refineRounds, 0);
+      expect(res.report.contains('## Catatan Review'), isTrue);
+    });
+
+    test('cap 2 putaran: reviewer selalu mengkritik -> refineRounds 2 lalu berhenti', () async {
+      final plannerQuestions = <String>[];
+      final runner = ResearchRunner(
+        plannerTurn: (prompt) {
+          plannerQuestions.add(prompt);
+          return Future.value(
+            _turn(prompt.contains('Kritik reviewer')
+                ? '{"queries":["ekstra ${plannerQuestions.length}"]}'
+                : '{"queries":["q1"]}'),
+          );
+        },
+        researcherTurn: (slot, prompt) async {
+          if (slot.startsWith('q')) return _turn('temuan $slot');
+          if (slot == '__synthesis') return _turn('laporan');
+          if (slot == '__review') return _turn('masih kurang');
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        maxRefineRounds: 2,
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.refineRounds, 2);
+      expect(res.queries.length, 3); // q1 + q kedua + q ketiga
+    });
+
+    test('refine planner gagal / tidak mengirim query baru -> dipotong, run ok', () async {
+      final runner = ResearchRunner(
+        plannerTurn: (prompt) {
+          return Future.value(
+            _turn(prompt.contains('Kritik reviewer')
+                ? '{"queries":["q1"]}' // duplikat -> noop
+                : '{"queries":["q1"]}'),
+          );
+        },
+        researcherTurn: (slot, prompt) async {
+          if (slot.startsWith('q')) return _turn('temuan $slot');
+          if (slot == '__synthesis') return _turn('laporan');
+          if (slot == '__review') return _turn('masih kurang');
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        maxRefineRounds: 2,
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.success, isTrue);
+      expect(res.refineRounds, 0);
+      expect(res.queries, ['q1']);
+    });
+
+    test('maxRefineRounds di luar 0..2 ditolak ArgumentError', () {
+      expect(() => ResearchRunner(
+            plannerTurn: (_) => Future.value(_turn('x')),
+            researcherTurn: (_, __) => Future.value(_turn('x')),
+            maxRefineRounds: 3,
+          ), throwsArgumentError);
+      expect(() => ResearchRunner(
+            plannerTurn: (_) => Future.value(_turn('x')),
+            researcherTurn: (_, __) => Future.value(_turn('x')),
+            maxRefineRounds: -1,
+          ), throwsArgumentError);
+    });
+  });
+
+  group('F4 — verify_claims wire ke laporan', () {
+    test('slot __verify dijalankan bila verifyClaims, hasil jadi bagian laporan', () async {
+      final slots = <String>[];
+      final runner = ResearchRunner(
+        plannerTurn: (_) => Future.value(_turn('{"queries":["q1"]}')),
+        researcherTurn: (slot, prompt) async {
+          slots.add(slot);
+          if (slot == 'q1') return _turn('temuan umum');
+          if (slot == '__synthesis') {
+            return _turn(
+              '## Ringkasan\n- inti\n\n'
+              '## Kesimpulan\njawab\n\n## Sumber\n- http://b\n',
+            );
+          }
+          if (slot == '__review') return _turn('LAPORAN_OK');
+          if (slot == '__verify') {
+            return _turn('OK klaim 1\nOK klaim 2');
+          }
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        verifyClaims: true,
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.success, isTrue);
+      expect(slots, contains('__verify'));
+      expect(res.report, contains('## Verifikasi Klaim'));
+      expect(res.report, contains('OK klaim 1'));
+      // Laporan inti (berakhir di ## Sumber) tetap utuh, verifikasi
+      // ditempel setelahnya.
+      expect(
+        res.report.indexOf('## Verifikasi Klaim'),
+        greaterThan(res.report.indexOf('## Sumber')),
+      );
+    });
+
+    test('VERIFIKASI_TIDAK_TERSEDIA / gagal -> laporan tetap terbit tanpa bagian', () async {
+      final runner = ResearchRunner(
+        plannerTurn: (_) => Future.value(_turn('{"queries":["q1"]}')),
+        researcherTurn: (slot, prompt) async {
+          if (slot == 'q1') return _turn('temuan umum');
+          if (slot == '__synthesis') return _turn('laporan riset');
+          if (slot == '__review') return _turn('LAPORAN_OK');
+          if (slot == '__verify') return _turn('VERIFIKASI_TIDAK_TERSEDIA');
+          throw StateError('slot tidak dikenal: $slot');
+        },
+        verifyClaims: true,
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.success, isTrue);
+      expect(res.report.contains('## Verifikasi Klaim'), isFalse);
+    });
+
+    test('default tetap off: slot __verify tidak dipanggil (kompatibilitas lama)', () async {
+      final runner = ResearchRunner(
+        plannerTurn: (_) => Future.value(_turn('{"queries":["q1"]}')),
+        researcherTurn: (slot, prompt) async {
+          if (slot == 'q1') return _turn('temuan umum');
+          if (slot == '__synthesis') return _turn('laporan riset');
+          if (slot == '__review') return _turn('LAPORAN_OK');
+          throw StateError('slot tidak dikenal: $slot');
+        },
+      );
+      final res = await runner.run(question: 'q');
+      expect(res.success, isTrue);
+      expect(res.report.contains('## Verifikasi Klaim'), isFalse);
+    });
+  });
+
+  group('F4 — dedupeSources', () {
+    test('URL duplikat + parameter pelacakan + trailing slash tereduksi', () {
+      final report = '# Riset: x\n\n## Sumber\n'
+          '- https://Contoh.org/docs/?utm_source=wa&id=1\n'
+          '- https://contoh.org/docs?id=1\n'
+          '- https://contoh.org/docs?id=1#top\n'
+          '- https://unik.io/a?fbclid=z\n'
+          '- path/file.md\n'
+          '- path/file.md\n';
+      final out = dedupeSources(report);
+      final sources = out
+          .substring(out.indexOf('## Sumber'))
+          .split('\n')
+          .skip(1)
+          .toList();
+      expect(
+        sources.where((l) => l.toLowerCase().contains('contoh.org')).length,
+        1,
+      );
+      expect(
+        sources.where((l) => l.trim().isNotEmpty).length,
+        3, // 1 contoh.org + 1 unik.io + 1 path file (baris kosong akhir dulu)
+      );
+      expect(
+        dedupeSources(dedupeSources(report)),
+        dedupeSources(report),
+        reason: 'dedupe idempoten',
+      );
+    });
+
+    test('tanpa bagian Sumber -> tidak diubah; baris kosong dipertahankan', () {
+      final report = 'laporan tanpa sumber';
+      expect(dedupeSources(report), report);
+      final withSumber = '## Kesimpulan\nx\n\n## Sumber\n\n- http://a\n';
+      expect(
+        dedupeSources(withSumber).contains('\n- http://a'),
+        isTrue,
+      );
+    });
+  });
+
+  group('F4 — ekspor PDF (pure Dart)', () {
+    test('buildPdfReport: header PDF, EOF, satu halaman untuk teks pendek', () {
+      final bytes = buildPdfReport('# Riset: uji\n\n## Ringkasan\n- inti\n');
+      final text = latin1.decode(bytes);
+      expect(text.startsWith('%PDF-1.4'), isTrue);
+      expect(text.endsWith('%%EOF\n'), isTrue);
+      expect(text, contains('/Count 1'));
+      expect(text, contains('/Type /Catalog'));
+      expect(text, contains('(Riset: uji)'));
+    });
+
+    test('teks panjang -> multi halaman', () {
+      final body = [for (var i = 0; i < 200; i++) 'baris laporan ke-$i']
+          .join('\n');
+      final text = latin1.decode(buildPdfReport(body));
+      expect(text, contains('/Count 4'));
+    });
+
+    test('karakter non-latin1 distereotipkan jujur tanpa kegagalan', () {
+      final bytes = buildPdfReport('emoji 😀 dan … ellipse'); 
+      final text = latin1.decode(bytes);
+      expect(text, contains('(emoji ? dan ... ellipse)'));
+    });
+  });
   group('prompt-prefix job riset', () {
     test('deteksi + ekstraksi pertanyaan', () {
       expect(isResearchJobPrompt('[RISET] siapa presiden'), isTrue);

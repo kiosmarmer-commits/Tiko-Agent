@@ -17,9 +17,9 @@
 |---|---|---|---|
 | F1 — Daya eksekusi nyata | Host-exec opt-in + smoke setup | ✅ selesai | `sandbox.allow_host_exec` + `tiko setup --smoke` + panduan sandbox install.sh — lihat §2 |
 | F2 — Coding agent | Repo map, git toolset, edit-loop | ✅ selesai | `code_context` + git toolset aman + edit-loop guard + wiring IdeIntegration — lihat §3 |
-| F3 — Debugging superior | Error recall, log probe, post-mortem | ⏳ belum | lihat §4 |
-| F4 — Riset unggul | Multi-putaran refine + verify claims | ⏳ belum | lihat §5 |
-| F5 — Otonomi & scheduling | context_from, digest, watcher | ⏳ belum | lihat §6 |
+| F3 — Debugging superior | Error recall, log probe, post-mortem | ✅ selesai | `agent.error_recall` auto-recall 3 kecocokan/turn + tool `error_lookup`/`error_record` + `log_probe` (list/tail/grep/runs) + `VerifyPostMortem` lesson procedural — lihat §4 |
+| F4 — Riset unggul | Multi-putaran refine + verify claims | ✅ selesai | refine terarah maks 2 putaran budget-guarded + verifikasi klaim evidence + dedupe sumber + ekspor PDF pure-Dart — lihat §5 |
+| F5 — Otonomi & scheduling | context_from, digest, watcher | ⏳ berjalan | lihat §6 |
 | F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | ⏳ belum | lihat §7 |
 | F7 — Keunggulan kompondensal | Eval harness, cost observability | ⏳ belum | lihat §8 |
 
@@ -49,9 +49,9 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
 
 ## 5. Fase F4 — Riset unggul
 
-1. **Multi-putaran `deep_research`** (gap terdok `docs/13` §1): iterasi critique→re-plan maks 2 putaran, budget-guarded.
-2. **Wire `verify_claims` (evidence ledger) ke laporan riset** sebelum terbit.
-3. **Dedupe sumber + export markdown/PDF** ke channel gateway.
+1. **Multi-putaran `deep_research`** — ✅: setelah review pertama, kritik reviewer memicu `refine` terarah (`_refinePlannerPrompt` → query BARU anti-duplikat → gather slot `r<n>q<i>` → re-sintesis → re-review), maks 2 putaran (`maxRefineRounds` 0..2) dengan budget guard `tokenBudget` (runtime: 60k eco / 300k standard). default `maxRefineRounds: 0` = perilaku lama (kompatibilitas). Event: `research.refine_started|refine_planned|refine_noop|refine_failed`; catatan review efektif = hasil review terakhir.
+2. **Wire `verify_claims` (evidence ledger) ke laporan riset** — ✅: stage `__verify` (opt-in `verifyClaims`, diaktifkan di runtime) mengecek ulang ≤3 klaim utama dengan tool riset, mengikat bukti via `claim`, lalu `verify_claims`; hasil jadi bagian `## Verifikasi Klaim` laporan; gagal/`VERIFIKASI_TIDAK_TERSEDIA` bersifat jujur tidak menggagalkan laporan. `claim`/`verify_claims` masuk allowlist tool riset (`defaultResearchTools`).
+3. **Dedupe sumber + export markdown/PDF** — ✅: `dedupeSources` (fragment + parameter pelacakan `utm_*`/`fbclid`/`gclid`/`msclkid`/`ref` dibuang, trailing slash rata, case-insensitive, idempoten) diterapkan pada laporan final; ekspor PDF pure-Dart tanpa dependensi (`research_pdf.dart`, `buildPdfReport` → A4 Helvetica multi-halaman) disimpan best-effort `reports/riset-<id>.pdf` (`ResearchRunStore.savePdfReport`, field `pdf_name` additive + `refine_rounds`); digest job riset menyertakan jalur PDF; tool `deep_research` menampilkan `pdf=`.
 
 ## 6. Fase F5 — Otonomi & scheduling
 

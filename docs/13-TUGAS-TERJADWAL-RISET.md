@@ -37,6 +37,13 @@ tiko research schedule "…" --cron … / tool schedule_research             →
    3. synthesis  laporan markdown bersumber (Ringkasan/Temuan/
                  Kesimpulan/Sumber)
    4. review     critic; catatan ditempel di bagian "Catatan Review"
+   4b. refine    (F4) kritik -> re-plan (query BARU anti-duplikat) ->
+                 gather -> re-sintesis -> re-review; maks 2 putaran,
+                 budget-guarded tokenBudget (eco 60k / standard 300k)
+   4c. verify    (F4) klaim utama dicek ulang + diikat bukti (claim) +
+                 verify_claims -> bagian "Verifikasi Klaim"
+   export        (F4) dedupe bagian Sumber + PDF pure-Dart
+                 (reports/riset-<id>.pdf, best-effort)
         │
         ▼
    ResearchRunStore — data/research/index.json + reports/riset-<id>.md

@@ -50,6 +50,8 @@ class ResearchRunRecord {
     this.queries = const [],
     this.tokensUsed = 0,
     this.toolCallCount = 0,
+    this.refineRounds = 0,
+    this.pdfName,
     this.error,
   });
 
@@ -73,6 +75,14 @@ class ResearchRunRecord {
   final List<String> queries;
   final int tokensUsed;
   final int toolCallCount;
+
+  /// F4 — jumlah putaran refine (critique -> re-plan -> gather -> sintesis
+  /// -> review) yang benar-benar dijalankan (0..2).
+  final int refineRounds;
+
+  /// F4 — nama file ekspor PDF di `<dataDir>/research/reports/` (best-effort;
+  /// null bila ekspor gagal atau tidak dijalankan).
+  final String? pdfName;
   final String? error;
 
   Map<String, dynamic> toJson() => {
@@ -88,6 +98,8 @@ class ResearchRunRecord {
     'queries': queries,
     'tokens_used': tokensUsed,
     'tool_call_count': toolCallCount,
+    if (refineRounds > 0) 'refine_rounds': refineRounds,
+    if (pdfName != null) 'pdf': pdfName,
     if (error != null) 'error': error,
   };
 
@@ -111,6 +123,8 @@ class ResearchRunRecord {
         ],
         tokensUsed: (j['tokens_used'] as num?)?.toInt() ?? 0,
         toolCallCount: (j['tool_call_count'] as num?)?.toInt() ?? 0,
+        refineRounds: (j['refine_rounds'] as num?)?.toInt() ?? 0,
+        pdfName: j['pdf']?.toString(),
         error: j['error']?.toString(),
       );
 }
@@ -224,6 +238,18 @@ class ResearchRunStore {
   }
 
   String reportPath(String name) => p.join(reportsDir, name);
+
+  /// F4 — simpan ekspor PDF laporan riset. Nama file mengikuti pola laporan
+  /// markdown (`riset-<id>.pdf`) dan tunduk pada jail nama yang sama dengan
+  /// [readReport]. Gagal sebuah ekspor tidak boleh menggagalkan run riset —
+  /// pemanggil memutuskan (best-effort).
+  Future<String> savePdfReport(String runId, Uint8List bytes) async {
+    await Directory(reportsDir).create(recursive: true);
+    final name = 'riset-$runId.pdf';
+    final file = File(p.join(reportsDir, name));
+    await file.writeAsBytes(bytes, flush: true);
+    return name;
+  }
 }
 
 /// Rencana riset hasil dekomposisi planner (atau fallback satu pertanyaan).
@@ -274,6 +300,83 @@ ResearchPlan? parseResearchPlan(String raw, {int maxQueries = 6}) {
   return ResearchPlan(source: 'planner', queries: out);
 }
 
+/// F4 — dedupe bagian `## Sumber` laporan riset. Entri URL/path dinormalisasi
+/// (fragment + parameter pelacakan `utm_*`/`fbclid`/`gclid`/`ref` dibuang,
+/// trailing slash diratakan, case-insensitive) dan duplikat direduksi ke
+/// kemunculan pertama apa adanya. Laporan tanpa bagian `## Sumber` tidak
+/// diubah. Murni, deterministik, diuji langsung di `research_test.dart`.
+String dedupeSources(String report) {
+  final lines = report.split('\n');
+  final headingRe = RegExp(r'^##\s*Sumber\s*$');
+  var heading = -1;
+  for (var i = 0; i < lines.length; i++) {
+    if (headingRe.hasMatch(lines[i])) {
+      heading = i;
+      break;
+    }
+  }
+  if (heading < 0) return report;
+  var sectionEnd = lines.length;
+  for (var i = heading + 1; i < lines.length; i++) {
+    if (RegExp(r'^#{1,6}\s').hasMatch(lines[i])) {
+      sectionEnd = i;
+      break;
+    }
+  }
+  final seen = <String>{};
+  final kept = <String>[];
+  for (final line in lines.sublist(heading + 1, sectionEnd)) {
+    final norm = _normalizeSource(line);
+    if (norm == null) {
+      kept.add(line);
+      continue;
+    }
+    if (!seen.add(norm)) continue;
+    kept.add(line);
+  }
+  return [
+    ...lines.sublist(0, heading + 1),
+    ...kept,
+    ...lines.sublist(sectionEnd),
+  ].join('\n');
+}
+
+/// Kunci dedupe untuk satu baris sumber. null = baris kosong (dipertahankan
+/// apa adanya). URL diekstrak dari bullet; baris non-URL dinormalisasi utuh
+/// (lowercase) sehingga teks duplikat juga tereduksi.
+String? _normalizeSource(String line) {
+  final t = line.trim().replaceAll(
+        RegExp(r'^[-*+]\s+|^\d+[.)]\s+'),
+        '',
+      );
+  if (t.isEmpty) return null;
+  final url = RegExp(r'https?://\S+').firstMatch(t)?.group(0);
+  if (url == null) return t.toLowerCase();
+  var u = url.split('#').first.toLowerCase();
+  final qIdx = u.indexOf('?');
+  if (qIdx >= 0) {
+    final params = u
+        .substring(qIdx + 1)
+        .split('&')
+        .where(
+          (kv) => kv.isNotEmpty &&
+              !RegExp(r'^(utm_[a-z]+|fbclid|gclid|msclkid|ref|ref_src)=').hasMatch(kv),
+        )
+        .toList();
+    final path = u.substring(0, qIdx);
+    final pathKey = path.length > 1 && path.endsWith('/')
+        ? path.substring(0, path.length - 1)
+        : path;
+    u = params.isEmpty
+        ? pathKey
+        : '$pathKey?${params.join('&')}';
+  }
+  while (u.length > 1 && u.endsWith('/')) {
+    u = u.substring(0, u.length - 1);
+  }
+  return u;
+}
+
 /// Hasil pipeline [ResearchRunner].
 class ResearchRunnerResult {
   const ResearchRunnerResult({
@@ -285,6 +388,7 @@ class ResearchRunnerResult {
     required this.queries,
     required this.tokensUsed,
     required this.toolCallCount,
+    this.refineRounds = 0,
     this.error,
   });
 
@@ -298,6 +402,10 @@ class ResearchRunnerResult {
   /// Ringkasan pendek (ulang dari laporan; fallback potongan laporan).
   final String summary;
   final List<String> queries;
+
+  /// F4 — jumlah putaran refine yang dijalankan (critique -> re-plan ->
+  /// gather -> sintesis -> review), 0..maxRefineRounds.
+  final int refineRounds;
   final int tokensUsed;
   final int toolCallCount;
   final String? error;
@@ -359,9 +467,18 @@ class ResearchRunner {
     required this.researcherTurn,
     this.maxConcurrency = 3,
     this.emitEvent,
+    this.maxRefineRounds = 0,
+    this.tokenBudget,
+    this.verifyClaims = false,
   }) {
     if (maxConcurrency < 1 || maxConcurrency > 4) {
       throw ArgumentError('maxConcurrency harus 1..4');
+    }
+    if (maxRefineRounds < 0 || maxRefineRounds > 2) {
+      throw ArgumentError('maxRefineRounds harus 0..2');
+    }
+    if (tokenBudget != null && tokenBudget! < 1) {
+      throw ArgumentError('tokenBudget minimal 1 bila diset');
     }
   }
 
@@ -369,6 +486,20 @@ class ResearchRunner {
   final ResearchTurn researcherTurn;
   final int maxConcurrency;
   final void Function(String type, Map<String, dynamic> data)? emitEvent;
+
+  /// F4 — maks putaran critique -> re-plan -> gather -> sintesis -> review
+  /// setelah review pertama (0 = perilaku lama, default untuk kompatibilitas
+  /// test/callbacks lama; runtime mengaktifkan 2).
+  final int maxRefineRounds;
+
+  /// F4 — budget guard refine: putaran berhenti bila token terpakai sudah
+  /// melampaui angka ini (null = tanpa batas budget refine).
+  final int? tokenBudget;
+
+  /// F4 — stage verifikasi evidence: setelah laporan final (dan refine),
+  /// slot `__verify` (dengan tool) diminta mengikat klaim utama ke bukti
+  /// via `claim` + `verify_claims`; hasilnya jadi bagian laporan.
+  final bool verifyClaims;
 
   void _emit(String type, Map<String, dynamic> data) =>
       emitEvent?.call(type, data);
@@ -421,6 +552,38 @@ persis: LAPORAN_OK.
 Laporan:
 $report''';
 
+  /// F4 — planner khusus refine: tutup gap dari kritik reviewer dengan
+  /// sub-pertanyaan BARU; jangan ulangi yang sudah diteliti.
+  static String _refinePlannerPrompt(String question, String critique) =>
+      '''
+Kamu planner riset. Kritik reviewer menunjukkan gap laporan riset berikut.
+Susun HANYA JSON — tanpa penjelasan — bentuk persis:
+{"queries":["<sub-pertanyaan BARU 1>","..."]}
+
+Aturan: 1-4 sub-pertanyaan pencarian spesifik untuk menutup gap tersebut,
+JANGAN mengulang pertanyaan yang sudah diteliti. Bila tidak ada gap yang
+bisa ditambal dengan pencarian, balas {"queries":[]}.
+
+Pertanyaan riset awal:
+$question
+
+Kritik reviewer:
+$critique''';
+
+  /// F4 — prompt stage verifikasi evidence (tool claim + verify_claims)
+  /// sebelum laporan final terbit.
+  static String _verifyPrompt(String report) => '''
+Verifikasi laporan riset berikut dengan tool yang tersedia (claim,
+verify_claims, web_search, web_fetch, http_request). Pilih hingga 3 klaim
+utama, cek ulang tiap klaim dengan tool riset, ikat hasilnya ke bukti
+(ID call dari cek-mu sendiri) dengan tool `claim`, lalu jalankan
+`verify_claims`. Keluaran (maks ~20 baris): status OK/FAIL per klaim plus
+sumber cek. Bila tidak ada klaim yang bisa diverifikasi, balas persis:
+VERIFIKASI_TIDAK_TERSEDIA.
+
+Laporan:
+$report''';
+
   Future<ResearchRunnerResult> run({required String question}) async {
     final q = question.trim();
     if (q.isEmpty) throw ArgumentError('question wajib');
@@ -449,15 +612,17 @@ $report''';
       'queries': plan.queries,
     });
 
-    // ── 2. Gather (paralel terbatas) ────────────────────────────────────
-    final findings = List<String?>.filled(plan.queries.length, null);
+    // ── 2. Gather (paralel terbatas) ─────────────────────────────────────────
+    // F4: gather jadi closure reusable — dipakai putaran awal DAN tiap
+    // putaran refine (query tambahan menutup gap hasil kritik reviewer).
+    final findings = <String>[]; // blok '## Sub-riset N: query' siap sintesis
     var cursor = 0;
-    Future<void> worker() async {
+    Future<void> worker(List<String> queries, String slotPrefix) async {
       while (true) {
         final i = cursor++;
-        if (i >= plan.queries.length) return;
-        final query = plan.queries[i];
-        final slot = 'q${i + 1}';
+        if (i >= queries.length) return;
+        final query = queries[i];
+        final slot = '$slotPrefix${i + 1}';
         _emit('research.gather_started', {
           'run_id': runId,
           'slot': slot,
@@ -466,11 +631,13 @@ $report''';
         try {
           final turn = await researcherTurn(
             slot,
-            _gatherPrompt(query, i + 1, plan.queries.length),
+            _gatherPrompt(query, i + 1, queries.length),
           );
           tokens += turn.tokensUsed;
           toolCalls += turn.toolCallCount;
-          findings[i] = turn.text.trim();
+          findings.add(
+            '## Sub-riset ${findings.length + 1}: $query\n${turn.text.trim()}',
+          );
           _emit('research.gather_done', {
             'run_id': runId,
             'slot': slot,
@@ -479,7 +646,9 @@ $report''';
         } catch (e) {
           // Satu sub-riset gagal tidak menggagalkan run — ditandai jujur
           // di temuan untuk dievaluasi tahap sintesis.
-          findings[i] = '(sub-riset gagal: $e)';
+          findings.add(
+            '## Sub-riset ${findings.length + 1}: $query\n(sub-riset gagal: $e)',
+          );
           _emit('research.gather_failed', {
             'run_id': runId,
             'slot': slot,
@@ -489,31 +658,40 @@ $report''';
       }
     }
 
-    await Future.wait([for (var w = 0; w < maxConcurrency; w++) worker()]);
-
-    // ── 3. Synthesize ───────────────────────────────────────────────────
-    final materialized = <String>[];
-    for (var i = 0; i < findings.length; i++) {
-      materialized.add(
-        '## Sub-riset ${i + 1}: ${plan.queries[i]}\n'
-        '${findings[i] ?? '(tidak ada temuan)'}',
-      );
+    Future<void> gather(List<String> queries, String slotPrefix) {
+      cursor = 0;
+      return Future.wait([
+        for (var w = 0; w < maxConcurrency; w++) worker(queries, slotPrefix),
+      ]);
     }
+
+    await gather(plan.queries, 'q');
+
+    // ── 3. Synthesize ───────────────────────────────────────────────────────
     String report;
-    try {
+    Future<String> synthesize(String critique) async {
       final turn = await researcherTurn(
         '__synthesis',
-        _synthesisPrompt(q, materialized),
+        critique.isEmpty
+            ? _synthesisPrompt(q, findings)
+            : _synthesisPrompt(
+                '$q\n\nCatatan reviewer yang wajib ditutup:\n$critique',
+                findings,
+              ),
       );
       tokens += turn.tokensUsed;
       toolCalls += turn.toolCallCount;
-      report = turn.text.trim();
+      return turn.text.trim();
+    }
+
+    try {
+      report = await synthesize('');
     } catch (e) {
       return ResearchRunnerResult(
         runId: runId,
         question: q,
         success: false,
-        report: materialized.join('\n\n'),
+        report: findings.join('\n\n'),
         summary: '(sintesis gagal: $e)',
         queries: plan.queries,
         tokensUsed: tokens,
@@ -521,15 +699,19 @@ $report''';
         error: '$e',
       );
     }
-    if (report.isEmpty) report = materialized.join('\n\n');
+    if (report.isEmpty) report = findings.join('\n\n');
 
-    // ── 4. Review ───────────────────────────────────────────────────────
-    var reviewNote = '';
-    try {
-      final turn = await researcherTurn('__review', _reviewPrompt(report));
+    // ── 4. Review ───────────────────────────────────────────────────────────
+    Future<String> review(String rpt) async {
+      final turn = await researcherTurn('__review', _reviewPrompt(rpt));
       tokens += turn.tokensUsed;
       toolCalls += turn.toolCallCount;
-      final note = turn.text.trim();
+      return turn.text.trim();
+    }
+
+    var reviewNote = '';
+    try {
+      final note = await review(report);
       if (note.isNotEmpty && !note.contains('LAPORAN_OK')) {
         reviewNote = note;
       }
@@ -537,10 +719,98 @@ $report''';
       // Review bersifat best-effort; kegagalan tidak menggagalkan run.
       _emit('research.review_failed', {'run_id': runId, 'error': '$e'});
     }
-    var finalReport = report;
-    if (reviewNote.isNotEmpty) {
-      finalReport = '$report\n\n## Catatan Review\n$reviewNote';
+
+    // ── 4b. Refine (F4) — critique -> re-plan -> gather -> synth -> review.
+    // Maks [maxRefineRounds] putaran, budget-guarded via [tokenBudget]:
+    // satu langkah gagal/tidak produktif dipotong, run tidak pernah mati.
+    var refineRounds = 0;
+    var critique = reviewNote;
+    while (critique.isNotEmpty &&
+        refineRounds < maxRefineRounds &&
+        (tokenBudget == null || tokens < tokenBudget!)) {
+      _emit('research.refine_started', {
+        'run_id': runId,
+        'round': refineRounds + 1,
+      });
+      ResearchPlan? refined;
+      try {
+        final turn = await plannerTurn(_refinePlannerPrompt(q, critique));
+        tokens += turn.tokensUsed;
+        toolCalls += turn.toolCallCount;
+        refined = parseResearchPlan(turn.text, maxQueries: 4);
+      } catch (e) {
+        _emit('research.refine_failed', {'run_id': runId, 'error': '$e'});
+        break;
+      }
+      final followups = <String>[
+        if (refined != null)
+          for (final nq in refined.queries)
+            if (!plan.queries.any((oq) => oq.toLowerCase() == nq.toLowerCase()))
+              nq,
+      ];
+      if (followups.isEmpty) {
+        _emit('research.refine_noop', {'run_id': runId});
+        break;
+      }
+      refineRounds++;
+      plan = ResearchPlan(
+        source: refineRounds == 1 && plan.source == 'planner'
+            ? 'planner'
+            : 'refine',
+        queries: [...plan.queries, ...followups],
+      );
+      _emit('research.refine_planned', {
+        'run_id': runId,
+        'round': refineRounds,
+        'queries': followups,
+      });
+      await gather(followups, 'r${refineRounds}q');
+      try {
+        report = await synthesize(critique);
+        if (report.isEmpty) report = findings.join('\n\n');
+      } catch (e) {
+        _emit('research.refine_failed', {'run_id': runId, 'error': '$e'});
+        break;
+      }
+      try {
+        final note = await review(report);
+        critique = note.isNotEmpty && !note.contains('LAPORAN_OK') ? note : '';
+      } catch (e) {
+        _emit('research.review_failed', {'run_id': runId, 'error': '$e'});
+        critique = '';
+      }
     }
+
+    // F4: catatan review efektif = hasil review TERAKHIR (putaran awal
+    // yang sudah ditambal oleh refine tidak lagi relevan di laporan final).
+    reviewNote = critique;
+
+    // ── 4c. Verifikasi evidence (F4, opt-in) — klaim utama diikat ke bukti
+    // (tool claim) lalu diverifikasi (verify_claims) sebelum laporan terbit.
+    var verifySection = '';
+    if (verifyClaims) {
+      try {
+        final turn = await researcherTurn('__verify', _verifyPrompt(report));
+        tokens += turn.tokensUsed;
+        toolCalls += turn.toolCallCount;
+        final out = turn.text.trim();
+        if (out.isNotEmpty && !out.contains('VERIFIKASI_TIDAK_TERSEDIA')) {
+          verifySection = out;
+        }
+      } catch (e) {
+        // Best-effort: kegagalan verifikasi tidak menggagalkan laporan.
+        _emit('research.verify_failed', {'run_id': runId, 'error': '$e'});
+      }
+    }
+
+    var finalReport = report;
+    if (verifySection.isNotEmpty) {
+      finalReport = '$finalReport\n\n## Verifikasi Klaim\n$verifySection';
+    }
+    if (reviewNote.isNotEmpty) {
+      finalReport = '$finalReport\n\n## Catatan Review\n$reviewNote';
+    }
+    finalReport = dedupeSources(finalReport);
 
     // Ringkasan: pakai bagian "## Ringkasan" kalau ada, kalau tidak awal
     // laporan dipotong.
@@ -567,6 +837,7 @@ $report''';
       queries: plan.queries,
       tokensUsed: tokens,
       toolCallCount: toolCalls,
+      refineRounds: refineRounds,
     );
     _emit('research.finished', {
       'run_id': runId,
@@ -590,8 +861,9 @@ class DeepResearchTool implements Tool {
     name: 'deep_research',
     description:
         'Riset mendalam multi-tahap (plan -> gather -> sintesis -> '
-        'review): kumpulkan temuan bersumber, tulis laporan markdown, '
-        'simpan di data/research, catat di papan Kanban.',
+        'review -> refine terarah maks 2 putaran budget-guarded -> '
+        'verifikasi klaim): temuan bersumber, laporan markdown + ekspor '
+        'PDF, simpan di data/research, catat di papan Kanban.',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -621,7 +893,9 @@ class DeepResearchTool implements Tool {
         content: ok
             ? 'Riset selesai id=${record.runId}\n'
                   'queries=${record.queries.length}\n'
+                  'refine_rounds=${record.refineRounds}\n'
                   'laporan=data/research/reports/${record.reportName}\n'
+                  '${record.pdfName == null ? '' : 'pdf=data/research/reports/${record.pdfName}\n'}'
                   'kanban=${record.kanbanTaskId}\n\n'
                   '${record.summary}'
             : 'Riset gagal id=${record.runId}: ${record.error}\n',
@@ -730,6 +1004,9 @@ extension ResearchWiring on TikoRuntime {
     'grep',
     'unzip_archive',
     'datetime',
+    // F4 — klaim + verifikasi bukti untuk stage verifikasi laporan.
+    'claim',
+    'verify_claims',
   };
 
   Future<ChatRunResult> _researchTurn(
@@ -808,12 +1085,19 @@ extension ResearchWiring on TikoRuntime {
           return _researchTurn(
             prompt,
             sessionId: 'research:adhoc:$slot:$stamp',
-            persona: slot == '__review' ? 'critic' : 'researcher',
+            persona: slot == '__review' || slot == '__verify'
+                ? 'critic'
+                : 'researcher',
             withTools: slot != '__synthesis' && slot != '__review',
           );
         },
         maxConcurrency: maxConcurrency.clamp(1, 4).toInt(),
         emitEvent: (type, data) => events.emit(type, data),
+        // F4 — riset unggul: refine terarah maks 2 putaran (budget-guarded)
+        // + verifikasi evidence sebelum laporan terbit.
+        maxRefineRounds: 2,
+        tokenBudget: resourceProfile == 'eco' ? 60000 : 300000,
+        verifyClaims: true,
       );
       final result = await runner.run(question: question);
       final reportName = await store.saveReport(
@@ -821,6 +1105,20 @@ extension ResearchWiring on TikoRuntime {
         result.question,
         result.report,
       );
+      // F4 — ekspor PDF (pure Dart, tanpa dependensi). Best-effort:
+      // kegagalan ekspor tidak menggagalkan run — dipantau via event.
+      String? pdfName;
+      try {
+        pdfName = await store.savePdfReport(
+          result.runId,
+          buildPdfReport(result.report),
+        );
+      } catch (e) {
+        events.emit('research.pdf_export_failed', {
+          'run_id': result.runId,
+          'error': '$e',
+        });
+      }
       record = ResearchRunRecord(
         runId: result.runId,
         question: result.question,
@@ -834,6 +1132,8 @@ extension ResearchWiring on TikoRuntime {
         queries: result.queries,
         tokensUsed: result.tokensUsed,
         toolCallCount: result.toolCallCount,
+        refineRounds: result.refineRounds,
+        pdfName: pdfName,
         error: result.error,
       );
       await store.append(record);
