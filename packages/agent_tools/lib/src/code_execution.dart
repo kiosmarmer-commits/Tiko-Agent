@@ -15,17 +15,60 @@ String _generateId({int length = 32}) {
   return List.generate(length, (_) => chars[random.nextInt(chars.length)]).join();
 }
 
-/// Supported programming languages for code execution
+/// Supported programming languages for code execution (F8.3 polyglot).
+///
+/// Compiled languages (C / C++ / Rust) follow a two-stage model: compile
+/// the single source file to a binary next to it, then run that binary.
 enum ExecutionLanguage {
-  python('python', ['.py']),
-  javascript('node', ['.js', '.mjs']),
-  bash('bash', ['.sh']),
-  dart('dart', ['.dart']);
+  python('python', ['.py'], 'python:3.13-alpine'),
+  javascript('node', ['.js', '.mjs'], 'node:20-alpine'),
+  bash('bash', ['.sh'], 'alpine:latest'),
+  dart('dart', ['.dart'], 'dart:stable'),
+  java('java', ['.java'], 'eclipse-temurin:21-alpine'),
+  go('go', ['.go'], 'golang:1.23-alpine'),
+  c('gcc', ['.c'], 'gcc:14-bookworm'),
+  cpp('g++', ['.cpp', '.cc'], 'gcc:14-bookworm'),
+  rust('rustc', ['.rs'], 'rust:1-alpine');
 
-  const ExecutionLanguage(this.interpreter, this.extensions);
+  const ExecutionLanguage(this.interpreter, this.extensions, this.dockerImage);
 
   final String interpreter;
   final List<String> extensions;
+
+  /// Official docker image per language (network always `--network=none`).
+  final String dockerImage;
+
+  bool get needsCompile => switch (this) {
+        ExecutionLanguage.c ||
+        ExecutionLanguage.cpp ||
+        ExecutionLanguage.rust => true,
+        _ => false,
+      };
+
+  /// Full argv to run a single source file (interpreted languages), executed
+  /// with the file's directory or [workingDirectory] as cwd.
+  List<String> runArgv(String scriptPath) => switch (this) {
+        ExecutionLanguage.python => [interpreter, scriptPath],
+        ExecutionLanguage.javascript => [interpreter, scriptPath],
+        ExecutionLanguage.bash => [interpreter, scriptPath],
+        ExecutionLanguage.dart ||
+        ExecutionLanguage.go => [interpreter, 'run', scriptPath],
+        ExecutionLanguage.java => [interpreter, scriptPath],
+        _ => throw UnsupportedError('$name butuh tahap compile'),
+      };
+
+  /// One-step compile+run shell command (compiled languages), run with cwd
+  /// set to the source file's directory. Binary name is fixed and lives in
+  /// the temp dir so repeated runs cannot clash with user files.
+  String compileAndRun(String scriptName) => switch (this) {
+        ExecutionLanguage.c =>
+          'gcc -O1 "$scriptName" -o tiko_prog && ./tiko_prog',
+        ExecutionLanguage.cpp =>
+          'g++ -O1 "$scriptName" -o tiko_prog && ./tiko_prog',
+        ExecutionLanguage.rust =>
+          'rustc -O "$scriptName" -o tiko_prog && ./tiko_prog',
+        _ => throw UnsupportedError('$name tidak butuh compile'),
+      };
 
   static ExecutionLanguage fromExtension(String path) {
     final ext = p.extension(path).toLowerCase();
@@ -48,7 +91,7 @@ class CodeExecutionConfig {
     this.enabled = true,
     this.timeoutSeconds = 30,
     this.maxOutputBytes = 1024 * 1024, // 1MB
-    this.allowedLanguages = const [ExecutionLanguage.python],
+    this.allowedLanguages = ExecutionLanguage.values,
     this.sandboxKind = SandboxKind.none,
     this.dockerImage = 'python:3.13-alpine',
     this.tempDirectory,
@@ -218,6 +261,23 @@ class LocalCodeExecutionProvider implements CodeExecutionProvider {
   @override
   List<ExecutionLanguage> get supportedLanguages => ExecutionLanguage.values;
 
+  /// Cheap availability probe for the language's interpreter/compiler on the
+  /// host. Used by tests and tooling (doctor) to degrade gracefully instead
+  /// of surfacing raw `ProcessException` to the model.
+  static Future<bool> interpreterAvailable(ExecutionLanguage language) async {
+    final probe = switch (language) {
+      ExecutionLanguage.go => const ['version'],
+      ExecutionLanguage.java => const ['-version'],
+      _ => const ['--version'],
+    };
+    try {
+      final r = await Process.run(language.interpreter, probe);
+      return r.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Future<bool> isAvailable() async => true;
 
@@ -244,38 +304,38 @@ class LocalCodeExecutionProvider implements CodeExecutionProvider {
       await tempFile.writeAsString(code);
 
       try {
-        final args = [tempFile.path];
-        
-        // Add flags based on language
-        switch (language) {
-          case ExecutionLanguage.python:
-            args.insert(0, language.interpreter);
-            break;
-          case ExecutionLanguage.javascript:
-            args.insert(0, language.interpreter);
-            break;
-          case ExecutionLanguage.bash:
-            args.insert(0, language.interpreter);
-            break;
-          case ExecutionLanguage.dart:
-            args.insert(0, language.interpreter);
-            args.insert(1, 'run');
-            break;
-        }
-
         var timedOut = false;
-        final result = await Process.run(
-          args.first,
-          args.skip(1).toList(),
-          workingDirectory: workingDirectory,
-          environment: env,
-        ).timeout(
-          timeout ?? Duration(seconds: config.timeoutSeconds),
-          onTimeout: () {
-            timedOut = true;
-            return ProcessResult(-1, -1, '', '');
-          },
-        );
+        final ProcessResult result;
+        if (language.needsCompile) {
+          // Compile-then-run in one step, cwd = temp dir so the binary
+          // never lands in the workspace.
+          result = await Process.run(
+            'sh',
+            ['-c', language.compileAndRun(p.basename(tempFile.path))],
+            workingDirectory: tempDir.path,
+            environment: env,
+          ).timeout(
+            timeout ?? Duration(seconds: config.timeoutSeconds),
+            onTimeout: () {
+              timedOut = true;
+              return ProcessResult(-1, -1, '', '');
+            },
+          );
+        } else {
+          final args = language.runArgv(tempFile.path);
+          result = await Process.run(
+            args.first,
+            args.skip(1).toList(),
+            workingDirectory: workingDirectory,
+            environment: env,
+          ).timeout(
+            timeout ?? Duration(seconds: config.timeoutSeconds),
+            onTimeout: () {
+              timedOut = true;
+              return ProcessResult(-1, -1, '', '');
+            },
+          );
+        }
 
         final executionTimeMs = stopwatch.elapsedMilliseconds;
         
@@ -495,31 +555,24 @@ class DockerCodeExecutionProvider implements CodeExecutionProvider {
           }
         }
 
-        String command;
-        switch (language) {
-          case ExecutionLanguage.python:
-            command = 'python /tmp/tiko_code/script.py';
-            dockerArgs.add(dockerImage);
-            dockerArgs.addAll(['sh', '-c', command]);
-            break;
-          case ExecutionLanguage.javascript:
-            command = 'node /tmp/tiko_code/script.js';
-            dockerArgs.add('node:20-alpine');
-            dockerArgs.addAll(['sh', '-c', command]);
-            break;
-          case ExecutionLanguage.bash:
-            command = 'bash /tmp/tiko_code/script.sh';
-            dockerArgs.add('alpine:latest');
-            dockerArgs.addAll(['sh', '-c', command]);
-            break;
-          default:
-            return CodeExecutionResult(
-              success: false,
-              error: 'Language ${language.name} not supported in docker',
-              exitCode: -1,
-              executionTimeMs: stopwatch.elapsedMilliseconds,
-            );
-        }
+        final String command;
+        // Entry image: config.dockerImage overrides only the python default;
+        // other languages pin their official image (F8.3).
+        final image = language == ExecutionLanguage.python
+            ? dockerImage
+            : language.dockerImage;
+        final mounted = '/tmp/tiko_code${language.extensions.first}';
+        command = switch (language) {
+          ExecutionLanguage.python => 'python $mounted',
+          ExecutionLanguage.javascript => 'node $mounted',
+          ExecutionLanguage.bash => 'bash $mounted',
+          ExecutionLanguage.dart => 'dart run $mounted',
+          ExecutionLanguage.java => 'java $mounted',
+          ExecutionLanguage.go => 'go run $mounted',
+          _ => language.compileAndRun(p.basename(mounted)),
+        };
+        dockerArgs.add(image);
+        dockerArgs.addAll(['sh', '-c', command]);
 
         final result = await Process.run(
           'docker',
@@ -597,7 +650,10 @@ class CodeExecutionTool implements Tool {
 
   String get description =>
       'Execute code in a sandboxed environment. Supports Python, JavaScript, '
-      'Bash, and Dart. Code is executed with timeout and resource limits.';
+      'Bash, Dart, Java, Go, C, C++, and Rust (compiled languages are first '
+      'compiled from a single file, then run). Code is executed with timeout '
+      'and resource limits; unsupported languages on the active provider '
+      'fail-soft with an explicit error.';
 
   @override
   ToolSpec get spec => ToolSpec(
