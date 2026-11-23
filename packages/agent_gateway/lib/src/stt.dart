@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 /// Speech-to-text providers with fallback chain.
-/// Supports: local whisper, local_command, OpenAI, Groq, Mistral, xAI, ElevenLabs, DeepInfra
+/// Supports: local whisper, local_command, OpenAI, Groq, Gemini, Mistral, xAI,
+/// ElevenLabs, DeepInfra
 class SttClient {
   SttClient({
     this.whisperBin,
@@ -13,6 +14,9 @@ class SttClient {
     this.openaiBaseUrl = 'https://api.openai.com/v1',
     this.groqApiKey,
     this.groqBaseUrl = 'https://api.groq.com/v1',
+    this.geminiApiKey,
+    this.geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta',
+    this.geminiModel = 'gemini-2.0-flash',
     this.mistralApiKey,
     this.mistralBaseUrl = 'https://api.mistral.ai/v1',
     this.xaiApiKey,
@@ -29,6 +33,7 @@ class SttClient {
       'local_command',
       'groq',
       'openai',
+      'gemini',
       'mistral',
       'xai',
       'elevenlabs',
@@ -48,6 +53,11 @@ class SttClient {
   // Groq
   final String? groqApiKey;
   final String groqBaseUrl;
+
+  // Gemini (generateContent + inline_data, bukan jalur OpenAI-compat)
+  final String? geminiApiKey;
+  final String geminiBaseUrl;
+  final String geminiModel;
 
   // Mistral
   final String? mistralApiKey;
@@ -100,6 +110,11 @@ class SttClient {
           break;
         case 'groq':
           if ((groqApiKey ?? '').isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
+        case 'gemini':
+          if ((geminiApiKey ?? '').isNotEmpty) {
             activeProviders.add(providerId);
           }
           break;
@@ -168,6 +183,8 @@ class SttClient {
         return _transcribeOpenAI(client, path);
       case 'groq':
         return _transcribeGroq(client, path);
+      case 'gemini':
+        return _transcribeGemini(client, path);
       case 'mistral':
         return _transcribeMistral(client, path);
       case 'xai':
@@ -293,6 +310,95 @@ class SttClient {
       deepinfraApiKey!,
       model,
     );
+  }
+
+  Future<String?> _transcribeGemini(
+    http.Client client,
+    String path,
+  ) async {
+    try {
+      final uri = Uri.parse(
+          '$geminiBaseUrl/models/$geminiModel:generateContent');
+      final bytes = await File(path).readAsBytes();
+      if (bytes.isEmpty) return null;
+      final mime = _audioMimeType(path);
+      final res = await client
+          .post(
+            uri,
+            headers: {
+              'x-goog-api-key': geminiApiKey!,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'contents': [
+                {
+                  'parts': [
+                    {
+                      'text': 'Transcribe the audio exactly as spoken. '
+                          'Return only the transcript text without any '
+                          'comment.',
+                    },
+                    {
+                      'inline_data': {
+                        'mime_type': mime,
+                        'data': base64Encode(bytes),
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          )
+          .timeout(const Duration(seconds: 120));
+      if (res.statusCode >= 400) {
+        stderr.writeln('stt: gemini HTTP ${res.statusCode}: ${res.body}');
+        return null;
+      }
+      final json = jsonDecode(res.body);
+      if (json is! Map) return null;
+      final candidates = json['candidates'];
+      if (candidates is! List || candidates.isEmpty) return null;
+      final first = candidates.first;
+      if (first is! Map) return null;
+      final content = first['content'];
+      if (content is! Map) return null;
+      final parts = content['parts'];
+      if (parts is! List || parts.isEmpty) return null;
+      final text = parts
+          .whereType<Map>()
+          .map((part) => part['text']?.toString() ?? '')
+          .join()
+          .trim();
+      return text.isEmpty ? null : text;
+    } catch (e) {
+      stderr.writeln('stt: gemini error: $e');
+      return null;
+    }
+  }
+
+  String _audioMimeType(String path) {
+    switch (path.split('.').last.toLowerCase()) {
+      case 'mp3':
+        return 'audio/mp3';
+      case 'wav':
+        return 'audio/wav';
+      case 'm4a':
+      case 'mp4':
+        return 'audio/mp4';
+      case 'aac':
+        return 'audio/aac';
+      case 'ogg':
+      case 'opus':
+        return 'audio/ogg';
+      case 'webm':
+        return 'audio/webm';
+      case 'flac':
+        return 'audio/flac';
+      case 'aiff':
+        return 'audio/aiff';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   Future<String?> _transcribeMiniMax(

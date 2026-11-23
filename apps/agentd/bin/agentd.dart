@@ -308,7 +308,7 @@ Future<void> main(List<String> args) async {
         (envKey('STT_LOCAL_COMMAND') ?? envKey('GROQ_API_KEY') ??
                 envKey('MISTRAL_API_KEY') ?? envKey('XAI_API_KEY') ??
                 envKey('ELEVENLABS_API_KEY') ?? envKey('DEEPINFRA_API_KEY') ??
-                envKey('MINIMAX_API_KEY')) !=
+                envKey('MINIMAX_API_KEY') ?? envKey('GEMINI_API_KEY')) !=
             null) {
       stt = SttClient(
         whisperBin: whisper,
@@ -321,6 +321,8 @@ Future<void> main(List<String> args) async {
         elevenlabsApiKey: envKey('ELEVENLABS_API_KEY'),
         deepinfraApiKey: envKey('DEEPINFRA_API_KEY'),
         minimaxApiKey: envKey('MINIMAX_API_KEY'),
+        geminiApiKey: envKey('GEMINI_API_KEY'),
+        geminiModel: envKey('GEMINI_STT_MODEL') ?? 'gemini-2.0-flash',
       );
     }
     tg = TelegramGateway(token: token, allowedUserIds: allow, stt: stt);
