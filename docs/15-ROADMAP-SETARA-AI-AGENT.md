@@ -16,7 +16,7 @@
 | Fase | Judul | Status | Ringkasan |
 |---|---|---|---|
 | F1 — Daya eksekusi nyata | Host-exec opt-in + smoke setup | ✅ selesai | `sandbox.allow_host_exec` + `tiko setup --smoke` + panduan sandbox install.sh — lihat §2 |
-| F2 — Coding agent | Repo map, git toolset, edit-loop | ⏳ belum | lihat §3 |
+| F2 — Coding agent | Repo map, git toolset, edit-loop | 🔄 berjalan | bagian 1 (code_context + git toolset) selesai; bagian 2 (edit-loop guard + IdeIntegration) menyusul — lihat §3 |
 | F3 — Debugging superior | Error recall, log probe, post-mortem | ⏳ belum | lihat §4 |
 | F4 — Riset unggul | Multi-putaran refine + verify claims | ⏳ belum | lihat §5 |
 | F5 — Otonomi & scheduling | context_from, digest, watcher | ⏳ belum | lihat §6 |
@@ -36,10 +36,10 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
 
 ## 3. Fase F2 — Coding agent kelas Claude Code
 
-1. **Repo map + `code_context`**: indeks simbol (class/fungsi/import) per file di `data/`, dicari via FTS/regex tanpa dependensi LSP; agen dapat "find definition/references" mulus.
-2. **Git toolset aman**: `git_status`/`git_diff`/`git_log`/`git_commit` — whitelist subcommand, PathSafety, tanpa flag berbahaya (`--force`, `reset --hard`); anti-replay tidak perlu (semuanya read-only kecuali commit sesuai approval).
-3. **Edit loop guard** (opsional per config `agent.edit_loop_verify`): setelah `patch_file` wajib `verify_project` sukses sebelum aksi berikutnya — memakai loop detector yang sudah ada sebagai fondasi.
-4. **Selesaikan wiring `IdeIntegrationTool`** (toolbank memakai `tools: []` di `builtin.dart`) → sambungkan registry nyata + test ACP.
+1. **Repo map + `code_context`** — ✅ bagian 1: `CodeContextTool` (risk low, parallelSafe) — action `map`/`find`/`refs` via regex parser per bahasa (Dart class/mixin/enum/extension + top-level function; Python def/class; JS-TS function/class; Go/Rust/Java/Kotlin terindeks) di atas workspace, stateless (pindai ulang tiap panggilan), guard `maxFiles=2000`/`maxFileSize=256KB`/junk-dir skip, path jail PathSafety, limit 1-50. Terdaftar di `tiko_runtime.dart`. Uji: `code_context_test.dart` (map/find/refs/fail-closed/path keluar/subdir).
+2. **Git toolset aman** — ✅ bagian 1: `GitCommandRunner` (argv array, `runInShell: false`, timeout 30s, jail `-C workspaceRoot`) + `git_status`/`git_diff`/`git_log` (read-only) + `git_commit` (risk medium; message 1-200 char tanpa kontrol char; hanya staged atau pathspec eksplisit tervalidasi; tanpa amend/force; fail-closed bila tidak ada yang distage). Uji: `git_tools_test.dart` (7 skenario).
+3. **Edit loop guard** (opsional per config `agent.edit_loop_verify`) — ⏳ bagian 2: setelah `patch_file` wajib `verify_project` sukses sebelum aksi berikutnya — memakai loop detector yang sudah ada sebagai fondasi.
+4. **Selesaikan wiring `IdeIntegrationTool`** (toolbank memakai `tools: []` di `builtin.dart`) — ⏳ bagian 2: sambungkan registry nyata + test ACP.
 
 ## 4. Fase F3 — Debugging superior (diferensiasi)
 
