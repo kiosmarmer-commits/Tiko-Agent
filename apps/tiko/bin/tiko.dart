@@ -17,7 +17,7 @@ tiko — Pasitiko local-first agent (control plane)
   tiko [opsi] <perintah>
 
 Perintah utama:
-  setup [--provider mock|ollama] [--workspace PATH] [--force]
+  setup [--provider mock|ollama] [--workspace PATH] [--force] [--smoke]
   setup --interactive         wizard kredensial provider + gateway
   chat [prompt]              chat (mode auto: embedded)
   run <prompt>
@@ -1999,7 +1999,52 @@ Future<void> _setup(String configPath, List<String> args) async {
     'provider=${actual.defaultProvider} type=${actual.providers[actual.defaultProvider]!.type}',
   );
   stdout.writeln('Config: $configAbs');
-  stdout.writeln('Lanjut: tiko doctor --probe && tiko calc 5+1 && tiko chat');
+  if (setup.smoke) {
+    final smokeOk = await _setupSmokeTurn(configAbs);
+    if (!smokeOk) {
+      exitCode = 1;
+      return;
+    }
+  }
+  stdout.writeln('Lanjut: tiko doctor --probe && tiko chat');
+}
+
+/// F1 (docs/15 §2) — satu turn agentic pasca-setup: bukti konfigurasi
+/// benar-benar lewat loop tool, bukan hanya config valid. Deterministik:
+/// mock `assisted` memanggil tool `calc` untuk pertanyaan hitungan.
+/// Tidak pernah throw — kegagalan menghasilkan `false` + pesan.
+Future<bool> _setupSmokeTurn(String configAbs) async {
+  stdout.writeln('Smoke (F1): menjalankan satu turn agentic uji...');
+  TikoRuntime? rt;
+  try {
+    rt = await TikoRuntime.create(configPath: configAbs);
+    final sw = Stopwatch()..start();
+    final run = await rt.chatWithStatus(
+      'hitung 5+1',
+      sessionId: 'cli:setup-smoke',
+      channel: 'cli',
+      userKey: 'setup',
+    );
+    sw.stop();
+    final ok = run.success && run.toolCallCount > 0 && run.text.contains('6');
+    if (ok) {
+      stdout.writeln(
+        '  ✓ smoke OK (${run.toolCallCount} tool call, '
+        '${sw.elapsedMilliseconds} ms): ${run.text.trim()}',
+      );
+      return true;
+    }
+    stderr.writeln(
+      '  ✗ smoke GAGAL: success=${run.success} '
+      'toolCalls=${run.toolCallCount} jawaban="${run.text.trim()}"',
+    );
+    return false;
+  } catch (error) {
+    stderr.writeln('  ✗ smoke GAGAL: $error');
+    return false;
+  } finally {
+    await rt?.events.close();
+  }
 }
 
 Future<void> _setupInteractive(String configPath, bool force) async {

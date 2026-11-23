@@ -77,6 +77,13 @@ void main() {
       expect(s.interactive, isTrue);
     });
 
+    test('smoke default false dan --smoke mengaktifkan (F1)', () {
+      expect(parseSetupArgs([])!.smoke, isFalse);
+      final s = parseSetupArgs(['--smoke']);
+      expect(s, isNotNull);
+      expect(s!.smoke, isTrue);
+    });
+
     test('opsi tak dikenal menghasilkan null + pesan', () {
       final messages = <String>[];
       final s = parseSetupArgs(['--ngasal'], onUnknown: messages.add);

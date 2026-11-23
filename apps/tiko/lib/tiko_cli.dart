@@ -67,12 +67,17 @@ class SetupArgs {
     this.workspace = '.',
     this.force = false,
     this.interactive = false,
+    this.smoke = false,
   });
 
   final String provider;
   final String workspace;
   final bool force;
   final bool interactive;
+
+  /// F1 — jalankan satu turn agentic pasca-setup sebagai bukti akhir:
+  /// pertanyaan kalkulasi harus memicu tool `calc` dan menghasilkan angka.
+  final bool smoke;
 }
 
 /// Parse argumen `tiko setup`; null bila ada opsi tak dikenal (pesan
@@ -85,6 +90,7 @@ SetupArgs? parseSetupArgs(
   var workspace = '.';
   var force = false;
   var interactive = false;
+  var smoke = false;
   for (var i = 0; i < args.length; i++) {
     if (args[i] == '--provider' && i + 1 < args.length) {
       provider = args[++i];
@@ -94,6 +100,8 @@ SetupArgs? parseSetupArgs(
       force = true;
     } else if (args[i] == '--interactive') {
       interactive = true;
+    } else if (args[i] == '--smoke') {
+      smoke = true;
     } else {
       onUnknown?.call('Opsi setup tidak dikenal: ${args[i]}');
       return null;
@@ -104,6 +112,7 @@ SetupArgs? parseSetupArgs(
     workspace: workspace,
     force: force,
     interactive: interactive,
+    smoke: smoke,
   );
 }
 

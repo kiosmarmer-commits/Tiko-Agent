@@ -234,6 +234,17 @@ else
   ensure_prefix_path
 fi
 
+if command -v bwrap >/dev/null 2>&1; then
+  ok "sandbox OS: bubblewrap tersedia"
+elif command -v docker >/dev/null 2>&1; then
+  ok "sandbox OS: docker tersedia"
+else
+  warn "sandbox OS tidak ditemukan - tool shell/script/MCP berjalan fail-closed."
+  warn "  Aktifkan kembali: sudo apt-get install -y bubblewrap  (Debian/Ubuntu)"
+  warn "  atau pasang Docker; atau set sandbox.allow_host_exec: true di agent.yaml"
+  warn "  (opt-in risiko diemban operator - lihat docs/15)."
+fi
+
 cat <<'EOF'
 
 Instalasi selesai. Langkah berikutnya:
