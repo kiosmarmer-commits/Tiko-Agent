@@ -109,6 +109,7 @@ Prinsip: turunkan FREKUENSI konfirmasi, jangan hapus lapisan mediasi host. Semua
 - `security.profile` (`tiko_config.dart`): `strict` (default, perilaku lama), `standard` (mode `guided` — medium auto, high selalu dikonfirmasi, shell di luar allowlist dikonfirmasi bukan ditolak, metachar tetap ditolak keras), `trusted_workspace` (standard tanpa konfirmasi medium tambahan). Nilai eksplisit di `security.*` selalu menang atas preset; profil tak dikenal fallback `strict`.
 - `security.risk_overrides`: koreksi risiko per-tool milik operator (di luar jail workspace agent) ke `MatrixPermissionGate.riskOverrides`.
 - Approval-remember: setelah konfirmasi manual, aksi boleh diingat per `session` (in-memory) atau `workspace` (`data/approval_rules.json`); match presisi (tool + prefix perintah shell penuh) hanya melewati prompt identik — gate tetap dievaluasi.
+- Provisioning toolchain (F8.4, `toolchain_recipe.dart`): `tiko doctor` melaporkan toolchain registry yang absen beserta arah instalasi; `tiko doctor --fix` human-in-loop — rencana ditampilkan, dipasang HANYA setelah konfirmasi user ([y/N]), lalu group-install via `apt-get` (sudo bila non-root) dengan stdio inherited; bahasa tanpa paket baku diberi hint installer ofisial; tidak pernah ada auto-install diam-diam.
 - FFI in-process ditolak permanen dengan alasan yang sama seperti `video_player` (docs/14): eksekusi polyglot lewat proses/container terpisah yang tetap dijail.
 
 Detail perubahan keamanan dan aturan kontribusi: [08-PEDOMAN-PENGEMBANGAN.md](08-PEDOMAN-PENGEMBANGAN.md).
