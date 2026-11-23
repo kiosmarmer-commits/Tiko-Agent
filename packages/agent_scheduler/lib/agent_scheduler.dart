@@ -5,3 +5,5 @@ export 'src/timezones.dart';
 export 'src/job_store.dart';
 export 'src/scheduler.dart';
 export 'src/schedule_tool.dart';
+export 'src/watch_probe.dart';
+export 'src/job_outputs.dart';
