@@ -73,6 +73,11 @@ class RunsPage extends StatelessWidget {
                           for (final run in snap.recent)
                             _RunTile(run: run, active: false),
                         ],
+                        if (snap?.cost != null) ...[
+                          _SectionLabel(
+                              'BIAYA/TOKEN (${snap!.cost!.days} HARI)'),
+                          _CostCard(summary: snap.cost!),
+                        ],
                         if (teamRuns != null) ...[
                           _SectionLabel('RUN TEAM (Fase C)'),
                           if (teamRuns!.isEmpty)
@@ -97,7 +102,88 @@ class RunsPage extends StatelessWidget {
 /// state; run-team section tampil walau snapshot turn kosong/nnull.
 bool hasContent(RunsSnapshot? snap, List<Map<String, dynamic>>? teamRuns) =>
     (snap != null && (snap.active.isNotEmpty || snap.recent.isNotEmpty)) ||
-    (teamRuns != null && teamRuns.isNotEmpty);
+    (teamRuns != null && teamRuns.isNotEmpty) ||
+    (snap?.cost != null && snap!.cost!.totalTurns > 0);
+
+class _CostCard extends StatelessWidget {
+  const _CostCard({required this.summary});
+
+  final CostSummary summary;
+
+  String _successRate(int success, int turns) =>
+      turns == 0 ? '-' : '${((success / turns) * 100).round()}%';
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${summary.totalTurns} turn · ${summary.totalTokensUsed} token · '
+                '${summary.totalToolCalls} tool · sukses '
+                '${_successRate(summary.totalSuccess, summary.totalTurns)}',
+            style: TextStyle(color: context.simpulMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          if (summary.buckets.isEmpty)
+            Text('Belum ada aktivitas dalam jendela ${summary.days} hari.',
+                style: TextStyle(color: context.simpulMuted, fontSize: 12))
+          else
+            Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3),
+                1: FlexColumnWidth(1.5),
+                2: FlexColumnWidth(2),
+                3: FlexColumnWidth(1.5),
+              },
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(
+                      color: context.simpulMuted.withValues(alpha: 0.08)),
+                  children: const [
+                    _CostHeader('CHART'),
+                    _CostHeader('TURN'),
+                    _CostHeader('TOKEN'),
+                    _CostHeader('SUKSES'),
+                  ],
+                ),
+                for (final b in summary.buckets.take(10))
+                  TableRow(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Text(b.key,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    Text('${b.turns}'),
+                    Text('${b.tokensUsed}'),
+                    Text(_successRate(b.success, b.turns)),
+                  ]),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CostHeader extends StatelessWidget {
+  const _CostHeader(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: context.simpulMuted)),
+      );
+}
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);

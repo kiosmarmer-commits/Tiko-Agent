@@ -45,6 +45,8 @@ part 'research.dart';
 part 'research_pdf.dart';
 part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
+part 'cost_ledger.dart';
+part 'eval_gate.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -403,6 +405,7 @@ class TikoRuntime {
     required this.ragPipeline,
     required this.errorMemory,
     required this.jobOutputs,
+    required this.costLedger,
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
@@ -659,6 +662,9 @@ class TikoRuntime {
   /// Run-inspector (GUI-P2-04): live/recent registry of agent turns.
   final TurnInspector turnInspector = TurnInspector();
 
+  /// F7 (docs/15 §8) — ledger biaya/token per turn (durabel, JSONL).
+  final CostLedger costLedger;
+
   /// F3 — post-mortem procedural (verify_project gagal >=2x lalu sukses).
   late final VerifyPostMortem postMortem = VerifyPostMortem(
     memory: layeredMemory,
@@ -798,6 +804,9 @@ class TikoRuntime {
 
     final jobOutputs = JobOutputStore(persistPath: p.join(dataDir, 'job_outputs.json'));
     await jobOutputs.load();
+
+    final costLedger = CostLedger(persistPath: p.join(dataDir, 'turn_costs.jsonl'));
+    await costLedger.load();
     final errorMemory = ErrorMemoryStore(
       persistPath: p.join(dataDir, 'errors.json'),
     );
@@ -1157,6 +1166,7 @@ class TikoRuntime {
       issues: issues,
       errorMemory: errorMemory,
       jobOutputs: jobOutputs,
+      costLedger: costLedger,
       providers: providers,
       registry: registry,
       sessions: sessionStore,
@@ -2128,10 +2138,60 @@ class TikoRuntime {
           result.text.length > 240 ? '${result.text.substring(0, 240)}…' : result.text,
         ),
       );
+      if (!internalCommand) {
+        await _recordTurnCost(
+          session: sessionId,
+          channel: channel,
+          userKey: userKey,
+          success: result.success,
+          tokensUsed: result.tokensUsed,
+          toolCalls: result.toolCallCount,
+          durationMs: entry.endedAt == null
+              ? 0
+              : entry.endedAt!.difference(DateTime.parse(entry.startedAt)).inMilliseconds,
+        );
+      }
       return result;
     } catch (error) {
       turnInspector.fail(entry.id, error: _sanitizer.output('$error'));
+      if (!internalCommand) {
+        await _recordTurnCost(
+          session: sessionId,
+          channel: channel,
+          userKey: userKey,
+          success: false,
+        );
+      }
       rethrow;
+    }
+  }
+
+  /// F7 — catat turn selesai ke [costLedger] (observabilitas, fail-soft:
+  /// kegagalan persist tidak menggagalkan turn). Di-await agar pencatatan
+  /// deterministik relatif terhadap balasan turn.
+  Future<void> _recordTurnCost({
+    required String session,
+    required String channel,
+    required String userKey,
+    required bool success,
+    int tokensUsed = 0,
+    int toolCalls = 0,
+    int durationMs = 0,
+  }) async {
+    try {
+      final entry = CostEntry(
+        ts: DateTime.now().toUtc(),
+        session: session.length > 128 ? session.substring(0, 128) : session,
+        channel: channel,
+        userKey: userKey,
+        tokensUsed: tokensUsed,
+        toolCalls: toolCalls,
+        success: success,
+        durationMs: durationMs,
+      );
+      await costLedger.record(entry);
+    } catch (e) {
+      events.emit('cost.record_failed', {'error': '$e'});
     }
   }
 
@@ -3144,7 +3204,11 @@ class TikoRuntime {
   /// terbaru ({active, recent, truncated}); input/answer sudah disanitasi
   /// [SecuritySanitizer] saat direkam, steps dibatasi per run.
   Map<String, dynamic> turnInspectorSnapshot({int limit = 40}) {
-    return turnInspector.snapshot(maxRuns: limit);
+    return {
+      ...turnInspector.snapshot(maxRuns: limit),
+      /// F7 — agregasi biaya/token 7 hari terakhir untuk halaman Runs.
+      'cost': costLedger.summary(),
+    };
   }
 
   String get _layeredMemoryPath => p.join(dataDir, 'layered_memory.json');

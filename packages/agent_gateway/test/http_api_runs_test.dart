@@ -50,6 +50,26 @@ void main() {
           ],
           'recent': <Map<String, dynamic>>[],
           'truncated': false,
+          'cost': {
+            'group_by': 'user',
+            'days': 7,
+            'window_start': '2026-11-18T00:00:00.000Z',
+            'total': {
+              'turns': 1,
+              'tokens_used': 320,
+              'tool_calls': 1,
+              'success': 1,
+            },
+            'buckets': [
+              {
+                'key': 'local',
+                'turns': 1,
+                'tokens_used': 320,
+                'tool_calls': 1,
+                'success': 1,
+              },
+            ],
+          },
         };
       },
     );
@@ -101,6 +121,11 @@ void main() {
     expect(run['state'], 'running');
     expect((run['steps'] as List).first['tool'], 'datetime');
     expect((r['body']['recent'] as List), isEmpty);
+    final cost = r['body']['cost'] as Map<String, dynamic>;
+    expect(cost['group_by'], 'user');
+    expect(cost['days'], 7);
+    expect((cost['total'] as Map<String, dynamic>)['tokens_used'], 320);
+    expect((cost['buckets'] as List), hasLength(1));
   });
 
   test('401 tanpa auth + 501 bare + POST 404 read-only', () async {
