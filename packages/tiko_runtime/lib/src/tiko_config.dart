@@ -403,6 +403,7 @@ class TikoConfig {
     this.sandboxAllowHostExec = false,
     this.agentEditLoopVerify = false,
     this.agentIdeIntegration = false,
+    this.agentErrorRecall = true,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -516,6 +517,11 @@ class TikoConfig {
   /// Fase F2 — wiring tool `ide_integration` (`agent.ide_integration`, default
   /// false): daftar tool live dari registry diteruskan ke ACP.
   final bool agentIdeIntegration;
+
+  /// Fase F3 — auto-recall error memory (`agent.error_recall`, default true):
+  /// ContextBuilder menarik maks 3 kecocokan dari ErrorMemoryStore per turn
+  /// (read-only; matikan dengan `error_recall: false`).
+  final bool agentErrorRecall;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1329,6 +1335,9 @@ class TikoConfig {
       agentIdeIntegration:
           root['agent'] is YamlMap &&
               (root['agent'] as YamlMap)['ide_integration'] == true,
+      agentErrorRecall: root['agent'] is YamlMap
+          ? (root['agent'] as YamlMap)['error_recall'] != false
+          : true,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue
