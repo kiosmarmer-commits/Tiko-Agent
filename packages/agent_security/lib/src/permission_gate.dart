@@ -4,8 +4,14 @@ import 'dart:math';
 import 'package:agent_core/agent_core.dart';
 import 'taint.dart';
 
-/// Permission modes (AGD-03 §2).
-enum PermissionMode { auto, ask, deny }
+/// Permission modes (AGD-03 §2 + F8 profiles docs/15 §9).
+///
+/// `guided` — mode standar untuk pengembang lokal (profil `standard` /
+/// `trusted_workspace`): tool medium/low berjalan tanpa konfirmasi, tool
+/// high tetap selalu lewat konfirmasi (never auto), kecuali perintah shell
+/// yang tercantum di allowlist tematik. Fail-closed: tanpa callback
+/// konfirmasi, tool high ditolak — bukan dijalankan.
+enum PermissionMode { auto, guided, ask, deny }
 
 /// Matriks izin berdasarkan risiko tool + mode global.
 class MatrixPermissionGate implements PermissionGate {
@@ -21,6 +27,7 @@ class MatrixPermissionGate implements PermissionGate {
     this.taint,
     this.onConfirmRequest,
     this.riskResolver,
+    this.riskOverrides = const {},
   });
 
   /// Resolves the declared risk of a tool (normally `ToolSpec.risk` from the
@@ -28,6 +35,13 @@ class MatrixPermissionGate implements PermissionGate {
   /// uses the *stricter* of the declared risk and the built-in name table, and
   /// treats unknown tools as `high` (fail-closed, PRD §9.1).
   final String? Function(ToolCall call)? riskResolver;
+
+  /// F8 — koreksi risiko per-tool yang diatur operator melalui config
+  /// (`security.risk_overrides`), mis. `verify_project: medium` agar loop
+  /// build/test tidak menanyakan berulang. Konfigurasi adalah milik operator
+  /// (diluar jangkauan jail workspace agent), jadi penurunan ini tersurat
+  /// dan diaudit, bukan jalan pintas model.
+  final Map<String, String> riskOverrides;
 
   PermissionMode mode;
   final List<String> shellAllowlist;
@@ -76,6 +90,13 @@ class MatrixPermissionGate implements PermissionGate {
           reason: 'high risk tidak boleh auto',
         );
       }
+      // guided: tool high tetap dikonfirmasi (never auto) — kecuali
+      // perintah shell yang eksplisit berada di allowlist tematik operator;
+      // jail workspace dan guard lain tetap berjalan di implementasi tool.
+      if (mode == PermissionMode.guided) {
+        if (call.name == 'shell') return _guidedShell(call, session);
+        return await _confirmOrDeny(call, session, 'high risk: ${call.name}');
+      }
       // Extra: shell allowlist
       if (call.name == 'shell') {
         final cmd = (call.args['cmd'] as String?)?.trim() ?? '';
@@ -90,7 +111,7 @@ class MatrixPermissionGate implements PermissionGate {
     }
 
     if (risk == 'medium') {
-      if (mode == PermissionMode.auto) {
+      if (mode == PermissionMode.auto || mode == PermissionMode.guided) {
         return const PermissionResult(PermissionVerdict.allowed);
       }
       if (requireConfirm.contains(call.name) || mode == PermissionMode.ask) {
@@ -134,6 +155,12 @@ class MatrixPermissionGate implements PermissionGate {
   }
 
   String _riskOf(ToolCall call) {
+    // F8: override operator diterapkan setelah resolver — digunakan hanya
+    // bila labelnya valid; tanpa override, aturan stricter-of tetap berlaku.
+    final override = riskOverrides[call.name];
+    if (override != null && _riskOrder.contains(override)) {
+      return override;
+    }
     final byName = _riskByName(call);
     final resolver = riskResolver;
     if (resolver == null) return byName;
@@ -143,6 +170,23 @@ class MatrixPermissionGate implements PermissionGate {
       return stricterRisk('high', byName);
     }
     return stricterRisk(declared, byName);
+  }
+
+  /// F8 guided — shell di dalam allowlist lolos; di luar allowlist
+  /// dikonfirmasi (bukan ditolak seperti ask); metacharacter/expansion
+  /// tetap ditolak keras — bukan interaksi yang pantas diingat-kan.
+  Future<PermissionResult> _guidedShell(ToolCall call, Session session) async {
+    final cmd = '${call.args['command'] ?? call.args['cmd'] ?? ''}'.trim();
+    if (cmd.isEmpty || ShellPolicy.hasMetachar(cmd)) {
+      return PermissionResult(
+        PermissionVerdict.denied,
+        reason: 'shell tidak aman (metacharacter/expansion): $cmd',
+      );
+    }
+    if (_shellAllowed(call)) {
+      return const PermissionResult(PermissionVerdict.allowed);
+    }
+    return _confirmOrDeny(call, session, 'shell di luar allowlist: $cmd');
   }
 
   String _riskByName(ToolCall call) {

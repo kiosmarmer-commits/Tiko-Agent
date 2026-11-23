@@ -220,12 +220,28 @@ Future<void> main(List<String> argv) async {
     Session session,
     String approvalId,
   ) async {
+    // F8.2: aksi yang pernah diingat user lolos tanpa prompt — gate tetap
+    // berjalan, hanya konfirmasi identik yang di-skip.
+    if (!safe && rt.approvalRules.matches(call, sessionId: session.id)) {
+      stdout.writeln(
+        'Auto-approved via aturan diingat [${call.name}] id=$approvalId',
+      );
+      return true;
+    }
     stdout.writeln(
       'Konfirmasi tool [${call.name}] risk args=${call.args} id=$approvalId',
     );
     stdout.write('Izinkan? [y/N] ');
     final line = stdin.readLineSync()?.trim().toLowerCase();
-    return line == 'y' || line == 'yes';
+    if (line != 'y' && line != 'yes') return false;
+    stdout.write('Ingat aksi ini? [t]idak / [s]esi / [w]orkspace (t/S) ');
+    final remember = stdin.readLineSync()?.trim().toLowerCase();
+    if (remember == 's' || remember == 'sesi') {
+      await rt.approvalRules.remember(call, scope: 'session', sessionId: session.id);
+    } else if (remember == 'w' || remember == 'workspace') {
+      await rt.approvalRules.remember(call, scope: 'workspace');
+    }
+    return true;
   }
 
   try {

@@ -22,6 +22,7 @@
 | F5 — Otonomi & scheduling | context_from, digest, watcher | ✅ selesai | watcher probe + digest harian + chaining konteks (PR #164) — lihat §6 |
 | F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | ✅ selesai | smart-home REST (F6.1) + STT chain lengkap 10 provider (F6.2); A2UI E9 opsional sesuai docs/14 — lihat §7 |
 | F7 — Keunggulan kompondensal | Eval harness, cost observability | ✅ selesai | eval gate offline-first di CI + ledger cost per user/channel/day (PR #166) — lihat §8 |
+| F8 — Otonomi aman bertingkat | Profil security + approval-remember | ✅ selesai | `security.profile` (strict/standard/trusted_workspace) + mode `guided` + `risk_overrides` + approval-remember session/workspace — lihat §9 |
 
 ## 2. Fase F1 — Daya eksekusi nyata
 
@@ -81,3 +82,19 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
    - REST: snapshot `GET /v1/runs` kini menyertakan blok `cost` (pass-through `turnInspectorSnapshot`).
    - Web UI: kartu "BIAYA/TOKEN (7 HARI)" di halaman Runs (total + tabel top bucket, parsing defensif di `apps/agent_flutter/lib/data/models.dart`).
 3. **Dukung diferensiator yang sudah berjalan**: sandbox fail-closed + approval + audit yang lebih ketat dari kebanyakan agen (dipertahankan), scheduler tahan DST, A2UI generative-UI.
+
+## 9. Fase F8 — Otonomi aman bertingkat (security UX)
+
+Masalah: user baru menghadapi friksi konfirmasi berulang (`verify_project` selalu high meski read-mostly, allowlist shell tidak mencakup toolchain dev, konfirmasi identik tak pernah diingat) sementara mode `auto` justru MENOLAK tool high alih-alih menanyakan.
+
+Prinsip desain: turunkan FREKUENSI konfirmasi, jangan hapus lapisan mediasi host. Semua lapisan tetap berjalan: ShellPolicy (metachar), jail workspace PathSafety, taint C-03, audit, capability token.
+
+1. **`security.profile` (F8.1)** — ✅: preset `strict` (default, perilaku lama), `standard`, `trusted_workspace` di `tiko_config.dart`; preset hanya mengisi field yang TIDAK diset eksplisit di `security.*` (nilai eksplisit selalu menang).
+   - `strict`: mode `ask`, allowlist bawaan (`ls/cat/git status/pwd/echo`), tanpa override.
+   - `standard`: mode baru `guided` (medium/low auto; high SELALU dikonfirmasi, never auto; shell di luar allowlist dikonfirmasi — bukan ditolak; metachar tetap ditolak keras) + allowlist toolchain dev (`dart`, `flutter`, `make`, `cmake`, `gcc`, `g++`, `clang`, `javac`, `java`, `go`, `cargo`, `rustc`, `npm`, `node`, `npx`, `python`, `python3`, `pip`, `pip3`, `pytest`, `grep`, `wc`, `head`, `tail`, `find`, `git status/diff/log`) + `risk_overrides: {verify_project: medium}`.
+   - `trusted_workspace`: seperti `standard` plus `require_confirm` dikosongkan (medium sudah auto; high tetap dikonfirmasi oleh gate).
+   - Profil tidak dikenal → fallback `strict` + issue non-fatal.
+2. **`security.risk_overrides` (F8.1)** — ✅: map `tool -> low|medium|high|critical` divalidasi (label tak valid → issue non-fatal + entri diabaikan), diteruskan ke `MatrixPermissionGate.riskOverrides` (runtime + Tirith); override diterapkan terhadap risiko efektif strictest-of, kepemilikan operator di luar jail workspace.
+3. **Approval-remember (F8.2)** — ✅: `approval_rules.dart` (part tiko_runtime) — setelah confirm `y`, CLI bertanya "Ingat aksi ini? [t]idak / [s]esi / [w]orkspace"; rule session in-memory (per sesi), rule workspace persist `data/approval_rules.json` (fail-soft, entri korup dilompati); match = tool sama + prefix perintah shell penuh yang diingat (`flutter test` tidak mengizinkan `flutter clean` otomatis); gate tetap berjalan — hanya prompt identik yang di-skip.
+4. **Peta lanjutan F8.3/F8.4** (belum): `execute_code` multi-bahasa (Docker image per-bahasa), provisioning toolchain otomatis `doctor --fix`, auto-approve paket/apt dengan konfirmasi sekali per toolchain.
+5. **FFI in-process tetap ditolak** — dengan alasan arsitektur yang sama seperti `video_player` (docs/14): artefak eksekusi bersifat sementara; polyglot lewat proses/container terpisah.
