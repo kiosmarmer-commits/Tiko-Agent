@@ -875,6 +875,59 @@ void main() {
       );
     });
 
+    test('Modal diterima; wajib minimal satu children dan properti whitelist', () {
+      final msgs = parseA2uiMessages({
+        'version': '1.0',
+        'createSurface': {
+          'surfaceId': 's-modal',
+          'components': [
+            {
+              'id': 'root',
+              'component': 'Modal',
+              'title': 'Rincian langkah',
+              'children': ['t1'],
+            },
+            {'id': 't1', 'component': 'Text', 'text': 'isi modal'},
+          ],
+        },
+      });
+      final set = A2uiSurfaceSet();
+      expect(set.apply(msgs), isNotEmpty);
+
+      expect(
+        () => A2uiSurfaceSet().apply(parseA2uiMessages({
+              'version': '1.0',
+              'createSurface': {
+                'surfaceId': 's-modal-kosong',
+                'components': [
+                  {'id': 'root', 'component': 'Modal', 'title': 'kosong'},
+                ],
+              },
+            })),
+        throwsA(isA<FormatException>()),
+      );
+
+      expect(
+        () => A2uiSurfaceSet().apply(parseA2uiMessages({
+              'version': '1.0',
+              'createSurface': {
+                'surfaceId': 's-modal-prop',
+                'components': [
+                  {
+                    'id': 'root',
+                    'component': 'Modal',
+                    'title': 'x',
+                    'open': true,
+                    'children': ['t1'],
+                  },
+                  {'id': 't1', 'component': 'Card'},
+                ],
+              },
+            })),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('writeInputValue menulis data model via @path', () {
       final set = A2uiSurfaceSet()..apply(formMessages());
       final path = set.writeInputValue('s-form', 'f1', 'Budi');

@@ -168,6 +168,11 @@ class A2uiSurfaceView extends StatelessWidget {
           labels: (p['labels'] as List?)?.cast<String>() ?? const [],
           panes: _buildChildren(context, pool, node),
         );
+      case 'Modal':
+        return _A2uiModal(
+          title: _resolve(p['title'])?.toString() ?? 'Detail',
+          children: _buildChildren(context, pool, node),
+        );
       case 'Card':
         final child = node.childId != null ? pool[node.childId] : null;
         return Card(
@@ -629,6 +634,65 @@ class _A2uiTabsState extends State<_A2uiTabs>
         ),
         if (widget.panes.isNotEmpty) widget.panes[index],
       ],
+    );
+  }
+}
+
+/// Modal (E8): konten disembunyikan sampai pengguna mengetuk header —
+/// host yang mengontrol tampilan, agen tidak dapat memaksa dialog terbuka.
+/// Aksi di dalam konten tetap lewat pipeline anti-replay Tiko.
+class _A2uiModal extends StatefulWidget {
+  const _A2uiModal({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  State<_A2uiModal> createState() => _A2uiModalState();
+}
+
+class _A2uiModalState extends State<_A2uiModal> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => setState(() => _open = !_open),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  Icon(_open ? Icons.expand_less : Icons.expand_more,
+                      size: 20, color: scheme.outline),
+                ],
+              ),
+              if (_open && widget.children.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ...widget.children,
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
