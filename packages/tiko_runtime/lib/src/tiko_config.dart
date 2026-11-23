@@ -376,6 +376,8 @@ class TikoConfig {
       'http_request',
       'schedule_job',
     ],
+    this.securityProfile = 'strict',
+    this.riskOverrides = const {},
     this.httpDomainAllowlist = const [],
     this.a2uiOpenUrlAllow = const [],
     this.mcpServers = const [],
@@ -427,6 +429,19 @@ class TikoConfig {
   final String permissionMode;
   final List<String> shellAllowlist;
   final List<String> requireConfirm;
+
+  /// F8.1 (docs/15 §9) — profil security preset: `strict` (default,
+  /// perilaku lama), `standard` (mode `guided` + allowlist toolchain dev +
+  /// override `verify_project: medium`), `trusted_workspace` (standard, tapi
+  /// medium tidak dikonfirmasi lagi). Preset hanya mengisi field yang TIDAK
+  /// diset eksplisit di `security.*`; nilai eksplisit selalu menang.
+  final String securityProfile;
+
+  /// F8.1 — koreksi risiko per-tool (`tool -> low|medium|high|critical`)
+  /// dari `security.risk_overrides`, diteruskan ke MatrixPermissionGate.
+  /// Kepemilikan operator: bagian config di luar jangkauan jail workspace.
+  final Map<String, String> riskOverrides;
+
   final List<String> httpDomainAllowlist;
 
   /// Allowlist URL untuk aksi `open_url` pada surface A2UI (E5); entri
@@ -1253,8 +1268,9 @@ class TikoConfig {
         (configuredPort is! int || configuredPort < 1 || configuredPort > 65535)) {
       issues.add(const ConfigIssue('api.port', 'harus berupa integer 1 sampai 65535'));
     }
-    final mode = str(security['mode'], 'ask');
-    if (!const {'auto', 'ask', 'deny'}.contains(mode)) {
+    final modeRaw = security['mode'];
+    final mode = str(modeRaw, 'ask');
+    if (!const {'auto', 'guided', 'ask', 'deny'}.contains(mode)) {
       issues.add(ConfigIssue('security.mode', "mode '$mode' tidak dikenal"));
     }
     if (mode == 'auto') {
@@ -1263,6 +1279,71 @@ class TikoConfig {
         "mode 'auto' mengurangi konfirmasi; pakai 'ask' kecuali sadar risikonya",
         fatal: false,
       ));
+    }
+
+    // F8.1: profil security preset. Nilai eksplisit di security.*
+    // (mode, shell_allowlist, require_confirm, risk_overrides) selalu
+    // menang atas preset; preset hanya mengisi celah.
+    var secProfile = str(security['profile'], 'strict');
+    if (!const {'strict', 'standard', 'trusted_workspace'}
+        .contains(secProfile)) {
+      issues.add(ConfigIssue(
+        'security.profile',
+        "profil '$secProfile' tidak dikenal; fallback 'strict'",
+        fatal: false,
+      ));
+      secProfile = 'strict';
+    }
+
+    final riskOverrideRaw = security['risk_overrides'];
+    final riskOverrides = <String, String>{};
+    if (riskOverrideRaw != null) {
+      if (riskOverrideRaw is! Map) {
+        issues.add(const ConfigIssue(
+          'security.risk_overrides',
+          'harus berupa map tool -> label risiko',
+          fatal: false,
+        ));
+      } else {
+        for (final entry in riskOverrideRaw.entries) {
+          final value = '${entry.value}';
+          if (!const {'low', 'medium', 'high', 'critical'}
+              .contains(value)) {
+            issues.add(ConfigIssue(
+              'security.risk_overrides.${entry.key}',
+              "label '$value' tidak valid (low|medium|high|critical)",
+              fatal: false,
+            ));
+            continue;
+          }
+          riskOverrides['${entry.key}'] = value;
+        }
+      }
+    }
+
+    // Preset allowlist toolchain dev — mode `guided` menanyakan sekali per
+    // aksi high di luar allowlist ini, jadi toolchain build/test diriwayatkan
+    // tanpa membuka metacharacter (ShellPolicy tetap menolak `;&|` dsb).
+    const devTools = [
+      'git status', 'git diff', 'git log',
+      'dart', 'flutter', 'make', 'cmake',
+      'gcc', 'g++', 'clang', 'javac', 'java',
+      'go', 'cargo', 'rustc',
+      'npm', 'node', 'npx',
+      'python', 'python3', 'pip', 'pip3', 'pytest',
+      'grep', 'wc', 'head', 'tail', 'find',
+    ];
+    final baseAllowlist = const ['ls', 'cat', 'git status', 'pwd', 'echo'];
+    var permissionMode = modeRaw == null
+        ? (secProfile == 'strict' ? 'ask' : 'guided')
+        : (const {'auto', 'guided', 'ask', 'deny'}.contains(mode) ? mode : 'ask');
+    var shellAllowlist = security['shell_allowlist'] == null
+        ? (secProfile == 'strict'
+            ? baseAllowlist
+            : [...baseAllowlist, ...devTools])
+        : strList(security['shell_allowlist'], baseAllowlist);
+    if (riskOverrideRaw == null && secProfile != 'strict') {
+      riskOverrides['verify_project'] = 'medium';
     }
 
     final cfg = TikoConfig(
@@ -1276,16 +1357,20 @@ class TikoConfig {
           : providers.keys.first,
       providers: providers,
       tierProviders: tierProviders,
-      permissionMode: const {'auto', 'ask', 'deny'}.contains(mode) ? mode : 'ask',
-      shellAllowlist: strList(security['shell_allowlist'],
-          const ['ls', 'cat', 'git status', 'pwd', 'echo']),
-      requireConfirm: strList(security['require_confirm'], const [
-        'write_file',
-        'patch_file',
-        'shell',
-        'http_request',
-        'schedule_job',
-      ]),
+      permissionMode: permissionMode,
+      shellAllowlist: List.unmodifiable(shellAllowlist),
+      requireConfirm: security['require_confirm'] == null &&
+              secProfile == 'trusted_workspace'
+          ? const []
+          : strList(security['require_confirm'], const [
+              'write_file',
+              'patch_file',
+              'shell',
+              'http_request',
+              'schedule_job',
+            ]),
+      securityProfile: secProfile,
+      riskOverrides: Map.unmodifiable(riskOverrides),
       httpDomainAllowlist: strList(http['domain_allowlist'], const []),
       a2uiOpenUrlAllow: strList(a2ui['open_url_allow'], const []),
       mcpServers: mcpServers,

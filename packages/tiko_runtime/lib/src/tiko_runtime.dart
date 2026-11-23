@@ -47,6 +47,7 @@ part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
 part 'cost_ledger.dart';
 part 'eval_gate.dart';
+part 'approval_rules.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -406,6 +407,7 @@ class TikoRuntime {
     required this.errorMemory,
     required this.jobOutputs,
     required this.costLedger,
+    required this.approvalRules,
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
@@ -665,6 +667,11 @@ class TikoRuntime {
   /// F7 (docs/15 §8) — ledger biaya/token per turn (durabel, JSONL).
   final CostLedger costLedger;
 
+  /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
+  /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
+  /// identik tanpa menghilangkan gate.
+  final ApprovalRules approvalRules;
+
   /// F3 — post-mortem procedural (verify_project gagal >=2x lalu sukses).
   late final VerifyPostMortem postMortem = VerifyPostMortem(
     memory: layeredMemory,
@@ -807,6 +814,8 @@ class TikoRuntime {
 
     final costLedger = CostLedger(persistPath: p.join(dataDir, 'turn_costs.jsonl'));
     await costLedger.load();
+    final approvalRules = ApprovalRules(persistPath: p.join(dataDir, 'approval_rules.json'));
+    await approvalRules.load();
     final errorMemory = ErrorMemoryStore(
       persistPath: p.join(dataDir, 'errors.json'),
     );
@@ -1105,9 +1114,12 @@ class TikoRuntime {
     final securityAuditLog = AuditLog(directory: p.join(dataDir, 'logs'));
     
     final permissionGate = MatrixPermissionGate(
-      mode: cfg.permissionMode == 'auto' 
-          ? PermissionMode.auto 
-          : (cfg.permissionMode == 'deny' ? PermissionMode.deny : PermissionMode.ask),
+      mode: switch (cfg.permissionMode) {
+        'auto' => PermissionMode.auto,
+        'guided' => PermissionMode.guided,
+        'deny' => PermissionMode.deny,
+        _ => PermissionMode.ask,
+      },
     );
     
     final capabilityGate = CapabilityVault();
@@ -1167,6 +1179,7 @@ class TikoRuntime {
       errorMemory: errorMemory,
       jobOutputs: jobOutputs,
       costLedger: costLedger,
+      approvalRules: approvalRules,
       providers: providers,
       registry: registry,
       sessions: sessionStore,
@@ -1472,6 +1485,7 @@ class TikoRuntime {
 
   PermissionMode get _mode => switch (config.permissionMode) {
         'auto' => PermissionMode.auto,
+        'guided' => PermissionMode.guided,
         'deny' => PermissionMode.deny,
         _ => PermissionMode.ask,
       };
@@ -1487,6 +1501,7 @@ class TikoRuntime {
       requireConfirm: config.requireConfirm,
       onConfirmRequest: confirm,
       riskResolver: (call) => registry.get(call.name)?.spec.risk,
+      riskOverrides: config.riskOverrides,
     );
     final withCap = CapabilityAwareGate(
       inner: matrix,

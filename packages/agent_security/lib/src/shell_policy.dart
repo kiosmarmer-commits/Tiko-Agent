@@ -47,6 +47,11 @@ class ShellPolicy {
     return 'command not in structured allowlist: ${parts.take(3).join(' ')}';
   }
 
+  /// True bila teks perintah memuat metacharacter/expansion yang sebabkan
+  /// [check] pasti menolaknya — dipakai gate mode guided untuk membedakan
+  /// "di luar allowlist" (dikonfirmasi) dari "tidak aman" (ditolak).
+  static bool hasMetachar(String command) => _meta.hasMatch(command.trim());
+
   static List<List<String>> fromStringList(List<String> entries) {
     return entries
         .map((e) => e.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList())
