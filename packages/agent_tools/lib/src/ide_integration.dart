@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'dart:math';
 
 import 'acp_agent.dart';
+import 'registry.dart';
 
 /// Generate a random ID
 String _generateId({int length = 32}) {
@@ -327,13 +328,22 @@ class IdeIntegrationManager {
   IdeIntegrationManager({
     this.config = const IdeIntegrationConfig(),
     this.agentLoop,
-    this.tools = const [],
+    List<Tool>? tools,
     this.workingDirectory,
-  });
+    this.toolRegistry,
+  }) : _tools = tools ?? const [];
 
   final IdeIntegrationConfig config;
   final AgentLoop? agentLoop;
-  final List<Tool> tools;
+
+  /// Ketika [toolRegistry] diset, daftar tool dibaca live dari registry
+  /// runtime (termasuk tool MCP/script yang dimuat belakangan); kalau tidak,
+  /// snapshot statis [_tools] dipakai.
+  final ToolRegistry? toolRegistry;
+  final List<Tool> _tools;
+
+  List<Tool> get tools => toolRegistry?.all ?? _tools;
+
   final String? workingDirectory;
 
   final Map<String, AcpMessage> _pendingRequests = {};
@@ -1027,6 +1037,7 @@ class IdeIntegrationTool implements Tool {
     this.agentLoop,
     this.tools = const [],
     this.workingDirectory,
+    this.toolRegistry,
   }) : _manager =
            manager ??
            IdeIntegrationManager(
@@ -1034,12 +1045,17 @@ class IdeIntegrationTool implements Tool {
              agentLoop: agentLoop,
              tools: tools,
              workingDirectory: workingDirectory,
+             toolRegistry: toolRegistry,
            );
 
   final IdeIntegrationManager? manager;
   final IdeIntegrationConfig config;
   final AgentLoop? agentLoop;
   final List<Tool> tools;
+
+  /// Live tool listing source (F2 — wiring registry nyata, termasuk tool
+  /// MCP/script yang dimuat belakangan).
+  final ToolRegistry? toolRegistry;
   final String? workingDirectory;
   late final IdeIntegrationManager _manager;
 
@@ -1340,6 +1356,7 @@ class IdeIntegrationToolFactory {
     AgentLoop? agentLoop,
     List<Tool>? tools,
     String? workingDirectory,
+    ToolRegistry? toolRegistry,
   }) {
     return IdeIntegrationTool(
       manager: manager,
@@ -1347,6 +1364,7 @@ class IdeIntegrationToolFactory {
       agentLoop: agentLoop,
       tools: tools ?? [],
       workingDirectory: workingDirectory,
+      toolRegistry: toolRegistry,
     );
   }
 }

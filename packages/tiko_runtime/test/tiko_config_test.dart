@@ -269,6 +269,40 @@ mcp:
           reason: 'nilai non-bool jatuh ke default false');
     });
 
+    test('agent.edit_loop_verify & agent.ide_integration: default false, hanya true (F2)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.agentEditLoopVerify, isFalse);
+      expect(defaults.agentIdeIntegration, isFalse);
+
+      final (cfg, issues) = TikoConfig.parse('''
+agent:
+  edit_loop_verify: true
+  ide_integration: true
+mcp:
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.agentEditLoopVerify, isTrue);
+      expect(cfg.agentIdeIntegration, isTrue);
+
+      final (off, offIssues) = TikoConfig.parse('''
+agent:
+  edit_loop_verify: "on"
+  ide_integration: 1
+mcp:
+  servers: []
+''');
+      expect(offIssues.where((issue) => issue.fatal), isEmpty);
+      expect(off.agentEditLoopVerify, isFalse,
+          reason: 'nilai non-bool jatuh ke default false');
+      expect(off.agentIdeIntegration, isFalse,
+          reason: 'nilai non-bool jatuh ke default false');
+    });
+
     test('security.token_anomaly: default false, bentuk ringkas & mapping (E1)', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:

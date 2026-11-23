@@ -30,6 +30,10 @@ class ToolRegistry {
 
   Tool? get(String name) => _tools[name];
 
+  /// Snapshot tool berdaftar saat ini (dipakai integrasi IDE/ACP agar
+  /// tool yang dimuat belakangan — MCP/script — tetap terlihat).
+  List<Tool> get all => List.unmodifiable(_tools.values);
+
   List<ToolSpec> get specs => _tools.values.map((t) => t.spec).toList();
 
   List<String> get names => _tools.keys.toList();
