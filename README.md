@@ -10,7 +10,7 @@ Dokumentasi ini membedakan kode yang tersedia, kode yang terhubung ke runtime, d
 git clone https://github.com/kiosmarmer-commits/Tiko-Agent.git
 cd Tiko-Agent
 bash install.sh
-tiko setup --provider mock
+tiko setup --provider mock --smoke
 tiko settings
 tiko chat
 ```

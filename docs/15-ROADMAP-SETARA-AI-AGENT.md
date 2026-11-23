@@ -15,7 +15,7 @@
 
 | Fase | Judul | Status | Ringkasan |
 |---|---|---|---|
-| F1 — Daya eksekusi nyata | Host-exec opt-in + smoke setup | 🔄 berjalan | `sandbox.allow_host_exec` — lihat §2 |
+| F1 — Daya eksekusi nyata | Host-exec opt-in + smoke setup | ✅ selesai | `sandbox.allow_host_exec` + `tiko setup --smoke` + panduan sandbox install.sh — lihat §2 |
 | F2 — Coding agent | Repo map, git toolset, edit-loop | ⏳ belum | lihat §3 |
 | F3 — Debugging superior | Error recall, log probe, post-mortem | ⏳ belum | lihat §4 |
 | F4 — Riset unggul | Multi-putaran refine + verify claims | ⏳ belum | lihat §5 |
@@ -28,44 +28,45 @@
 Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind.none` → `UnsupportedError`) dan default provider mock — di host polos, kemampuan eksekusi agen nyaris nol.
 
 1. **`sandbox.allow_host_exec` (default `false`)** — ✅: bila tidak ada sandbox OS tersedia, tool `shell` menjalankan argv array **TANPA interpreter shell** (pola `verify_project` di `verify_tool.dart`): validasi metachar + `PathSafety` (symlink-aware) + jail workspace tetap berjalan, timeout 15s, output cap 50.000 char. Konvensi mengikuti `CodeExecutionConfig.allowUnsafeLocalExecution` (`docs/07` §5).
-   - Config: `tiko_config.dart` (`sandboxAllowHostExec`), wiring `tiko_runtime.dart` \u2192 `createBuiltinTools(allowHostExec: ...)`, implementasi `builtin.dart` (`ShellTool.allowHostExec`).
-   - Uji: `shell_host_exec_test.dart` (flag off \u2192 ditolak; flag on \u2192 output/exit nyata; jail & metachar tetap), `tiko_config_test.dart` (parse default/true/non-bool).
-2. **Smoke-test provider pasca-setup** — ⏳: `tiko setup` sudah memverifikasi provider aktif + menyarankan `tiko doctor --probe`; tinggal menautkan satu turn probe kecil (pertanyaan kalkulasi \u2192 tool `calc`) sebagai bukti akhir, berdampingan dengan health/circuit-breaker probe yang sudah ada.
-3. **Auto-bootstrap sandbox lokal** — ⏳: instalasi/petunjuk bubblewrap (Linux) di `install.sh` + symlink docs INSTALL; fallback docker image tetap tersedia via `SandboxRunner.detect()`.
+   - Config: `tiko_config.dart` (`sandboxAllowHostExec`), wiring `tiko_runtime.dart` → `createBuiltinTools(allowHostExec: ...)`, implementasi `builtin.dart` (`ShellTool.allowHostExec`).
+   - Uji: `shell_host_exec_test.dart` (flag off → ditolak; flag on → output/exit nyata; jail & metachar tetap), `tiko_config_test.dart` (parse default/true/non-bool).
+2. **Smoke-test provider pasca-setup** — ✅: `tiko setup --smoke` menjalankan satu turn agentic uji (“hitung 5+1” → tool `calc` → jawaban “6”) lewat `TikoRuntime.create` + `chatWithStatus`; turn 1 tool call ≈70 ms dengan mock; gagal → exit code 1 dengan pesan; health/circuit-breaker probe tetap tersedia via `tiko doctor --probe`.
+   - Uji: `tiko_cli_test.dart` (parse `--smoke`), smoke langsung di temp dir.
+3. **Auto-bootstrap sandbox lokal** — ✅: `install.sh` mendeteksi `bwrap`/`docker` dan bila absen memandu satu perintah (`sudo apt-get install -y bubblewrap`) + alternatif `sandbox.allow_host_exec`; `doctor` check `sandbox` tetap memberi instruksi setara saat runtime.
 
 ## 3. Fase F2 — Coding agent kelas Claude Code
 
 1. **Repo map + `code_context`**: indeks simbol (class/fungsi/import) per file di `data/`, dicari via FTS/regex tanpa dependensi LSP; agen dapat "find definition/references" mulus.
 2. **Git toolset aman**: `git_status`/`git_diff`/`git_log`/`git_commit` — whitelist subcommand, PathSafety, tanpa flag berbahaya (`--force`, `reset --hard`); anti-replay tidak perlu (semuanya read-only kecuali commit sesuai approval).
-3. **Edit loop guard** (opsional per config `agent.edit_loop_verify`): setelah `patch_file` wajib `verify_project` sukses sebelum aksi berikutnya \u2014 memakai loop detector yang sudah ada sebagai fondasi.
-4. **Selesaikan wiring `IdeIntegrationTool`** (toolbank memakai `tools: []` di `builtin.dart`) \u2192 sambungkan registry nyata + test ACP.
+3. **Edit loop guard** (opsional per config `agent.edit_loop_verify`): setelah `patch_file` wajib `verify_project` sukses sebelum aksi berikutnya — memakai loop detector yang sudah ada sebagai fondasi.
+4. **Selesaikan wiring `IdeIntegrationTool`** (toolbank memakai `tools: []` di `builtin.dart`) → sambungkan registry nyata + test ACP.
 
 ## 4. Fase F3 — Debugging superior (diferensiasi)
 
-1. **Auto-recall error memory**: ContextBuilder menarik sampai 3 kesalahan mirip dari `ErrorMemoryStore` (pola `MemoryNudgeEngine` yang sudah ada) \u2014 agen mengingat bug lintas sesi.
-2. **Tool `log_probe`** (read-only, fail-closed): tail/grep log di `data/logs` + journald opsional, terintegrasi `TurnInspector` \u2192 agen menganalisis jejak run-nya sendiri.
-3. **Post-mortem procedural**: reflection engine menulis "lesson" ke layered memory (procedural) setelah verify gagal 2\u00d7 lalu sukses.
+1. **Auto-recall error memory**: ContextBuilder menarik sampai 3 kesalahan mirip dari `ErrorMemoryStore` (pola `MemoryNudgeEngine` yang sudah ada) — agen mengingat bug lintas sesi.
+2. **Tool `log_probe`** (read-only, fail-closed): tail/grep log di `data/logs` + journald opsional, terintegrasi `TurnInspector` → agen menganalisis jejak run-nya sendiri.
+3. **Post-mortem procedural**: reflection engine menulis "lesson" ke layered memory (procedural) setelah verify gagal 2× lalu sukses.
 
 ## 5. Fase F4 — Riset unggul
 
-1. **Multi-putaran `deep_research`** (gap terdok `docs/13` \u00a71): iterasi critique\u2192re-plan maks 2 putaran, budget-guarded.
+1. **Multi-putaran `deep_research`** (gap terdok `docs/13` §1): iterasi critique→re-plan maks 2 putaran, budget-guarded.
 2. **Wire `verify_claims` (evidence ledger) ke laporan riset** sebelum terbit.
 3. **Dedupe sumber + export markdown/PDF** ke channel gateway.
 
 ## 6. Fase F5 — Otonomi & scheduling
 
-1. **`context_from` chaining antar-job** (gap terdok `docs/13` \u00a71).
+1. **`context_from` chaining antar-job** (gap terdok `docs/13` §1).
 2. **Digest proaktif harian** ala Pulse/Hermes (cron + riset + gateway yang sudah ada).
 3. **Watcher job**: probe periodik (`verify_project`/URL) yang memicu turn agen hanya saat status berubah.
 
 ## 7. Fase F6 — Penuntasan integrasi (tanpa menghapus apa pun)
 
 1. **Smart-home wiring user-facing**: tool/REST + consent (README mencatat provider masih "library + test contract").
-2. **Voice breadth** (TTS/STT provider) dan **adapter memori cloud first-class** \u2014 gap `HERMES-TOOLS-GAP-ANALYSIS-2026-11-20.md` \u00a7"Yang masih gap".
-3. **A2UI tersisa (E9 Video/Audio, katalog chart lanjutan)** \u2014 hanya bila keputusan `docs/14` diubah (video_player) / opsional.
+2. **Voice breadth** (TTS/STT provider) dan **adapter memori cloud first-class** — gap `HERMES-TOOLS-GAP-ANALYSIS-2026-11-20.md` §"Yang masih gap".
+3. **A2UI tersisa (E9 Video/Audio, katalog chart lanjutan)** — hanya bila keputusan `docs/14` diubah (video_player) / opsional.
 
 ## 8. Fase F7 — Keunggulan kompondensal
 
-1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) \u2192 eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI.
+1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) → eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI.
 2. **Cost/token observability per user/channel** di halaman Runs (agregasi dari `TurnInspector` + persist).
 3. **Dukung diferensiator yang sudah berjalan**: sandbox fail-closed + approval + audit yang lebih ketat dari kebanyakan agen (dipertahankan), scheduler tahan DST, A2UI generative-UI.
