@@ -7,6 +7,7 @@ import 'models.dart';
 import 'context_builder.dart';
 import 'compactor.dart';
 import 'loop_detector.dart';
+import 'edit_loop_guard.dart';
 import 'budget_guard.dart';
 import 'router.dart';
 import 'metrics.dart';
@@ -95,6 +96,7 @@ class AgentLoop {
     this.autoReflectOnTools = 3,
     this.synthLlm,
     this.skillEval = const SkillEvalConfig(),
+    this.editLoopVerify = false,
     this.onTextDelta,
     this.onToolCallStart,
     this.onToolTrace,
@@ -165,6 +167,10 @@ class AgentLoop {
   /// FR-01: S_eval weights and threshold for auto skill drafting.
   final SkillEvalConfig skillEval;
 
+  /// F2 (docs/15 §3) — edit-loop guard: bila aktif, setelah `patch_file`
+  /// sukses seluruh tool lain ditahan hingga `verify_project` sukses.
+  final bool editLoopVerify;
+
   /// Explainability payload of the most recent routing decision.
   Map<String, dynamic>? _lastRouteExplain;
   Map<String, dynamic>? get lastRouteExplain => _lastRouteExplain;
@@ -201,6 +207,7 @@ class AgentLoop {
 
   final _loopDetector = LoopDetector();
   final _budget = BudgetGuard();
+  final _editGuard = EditLoopGuard();
 
   /// Cooperative cancellation token for the turn currently being handled.
   /// Hosts call [cancelTurn] (from a stop button, gateway command, or team
@@ -223,6 +230,7 @@ class AgentLoop {
     _lastSkillsUsed = const [];
     _lastAnswer = null;
     _lastTurnSucceeded = false;
+    _editGuard.reset();
     final cancel = _turnCancel = cancelToken ?? CancellationToken();
     final trace = TraceContext();
     trace.span('start');
@@ -395,7 +403,33 @@ class AgentLoop {
                     );
             }
           }
-          if (verdict.verdict == PermissionVerdict.allowed) {
+          if (editLoopVerify &&
+              verdict.verdict == PermissionVerdict.allowed &&
+              _editGuard.intercept(call) != null) {
+            // F2 edit-loop guard: tool lain ditahan sebelum eksekusi; model
+            // menerima hasil error dan dapat memulihkan dengan verify_project.
+            final result = _editGuard.intercept(call)!;
+            denied.add(
+              (
+                call: call,
+                result: result,
+                verdict: const PermissionResult(
+                  PermissionVerdict.denied,
+                  reason: 'edit-loop guard menunggu verify_project',
+                ),
+              ),
+            );
+            audit?.call(
+              call,
+              const PermissionResult(
+                PermissionVerdict.denied,
+                reason: 'edit-loop guard menunggu verify_project',
+              ),
+              result,
+            );
+            metrics?.recordTool(error: true);
+            ctx = ctx.withToolResult(call, result);
+          } else if (verdict.verdict == PermissionVerdict.allowed) {
             // Capability is validated and consumed by the gate; it must not
             // reach tool adapters, tool output, or persisted execution traces.
             // Copy the args instead of mutating them: a ToolCall may carry a
@@ -441,6 +475,7 @@ class AgentLoop {
           final verdict = const PermissionResult(PermissionVerdict.allowed);
           audit?.call(call, verdict, result);
           metrics?.recordTool(error: result.isError);
+          if (editLoopVerify) _editGuard.observe(call.name, result.isError);
           if (result.isError) success = false;
           _lastToolNames.add(call.name);
           executedToolNames.add(call.name);

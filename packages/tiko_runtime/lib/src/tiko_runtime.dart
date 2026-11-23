@@ -931,6 +931,20 @@ class TikoRuntime {
       ..register(GitDiffTool(runner: gitRunner))
       ..register(GitLogTool(runner: gitRunner))
       ..register(GitCommitTool(runner: gitRunner));
+    // F2 (docs/15 §3): wiring IdeIntegrationTool dengan registry nyata —
+    // opt-in via config (default false); daftar tool ACP dibaca live.
+    if (cfg.agentIdeIntegration) {
+      registry.register(IdeIntegrationTool(
+        config: const IdeIntegrationConfig(
+          enabled: true,
+          ideType: 'vscode',
+          autoDetect: true,
+          enableAcp: true,
+        ),
+        toolRegistry: registry,
+        workingDirectory: workspace,
+      ));
+    }
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
@@ -2206,6 +2220,7 @@ class TikoRuntime {
         synthLlm: auxiliaryLlm(),
         shouldStop: () => safety.stopRequested,
         config: configOverride ?? defaultConfig,
+        editLoopVerify: config.agentEditLoopVerify,
         // P1-4: sanitize each delta before it reaches a live chat message;
         // the final reply is additionally guarded below as usual.
         onTextDelta:

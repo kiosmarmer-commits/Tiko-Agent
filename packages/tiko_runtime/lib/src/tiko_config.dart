@@ -401,6 +401,8 @@ class TikoConfig {
     this.enableVision = false,
     this.sandboxDockerPersistent = false,
     this.sandboxAllowHostExec = false,
+    this.agentEditLoopVerify = false,
+    this.agentIdeIntegration = false,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -505,6 +507,15 @@ class TikoConfig {
   /// argv TANPA interpreter shell di host (pola `verify_project`).
   /// Validasi metachar + PathSafety + jail workspace + approval tetap berlaku.
   final bool sandboxAllowHostExec;
+
+  /// Fase F2 — edit loop guard (`agent.edit_loop_verify`, default false):
+  /// setelah `patch_file` sukses, `verify_project` wajib sukses dulu sebelum
+  /// tool lain dieksekusi.
+  final bool agentEditLoopVerify;
+
+  /// Fase F2 — wiring tool `ide_integration` (`agent.ide_integration`, default
+  /// false): daftar tool live dari registry diteruskan ke ACP.
+  final bool agentIdeIntegration;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1312,6 +1323,12 @@ class TikoConfig {
       sandboxAllowHostExec:
           root['sandbox'] is YamlMap &&
               (root['sandbox'] as YamlMap)['allow_host_exec'] == true,
+      agentEditLoopVerify:
+          root['agent'] is YamlMap &&
+              (root['agent'] as YamlMap)['edit_loop_verify'] == true,
+      agentIdeIntegration:
+          root['agent'] is YamlMap &&
+              (root['agent'] as YamlMap)['ide_integration'] == true,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue

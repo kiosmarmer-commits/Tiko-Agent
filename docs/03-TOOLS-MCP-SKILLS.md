@@ -21,6 +21,7 @@ Semua tool diregistrasi sebagai `ToolSpec` dan dijalankan melalui `RegistryToolE
 | Memory | `memory_search`, `memory_add` | Melalui `MemoryStore` runtime |
 | File recovery | `patch_file`, `rollback`, `list_checkpoints` | Checkpoint workspace dan rollback |
 | Browser | `cdp_browser` | Memerlukan endpoint/browser CDP yang tersedia; tidak otomatis terpasang pada host |
+| IDE/ACP | `ide_integration` | Opt-in via config `agent.ide_integration` (default false); daftar tool ACP dibaca live dari registry (termasuk tool MCP/script yang dimuat belakangan); server ACP bind loopback, bearer-token opsional |
 | Scheduler | `schedule_job`, `list_jobs`, `cancel_job` | Menulis/membaca `JobStore` |
 | Error/coordination | `error_lookup`, `error_record`, `lease` | Penyimpanan error dan lease |
 | Invariant/evidence | `invariant_declare`, `invariant_check`, `claim`, `verify_claims` | Guard/inventory klaim dan bukti runtime |
@@ -34,6 +35,7 @@ Status nama tool yang aktif dapat berbeda sesuai host/config: script/MCP yang ga
 ## 2. Urutan izin dan eksekusi
 
 1. AgentLoop meminta PermissionGate memeriksa setiap tool call.
+1b. Edit loop guard (F2, opt-in `agent.edit_loop_verify`, default false): setelah `patch_file` sukses, seluruh tool lain ditahan fail-closed sampai `verify_project` sukses; tool yang ditahan tidak dieksekusi dan dicatat di audit.
 2. Permintaan yang memerlukan konfirmasi menunggu keputusan manusia dari channel yang memiliki approval UI. Channel tanpa mekanisme approval yang aman ditolak.
 3. Bila disetujui, gate memvalidasi ulang capability token; token capability tidak diteruskan ke adapter maupun hasil tool.
 4. Semua permission diperiksa berurutan sebelum eksekusi. Hanya panggilan berurutan dengan `ToolSpec.parallelSafe == true` dapat dijalankan bersamaan; tool tanpa opt-in adalah serial dan menjadi barrier.
