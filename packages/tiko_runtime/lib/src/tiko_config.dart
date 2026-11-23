@@ -400,6 +400,7 @@ class TikoConfig {
     this.enableVideoGeneration = false,
     this.enableVision = false,
     this.sandboxDockerPersistent = false,
+    this.sandboxAllowHostExec = false,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -498,6 +499,12 @@ class TikoConfig {
   /// alive and dispatch commands via `docker exec` so state (cwd, installed
   /// packages, /work files) carries between tool calls. Off by default.
   final bool sandboxDockerPersistent;
+
+  /// Fase F1 — opt-in eksplisit operator (`sandbox.allow_host_exec`, default
+  /// false): bila tidak ada sandbox OS tersedia, tool `shell` boleh menjalankan
+  /// argv TANPA interpreter shell di host (pola `verify_project`).
+  /// Validasi metachar + PathSafety + jail workspace + approval tetap berlaku.
+  final bool sandboxAllowHostExec;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1302,6 +1309,9 @@ class TikoConfig {
       sandboxDockerPersistent:
           root['sandbox'] is YamlMap &&
               (root['sandbox'] as YamlMap)['container_persistent'] == true,
+      sandboxAllowHostExec:
+          root['sandbox'] is YamlMap &&
+              (root['sandbox'] as YamlMap)['allow_host_exec'] == true,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue

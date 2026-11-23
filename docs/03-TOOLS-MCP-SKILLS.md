@@ -44,6 +44,8 @@ Status nama tool yang aktif dapat berbeda sesuai host/config: script/MCP yang ga
 
 `none` bukan isolasi OS. `proot` pada Termux juga bukan batas keamanan kuat. Jangan mengiklankan eksekusi shell/MCP sebagai terisolasi kuat pada host tanpa sandbox OS.
 
+Operator yang benar-benar memahami risikonya dapat mengaktifkan `sandbox.allow_host_exec` (default `false`): bila tidak ada sandbox OS, tool `shell` menjalankan argv array TANPA interpreter shell (metachar tak bisa dieksekusi), dengan validasi `PathSafety` + jail workspace + timeout + batas output yang sama dengan `verify_project`. Ini tidak menjadikan eksekusi terisolasi — jalankan sebagai user terbatas. (Fase F1, `docs/15` §2; uji: `shell_host_exec_test.dart`.)
+
 `SsrfGuard` melakukan validasi DNS/IP dan koneksi terjaga untuk memblokir alamat loopback, privat, link-local dan reserved. Proteksi ini harus tetap digunakan oleh semua adapter HTTP yang menerima URL dari model/user.
 
 ## 4. MCP configuration

@@ -34,6 +34,7 @@ List<Tool> createBuiltinTools({
   String? tavilyApiKey,
   bool enableWebSearch = true,
   SandboxRunner? sandbox,
+  bool allowHostExec = false,
   SkillRegistry? skillRegistry,
   String? falApiKey,
   String? openaiApiKey,
@@ -111,6 +112,7 @@ List<Tool> createBuiltinTools({
     ShellTool(
       sandbox:
           sandbox ?? SandboxRunner(kind: SandboxKind.none, workspacePath: root),
+      allowHostExec: allowHostExec,
     ),
     WebFetchTool(ssrf: guard),
     BrowserTool(
@@ -595,8 +597,16 @@ class WriteFileTool implements Tool {
 }
 /// Shell tool — high risk; allowlist enforced by PermissionGate + local checks.
 class ShellTool implements Tool {
-  ShellTool({this.sandbox});
+  ShellTool({this.sandbox, this.allowHostExec = false});
   final SandboxRunner? sandbox;
+
+  /// Fase F1 — opt-in eksplisit operator (config `sandbox.allow_host_exec`,
+  /// default false). Tanpa sandbox OS, shell biasanya ditolak fail-closed;
+  /// bila flag aktif, eksekusi memakai pola `verify_tool`: argv array TANPA
+  /// interpreter shell (metachar tak bisa dieksekusi), validasi metachar +
+  /// PathSafety + jail workspace tetap berjalan di atas, timeout dan batas
+  /// output sama.
+  final bool allowHostExec;
 
   @override
   ToolSpec get spec => const ToolSpec(
@@ -677,10 +687,16 @@ class ShellTool implements Tool {
     try {
       final runner =
           sandbox ?? SandboxRunner(kind: SandboxKind.none, workspacePath: root);
-      final result = await runner.run(
-        parts,
-        timeout: const Duration(seconds: 15),
-      );
+      final unsandboxedFallback =
+          allowHostExec && runner.kind == SandboxKind.none;
+      final result = unsandboxedFallback
+          ? await (Process.run(parts.first, parts.sublist(1),
+                  workingDirectory: root)
+              .timeout(const Duration(seconds: 15)))
+          : await runner.run(
+              parts,
+              timeout: const Duration(seconds: 15),
+            );
 
       final out = StringBuffer();
       if ((result.stdout as String).isNotEmpty) out.writeln(result.stdout);

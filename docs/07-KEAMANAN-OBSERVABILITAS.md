@@ -70,6 +70,8 @@ Tool forge menjalankan contract tests sebelum tool dipasang; fail-closed bila sa
 
 `CodeExecutionTool` tidak lagi fallback diam-diam ke eksekusi lokal di host ketika OS sandbox tidak tersedia. Tanpa sandbox (atau tanpa provider eksplisit), tool menolak eksekusi dengan pesan fail-closed. Operator yang benar-benar memahami risikonya dapat mengaktifkan eksekusi host secara eksplisit lewat `CodeExecutionConfig.allowUnsafeLocalExecution: true` (default `false`). Provider eksplisit yang diinjeksi (mis. `LocalCodeExecutionProvider` atau `DockerCodeExecutionProvider`) tetap dihormati untuk kompatibilitas.
 
+Pola yang sama berlaku untuk tool `shell` (Fase F1): tanpa sandbox OS ia ditolak fail-closed; bila `sandbox.allow_host_exec: true` di config, ia menjalankan argv array TANPA interpreter shell dengan jail workspace + `PathSafety` + timeout + batas output yang sama dengan `verify_project`. Default tetap `false`; Roadmap F1 ada di `docs/15` §2.
+
 ## 6. Logging/diagnostics
 
 Runtime memiliki audit log, events, provider health/fallback snapshot, resource monitor, status/capabilities/doctor API. Gunakan `tiko doctor`, `tiko doctor --probe`, `tiko route explain --task "..."`, dan endpoint status untuk diagnosis. Audit/event log harus menghindari secret dan payload sensitif; jangan mengaktifkan prompt-level debug pada produksi tanpa redaksi dan kontrol akses.
