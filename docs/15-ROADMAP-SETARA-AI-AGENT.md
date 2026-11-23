@@ -21,7 +21,7 @@
 | F4 — Riset unggul | Multi-putaran refine + verify claims | ✅ selesai | refine terarah maks 2 putaran budget-guarded + verifikasi klaim evidence + dedupe sumber + ekspor PDF pure-Dart — lihat §5 |
 | F5 — Otonomi & scheduling | context_from, digest, watcher | ⏳ berjalan | lihat §6 |
 | F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | 🔄 berjalan | smart-home tool + REST `/v1/smart-home` user-facing (F6.1) ✅; A2UI E9 opsional — lihat §7 |
-| F7 — Keunggulan kompondensal | Eval harness, cost observability | ⏳ belum | lihat §8 |
+| F7 — Keunggulan kompondensal | Eval harness, cost observability | 🔄 berjalan | lihat §8 |
 
 ## 2. Fase F1 — Daya eksekusi nyata
 
@@ -69,6 +69,10 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
 
 ## 8. Fase F7 — Keunggulan kompondensal
 
-1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) → eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI.
-2. **Cost/token observability per user/channel** di halaman Runs (agregasi dari `TurnInspector` + persist).
+1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) → eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI. **⏳ menunggu keputusan**: gerbang CI butuh token provider asli (quota/biaya, perlu persetujuan) **atau** pendekatan offline deterministik (mock provider + fixture golden) — diusulkan yang kedua agar tanpa biaya.
+2. **Cost/token observability per user/channel** di halaman Runs (agregasi dari `TurnInspector` + persist) — ✅ selesai:
+   - `packages/tiko_runtime/lib/src/cost_ledger.dart`: `CostEntry` + `CostLedger` (persist JSONL `turn_costs.jsonl`, atomic tmp+rename, tail-trim 5.000 entri, skip baris korup fail-soft); `summary({group_by: user|channel|day, days})` mengembalikan total + bucket terurut token.
+   - Wiring runtime: `chatWithStatus` mencatat setiap turn user-facing (turn internal `internalCommand: true` dilewati), deterministik (di-await), fail-soft via event `cost.record_failed`.
+   - REST: snapshot `GET /v1/runs` kini menyertakan blok `cost` (pass-through `turnInspectorSnapshot`).
+   - Web UI: kartu "BIAYA/TOKEN (7 HARI)" di halaman Runs (total + tabel top bucket, parsing defensif di `apps/agent_flutter/lib/data/models.dart`).
 3. **Dukung diferensiator yang sudah berjalan**: sandbox fail-closed + approval + audit yang lebih ketat dari kebanyakan agen (dipertahankan), scheduler tahan DST, A2UI generative-UI.

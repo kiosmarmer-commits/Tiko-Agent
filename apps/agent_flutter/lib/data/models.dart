@@ -1284,10 +1284,14 @@ class RunsSnapshot {
     required this.active,
     required this.recent,
     required this.truncated,
+    this.cost,
   });
   final List<RunEntry> active;
   final List<RunEntry> recent;
   final bool truncated;
+
+  /// F7 — agregasi biaya/token per user/channel/day (`/v1/runs` `cost`).
+  final CostSummary? cost;
 
   factory RunsSnapshot.fromMap(Map<String, dynamic> map) => RunsSnapshot(
         active: [
@@ -1299,5 +1303,74 @@ class RunsSnapshot {
             RunEntry.fromMap(Map<String, dynamic>.from(r as Map)),
         ],
         truncated: map['truncated'] == true,
+        cost: map['cost'] is Map
+            ? CostSummary.fromMap(Map<String, dynamic>.from(map['cost'] as Map))
+            : null,
+      );
+}
+
+/// F7 — agregasi cost/token (window UTC `days` hari) per bucket.
+class CostSummary {
+  const CostSummary({
+    required this.groupBy,
+    required this.days,
+    required this.totalTurns,
+    required this.totalTokensUsed,
+    required this.totalToolCalls,
+    required this.totalSuccess,
+    required this.buckets,
+  });
+
+  final String groupBy;
+  final int days;
+  final int totalTurns;
+  final int totalTokensUsed;
+  final int totalToolCalls;
+  final int totalSuccess;
+
+  /// Urut token terbesar dulu.
+  final List<CostSummaryBucket> buckets;
+
+  factory CostSummary.fromMap(Map<String, dynamic> map) {
+    final total = Map<String, dynamic>.from(map['total'] as Map? ?? const {});
+    return CostSummary(
+      groupBy: map['group_by']?.toString() ?? 'user',
+      days: map['days'] is int ? map['days'] as int : 7,
+      totalTurns: total['turns'] is int ? total['turns'] as int : 0,
+      totalTokensUsed:
+          total['tokens_used'] is int ? total['tokens_used'] as int : 0,
+      totalToolCalls:
+          total['tool_calls'] is int ? total['tool_calls'] as int : 0,
+      totalSuccess: total['success'] is int ? total['success'] as int : 0,
+      buckets: [
+        for (final b in map['buckets'] as List? ?? const [])
+          CostSummaryBucket.fromMap(Map<String, dynamic>.from(b as Map)),
+      ],
+    );
+  }
+}
+
+class CostSummaryBucket {
+  const CostSummaryBucket({
+    required this.key,
+    required this.turns,
+    required this.tokensUsed,
+    required this.toolCalls,
+    required this.success,
+  });
+
+  final String key;
+  final int turns;
+  final int tokensUsed;
+  final int toolCalls;
+  final int success;
+
+  factory CostSummaryBucket.fromMap(Map<String, dynamic> map) =>
+      CostSummaryBucket(
+        key: map['key']?.toString() ?? '',
+        turns: map['turns'] is int ? map['turns'] as int : 0,
+        tokensUsed: map['tokens_used'] is int ? map['tokens_used'] as int : 0,
+        toolCalls: map['tool_calls'] is int ? map['tool_calls'] as int : 0,
+        success: map['success'] is int ? map['success'] as int : 0,
       );
 }
