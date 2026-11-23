@@ -1195,6 +1195,10 @@ Future<void> main(List<String> args) async {
                   ? (body['timezone'] as String).trim()
                   : 'UTC',
               skill: (body['skill'] as String?)?.trim(),
+              contextFrom: (body['context_from'] as List?)
+                  ?.map((e) => e.toString())
+                  .toList(),
+              watchProbe: _watchProbe(body['watch']),
             );
             return job.toJson();
           } on FormatException catch (e) {
@@ -1216,6 +1220,12 @@ Future<void> main(List<String> args) async {
               timezone: (body['timezone'] as String?)?.trim(),
               paused: body['paused'] as bool?,
               skill: body['skill'] as String?,
+              contextFrom: (body['context_from'] as List?)
+                  ?.map((e) => e.toString())
+                  .toList(),
+              watchProbe: _watchProbe(body['watch']),
+              clearWatch:
+                  body.containsKey('watch') && body['watch'] == null,
             );
             return job?.toJson();
           } on FormatException catch (e) {
@@ -1566,6 +1576,17 @@ MissedPolicy _missedPolicy(String? name) {
     if (candidate.name.toLowerCase() == normalized) return candidate;
   }
   throw ArgumentError('invalid missed_policy: $name');
+}
+
+/// F5 — parse field `watch` body job (Automation CRUD). Null/absent = null
+/// (tanpa perubahan di update); objek tak valid jadi ArgumentError -> 400.
+WatchProbe? _watchProbe(Object? raw) {
+  if (raw == null) return null;
+  final probe = WatchProbe.tryFromJson(raw);
+  if (probe == null) {
+    throw ArgumentError('invalid watch payload: $raw');
+  }
+  return probe;
 }
 
 /// GUI-P1-07: snapshot status channel gateway (read-only). [active] adalah

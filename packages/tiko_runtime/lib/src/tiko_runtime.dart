@@ -43,6 +43,7 @@ part 'code_loop.dart';
 part 'bot_team.dart';
 part 'research.dart';
 part 'research_pdf.dart';
+part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
 
 const tikoVersion = '0.2.0';
@@ -401,6 +402,7 @@ class TikoRuntime {
     required this.pluginConsents,
     required this.ragPipeline,
     required this.errorMemory,
+    required this.jobOutputs,
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
@@ -666,6 +668,10 @@ class TikoRuntime {
   /// Error memory store (NEW-09) — dipakai auto-recall F3 per turn.
   final ErrorMemoryStore errorMemory;
 
+  /// F5 — output terakhir per job (durabel, cap ketat) untuk
+  /// `context_from` chaining antar-job.
+  final JobOutputStore jobOutputs;
+
   /// Cooperative cancellation registry keyed by session id (P1-11). One live
   /// token per running turn; subagent turns chain to their parent's token so
   /// cancelling a parent session also stops its nested subagents.
@@ -790,6 +796,8 @@ class TikoRuntime {
     final jobs = JobStore(persistPath: p.join(dataDir, 'jobs.json'));
     await jobs.load();
 
+    final jobOutputs = JobOutputStore(persistPath: p.join(dataDir, 'job_outputs.json'));
+    await jobOutputs.load();
     final errorMemory = ErrorMemoryStore(
       persistPath: p.join(dataDir, 'errors.json'),
     );
@@ -976,6 +984,24 @@ class TikoRuntime {
       ..register(ListCheckpointsTool(checkpointer: checkpointer))
       ..register(CdpBrowserTool())
       ..register(ScheduleJobTool(jobs))
+      ..register(
+        ScheduleDigestTool(
+          ({
+            required String cron,
+            required String timezone,
+            required String channel,
+            required String userKey,
+          }) =>
+            jobs.addAndSave(
+              cron: cron,
+              prompt: digestPromptPrefix,
+              channel: channel,
+              userKey: userKey,
+              timezone: timezone,
+              missedPolicy: MissedPolicy.runOnce,
+            ),
+        ),
+      )
       ..register(ListJobsTool(jobs))
       ..register(CancelJobTool(jobs))
       ..register(ErrorLookupTool(store: errorMemory))
@@ -1130,6 +1156,7 @@ class TikoRuntime {
       config: cfg,
       issues: issues,
       errorMemory: errorMemory,
+      jobOutputs: jobOutputs,
       providers: providers,
       registry: registry,
       sessions: sessionStore,
@@ -4304,12 +4331,75 @@ class TikoRuntime {
           'scheduled_at': job.scheduledAt?.toIso8601String(),
         });
         try {
+          // F5 — watcher: probe read-only dulu; turn agen hanya dijalankan
+          // bila fingerprint status berubah (atau baseline kosong). Probe
+          // gagal (network) diperlakukan fail-soft: tick dilewati, state
+          // tidak berubah, event job.watch_error. Job riset/digest biasa.
+          var handlerPrompt = message.text;
+          if (job.watchProbe != null) {
+            final probe = await runWatchProbe(job.watchProbe!);
+            if (probe.error != null) {
+              events.emit('job.watch_error', {
+                'job_id': job.id,
+                'error': probe.error,
+                'detail': probe.detail,
+              });
+              jobs.recordSuccess(job.id);
+              return;
+            }
+            final changed =
+                job.watchState == null || job.watchState != probe.fingerprint;
+            jobs.recordWatch(job.id, state: probe.fingerprint);
+            if (!changed) {
+              events.emit('job.watch_unchanged', {
+                'job_id': job.id,
+                'detail': probe.detail,
+              });
+              return;
+            }
+            events.emit('job.watch_changed', {
+              'job_id': job.id,
+              'detail': probe.detail,
+            });
+            handlerPrompt = '[WATCHER ${job.id} — ${probe.detail}]\n'
+                'Status target berubah dari "${job.watchState ?? '(baseline)'}" '
+                'menjadi "${probe.fingerprint}".\n\n${message.text}';
+          }
+
+          // F5 — digest proaktif harian: deterministik dari state nyata
+          // (kanban + riset + scheduler), tanpa turn LLM.
+          if (isDigestJobPrompt(handlerPrompt)) {
+            final digest = await buildDailyDigest();
+            jobs.recordSuccess(job.id);
+            try {
+              await jobOutputs.record(job.id, digest);
+            } catch (_) {}
+            if (deliver != null) {
+              await jobs.awaitDelivery(
+                job.id,
+                message.meta['run_id'] as String? ?? '',
+                digest,
+              );
+            }
+            events.emit('job.completed', {
+              'job_id': job.id,
+              'channel': job.channel,
+              'user_key': job.userKey,
+              'session_id': message.sessionKey,
+              'kind': 'digest',
+              'text': digest,
+              'scheduled_at': job.scheduledAt?.toIso8601String(),
+              'delivery_pending': deliver != null,
+            });
+            return;
+          }
+
           // Fase D — job riset (prompt ber-prefix [RISET]): jalankan
           // pipeline riset penuh, bukan turn chat biasa. Digest dikirim
           // via channel milik job; laporan markdown tetap tersimpan.
-          if (isResearchJobPrompt(message.text)) {
+          if (isResearchJobPrompt(handlerPrompt)) {
             final record = await runResearch(
-              question: researchQuestionFromPrompt(message.text),
+              question: researchQuestionFromPrompt(handlerPrompt),
               jobId: job.id,
             );
             if (record.status != 'ok') {
@@ -4347,10 +4437,20 @@ class TikoRuntime {
             });
             return;
           }
+          // F5 — suntik konteks antar-job (context_from): output terakhir
+          // job sumber (read-only) diberi label jelas; kosong bila tidak ada.
+          var promptText = handlerPrompt;
+          final contextBlock = buildJobContextBlock(
+            job,
+            outputFor: jobOutputs.textFor,
+            atFor: jobOutputs.atFor,
+          );
+          if (contextBlock.isNotEmpty) {
+            promptText = '$contextBlock\n\n$promptText';
+          }
           // Attach skill (Hermes-parity P2): fail-closed — skill hilang/
           // retired membuat run gagal dengan pesan eksplisit, bukan
           // dijalankan tanpa skill.
-          var promptText = message.text;
           final attachedSkill =
               job.skill == null ? null : skills.get(job.skill!);
           if (job.skill != null &&
@@ -4362,7 +4462,7 @@ class TikoRuntime {
           }
           if (attachedSkill != null) {
             promptText =
-                '${attachedSkill.body}\n\nTask:\n${message.text}';
+                '${attachedSkill.body}\n\nTask:\n$handlerPrompt';
           }
           final outcome = await chatWithStatus(
             promptText,
@@ -4379,6 +4479,13 @@ class TikoRuntime {
             );
           }
           jobs.recordSuccess(job.id);
+          // F5 — simpan output untuk context_from job lain (cap ketat di
+          // JobOutputStore; gagal simpan tidak menggagalkan job).
+          try {
+            await jobOutputs.record(job.id, outcome.text);
+          } catch (e) {
+            events.emit('job.output_record_failed', {'job_id': job.id, 'error': '$e'});
+          }
           if (deliver != null) {
             // Antre durabel sebelum menerbitkan sukses: crash setelah titik
             // ini me-replay delivery alih-alih kehilangan output.

@@ -703,6 +703,8 @@ class HttpApiServer {
       'timezone',
       'paused',
       'skill',
+      'context_from',
+      'watch',
     };
     for (final key in body.keys) {
       if (!allowed.contains(key)) {
@@ -823,6 +825,46 @@ class HttpApiServer {
         'invalid_request',
         'timezone wajib nama zona IANA maks 64',
       );
+    }
+    final contextFrom = body['context_from'];
+    if (contextFrom != null && contextFrom is! List) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'context_from wajib array id job (maks 5)',
+      );
+    }
+    if (contextFrom is List) {
+      final valid = contextFrom.every(
+        (e) => e is String && e.trim().isNotEmpty && e.trim().length <= 64,
+      );
+      if (!valid || contextFrom.length > 5) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'context_from wajib maks 5 id string 1..64 karakter',
+        );
+      }
+    }
+    final watch = body['watch'];
+    if (watch != null) {
+      if (watch is! Map) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'watch wajib objek {kind: url, url: ...}',
+        );
+      }
+      final url = watch['url'];
+      if (watch['kind'] != 'url' ||
+          url is! String ||
+          !(url.startsWith('http://') || url.startsWith('https://'))) {
+        throw ApiRequestException(
+          400,
+          'invalid_request',
+          'watch wajib {kind: "url", url: scheme http(s)}',
+        );
+      }
     }
   }
 

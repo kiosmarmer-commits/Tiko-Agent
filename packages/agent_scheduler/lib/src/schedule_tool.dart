@@ -1,6 +1,7 @@
 import 'package:agent_core/agent_core.dart';
 
 import 'cron.dart';
+import 'watch_probe.dart';
 import 'job_store.dart';
 
 /// Tool schedule_job (TASK-05-04) — medium risk, needs confirm in ask mode.
@@ -34,6 +35,16 @@ class ScheduleJobTool implements Tool {
           'type': 'string',
           'description':
               'Slug skill opsional yang dilampirkan ke tiap run; skill harus tersedia dan tidak retired',
+        },
+        'context_from': {
+          'type': 'array',
+          'description':
+              'F5 — maks 5 id job sumber; output terakhir job-jobs itu disuntik sebagai konteks tiap run',
+        },
+        'watch_url': {
+          'type': 'string',
+          'description':
+              'F5 — URL http(s) yang diprobe tiap tick; turn agen hanya jalan bila status berubah (watcher)',
         },
       },
       'required': ['cron', 'prompt'],
@@ -76,6 +87,10 @@ class ScheduleJobTool implements Tool {
         missedPolicy: policy,
         timezone: timezone,
         skill: (args['skill'] as String?)?.trim(),
+        contextFrom: (args['context_from'] as List?)?.map((e) => e.toString()).toList(),
+        watchProbe: (args['watch_url'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : WatchProbe.url((args['watch_url'] as String).trim()),
       );
     } catch (error) {
       return ToolResult(callId: '', content: 'job tidak dapat disimpan: $error', isError: true);

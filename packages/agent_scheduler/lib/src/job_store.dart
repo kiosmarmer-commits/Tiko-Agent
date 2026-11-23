@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:uuid/uuid.dart';
 
 import 'cron.dart';
+import 'watch_probe.dart';
 
 enum MissedPolicy { skip, runOnce, catchUp }
 
@@ -37,6 +38,10 @@ class Job {
     this.lastStatus,
     this.lastError,
     this.failureStreak = 0,
+    this.contextFrom = const [],
+    this.watchProbe,
+    this.watchState,
+    this.watchProbeAt,
   });
 
   final String id;
@@ -84,6 +89,22 @@ class Job {
   /// Streak kegagalan beruntun; reset ke 0 saat run sukses.
   int failureStreak;
 
+  /// F5 — chaining antar-job: output terakhir job-jobs ini (durabel via
+  /// JobOutputStore di host) disuntik sebagai konteks ke prompt tiap run.
+  /// Maks 5 id, fail-soft: id tidak dikenal dilompati.
+  List<String> contextFrom;
+
+  /// F5 — probe watcher (badan `url` GET read-only). Null = job biasa.
+  /// Turn agen hanya dipicu bila [watchState] berubah.
+  WatchProbe? watchProbe;
+
+  /// F5 — fingerprint probe terakhir yang SUDAH memicu/tercatat normal;
+  /// null = belum ada baseline (run pertama selalu dijalankan).
+  String? watchState;
+
+  /// F5 — kapan probe terakhir diperiksa.
+  DateTime? watchProbeAt;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'cron': cron,
@@ -108,6 +129,10 @@ class Job {
     'last_status': lastStatus,
     'last_error': lastError,
     'failure_streak': failureStreak,
+    if (contextFrom.isNotEmpty) 'context_from': contextFrom,
+    if (watchProbe != null) 'watch': watchProbe!.toJson(),
+    if (watchState != null) 'watch_state': watchState,
+    if (watchProbeAt != null) 'watch_probe_at': watchProbeAt!.toUtc().toIso8601String(),
   };
 
   factory Job.fromJson(Map<String, dynamic> m) {
@@ -198,6 +223,34 @@ class Job {
     if (rawStreak != null && (rawStreak is! int || rawStreak < 0)) {
       throw const FormatException('invalid failure_streak');
     }
+    final rawContextFrom = m['context_from'];
+    List<String> contextFrom = const [];
+    if (rawContextFrom != null) {
+      if (rawContextFrom is! List ||
+          rawContextFrom.length > 5 ||
+          rawContextFrom.any(
+            (e) => e is! String || e.trim().isEmpty || e.length > 64,
+          )) {
+        throw const FormatException('invalid context_from (maks 5 id 1..64 char)');
+      }
+      contextFrom = [
+        for (final e in rawContextFrom) e.trim(),
+      ];
+    }
+    final watch = WatchProbe.tryFromJson(m['watch']);
+    final rawWatchState = m['watch_state'];
+    if (rawWatchState != null && rawWatchState is! String) {
+      throw const FormatException('invalid watch_state');
+    }
+    final rawWatchProbeAt = m['watch_probe_at'];
+    final parsedWatchProbeAt = rawWatchProbeAt == null
+        ? null
+        : rawWatchProbeAt is String
+            ? DateTime.tryParse(rawWatchProbeAt)?.toUtc()
+            : null;
+    if (rawWatchProbeAt != null && parsedWatchProbeAt == null) {
+      throw const FormatException('invalid watch_probe_at');
+    }
     return Job(
       id: m['id'] as String,
       cron: m['cron'] as String,
@@ -224,6 +277,10 @@ class Job {
       lastStatus: lastStatus,
       lastError: rawLastError as String?,
       failureStreak: rawStreak as int? ?? 0,
+      contextFrom: contextFrom,
+      watchProbe: watch,
+      watchState: rawWatchState as String?,
+      watchProbeAt: parsedWatchProbeAt,
     );
   }
 }
@@ -340,6 +397,8 @@ class JobStore {
     String timezone = 'UTC',
     String? id,
     String? skill,
+    List<String>? contextFrom,
+    WatchProbe? watchProbe,
   }) {
     final expr = CronExpression.parse(cron);
     if (prompt.trim().isEmpty || prompt.length > 10000) {
@@ -351,6 +410,21 @@ class JobStore {
         throw ArgumentError.value(skill, 'skill', 'must be a slug 1..64 chars');
       }
       skill = trimmed;
+    }
+    final ctxFrom = <String>[...?contextFrom];
+    if (ctxFrom.length > 5) {
+      throw ArgumentError.value(
+        contextFrom, 'context_from', 'maks 5 id job sumber');
+    }
+    for (var i = 0; i < ctxFrom.length; i++) {
+      ctxFrom[i] = ctxFrom[i].trim();
+      if (ctxFrom[i].isEmpty || ctxFrom[i].length > 64) {
+        throw ArgumentError.value(
+          ctxFrom[i], 'context_from', 'id harus 1..64 karakter');
+      }
+      if (ctxFrom.indexOf(ctxFrom[i]) != i) {
+        ctxFrom.removeAt(i--); // duplikat dibuang
+      }
     }
     if (channel.trim().isEmpty || channel.length > 64 ||
         userKey.trim().isEmpty || userKey.length > 256) {
@@ -369,6 +443,8 @@ class JobStore {
       missedPolicy: missedPolicy,
       timezone: timezone,
       skill: skill,
+      contextFrom: ctxFrom,
+      watchProbe: watchProbe,
     );
     _jobs[job.id] = job;
     unawaitedSave();
@@ -384,6 +460,8 @@ class JobStore {
     String timezone = 'UTC',
     String? id,
     String? skill,
+    List<String>? contextFrom,
+    WatchProbe? watchProbe,
   }) async {
     final job = add(
       cron: cron,
@@ -394,6 +472,8 @@ class JobStore {
       timezone: timezone,
       id: id,
       skill: skill,
+      contextFrom: contextFrom,
+      watchProbe: watchProbe,
     );
     try {
       await save();
@@ -426,6 +506,9 @@ class JobStore {
     String? timezone,
     bool? paused,
     String? skill,
+    List<String>? contextFrom,
+    WatchProbe? watchProbe,
+    bool clearWatch = false,
   }) {
     final job = _jobs[id];
     if (job == null) return null;
@@ -464,6 +547,23 @@ class JobStore {
         }
         job.skill = trimmed;
       }
+    }
+    if (contextFrom != null) {
+      final ctxFrom = [
+        for (final e in contextFrom) e.trim(),
+      ]..removeWhere((e) => e.isEmpty);
+      if (ctxFrom.length > 5 || ctxFrom.any((e) => e.length > 64)) {
+        throw ArgumentError.value(
+          contextFrom, 'context_from', 'maks 5 id 1..64 karakter');
+      }
+      job.contextFrom = ctxFrom;
+    }
+    if (watchProbe != null) job.watchProbe = watchProbe;
+    if (clearWatch) {
+      job
+        ..watchProbe = null
+        ..watchState = null
+        ..watchProbeAt = null;
     }
     if (missedPolicy != null) {
       MissedPolicy? policy;
@@ -509,6 +609,18 @@ class JobStore {
     final ok = _jobs.remove(id) != null;
     if (ok) unawaitedSave();
     return ok;
+  }
+
+  /// F5 — catat hasil probe watcher (fingerprint + waktu), disimpan durabel.
+  /// Null bila id tidak dikenal.
+  Job? recordWatch(String id, {required String state}) {
+    final job = _jobs[id];
+    if (job == null) return null;
+    job
+      ..watchState = state
+      ..watchProbeAt = DateTime.now().toUtc();
+    unawaitedSave();
+    return job;
   }
 
   /// Pause/resume eksplisit (Hermes-parity P2): job paused tidak pernah
