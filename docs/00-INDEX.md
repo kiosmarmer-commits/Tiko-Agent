@@ -23,7 +23,8 @@
 | 11 | [10-WEB-UI.md](10-WEB-UI.md) | Dashboard web agentd (Flutter Web), sesi cookie, auto-open |
 | 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
-| 15 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E7 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface, ApprovalSheet, surface riset + DAG team run, aksi `open_url` allowlist host) |
+| 14 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E7 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface, ApprovalSheet, surface riset + DAG team run, aksi `open_url` allowlist host) |
+| 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F7; prinsip additive, status per fase) |
 
 ## Status implementasi
 
@@ -32,7 +33,7 @@
 | Agent loop, cancellation, budget, tool orchestration | Implemented | Perubahan harus menjaga contract test agent_core |
 | Provider AI, routing, health, circuit breaker | Implemented/conditional | Memerlukan endpoint dan secret provider |
 | Memory SQLite/JSON, FTS, vector, RAG, layers | Implemented/conditional | SQLite native tidak selalu tersedia; JSON fallback degraded |
-| Tools, sandbox, MCP stdio/HTTP, OAuth | Implemented/conditional | Sandbox OS dan secret dapat membuat capability unavailable |
+| Tools, sandbox, MCP stdio/HTTP, OAuth | Implemented/conditional | Sandbox OS dan secret dapat membuat capability unavailable; opsi opt-in `sandbox.allow_host_exec` (default false) menjalankan `shell` tanpa interpreter bila sandbox OS tidak ada (F1) |
 | Browser CDP lokal/remote | Implemented/conditional | Chrome atau backend remote harus tersedia |
 | Scheduler dan job delivery | Implemented | Channel tujuan harus aktif |
 | Telegram/Discord/Slack/WhatsApp/Email/Signal/Matrix/LINE | Implemented/conditional | Masing-masing membutuhkan konfigurasi dan credential |

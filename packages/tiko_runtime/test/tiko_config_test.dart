@@ -241,6 +241,34 @@ mcp:
       expect(badIssues.map((i) => i.path), contains('script.self_repair'));
     });
 
+    test('sandbox.allow_host_exec: default false, hanya true yang mengaktifkan (F1)', () {
+      final (defaults, defaultIssues) = TikoConfig.parse('''
+mcp:
+  servers: []
+''');
+      expect(defaultIssues.where((issue) => issue.fatal), isEmpty);
+      expect(defaults.sandboxAllowHostExec, isFalse);
+
+      final (cfg, issues) = TikoConfig.parse('''
+sandbox:
+  allow_host_exec: true
+mcp:
+  servers: []
+''');
+      expect(issues.where((issue) => issue.fatal), isEmpty);
+      expect(cfg.sandboxAllowHostExec, isTrue);
+
+      final (off, offIssues) = TikoConfig.parse('''
+sandbox:
+  allow_host_exec: "on"
+mcp:
+  servers: []
+''');
+      expect(offIssues.where((issue) => issue.fatal), isEmpty);
+      expect(off.sandboxAllowHostExec, isFalse,
+          reason: 'nilai non-bool jatuh ke default false');
+    });
+
     test('security.token_anomaly: default false, bentuk ringkas & mapping (E1)', () {
       final (defaults, defaultIssues) = TikoConfig.parse('''
 mcp:

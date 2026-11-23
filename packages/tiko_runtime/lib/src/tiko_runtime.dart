@@ -871,6 +871,7 @@ class TikoRuntime {
         searxngBaseUrl: cfg.searxngBaseUrl,
         tavilyApiKey: TikoConfig.resolveSecretRef(cfg.tavilyApiKeyRef, env: effectiveEnv),
         sandbox: sandbox,
+        allowHostExec: cfg.sandboxAllowHostExec,
         skillRegistry: skillRegistry,
         falApiKey: TikoConfig.resolveSecretRef(cfg.falApiKeyRef, env: effectiveEnv),
         openaiApiKey: TikoConfig.resolveSecretRef(cfg.openaiApiKeyRef, env: effectiveEnv),
