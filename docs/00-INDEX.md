@@ -24,7 +24,7 @@
 | 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
 | 14 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E7 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface, ApprovalSheet, surface riset + DAG team run, aksi `open_url` allowlist host) |
-| 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F7; prinsip additive, status per fase) |
+| 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F4 selesai, F5 berjalan; prinsip additive, status per fase) |
 
 ## Status implementasi
 

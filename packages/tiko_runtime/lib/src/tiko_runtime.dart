@@ -42,6 +42,7 @@ part 'tiko_runtime_internals.dart';
 part 'code_loop.dart';
 part 'bot_team.dart';
 part 'research.dart';
+part 'research_pdf.dart';
 part 'a2ui_research.dart';
 
 const tikoVersion = '0.2.0';
@@ -4328,7 +4329,8 @@ class TikoRuntime {
                 job.id,
                 message.meta['run_id'] as String? ?? '',
                 '${record.summary}\n\n'
-                    'Laporan lengkap: data/research/reports/${record.reportName}',
+                    'Laporan lengkap: data/research/reports/${record.reportName}'
+                    '${record.pdfName == null ? '' : '\nPDF: data/research/reports/${record.pdfName}'}',
               );
             }
             events.emit('job.completed', {
