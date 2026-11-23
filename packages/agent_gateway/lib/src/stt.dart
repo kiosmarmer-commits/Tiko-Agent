@@ -21,6 +21,8 @@ class SttClient {
     this.elevenlabsBaseUrl = 'https://api.elevenlabs.io/v1',
     this.deepinfraApiKey,
     this.deepinfraBaseUrl = 'https://api.deepinfra.com/v1',
+    this.minimaxApiKey,
+    this.minimaxBaseUrl = 'https://api.minimax.io/v1',
     this.model = 'whisper-1',
     this.providerOrder = const [
       'local',
@@ -31,6 +33,7 @@ class SttClient {
       'xai',
       'elevenlabs',
       'deepinfra',
+      'minimax',
     ],
     http.Client? httpClient,
   }) : _http = httpClient;
@@ -61,6 +64,10 @@ class SttClient {
   // DeepInfra
   final String? deepinfraApiKey;
   final String deepinfraBaseUrl;
+
+  // MiniMax (asr-1.0 — POST /v1/speech_to_text, bukan jalur OpenAI-compat)
+  final String? minimaxApiKey;
+  final String minimaxBaseUrl;
 
   final String model;
 
@@ -116,6 +123,11 @@ class SttClient {
             activeProviders.add(providerId);
           }
           break;
+        case 'minimax':
+          if ((minimaxApiKey ?? '').isNotEmpty) {
+            activeProviders.add(providerId);
+          }
+          break;
       }
     }
 
@@ -164,6 +176,8 @@ class SttClient {
         return _transcribeElevenLabs(client, path);
       case 'deepinfra':
         return _transcribeDeepInfra(client, path);
+      case 'minimax':
+        return _transcribeMiniMax(client, path);
       default:
         throw Exception('Provider STT $providerId tidak dikenal');
     }
@@ -279,6 +293,35 @@ class SttClient {
       deepinfraApiKey!,
       model,
     );
+  }
+
+  Future<String?> _transcribeMiniMax(
+    http.Client client,
+    String path,
+  ) async {
+    try {
+      final uri = Uri.parse('$minimaxBaseUrl/speech_to_text');
+      final req = http.MultipartRequest('POST', uri)
+        ..headers['Authorization'] = 'Bearer ${minimaxApiKey!}'
+        ..fields['model'] = 'asr-1.0'
+        ..fields['response_format'] = 'json'
+        ..fields['stream'] = 'false'
+        ..files.add(await http.MultipartFile.fromPath('file', path));
+      final streamed = await req.send().timeout(const Duration(seconds: 120));
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode >= 400) {
+        stderr.writeln('stt: minimax HTTP ${streamed.statusCode}: $body');
+        return null;
+      }
+      final json = jsonDecode(body);
+      if (json is! Map) return null;
+      final text =
+          json['text'] ?? ((json['data'] as Map?)?['text'] as Object?);
+      return text?.toString().trim();
+    } catch (e) {
+      stderr.writeln('stt: minimax error: $e');
+      return null;
+    }
   }
 
   Future<String?> _transcribeGeneric(

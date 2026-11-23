@@ -109,9 +109,26 @@ class HttpApiServer {
     this.memoryRagProvider,
     this.onMessageWithProgress,
     this.onCancelTurn,
+    this.smartHomeProviders,
+    this.smartHomeDevices,
+    this.smartHomeDevice,
+    this.smartHomeExecute,
   });
 
   final MessageHandler onMessage;
+
+  /// F6 (docs/15 §7) — smart-home user-facing REST (read-only + execute).
+  /// Null = smart-home tidak dikonfigurasi host (gateway balas 501).
+  final Future<List<String>> Function()? smartHomeProviders;
+  final Future<List<Map<String, dynamic>>> Function(String? provider)?
+      smartHomeDevices;
+  final Future<Map<String, dynamic>?> Function(String provider, String deviceId)?
+      smartHomeDevice;
+  final Future<Map<String, dynamic>> Function(
+    String provider,
+    String deviceId,
+    Map<String, dynamic> command,
+  )? smartHomeExecute;
 
   /// C4 Chat-UX: bila diset, WS `/v1/stream` memakainya (menggantikan
   /// [onMessage]) dan meneruskan frame progress ke klien yang meminta.
@@ -2599,6 +2616,98 @@ class HttpApiServer {
           _error(req, 404, 'not_found', 'job not found or busy');
         } else {
           _json(req, job);
+        }
+      } else if (path == '/v1/smart-home' && req.method == 'GET') {
+        if (smartHomeProviders == null) {
+          _error(req, 501, 'not_implemented', 'smart-home not configured');
+          return;
+        }
+        _json(req, {'providers': await smartHomeProviders!()});
+      } else if (path == '/v1/smart-home/devices' && req.method == 'GET') {
+        if (smartHomeDevices == null) {
+          _error(req, 501, 'not_implemented', 'smart-home not configured');
+          return;
+        }
+        var provider = req.uri.queryParameters['provider']?.trim();
+        if (provider != null && provider.isEmpty) provider = null;
+        try {
+          _json(req, {'devices': await smartHomeDevices!(provider)});
+        } on ApiRequestException {
+          rethrow;
+        } on ArgumentError catch (e) {
+          _error(req, 400, 'invalid_request', '$e');
+        } catch (e) {
+          _error(req, 502, 'upstream_error', '$e', retryable: true);
+        }
+      } else if (path.startsWith('/v1/smart-home/devices/') &&
+          req.method == 'GET') {
+        if (smartHomeDevice == null) {
+          _error(req, 501, 'not_implemented', 'smart-home not configured');
+          return;
+        }
+        final parts = path.substring('/v1/smart-home/devices/'.length)
+            .split('/');
+        if (parts.length != 2 ||
+            parts[0].isEmpty ||
+            parts[1].isEmpty) {
+          _error(req, 400, 'invalid_request',
+              'format: /v1/smart-home/devices/{provider}/{device_id}');
+          return;
+        }
+        final provider = Uri.decodeComponent(parts[0]);
+        final deviceId = Uri.decodeComponent(parts[1]);
+        try {
+          final device = await smartHomeDevice!(provider, deviceId);
+          if (device == null) {
+            _error(req, 404, 'not_found', 'provider tidak dikenal: $provider');
+          } else {
+            _json(req, device);
+          }
+        } on ApiRequestException {
+          rethrow;
+        } on ArgumentError catch (e) {
+          _error(req, 400, 'invalid_request', '$e');
+        } catch (e) {
+          _error(req, 502, 'upstream_error', '$e', retryable: true);
+        }
+      } else if (path.startsWith('/v1/smart-home/devices/') &&
+          req.method == 'POST' &&
+          path.endsWith('/execute')) {
+        if (smartHomeExecute == null) {
+          _error(req, 501, 'not_implemented', 'smart-home not configured');
+          return;
+        }
+        final middle = path.substring(
+          '/v1/smart-home/devices/'.length,
+          path.length - '/execute'.length,
+        );
+        final parts = middle.split('/');
+        if (parts.length != 2 || parts[0].isEmpty || parts[1].isEmpty) {
+          _error(req, 400, 'invalid_request',
+              'format: /v1/smart-home/devices/{provider}/{device_id}/execute');
+          return;
+        }
+        final provider = Uri.decodeComponent(parts[0]);
+        final deviceId = Uri.decodeComponent(parts[1]);
+        final body = jsonDecode(await utf8.decoder.bind(req).join());
+        if (body is! Map || body.isEmpty) {
+          _error(req, 400, 'invalid_request', 'command wajib objek non-kosong');
+          return;
+        }
+        final command = <String, dynamic>{
+          for (final e in body.entries) e.key.toString(): e.value,
+        };
+        try {
+          _json(
+            req,
+            await smartHomeExecute!(provider, deviceId, command),
+          );
+        } on ApiRequestException {
+          rethrow;
+        } on ArgumentError catch (e) {
+          _error(req, 400, 'invalid_request', '$e');
+        } catch (e) {
+          _error(req, 502, 'upstream_error', '$e', retryable: true);
         }
       } else {
         _error(req, 404, 'not_found', 'not found');
