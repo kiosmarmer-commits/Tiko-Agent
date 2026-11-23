@@ -34,6 +34,7 @@ export 'src/mcp/oauth.dart';
 export 'src/mcp/oauth_authcode.dart';
 export 'src/sandbox.dart';
 export 'src/code_execution.dart';
+export 'src/language_registry.dart';
 export 'src/patch_file.dart';
 export 'src/readability.dart';
 export 'src/direct_commands.dart';
