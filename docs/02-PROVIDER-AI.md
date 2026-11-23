@@ -43,6 +43,22 @@ Perilaku saat ini:
 3. Bila DecisionProvider tidak aktif, heuristic keyword menentukan kebutuhan tool; panjang pesan `> 200` karakter menjadi heuristic berat, selainnya ringan; tier menjadi 2 bila perlu tool, jika tidak tier 1.
 4. Bila DecisionProvider melempar error, `needTools` kembali ke heuristic; kompleksitas awal tetap sedang, sehingga tier efektif 2.
 5. Provider preference dicoba jika selectable; jika tidak, Router menilai provider lain berdasarkan kemampuan tool, ID lokal, kegagalan dan latensi. Fallback chain mencoba ID tersisa tanpa mengulang provider yang sudah dicoba pada request itu.
+6. Hermes-parity P6 — fallback chain chat provider diurutkan oleh `TikoConfig.fallbackChainIds`: default provider tetap di depan, lalu provider enabled diurutkan `weight` desc → `cost` asc → urutan config (stabil). Tanpa `weight`/`cost` di config, urutan tetap perilaku lama. Contoh:
+
+```yaml
+providers:
+  default_chat: primary
+  chat:
+    primary:
+      type: openai_compat
+      weight: 1
+    murah:
+      type: deepseek
+      cost: 0.2
+    andalan:
+      type: anthropic
+      weight: 5
+```
 
 Gunakan `tiko route explain --task "..."` untuk melihat hasil route, tier mapping, provider health dan fallback events.
 

@@ -28,6 +28,8 @@ class ProviderConfig {
     this.oauthClientId,
     this.oauthScopes = const [],
     this.oauthTokenCache,
+    this.weight = 1,
+    this.cost,
   });
 
   final String id;
@@ -81,6 +83,16 @@ class ProviderConfig {
   final String? oauthClientId;
   final List<String> oauthScopes;
   final String? oauthTokenCache;
+
+  /// Hermes-parity P6: prioritas fallback. Urutan fallback (setelah primary)
+  /// = weight desc, lalu cost asc, lalu urutan config (stabil). Default 1
+  /// = neutral; semua provider setara.
+  final int weight;
+
+  /// Hermes-parity P6: biaya relatif per permintaan (opsional, >= 0);
+  /// hanya penentu urutan saat [weight] sama, dan `null` = tak diketahui
+  /// (diperlakukan netral).
+  final double? cost;
 }
 
 class ConfigValidationException implements Exception {
@@ -426,6 +438,32 @@ class TikoConfig {
   /// Pemetaan tier routing adaptif (tier 1, 2, atau 3) ke id provider dari
   /// providers.tiers di config; kosong berarti semua tier memakai default.
   final Map<int, String> tierProviders;
+
+  /// Hermes-parity P6 — urutan fallback chain chat provider: [primary] di
+  /// depan, lalu provider enabled diurutkan weight desc, cost asc, dan
+  /// urutan config sebagai tie-breaker stabil (index-numbered sort karena
+  /// List.sort tidak stabil). Disabled tidak pernah masuk chain.
+  List<String> fallbackChainIds(String primary) {
+    final ids = providers.keys.toList();
+    final ranked = <MapEntry<int, ProviderConfig>>[
+      for (var i = 0; i < ids.length; i++)
+        if (ids[i] != primary && providers[ids[i]]!.enabled)
+          MapEntry(i, providers[ids[i]]!),
+    ]..sort((a, b) {
+        final byWeight = b.value.weight.compareTo(a.value.weight);
+        if (byWeight != 0) return byWeight;
+        final ac = a.value.cost;
+        final bc = b.value.cost;
+        if (ac != null && bc != null && ac != bc) {
+          return ac.compareTo(bc);
+        }
+        if (ac != null && bc == null) return -1;
+        if (ac == null && bc != null) return 1;
+        return a.key.compareTo(b.key);
+      });
+    return [primary, ...ranked.map((e) => e.value.id)];
+  }
+
   final String permissionMode;
   final List<String> shellAllowlist;
   final List<String> requireConfirm;
@@ -895,6 +933,34 @@ class TikoConfig {
         }
         final apiVersionValue = v['api_version'];
         final regionValue = v['region'];
+        // Hermes-parity P6: weight/cost per provider (validasi non-fatal,
+        // nilai invalid diabaikan agar config salah tidak membunuh runtime).
+        var weightValue = 1;
+        if (v['weight'] != null) {
+          if (v['weight'] is int && (v['weight'] as int) >= 0) {
+            weightValue = v['weight'] as int;
+          } else {
+            issues.add(ConfigIssue(
+              'providers.chat.$id.weight',
+              'harus berupa integer >= 0',
+              fatal: false,
+            ));
+          }
+        }
+        double? costValue;
+        final rawCost = v['cost'];
+        if (rawCost != null) {
+          final asNum = rawCost is num ? rawCost.toDouble() : null;
+          if (asNum != null && asNum >= 0) {
+            costValue = asNum;
+          } else {
+            issues.add(ConfigIssue(
+              'providers.chat.$id.cost',
+              'harus berupa angka >= 0',
+              fatal: false,
+            ));
+          }
+        }
         String? secretRefOf(dynamic value, String field) {
           if (value == null) return null;
           if (value is String && value.startsWith('env:')) return value;
@@ -932,6 +998,8 @@ class TikoConfig {
           oauthTokenCache: v['oauth_token_cache'] is String
               ? v['oauth_token_cache'] as String
               : null,
+          weight: weightValue,
+          cost: costValue,
         );
       }
     }

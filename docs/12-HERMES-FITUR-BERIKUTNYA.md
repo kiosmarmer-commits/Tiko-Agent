@@ -62,10 +62,11 @@
 - **Gate concurrency:** `--concurrency` divalidasi 1..16 (di luar rentang ditolak, bukan diam-diam dicekam); budget per-turn tetap ditegakkan `BudgetGuard` di dalam tiap turn.
 - **Export:** `tiko batch export --out out.jsonl [--sharegpt] [--no-redact] [--exclude-session ID]` — ekspor JSONL trajektori (atau format ShareGPT untuk SFT/RL) dengan redaksi secret aktif secara default; file output yang sudah ada ditolak agar tidak tertimpa.
 
-### P6 — Kontrol routing per provider (sort/whitelist/cost)
+### P6 — Kontrol routing per provider (sort/whitelist/cost) — **Implemented**
 - **Hermes:** whitelists/blacklists, sorting, prioritas per permintaan.
 - **Fondasi Tiko:** tiers + preferredProviderId/session override + fallback chain sudah ada.
-- **Desain sarankan:** cukup tambah `providers.chat.<id>.weight/cost` opsional ke urutan fallback bila fitur dianggap perlu; jangan ubah kontrak Router tanpa kebutuhan nyata.
+- **Implementasi:** `providers.chat.<id>.weight` (int, default 1; >= 0) dan `providers.chat.<id>.cost` (angka >= 0, default null/tak diketahui) di `tiko_config.dart`; validasi non-fatal (issue `providers.chat.<id>.weight|cost`, nilai invalid diabaikan, runtime tidak mati). Fallback chain dibangun `TikoConfig.fallbackChainIds(primary)`: primary/default tetap di depan, lalu provider enabled diurutkan weight desc → cost asc → urutan config (sort stabil via index; `List.sort` Dart tidak stabil); provider disabled tidak pernah masuk chain. Router tetap memakai kontrak `fallbackOrder` lama (tanpa perubahan kontrak Router); `tierProviders`, `preferredProviderId`, dan `enabled: false` (blacklist eksplisit) tetap bekerja seperti sebelumnya.
+- **Uji:** `p6_provider_routing_test.dart` (9) — perilaku lama tanpa weight/cost, weight desc, cost asc pada weight sama, weight > cost, disabled keluar chain, tie urutan config, invalid non-fatal, primary selalu terdepan, cost int → double.
 
 ### P7 — Orkestra bot team satu panggilan (Fase C) — **Implemented**
 - **Hermes/Claude Code:** planner mendekomposisi tujuan, anggota tim
@@ -89,6 +90,6 @@
 3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip indikator UI web menyusul.
 4. ~~P4 endpoint OpenAI-compat~~ — **selesai**: `POST /v1/chat/completions` (system+transcript+user-terakhir, stream/non-stream, error shape OpenAI, cap 400k karakter).
 5. ~~P5 batch processing + trajektori export~~ — **selesai**: `tiko batch run --tasks/--concurrency/--label` (BatchRolloutRunner + trajektori JSONL + laporan `data/batch/`) dan `tiko batch export --out` (JSONL/ShareGPT, redaksi aktif).
-6. P6 menyusul; berdiri sendiri.
+6. ~~P6 kontrol routing per provider~~ — **selesai**: `providers.chat.<id>.weight/cost` + `TikoConfig.fallbackChainIds` (weight desc, cost asc, config order stabil); lihat §2 P6.
 7. ~~Tugas terjadwal riset otomatis (Pulsa-parity + riset digest)~~ — **selesai (Fase D)**: lihat [13-TUGAS-TERJADWAL-RISET.md](13-TUGAS-TERJADWAL-RISET.md).
 8. **Generative UI standar A2UI (Fase E)** — rancangan lengkap: lihat [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md); pendekatan hibrida (grammar `genui` tetap didukung, protokol A2UI v1.0 sebagai target baru, adapter tunggal di `tiko_widgets`).
