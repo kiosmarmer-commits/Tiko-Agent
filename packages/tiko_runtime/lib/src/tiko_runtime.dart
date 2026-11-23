@@ -269,6 +269,82 @@ class TurnInspector {
       'truncated': _runs.length >= _maxRuns,
     };
   }
+
+  /// F3 — ringkasan run terakhir untuk tool `log_probe` (aksi runs).
+  String summary({int maxRuns = 20}) {
+    final out = <String>[];
+    for (final run in _runs.reversed) {
+      if (out.length >= maxRuns) break;
+      final sb = StringBuffer('[${run.state}] ${run.id} ${run.session}');
+      if (run.success != null) sb.write(' success=${run.success}');
+      sb.write(' tools=${run.toolCalls} tokens=${run.tokensUsed}');
+      final input = run.input.replaceAll('\n', ' ');
+      sb.write(' :: ${input.length > 80 ? input.substring(0, 80) : input}');
+      out.add(sb.toString());
+    }
+    return out.join('\n');
+  }
+}
+
+/// F3 (docs/15 §4) — format blok recall error untuk ContextBuilder:
+/// maks [k] kecocokan dari ErrorMemoryStore agar konteks tetap ringkas.
+String? formatErrorRecall(List<ErrorMemoryMatch> matches) {
+  if (matches.isEmpty) return null;
+  final lines = <String>[];
+  for (final m in matches) {
+    final cause = _recallCut(m.entry.cause, 160);
+    final fix = _recallCut(m.entry.fix, 160);
+    final pct = (m.similarity * 100).round().clamp(0, 100);
+    lines.add('- (mirip $pct%, ${m.entry.hits}x) penyebab: $cause '
+        '| perbaikan yang pernah berhasil: $fix');
+  }
+  return '[RECALL ERROR INTERNAL] Kesalahan serupa yang pernah tercatat: '
+      'pertimbangkan pola perbaikan terbukti di bawah sebelum mencoba '
+      'pendekatan baru.\n${lines.join('\n')}';
+}
+
+String _recallCut(String s, int max) {
+  final one = s.replaceAll('\n', ' ').trim();
+  return one.length <= max ? one : '${one.substring(0, max)}…';
+}
+
+/// F3 (docs/15 §4) — post-mortem procedural: setelah verify_project gagal
+/// >=2x berturut-turut lalu sukses, tulis lesson (dengan detail kegagalan)
+/// ke layered memory (procedural) agar dipakai saat kegagalan serupa berikut.
+class VerifyPostMortem {
+  VerifyPostMortem({required this.memory, required this.memoryPath});
+
+  final LayeredMemory memory;
+  final String memoryPath;
+  final List<String> _failDetails = [];
+
+  void observe(String tool, bool isError, {String? detail}) {
+    if (tool != 'verify_project') return;
+    if (isError) {
+      _failDetails.add(
+        (detail == null || detail.trim().isEmpty)
+            ? '(detail tidak tersedia)'
+            : _recallCut(detail, 200),
+      );
+      if (_failDetails.length > 5) {
+        _failDetails.removeRange(0, _failDetails.length - 5);
+      }
+    } else if (_failDetails.length >= 2) {
+      memory.add(
+        MemoryLayerType.procedural,
+        'post-mortem verify_project: gagal ${_failDetails.length}x '
+            'berturut-turut lalu sukses. Kegagalan terakhir:\n- '
+            '${_failDetails.join('\n- ')}\n'
+            'Pelajari pola perbaikan yang bekerja untuk kegagalan serupa.',
+        importance: 0.7,
+        tags: ['post-mortem', 'verify'],
+      );
+      unawaited(memory.save(memoryPath));
+      _failDetails.clear();
+    } else {
+      _failDetails.clear();
+    }
+  }
 }
 
 class DoctorCheck {
@@ -323,6 +399,7 @@ class TikoRuntime {
     required this.researchRunStore,
     required this.pluginConsents,
     required this.ragPipeline,
+    required this.errorMemory,
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
@@ -578,6 +655,15 @@ class TikoRuntime {
 
   /// Run-inspector (GUI-P2-04): live/recent registry of agent turns.
   final TurnInspector turnInspector = TurnInspector();
+
+  /// F3 — post-mortem procedural (verify_project gagal >=2x lalu sukses).
+  late final VerifyPostMortem postMortem = VerifyPostMortem(
+    memory: layeredMemory,
+    memoryPath: p.join(dataDir, 'layered_memory.json'),
+  );
+
+  /// Error memory store (NEW-09) — dipakai auto-recall F3 per turn.
+  final ErrorMemoryStore errorMemory;
 
   /// Cooperative cancellation registry keyed by session id (P1-11). One live
   /// token per running turn; subagent turns chain to their parent's token so
@@ -1042,6 +1128,7 @@ class TikoRuntime {
     final rt = TikoRuntime._(
       config: cfg,
       issues: issues,
+      errorMemory: errorMemory,
       providers: providers,
       registry: registry,
       sessions: sessionStore,
@@ -1088,6 +1175,11 @@ class TikoRuntime {
     // Fase E — A2UI surface bridge: kaitkan event bus runtime setelah rt
     // tersedia (pola sama dengan approvals/DeepResearchTool).
     rt.a2ui = A2uiToolBridge(dataDir: dataDir, onEvent: rt.events.emit);
+    // Fase F3 (docs/15 §4): probe log read-only + ringkasan run terakhir.
+    rt.registry.register(LogProbeTool(
+      logsDir: abs(cfg.logsDir),
+      recentRuns: () => rt.turnInspector.summary(),
+    ));
     // Fase D — riset otomatis butuh runtime yang sudah jadi (starter
     // menyusun turn di atas chatWithStatus), jadi didaftarkan di sini.
     rt.registry
@@ -2160,6 +2252,11 @@ class TikoRuntime {
         );
       }
       await plugins.dispatchMessage(session.id, effectiveText, fromUser: true);
+      // F3 (docs/15 §4): auto-recall error memory — maks 3 kecocokan per
+      // turn, read-only; dimatikan via agent.error_recall: false.
+      final errorRecallBlock = config.agentErrorRecall
+          ? formatErrorRecall(await errorMemory.lookup(effectiveText, k: 3))
+          : null;
       final replies = <String>[];
       final defaultConfig = AgentConfig(
           maxIterations: resourceProfile == 'eco' ? 6 : config.maxIterations,
@@ -2195,6 +2292,7 @@ class TikoRuntime {
           projectContextBlock: projCtx?.content,
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
+          errorRecallBlock: errorRecallBlock,
         ),
         compactor: Compactor(),
         // P0-3: the gate never prompts directly. It returns needsConfirm and
@@ -2239,6 +2337,12 @@ class TikoRuntime {
               durationMs: result.durationMs ?? 0,
             );
           }
+          // F3: post-mortem procedural (verify gagal >=2x lalu sukses).
+          postMortem.observe(
+            call.name,
+            result.isError,
+            detail: result.isError ? result.content : null,
+          );
           evidence.recordCall(result.callId, call.name, result.content);
           unawaited(plugins.dispatchAfterToolCall(
             ToolHookInput(

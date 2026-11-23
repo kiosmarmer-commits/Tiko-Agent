@@ -260,6 +260,7 @@ class RuntimeContext extends ContextBuilder {
     this.ragPipeline,
     this.layeredMemory,
     this.curatedMemoryBlock,
+    this.errorRecallBlock,
     this.nudgeDirective,
     this.interruptNote,
     this.botPersona,
@@ -275,6 +276,10 @@ class RuntimeContext extends ContextBuilder {
   final String? projectContextName;
   final String? projectContextBlock;
   final String? curatedMemoryBlock;
+
+  /// F3 — blok recall error (hasil [formatErrorRecall] dari ErrorMemoryStore);
+  /// null bila tidak ada kecocokan atau auto-recall dimatikan.
+  final String? errorRecallBlock;
   final String? nudgeDirective;
   final String? interruptNote;
 
@@ -327,6 +332,10 @@ class RuntimeContext extends ContextBuilder {
     final curated = curatedMemoryBlock;
     if (curated != null && curated.isNotEmpty) {
       system = '$system\n\nMemori terkurasi lintas sesi:\n$curated';
+    }
+    final recall = errorRecallBlock;
+    if (recall != null && recall.isNotEmpty) {
+      system = '$system\n\n$recall';
     }
     final nudge = nudgeDirective;
     if (nudge != null && nudge.isNotEmpty) {
