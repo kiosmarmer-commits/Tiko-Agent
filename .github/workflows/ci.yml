@@ -134,6 +134,9 @@ jobs:
             fi
           done
           echo "✓ Both runs completed successfully - no nondeterminism detected"
+      - name: Eval gate (F7.1, offline deterministik)
+        shell: bash
+        run: bash scripts/eval_gate.sh
       - name: Surface test failures 1-10
         if: always()
         shell: bash

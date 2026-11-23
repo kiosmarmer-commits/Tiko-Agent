@@ -69,7 +69,11 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
 
 ## 8. Fase F7 — Keunggulan kompondensal
 
-1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) → eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI. **⏳ menunggu keputusan**: gerbang CI butuh token provider asli (quota/biaya, perlu persetujuan) **atau** pendekatan offline deterministik (mock provider + fixture golden) — diusulkan yang kedua agar tanpa biaya.
+1. **Eval harness rilis**: batch + trajectory export (sudah implemented, `docs/12` P5) → eval regresi otomatis per rilis; skor guard/skill jadi gerbang CI — ✅ selesai (pendekatan offline-first, keputusan pengguna):
+   - Gerbang guard: harness prompt-injection Indonesia (40 kasus deterministik, tanpa LLM) di `agent_security` — `injection_eval_test.dart` (akurasi 100% dicegat CI).
+   - Gerbang task: `eval_gate.dart` (part tiko_runtime) — `EvalTaskSpec` + `parseEvalTasksJsonl` + `runEvalGate` (urutan deterministik, alasan gagal eksplisit, skor pass-rate, `gate_passed`); dataset emas `test/fixtures/eval_golden.jsonl` dijalankan atas runtime + provider `mock` (skenario `assisted`, 100% offline).
+   - `scripts/eval_gate.sh`: tahap offline dulu; bila gagal dan `TIKO_EVAL_LIVE_CONFIG` diset, fallback ke eval live provider LLM asli (`TIKO_EVAL_LIVE=1`, fixture `eval_live.jsonl` success-only, 3 task beranggaran) — sesuai keputusan "offline first, fallback token provider asli".
+   - CI: langkah khusus "Eval gate (F7.1, offline deterministik)" di workflow `ci.yml` (job dart).
 2. **Cost/token observability per user/channel** di halaman Runs (agregasi dari `TurnInspector` + persist) — ✅ selesai:
    - `packages/tiko_runtime/lib/src/cost_ledger.dart`: `CostEntry` + `CostLedger` (persist JSONL `turn_costs.jsonl`, atomic tmp+rename, tail-trim 5.000 entri, skip baris korup fail-soft); `summary({group_by: user|channel|day, days})` mengembalikan total + bucket terurut token.
    - Wiring runtime: `chatWithStatus` mencatat setiap turn user-facing (turn internal `internalCommand: true` dilewati), deterministik (di-await), fail-soft via event `cost.record_failed`.

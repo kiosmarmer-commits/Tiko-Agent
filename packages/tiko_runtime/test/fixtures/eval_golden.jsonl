@@ -1,0 +1,7 @@
+{"id":"sapaan","prompt":"Halo","expect_success":true,"expect_contains":["Halo!"],"min_tool_calls":0}
+{"id":"identitas","prompt":"Siapa kamu?","expect_success":true,"expect_contains":["Tiko","mock"]}
+{"id":"kalkulator_tool","prompt":"hitung 25*4","expect_success":true,"min_tool_calls":1,"expect_contains":["Hasil"]}
+{"id":"waktu_tool","prompt":"jam berapa sekarang?","expect_success":true,"expect_not_contains":["PromptGuard"]}
+{"id":"bantuan","prompt":"bantuan","expect_success":true,"expect_contains":["hitung 12*8"]}
+{"id":"echo_topik_lain","prompt":"kucing oren suka tidur siang","expect_success":true,"expect_not_contains":["TEREKSEKUSI"],"expect_contains":["Anda berkata:"]}
+{"id":"hitungan_ganjil","prompt":"hitung 137+918","expect_success":true,"min_tool_calls":1,"max_tokens":1000}

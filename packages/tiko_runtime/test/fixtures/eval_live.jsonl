@@ -1,0 +1,3 @@
+{"id":"sapaan_live","prompt":"Balas satu kata saja: siap.","expect_success":true,"max_tokens":2000}
+{"id":"aritmetika_live","prompt":"Berapa hasil 25*4? Jawab singkat.","expect_success":true,"max_tokens":2000}
+{"id":"ide_live","prompt":"Sebut satu ide fitur untuk agen AI dalam satu kalimat.","expect_success":true,"max_tokens":2000}

@@ -46,6 +46,7 @@ part 'research_pdf.dart';
 part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
 part 'cost_ledger.dart';
+part 'eval_gate.dart';
 
 const tikoVersion = '0.2.0';
 
