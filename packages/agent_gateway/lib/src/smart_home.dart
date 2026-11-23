@@ -26,6 +26,17 @@ class SmartDevice {
   final List<String> capabilities;
   final Map<String, Object?> state;
   final Map<String, Object?> meta;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'provider': provider,
+    if (category != null) 'category': category,
+    if (online != null) 'online': online,
+    'capabilities': capabilities,
+    'state': state,
+    'meta': meta,
+  };
 }
 
 class SmartDeviceEvent {

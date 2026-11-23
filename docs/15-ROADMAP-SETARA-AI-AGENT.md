@@ -20,7 +20,7 @@
 | F3 — Debugging superior | Error recall, log probe, post-mortem | ✅ selesai | `agent.error_recall` auto-recall 3 kecocokan/turn + tool `error_lookup`/`error_record` + `log_probe` (list/tail/grep/runs) + `VerifyPostMortem` lesson procedural — lihat §4 |
 | F4 — Riset unggul | Multi-putaran refine + verify claims | ✅ selesai | refine terarah maks 2 putaran budget-guarded + verifikasi klaim evidence + dedupe sumber + ekspor PDF pure-Dart — lihat §5 |
 | F5 — Otonomi & scheduling | context_from, digest, watcher | ⏳ berjalan | lihat §6 |
-| F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | ⏳ belum | lihat §7 |
+| F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | 🔄 berjalan | smart-home tool + REST `/v1/smart-home` user-facing (F6.1) ✅; A2UI E9 opsional — lihat §7 |
 | F7 — Keunggulan kompondensal | Eval harness, cost observability | ⏳ belum | lihat §8 |
 
 ## 2. Fase F1 — Daya eksekusi nyata
@@ -61,8 +61,10 @@ Masalah: `ShellTool` ditolak fail-closed bila tidak ada sandbox OS (`SandboxKind
 
 ## 7. Fase F6 — Penuntasan integrasi (tanpa menghapus apa pun)
 
-1. **Smart-home wiring user-facing**: tool/REST + consent (README mencatat provider masih "library + test contract").
+1. **Smart-home wiring user-facing** — ✅ selesai: tool `smart_home` (high-risk, approval-gated) ter-register di runtime + REST user-facing di gateway: `GET /v1/smart-home` (daftar provider), `GET /v1/smart-home/devices?provider=`, `GET /v1/smart-home/devices/{provider}/{id}`, `POST /v1/smart-home/devices/{provider}/{id}/execute` (auth token sama dengan endpoint mutasi lain; provider tak dikenal 404, error upstream 502, payload non-objek 400). Consen provider tetap via allowlist env (`allowedEntityIds` Home Assistant + kredensial khusus env).
 2. **Voice breadth** (TTS/STT provider) dan **adapter memori cloud first-class** — gap `HERMES-TOOLS-GAP-ANALYSIS-2026-11-20.md` §"Yang masih gap".
+   - STT MiniMax (`POST /v1/speech_to_text`, model `asr-1.0`) ditambahkan ke fallback chain `SttClient` (Groq Whisper/Mistral/ElevenLabs/xAI/DeepInfra sudah ada sebelumnya); wiring env per-provider di agentd (`GROQ_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`, `ELEVENLABS_API_KEY`, `DEEPINFRA_API_KEY`, `MINIMAX_API_KEY`, `STT_LOCAL_COMMAND`).
+   - Adapter memori cloud (RetainDB/ByteRover/Supermemory) sudah tersedia di `agent_memory`; tidak ada pekerjaan tambahan.
 3. **A2UI tersisa (E9 Video/Audio, katalog chart lanjutan)** — hanya bila keputusan `docs/14` diubah (video_player) / opsional.
 
 ## 8. Fase F7 — Keunggulan kompondensal

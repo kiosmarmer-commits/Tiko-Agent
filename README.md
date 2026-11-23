@@ -74,7 +74,7 @@ tiko chat
 
 `agent_gateway` menyediakan kontrak seragam `SmartHomeProvider` untuk Home Assistant REST/WebSocket, Tuya Cloud HMAC-SHA256, dan SONOFF/eWeLink CUBE/iHost REST/SSE. Google Home didukung melalui jalur Home Assistant: hubungkan Google Home ke Home Assistant lalu gunakan provider Home Assistant.
 
-Provider tersebut saat ini adalah library integration surface dan test contract; wiring command/tool user-facing ke `agentd` masih merupakan pekerjaan lanjutan.
+Provider itu kini user-facing lewat dua jalur (F6, `docs/15` §7): (1) tool `smart_home` ber-risk tinggi yang tunduk pada approval gate runtime (list/get/execute), dan (2) REST `agentd` — `GET /v1/smart-home` (daftar provider), `GET /v1/smart-home/devices[?provider=]`, `GET /v1/smart-home/devices/{provider}/{id}`, `POST /v1/smart-home/devices/{provider}/{id}/execute` — dengan auth token sama seperti endpoint mutasi lain. Kredensial hanya dari environment (`TIKO_HOME_ASSISTANT_URL/TOKEN`, `TIKO_TUYA_*`, `TIKO_EWELINK_*`); tanpa env yang lengkap smart-home tetap tidak aktif.
 
 ### Security
 

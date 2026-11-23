@@ -299,12 +299,28 @@ Future<void> main(List<String> args) async {
     final whisper = Platform.environment['WHISPER_BIN'];
     final sttKey = Platform.environment['STT_API_KEY'];
     final sttBase = Platform.environment['STT_API_BASE'];
+    String? envKey(String name) {
+      final v = Platform.environment[name];
+      return (v != null && v.isNotEmpty) ? v : null;
+    }
     if ((whisper != null && whisper.isNotEmpty) ||
-        (sttKey != null && sttKey.isNotEmpty)) {
+        (sttKey != null && sttKey.isNotEmpty) ||
+        (envKey('STT_LOCAL_COMMAND') ?? envKey('GROQ_API_KEY') ??
+                envKey('MISTRAL_API_KEY') ?? envKey('XAI_API_KEY') ??
+                envKey('ELEVENLABS_API_KEY') ?? envKey('DEEPINFRA_API_KEY') ??
+                envKey('MINIMAX_API_KEY')) !=
+            null) {
       stt = SttClient(
         whisperBin: whisper,
+        localCommand: envKey('STT_LOCAL_COMMAND'),
         openaiApiKey: sttKey,
         openaiBaseUrl: sttBase ?? 'https://api.openai.com/v1',
+        groqApiKey: envKey('GROQ_API_KEY'),
+        mistralApiKey: envKey('MISTRAL_API_KEY'),
+        xaiApiKey: envKey('XAI_API_KEY'),
+        elevenlabsApiKey: envKey('ELEVENLABS_API_KEY'),
+        deepinfraApiKey: envKey('DEEPINFRA_API_KEY'),
+        minimaxApiKey: envKey('MINIMAX_API_KEY'),
       );
     }
     tg = TelegramGateway(token: token, allowedUserIds: allow, stt: stt);
@@ -1239,6 +1255,53 @@ Future<void> main(List<String> args) async {
           if (ok) await rt.jobs.save();
           return ok;
         },
+        smartHomeProviders: rt.smartHomeTool == null
+            ? null
+            : () async => rt.smartHomeTool!.providers.keys.toList(),
+        smartHomeDevices: rt.smartHomeTool == null
+            ? null
+            : (provider) async {
+                final providers = rt.smartHomeTool!.providers;
+                final names = provider == null
+                    ? providers.keys.toList()
+                    : (providers.containsKey(provider) ? [provider] : <String>[]);
+                final out = <Map<String, dynamic>>[];
+                for (final name in names) {
+                  try {
+                    final devices = await providers[name]!.listDevices();
+                    out.addAll([for (final d in devices) d.toJson()]);
+                  } catch (_) {
+                    // provider gagal (offline/kredensial) — skip fail-soft.
+                  }
+                }
+                return out;
+              },
+        smartHomeDevice: rt.smartHomeTool == null
+            ? null
+            : (provider, deviceId) async {
+                final p = rt.smartHomeTool!.providers[provider];
+                if (p == null) return null;
+                final device = await p.getDevice(deviceId);
+                return device.toJson();
+              },
+        smartHomeExecute: rt.smartHomeTool == null
+            ? null
+            : (provider, deviceId, command) async {
+                final p = rt.smartHomeTool?.providers[provider];
+                if (p == null) {
+                  throw ApiRequestException(
+                    404,
+                    'not_found',
+                    'provider tidak dikenal: $provider',
+                  );
+                }
+                await p.execute(deviceId, command);
+                return {
+                  'ok': true,
+                  'provider': provider,
+                  'device_id': deviceId,
+                };
+              },
         runJobNow: (id) async {
           final job = rt.jobs.runNow(id);
           if (job == null) return null;
