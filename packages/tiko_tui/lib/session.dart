@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'history_store.dart';
 import 'line_editor.dart';
+import 'theme.dart';
 
 /// Result of handling one REPL input.
 class TuiOutcome {
@@ -37,12 +38,13 @@ class TuiSession {
     List<String> scriptedLines = const [],
     bool? forceLineMode,
     bool color = true,
-  })  : _inputStream = inputStream,
-        _out = out ?? stdout,
-        _scripted = scriptedLines,
-        history = history ?? [],
-        _color = color {
-    _raw = !(forceLineMode ?? false) &&
+  }) : _inputStream = inputStream,
+       _out = out ?? stdout,
+       _scripted = scriptedLines,
+       history = history ?? [],
+       _color = color {
+    _raw =
+        !(forceLineMode ?? false) &&
         _scripted.isEmpty &&
         (_inputStream != null || (stdin.hasTerminal && _supportsRaw()));
   }
@@ -81,9 +83,7 @@ class TuiSession {
       _color ? '\x1B[${code}m$text\x1B[0m' : text;
 
   Future<void> run() async {
-    _color = _color &&
-        !Platform.environment.containsKey('NO_COLOR') &&
-        (Platform.environment['TERM'] ?? '') != 'dumb';
+    _color = _color && TuiTheme.terminalColorAllowed();
     final loaded = historyStore?.load() ?? <String>[];
     history.addAll(loaded);
     final editor = LineEditor(history: history, completer: completer);
@@ -94,12 +94,13 @@ class TuiSession {
     try {
       while (true) {
         final line = _raw
-            ? await _readLineRaw(editor, _multiline.inBlock
-                ? continuationPrompt
-                : prompt)
-            : _readLineFallback(_multiline.inBlock
-                ? continuationPrompt
-                : prompt);
+            ? await _readLineRaw(
+                editor,
+                _multiline.inBlock ? continuationPrompt : prompt,
+              )
+            : _readLineFallback(
+                _multiline.inBlock ? continuationPrompt : prompt,
+              );
         if (line == null) {
           _out.writeln();
           break;
@@ -124,6 +125,17 @@ class TuiSession {
 
   String _colorize(String text) {
     if (!_color) return text;
+    if (text.startsWith('tiko>') ||
+        text.startsWith('╭') ||
+        text.startsWith('╰')) {
+      return _paint(text, '36');
+    }
+    if (text.startsWith('✓') || text.startsWith('OK')) {
+      return _paint(text, '32');
+    }
+    if (text.startsWith('error:') || text.startsWith('✗')) {
+      return _paint(text, '31');
+    }
     if (text.startsWith('  [')) return _paint(text, '36');
     if (text.startsWith('  ')) return _paint(text, '90');
     if (text.startsWith('tidak ') || text.startsWith('gagal')) {
@@ -177,9 +189,7 @@ class TuiSession {
 
   void _rerender(LineEditor editor, String label) {
     final cursorCol = label.length + editor.cursor;
-    _out.write(
-      '\x1B[2K\r$label${editor.buffer}\x1B[1G\x1B[${cursorCol + 1}C',
-    );
+    _out.write('\x1B[2K\r$label${editor.buffer}\x1B[1G\x1B[${cursorCol + 1}C');
   }
 
   String? _readLineFallback(String label) {

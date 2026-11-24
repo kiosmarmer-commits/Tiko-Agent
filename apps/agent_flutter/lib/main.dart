@@ -1458,6 +1458,35 @@ class _ChatPageState extends State<_ChatPage> {
                             color: context.simpulMuted,
                           ),
                         ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Coba mulai dari sini',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: context.simpulMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _starterPrompt(
+                              context,
+                              'Ringkas workspace saya',
+                            ),
+                            _starterPrompt(
+                              context,
+                              'Bantu saya memahami project ini',
+                            ),
+                            _starterPrompt(
+                              context,
+                              'Tampilkan status agent',
+                            ),
+                          ],
+                        ),
                       ],
                     )
                   : ListView.builder(
@@ -1672,6 +1701,18 @@ class _ChatPageState extends State<_ChatPage> {
           ],
         );
       },
+    );
+  }
+
+  Widget _starterPrompt(BuildContext context, String prompt) {
+    return ActionChip(
+      avatar: Icon(
+        Icons.auto_awesome_outlined,
+        size: 15,
+        color: context.simpulAccent,
+      ),
+      label: Text(prompt),
+      onPressed: () => unawaited(_onSend(prompt, const [])),
     );
   }
 }

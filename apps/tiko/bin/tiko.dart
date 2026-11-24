@@ -1550,6 +1550,21 @@ Future<void> main(List<String> argv) async {
               }
               await TuiSession(
                 handler: (input) async {
+                  if (input == '/help') {
+                    return const TuiOutcome([
+                      'Perintah Tiko:',
+                      '  /help      bantuan singkat',
+                      '  /status    provider dan runtime aktif',
+                      '  /doctor    pemeriksaan kesehatan',
+                      '  /settings  ubah konfigurasi interaktif',
+                      '  /clear     bersihkan terminal',
+                      '  /quit      keluar',
+                      'Teks biasa dikirim ke agent. Tab melengkapi /command.',
+                    ]);
+                  }
+                  if (input == '/clear') {
+                    return const TuiOutcome([], clear: true);
+                  }
                   if (input == '/quit' || input == '/exit') {
                     return const TuiOutcome([], exit: true);
                   }
@@ -1566,7 +1581,12 @@ Future<void> main(List<String> argv) async {
                 historyStore: TuiHistoryStore(
                   p.join(rt.dataDir, 'tui-history.txt'),
                 ),
-                banner: ['tiko chat (remote daemon) — /quit keluar, /settings'],
+                banner: [
+                  '╭─ Tiko Chat · remote daemon ─╮',
+                  '│ provider: ${rt.config.defaultProvider}',
+                  '│ /help bantuan · /settings konfigurasi · /quit keluar',
+                  '╰──────────────────────────────╯',
+                ],
                 prompt: 'you> ',
               ).run();
               return;
@@ -1586,6 +1606,21 @@ Future<void> main(List<String> argv) async {
       // interactive
       await TuiSession(
         handler: (input) async {
+          if (input == '/help') {
+            return const TuiOutcome([
+              'Perintah Tiko:',
+              '  /help      bantuan singkat',
+              '  /status    provider dan runtime aktif',
+              '  /doctor    pemeriksaan kesehatan',
+              '  /settings  ubah konfigurasi interaktif',
+              '  /clear     bersihkan terminal',
+              '  /quit      keluar',
+              'Teks biasa dikirim ke agent. Tab melengkapi /command.',
+            ]);
+          }
+          if (input == '/clear') {
+            return const TuiOutcome([], clear: true);
+          }
           if (input == '/quit' || input == '/exit') {
             return const TuiOutcome([], exit: true);
           }
@@ -1611,7 +1646,12 @@ Future<void> main(List<String> argv) async {
         historyStore: TuiHistoryStore(
           p.join(rt.dataDir, 'tui-history.txt'),
         ),
-        banner: ['tiko chat — /quit keluar, /doctor, /status, /settings'],
+        banner: [
+          '╭─ Tiko Chat · embedded ────────╮',
+          '│ provider: ${rt.config.defaultProvider}',
+          '│ /help bantuan · /settings konfigurasi · /quit keluar',
+          '╰───────────────────────────────╯',
+        ],
         prompt: 'you> ',
       ).run();
       return;

@@ -43,9 +43,7 @@ final class _PlainPalette implements _Palette {
 
 String _paint(String text, String code) => '\x1B[${code}m$text\x1B[0m';
 
-bool _colorAllowed() =>
-    !Platform.environment.containsKey('NO_COLOR') &&
-    (Platform.environment['TERM'] ?? '') != 'dumb';
+bool _colorAllowed() => TuiTheme.terminalColorAllowed();
 
 /// Satu field yang dapat diubah di layar settings.
 class _Setting {
@@ -58,19 +56,18 @@ class _Setting {
 String _valueOf(TikoConfig cfg, _Setting s) {
   final prov = cfg.providers[cfg.defaultProvider];
   return switch (s.path) {
-    'providers.default_chat' =>
-      '${cfg.defaultProvider} (${prov?.type ?? '-'})',
+    'providers.default_chat' => '${cfg.defaultProvider} (${prov?.type ?? '-'})',
     'security.mode' => cfg.permissionMode,
     'api.port' => '${cfg.apiPort}',
     'features.vision' => '${cfg.enableVision}',
     'features.image_generation' => '${cfg.enableImageGeneration}',
     _ => switch (s.path.split('.').last) {
-        'model' => prov?.model ?? '(default)',
-        'base_url' => prov?.baseUrl ?? '(default)',
-        'api_key' => prov?.apiKeyRef ?? '(belum diset)',
-        'enabled' => '${prov?.enabled ?? true}',
-        _ => '-',
-      },
+      'model' => prov?.model ?? '(default)',
+      'base_url' => prov?.baseUrl ?? '(default)',
+      'api_key' => prov?.apiKeyRef ?? '(belum diset)',
+      'enabled' => '${prov?.enabled ?? true}',
+      _ => '-',
+    },
   };
 }
 
@@ -95,15 +92,13 @@ String _panel(
   for (var i = 0; i < fields.length; i++) {
     buf.writeln(
       '${palette.dim('│')}${fit('${i + 1}  ${fields[i].label}: '
-          '${_valueOf(cfg, fields[i])}')}${palette.dim('│')}',
+      '${_valueOf(cfg, fields[i])}')}${palette.dim('│')}',
     );
   }
   buf.writeln('${palette.dim('│')}${fit('')}${palette.dim('│')}');
   buf.writeln(
-    '${palette.dim('│')}${fit(
-      'Perubahan tervalidasi & ber-revisi — rollback: '
-      'tiko config rollback <rev>',
-    )}${palette.dim('│')}',
+    '${palette.dim('│')}${fit('Perubahan tervalidasi & ber-revisi — rollback: '
+    'tiko config rollback <rev>')}${palette.dim('│')}',
   );
   buf.writeln(
     '${palette.dim('│')}${fit('config: $configPath')}${palette.dim('│')}',
@@ -146,21 +141,24 @@ Future<void> runSettingsMenu({
     final fields = _settingsOf(cfg);
     sink.writeln();
     sink.writeln(_panel(palette, cfg, fields, p.absolute(configPath)));
-    String line;
+    final choices = [
+      for (final field in fields) '${field.label}  ·  ${_valueOf(cfg, field)}',
+    ];
+    choices.add('Keluar dari settings');
+    String selected;
     try {
-      line = (await prompts.readLine(
-        palette.cyan('pilih nomor untuk mengubah, q keluar: '),
-      )).trim();
+      selected = await prompts.select(
+        'Pilih pengaturan (↑/↓, Enter, angka; q keluar):',
+        choices,
+        quitValue: choices.last,
+      );
     } on PromptAborted {
       rethrow;
     }
-    if (line == 'q' || line == 'keluar' || line == 'exit') break;
-    final idx = int.tryParse(line);
-    if (idx == null || idx < 1 || idx > fields.length) {
-      sink.writeln(palette.yellow('  Pilihan tidak valid.'));
-      continue;
-    }
-    final setting = fields[idx - 1];
+    if (selected == choices.last) break;
+    final idx = choices.indexOf(selected);
+    if (idx < 0 || idx >= fields.length) continue;
+    final setting = fields[idx];
     String value;
     try {
       value = (await prompts.prompt(

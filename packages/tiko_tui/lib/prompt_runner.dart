@@ -26,11 +26,12 @@ class PromptRunner {
     List<String>? history,
     this.historyStore,
     bool? forceLineMode,
-  })  : _inputStream = inputStream,
-        _out = out ?? stdout,
-        _scripted = scriptedLines,
-        history = history ?? [] {
-    _raw = !(forceLineMode ?? false) &&
+  }) : _inputStream = inputStream,
+       _out = out ?? stdout,
+       _scripted = scriptedLines,
+       history = history ?? [] {
+    _raw =
+        !(forceLineMode ?? false) &&
         _scripted.isEmpty &&
         (inputStream != null || (stdin.hasTerminal && _supportsRaw()));
   }
@@ -81,6 +82,7 @@ class PromptRunner {
     String label,
     List<String> options, {
     String? def,
+    String? quitValue,
   }) async {
     if (options.isEmpty) throw ArgumentError('setidaknya satu opsi diperlukan');
     if (!_raw) {
@@ -92,18 +94,30 @@ class PromptRunner {
       final parsed = RegExp(r'^\s*(\d+)\s*$');
       while (true) {
         final line = _readLineScripted('$label [1-${options.length}]: ');
+        if (quitValue != null &&
+            const {
+              'q',
+              'quit',
+              'keluar',
+              'exit',
+            }.contains(line.trim().toLowerCase())) {
+          return quitValue;
+        }
         if (line.trim().isEmpty && def != null && options.contains(def)) {
           return def;
         }
         final m = parsed.firstMatch(line);
         final n = m == null ? 0 : int.parse(m.group(1)!);
         if (n >= 1 && n <= options.length) return options[n - 1];
-        _out.writeln('  Pilih angka 1-${options.length} (kosong = default).');
+        _out.writeln(
+          '  Pilihan tidak valid. Pilih angka 1-${options.length} '
+          '(kosong = default).',
+        );
       }
     }
     await _enterRaw();
     try {
-      return await _selectRaw(label, options, def);
+      return await _selectRaw(label, options, def, quitValue);
     } finally {
       _exitRaw();
     }
@@ -113,6 +127,7 @@ class PromptRunner {
     String label,
     List<String> options,
     String? def,
+    String? quitValue,
   ) async {
     var cursor = options.indexOf(def ?? '');
     if (cursor < 0) cursor = 0;
@@ -156,6 +171,10 @@ class PromptRunner {
             if (digits != null && digits >= 1 && digits <= options.length) {
               _out.writeln();
               return options[digits - 1];
+            }
+            if (quitValue != null && const {'q', 'Q'}.contains(event.char)) {
+              _out.writeln();
+              return quitValue;
             }
             if (event.char == 'k') {
               cursor = (cursor - 1 + options.length) % options.length;
@@ -202,8 +221,10 @@ class PromptRunner {
   }) async {
     while (true) {
       final suffix = (def != null && def.isNotEmpty) ? ' [$def]' : '';
-      final line = (await readLine('$label$suffix: ', completions: completions))
-          .trim();
+      final line = (await readLine(
+        '$label$suffix: ',
+        completions: completions,
+      )).trim();
       if (line.isEmpty && def != null && def.isNotEmpty) return def;
       if (line.isNotEmpty) return line;
       if (!required) return '';
@@ -222,9 +243,8 @@ class PromptRunner {
   Future<String> _readLineRaw(String label, List<String> completions) async {
     final editor = LineEditor(
       history: history,
-      completer: (prefix, token) => completions
-          .where((c) => c.startsWith(token) && c != token)
-          .toList(),
+      completer: (prefix, token) =>
+          completions.where((c) => c.startsWith(token) && c != token).toList(),
     );
     _out.write(label);
     final chunks = _chunks ??= StreamIterator(_inputStream ?? stdin);
@@ -264,9 +284,7 @@ class PromptRunner {
 
   void _rerender(String label, LineEditor editor) {
     final cursorCol = label.length + editor.cursor;
-    _out.write(
-      '\x1B[2K\r$label${editor.buffer}\x1B[1G\x1B[${cursorCol + 1}C',
-    );
+    _out.write('\x1B[2K\r$label${editor.buffer}\x1B[1G\x1B[${cursorCol + 1}C');
   }
 
   String _readLineScripted(String label) {

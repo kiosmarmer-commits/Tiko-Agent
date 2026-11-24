@@ -54,16 +54,61 @@ class PageHeader extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: online ? context.simpulAccent : context.simpulDanger,
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final label = online ? 'Online' : 'Offline';
+              final status = Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: (online ? context.simpulSuccess : context.simpulDanger)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(SimpulTheme.radiusPill),
+                  border: Border.all(
+                    color: online ? context.simpulSuccess : context.simpulDanger,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: online
+                            ? context.simpulSuccess
+                            : context.simpulDanger,
+                      ),
+                    ),
+                    if (constraints.maxWidth >= 70) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: online
+                              ? context.simpulSuccess
+                              : context.simpulDanger,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+              return Semantics(
+                label: 'Status koneksi: $label',
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: status,
+                ),
+              );
+            },
           ),
-          if (trailing != null) trailing!,
+          if (trailing != null) Flexible(child: trailing!),
         ],
       ),
     );

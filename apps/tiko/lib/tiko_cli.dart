@@ -143,10 +143,18 @@ String getCfg(TikoConfig c, String path) {
 }
 
 /// Perintah slash yang dilengkapi tab pada REPL chat.
-const chatCommands = ['/quit', '/exit', '/doctor', '/status', '/settings'];
+const chatCommands = [
+  '/help',
+  '/quit',
+  '/exit',
+  '/clear',
+  '/doctor',
+  '/status',
+  '/settings',
+];
 
 /// Completer REPL chat: saring [chatCommands] yang berawalan [token].
 List<String> chatCompleter(String prefix, String token) => [
-      for (final command in chatCommands)
-        if (command.startsWith(token)) command,
-    ];
+  for (final command in chatCommands)
+    if (command.startsWith(token)) command,
+];
