@@ -81,6 +81,11 @@ class FileSessionStore implements SessionStore {
           userKey: v['user'] as String? ?? '',
           title: v['title'] is String ? _redactor.redact(v['title'] as String) : null,
           summary: v['summary'] is String ? _redactor.redact(v['summary'] as String) : null,
+          provider: v['provider'] as String?,
+          model: v['model'] as String?,
+          pinned: v['pinned'] == true,
+          archived: v['archived'] == true,
+          lastFailed: v['last_failed'] == true,
           createdAt: DateTime.tryParse(v['created_at'] as String? ?? ''),
           updatedAt: DateTime.tryParse(v['updated_at'] as String? ?? ''),
         );
@@ -114,6 +119,11 @@ class FileSessionStore implements SessionStore {
             'user': e.value.userKey,
             'title': e.value.title == null ? null : _redactor.redact(e.value.title!),
             'summary': e.value.summary == null ? null : _redactor.redact(e.value.summary!),
+            if (e.value.provider != null) 'provider': e.value.provider,
+            if (e.value.model != null) 'model': e.value.model,
+            'pinned': e.value.pinned,
+            'archived': e.value.archived,
+            'last_failed': e.value.lastFailed,
             'created_at': e.value.createdAt.toIso8601String(),
             'updated_at': e.value.updatedAt.toIso8601String(),
             'turns': _turns[e.key] ?? 0,
@@ -169,6 +179,8 @@ class FileSessionStore implements SessionStore {
     required String user,
     required String assistant,
     List<String> tools = const [],
+    String? provider,
+    String? model,
   }) {
     return _transaction(() => _withFileLock(() async {
       await _refreshFromDisk();
@@ -182,6 +194,9 @@ class FileSessionStore implements SessionStore {
         list.removeRange(0, list.length - maxMessagesPerSession);
       }
       _turns[sessionId] = (_turns[sessionId] ?? 0) + 1;
+      if (provider != null) s.provider = provider;
+      if (model != null) s.model = model;
+      s.lastFailed = false;
       s.updatedAt = DateTime.now().toUtc();
       s.title ??= user.length > 60 ? '${user.substring(0, 60)}…' : user;
       await _persist();
@@ -201,9 +216,134 @@ class FileSessionStore implements SessionStore {
             title: s.title,
             updatedAt: s.updatedAt,
             turns: _turns[s.id] ?? 0,
+            provider: s.provider,
+            model: s.model,
+            pinned: s.pinned,
+            archived: s.archived,
+            lastFailed: s.lastFailed,
           ),
-      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      ]..sort((a, b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
       return out;
+    }));
+  }
+
+  @override
+  Future<SessionInfo?> get(String sessionId) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      return _infoOf(_sessions[sessionId]);
+    }));
+  }
+
+  SessionInfo? _infoOf(Session? s) {
+    if (s == null) return null;
+    return SessionInfo(
+      id: s.id,
+      channel: s.channel,
+      userKey: s.userKey,
+      title: s.title,
+      updatedAt: s.updatedAt,
+      turns: _turns[s.id] ?? 0,
+      provider: s.provider,
+      model: s.model,
+      pinned: s.pinned,
+      archived: s.archived,
+      lastFailed: s.lastFailed,
+    );
+  }
+
+  @override
+  Future<bool> setPinned(String sessionId, bool pinned) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final s = _sessions[sessionId];
+      if (s == null || s.pinned == pinned) return false;
+      s.pinned = pinned;
+      await _persist();
+      return true;
+    }));
+  }
+
+  @override
+  Future<bool> setArchived(String sessionId, bool archived) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final s = _sessions[sessionId];
+      if (s == null || s.archived == archived) return false;
+      s.archived = archived;
+      await _persist();
+      return true;
+    }));
+  }
+
+  @override
+  Future<int> deleteMany(List<String> sessionIds) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      var removed = 0;
+      for (final id in sessionIds) {
+        if (_sessions.remove(id) != null) removed++;
+        _messages.remove(id);
+        _turns.remove(id);
+      }
+      if (removed > 0) await _persist();
+      return removed;
+    }));
+  }
+
+  @override
+  Future<SessionInfo?> duplicate(String sessionId, {String? newId}) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final src = _sessions[sessionId];
+      if (src == null) return null;
+      final id = newId == null || newId.trim().isEmpty
+          ? '${src.id}-fork-${DateTime.now().millisecondsSinceEpoch}'
+          : newId.trim();
+      if (_sessions.containsKey(id)) return null;
+      final copy = Session(
+        id: id,
+        channel: src.channel,
+        userKey: src.userKey,
+        title:
+            src.title == null ? null : '${src.title} (salinan)',
+        summary: src.summary,
+        provider: src.provider,
+        model: src.model,
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+      _sessions[id] = copy;
+      _messages[id] = [
+        for (final m in _messages[sessionId] ?? const <Map<String, String>>[])
+          Map<String, String>.of(m),
+      ];
+      _turns[id] = _turns[sessionId] ?? 0;
+      await _persist();
+      return _infoOf(copy);
+    }));
+  }
+
+  @override
+  Future<bool> markTurnOutcome(
+    String sessionId, {
+    required bool ok,
+    String? provider,
+    String? model,
+  }) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final s = _sessions[sessionId];
+      if (s == null) return false;
+      if (provider != null) s.provider = provider;
+      if (model != null) s.model = model;
+      s.lastFailed = !ok;
+      s.updatedAt = DateTime.now().toUtc();
+      await _persist();
+      return true;
     }));
   }
 

@@ -140,6 +140,7 @@ class Router {
     this.clock,
     this.onFallback,
     this.providerCosts = const <String, double>{},
+    this.providerModels = const <String, String>{},
   });
 
   final Map<String, LlmProvider> providers;
@@ -154,6 +155,10 @@ class Router {
   /// terhadap cost maksimum (swing maks 0.1 — di bawah sinyal capability,
   /// local-preference dan health). Kosong/tanpa cost = perilaku lama.
   final Map<String, double> providerCosts;
+
+  /// Metadata sesi (Hermes S6): nama model per provider id, dipakai AgentLoop
+  /// untuk mencatat model yang benar-benar dipakai pada metadata sesi.
+  final Map<String, String> providerModels;
   final DecisionThresholds thresholds;
 
   /// Clock yang dapat disuntik untuk fase breaker deterministik di test;
@@ -447,6 +452,7 @@ class Router {
       risk: risk,
       complexity: complexity,
       providerId: realId,
+      model: providerModels[realId],
       reason: reason,
       fallbackIds: _fallbackChain(realId),
       score: score,

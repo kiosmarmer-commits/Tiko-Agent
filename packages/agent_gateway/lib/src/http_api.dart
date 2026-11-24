@@ -53,6 +53,10 @@ class HttpApiServer {
     this.surfaceDeleter,
     this.deleteSession,
     this.renameSession,
+    this.updateSession,
+    this.deleteSessions,
+    this.duplicateSession,
+    this.exportSession,
     this.doctorProvider,
     this.capabilitiesProvider,
     this.eventsProvider,
@@ -161,6 +165,22 @@ class HttpApiServer {
   sessionMessages;
   final Future<bool> Function(String sessionId)? deleteSession;
   final Future<bool> Function(String sessionId, String title)? renameSession;
+
+  /// Hermes S6: CRUD metadata sesi (title/pinned/archived), bulk delete,
+  /// duplicate/fork, dan export transcript. Semua opsional agar host lama
+  /// tetap kompatibel (fallback rename/delete tunggal).
+  final Future<bool> Function(
+    String sessionId, {
+    String? title,
+    bool? pinned,
+    bool? archived,
+  })?
+  updateSession;
+  final Future<int> Function(List<String> sessionIds)? deleteSessions;
+  final Future<Map<String, dynamic>?> Function(String sessionId)?
+      duplicateSession;
+  final Future<Map<String, dynamic>?> Function(String sessionId, String format)?
+      exportSession;
 
   /// Typed GenUI action (GUI-P0-04): memvalidasi action id terhadap registry
   /// per sesi (ownership + expiry + single-use + nilai form), lalu meneruskan
@@ -1494,6 +1514,85 @@ class HttpApiServer {
             await (listSessions?.call() ??
                 Future.value(<Map<String, dynamic>>[]));
         _json(req, {'sessions': sessions});
+      } else if (path == '/v1/sessions/delete-bulk' && req.method == 'POST') {
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final ids = [
+          for (final id in (body['ids'] as List? ?? const []))
+            if (id is String && id.trim().isNotEmpty) id.trim(),
+        ];
+        if (ids.isEmpty) {
+          _error(req, 400, 'invalid_request', 'ids wajib array non-kosong');
+          return;
+        }
+        final removed = await deleteSessions?.call(ids) ?? 0;
+        _json(req, {'deleted': removed, 'requested': ids.length});
+      } else if (path.startsWith('/v1/sessions/') &&
+          path.endsWith('/duplicate') &&
+          req.method == 'POST') {
+        final id = Uri.decodeComponent(
+          path.substring(
+            '/v1/sessions/'.length,
+            path.length - '/duplicate'.length,
+          ),
+        );
+        if (id.isEmpty || id.contains('/') || id.contains('..')) {
+          _error(req, 400, 'invalid_request', 'invalid session id');
+          return;
+        }
+        final created = await duplicateSession?.call(id);
+        if (created == null) {
+          _error(
+            req,
+            404,
+            'not_found',
+            'session not found or duplicate unsupported',
+          );
+        } else {
+          _json(req, {'session': created});
+        }
+      } else if (path.startsWith('/v1/sessions/') &&
+          path.endsWith('/export') &&
+          req.method == 'GET') {
+        final id = Uri.decodeComponent(
+          path.substring(
+            '/v1/sessions/'.length,
+            path.length - '/export'.length,
+          ),
+        );
+        if (id.isEmpty || id.contains('/') || id.contains('..')) {
+          _error(req, 400, 'invalid_request', 'invalid session id');
+          return;
+        }
+        final format = req.uri.queryParameters['format'] ?? 'md';
+        if (!const {'md', 'json', 'txt'}.contains(format)) {
+          _error(req, 400, 'invalid_request',
+              'format harus salah satu dari: md, json, txt');
+          return;
+        }
+        final exported = await exportSession?.call(id, format);
+        if (exported == null) {
+          _error(
+            req,
+            404,
+            'not_found',
+            'session not found or export unsupported',
+          );
+          return;
+        }
+        final mime = switch (format) {
+          'json' => 'application/json',
+          'txt' => 'text/plain',
+          _ => 'text/markdown',
+        };
+        req.response.headers.set(HttpHeaders.contentTypeHeader, mime);
+        req.response.headers.set(
+          'content-disposition',
+          'attachment; filename="session-${Uri.encodeComponent(id)}.$format"',
+        );
+        req.response.write(exported['content'] ?? '');
+        await req.response.close();
       } else if (path.startsWith('/v1/sessions/') &&
           path.endsWith('/messages') &&
           req.method == 'GET') {
@@ -1554,9 +1653,39 @@ class HttpApiServer {
         final body =
             jsonDecode(await utf8.decoder.bind(req).join())
                 as Map<String, dynamic>;
-        final title = body['title'] as String? ?? '';
+        final title = body['title'] as String?;
+        final pinned = body['pinned'] is bool ? body['pinned'] as bool : null;
+        final archived =
+            body['archived'] is bool ? body['archived'] as bool : null;
+        final update = updateSession;
+        if (update != null) {
+          final ok = await update(
+            id,
+            title: title,
+            pinned: pinned,
+            archived: archived,
+          );
+          if (!ok) {
+            _error(
+              req,
+              404,
+              'not_found',
+              'session not found or update unsupported',
+            );
+          } else {
+            _json(req, {
+              'ok': true,
+              'id': id,
+              'title': title,
+              'pinned': pinned,
+              'archived': archived,
+            });
+          }
+          return;
+        }
+        // Fallback host lama: hanya rename.
         final ok =
-            await (renameSession?.call(id, title) ?? Future.value(false));
+            await (renameSession?.call(id, title ?? '') ?? Future.value(false));
         if (!ok) {
           _error(
             req,

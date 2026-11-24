@@ -80,6 +80,11 @@ class Session {
     required this.userKey,
     this.title,
     this.summary,
+    this.provider,
+    this.model,
+    this.pinned = false,
+    this.archived = false,
+    this.lastFailed = false,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : createdAt = createdAt ?? DateTime.now().toUtc(),
@@ -90,6 +95,14 @@ class Session {
   final String userKey;
   String? title;
   String? summary;
+
+  /// Metadata turn terakhir (Hermes S6).
+  String? provider;
+  String? model;
+  bool pinned;
+  bool archived;
+  bool lastFailed;
+
   final DateTime createdAt;
   DateTime updatedAt;
 }

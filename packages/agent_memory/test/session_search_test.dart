@@ -126,6 +126,8 @@ class _NoSearchStore extends SessionStore {
     required String user,
     required String assistant,
     List<String> tools = const [],
+    String? provider,
+    String? model,
   }) =>
       throw UnimplementedError();
 

@@ -23,6 +23,15 @@ abstract class AgentRepository {
   });
   Future<bool> deleteSession(String sessionId);
   Future<bool> renameSession(String sessionId, String title);
+  Future<bool> updateSession(
+    String sessionId, {
+    String? title,
+    bool? pinned,
+    bool? archived,
+  });
+  Future<int> deleteSessions(List<String> sessionIds);
+  Future<SessionSummary?> duplicateSession(String sessionId);
+  Future<String> exportSession(String sessionId, {String format});
   Future<List<ApprovalSummary>> approvals();
   Future<bool> decideApproval(String id, bool approve);
   Future<List<RuntimeEvent>> events();
@@ -176,6 +185,32 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<bool> renameSession(String sessionId, String title) =>
       _guard(() => _client.renameSession(sessionId, title));
+
+  @override
+  Future<bool> updateSession(
+    String sessionId, {
+    String? title,
+    bool? pinned,
+    bool? archived,
+  }) =>
+      _guard(() => _client.updateSession(
+            sessionId,
+            title: title,
+            pinned: pinned,
+            archived: archived,
+          ));
+
+  @override
+  Future<int> deleteSessions(List<String> sessionIds) =>
+      _guard(() => _client.deleteSessions(sessionIds));
+
+  @override
+  Future<SessionSummary?> duplicateSession(String sessionId) =>
+      _guard(() => _client.duplicateSession(sessionId));
+
+  @override
+  Future<String> exportSession(String sessionId, {String format = 'md'}) =>
+      _guard(() => _client.exportSession(sessionId, format: format));
 
   @override
   Future<List<ApprovalSummary>> approvals() async =>

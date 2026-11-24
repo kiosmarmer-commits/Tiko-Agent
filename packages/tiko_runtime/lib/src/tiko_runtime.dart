@@ -1605,6 +1605,14 @@ class TikoRuntime {
           for (final e in config.providers.entries)
             if (e.value.enabled && e.value.cost != null) e.key: e.value.cost!,
         },
+        // Hermes S6: metadata model per provider untuk history/filter sesi.
+        providerModels: {
+          for (final e in config.providers.entries)
+            if (e.value.enabled &&
+                e.value.model != null &&
+                e.value.model!.trim().isNotEmpty)
+              e.key: e.value.model!,
+        },
         onFallback: (event) => events.emit('provider.fallback', event),
       );
 

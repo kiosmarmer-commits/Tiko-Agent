@@ -885,15 +885,18 @@ Future<void> main(List<String> args) async {
         listSessions: () async {
           final list = await rt.sessions.list();
           return list
-              .map(
-                (s) => {
-                  'id': s.id,
-                  'channel': s.channel,
-                  'title': s.title,
-                  'updated_at': s.updatedAt.toIso8601String(),
-                  'turns': s.turns,
-                },
-              )
+              .map((s) => {
+                    'id': s.id,
+                    'channel': s.channel,
+                    'title': s.title,
+                    'updated_at': s.updatedAt.toIso8601String(),
+                    'turns': s.turns,
+                    if (s.provider != null) 'provider': s.provider,
+                    if (s.model != null) 'model': s.model,
+                    'pinned': s.pinned,
+                    'archived': s.archived,
+                    'last_failed': s.lastFailed,
+                  })
               .toList();
         },
         sessionMessages: (id, {required int limit, required int offset}) async {
@@ -914,6 +917,54 @@ Future<void> main(List<String> args) async {
         },
         deleteSession: (id) => rt.sessions.delete(id),
         renameSession: (id, title) => rt.sessions.rename(id, title),
+        updateSession: (id, {title, pinned, archived}) async {
+          var ok = true;
+          if (pinned != null) {
+            ok &= await rt.sessions.setPinned(id, pinned);
+          }
+          if (archived != null) {
+            ok &= await rt.sessions.setArchived(id, archived);
+          }
+          if (title != null && title.trim().isNotEmpty) {
+            ok &= await rt.sessions.rename(id, title.trim());
+          }
+          return ok;
+        },
+        deleteSessions: (ids) => rt.sessions.deleteMany(ids),
+        duplicateSession: (id) async => (await rt.sessions.duplicate(id))?.toJson(),
+        exportSession: (id, format) async {
+          final session = await rt.sessions.get(id);
+          if (session == null) return null;
+          final messages = await rt.sessions.recent(id, limit: 400);
+          final title = session.title ?? id;
+          final exported = switch (format) {
+            'json' => jsonEncode({
+                  'session_id': id,
+                  'title': title,
+                  'channel': session.channel,
+                  'provider': session.provider,
+                  'model': session.model,
+                  'exported_at': DateTime.now().toUtc().toIso8601String(),
+                  'messages': [
+                    for (final m in messages)
+                      {'role': m.role, 'content': m.content},
+                  ],
+                }),
+            'txt' => [
+                title,
+                '=' * title.length,
+                for (final m in messages)
+                  '[${m.role}]\n${m.content}\n',
+              ].join('\n'),
+            _ => [
+                '# $title',
+                '',
+                for (final m in messages)
+                  '## ${m.role == 'user' ? 'User' : 'Assistant'}\n\n${m.content}\n',
+              ].join('\n'),
+          };
+          return {'content': exported, 'format': format};
+        },
         listMemories: () => rt.listMemories(),
         deleteMemory: (id) => rt.deleteMemory(id),
         doctorProvider: () async {

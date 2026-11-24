@@ -893,6 +893,114 @@ class _AgentAppState extends State<AgentApp> {
               }
             }
           },
+          onTogglePin: (id, pinned) async {
+            try {
+              await repo.updateSession(id, pinned: pinned);
+              await refreshAdmin(force: true);
+            } catch (error) {
+              if (mounted) {
+                setState(
+                  () => adminError =
+                      'Gagal mengubah sematan sesi: $error',
+                );
+              }
+            }
+          },
+          onToggleArchive: (id, archived) async {
+            try {
+              await repo.updateSession(id, archived: archived);
+              await refreshAdmin(force: true);
+            } catch (error) {
+              if (mounted) {
+                setState(() => adminError = 'Gagal mengubah arsip sesi: $error');
+              }
+            }
+          },
+          onDuplicate: (id) async {
+            try {
+              final copy = await repo.duplicateSession(id);
+              await refreshAdmin(force: true);
+              if (copy != null && copy.id.isNotEmpty) {
+                setState(() {
+                  sessionKey = copy.id;
+                  adminError = null;
+                  route = AppRoute.chat;
+                });
+                unawaited(chat.openSession(copy.id));
+              }
+            } catch (error) {
+              if (mounted) {
+                setState(() => adminError = 'Gagal menduplikat sesi: $error');
+              }
+            }
+          },
+          onExport: (id, format) async {
+            try {
+              final content = await repo.exportSession(id, format: format);
+              if (!mounted) return;
+              await showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Text('Ekspor percakapan ($format)'),
+                  content: SizedBox(
+                    width: 480,
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        content.isEmpty ? '(kosong)' : content,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    TextButton.icon(
+                      key: const Key('btn-session-export-copy'),
+                      onPressed: () => Clipboard.setData(
+                        ClipboardData(text: content),
+                      ),
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('Salin ke clipboard'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Tutup'),
+                    ),
+                  ],
+                ),
+              );
+            } catch (error) {
+              if (mounted) {
+                setState(() => adminError = 'Gagal mengekspor sesi: $error');
+              }
+            }
+          },
+          onBulkDelete: (ids) async {
+            try {
+              final deleted = await repo.deleteSessions(ids);
+              if (ids.any((id) => id == sessionKey)) {
+                setState(() => sessionKey = 'flutter:default');
+                chat.clearChat();
+              }
+              if (mounted) {
+                setState(
+                  () => adminError =
+                      deleted == ids.length
+                          ? null
+                          : 'Sebagian sesi gagal dihapus '
+                              '($deleted/${ids.length}).',
+                );
+              }
+              await refreshAdmin(force: true);
+            } catch (error) {
+              if (mounted) {
+                setState(
+                  () => adminError = 'Gagal menghapus sesi terpilih: $error',
+                );
+              }
+            }
+          },
         );
       case AppRoute.tasks:
         return TaskBoardPage(
@@ -2574,6 +2682,11 @@ class _SessionsPage extends StatelessWidget {
     required this.onSelect,
     required this.onRename,
     required this.onDelete,
+    required this.onTogglePin,
+    required this.onToggleArchive,
+    required this.onDuplicate,
+    required this.onExport,
+    required this.onBulkDelete,
   });
 
   final List<SessionSummary> sessions;
@@ -2586,6 +2699,11 @@ class _SessionsPage extends StatelessWidget {
   final void Function(String id) onSelect;
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
+  final Future<void> Function(String id, bool pinned) onTogglePin;
+  final Future<void> Function(String id, bool archived) onToggleArchive;
+  final Future<void> Function(String id) onDuplicate;
+  final Future<void> Function(String id, String format) onExport;
+  final Future<void> Function(List<String> ids) onBulkDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -2600,6 +2718,11 @@ class _SessionsPage extends StatelessWidget {
       onSelect: onSelect,
       onRename: onRename,
       onDelete: onDelete,
+      onTogglePin: onTogglePin,
+      onToggleArchive: onToggleArchive,
+      onDuplicate: onDuplicate,
+      onExport: onExport,
+      onBulkDelete: onBulkDelete,
     );
   }
 }
