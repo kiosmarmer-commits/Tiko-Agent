@@ -23,6 +23,7 @@ enum AppRoute {
   memory,
   events,
   logs,
+  hooks,
   settings,
 }
 
@@ -186,6 +187,13 @@ const List<AppRouteInfo> kAppRoutes = [
     Icons.article_outlined,
     primaryOnMobile: false,
     section: 'Operations',
+  ),
+  AppRouteInfo(
+    AppRoute.hooks,
+    'Hooks',
+    Icons.webhook_outlined,
+    primaryOnMobile: false,
+    section: 'Settings',
   ),
   AppRouteInfo(
     AppRoute.settings,

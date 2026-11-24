@@ -32,7 +32,8 @@
 - **Webhook:** POST JSON `{event, at, data}`; status ≥ 400 dianggap gagal.
 - **Script:** path relatif di dalam workspace (tanpa `..`/absolut — divalidasi ulang saat fire, fail-closed), dijalankan via `sh` dengan env minimal `PATH`, `TIKO_EVENT`, `TIKO_EVENT_DATA_JSON`, plus `env:` rule; timeout 1..120 detik → kill.
 - **Validasi config:** aturan invalid dilompati dengan issue `fatal: false` (`hooks[N]…`) — config hook salah tidak pernah membunuh daemon.
-- **Observabilitas:** hasil tiap fire di-emit balik sebagai event `hook.executed` `{rule, trigger, outcome, error?}`; snapshot rules + stats per target tersedia via `rt.hookSnapshot()` dan di `/v1/plugins` (`hooks`). GUI Pengaturan → Hooks menyusul.
+- **Observabilitas:** hasil tiap fire di-emit balik sebagai event `hook.executed` `{rule, trigger, outcome, error?}`; snapshot rules + stats per target tersedia via `rt.hookSnapshot()`, di `/v1/plugins` (`hooks`), dan di `GET /v1/hooks`.
+- **GUI Pengaturan → Hooks (SETTINGS-HOOKS):** CRUD lengkap lewat `POST/PATCH/DELETE /v1/hooks[/<n>]` + test fire `POST /v1/hooks/test` (`{index}`) — aturan berlaku live dan dipersist ke config `hooks:` lewat `ConfigStore` (atomik, terevisi); halaman Flutter menampilkan hook aktif, statistik sukses/gagal, form add/edit (webhook/script, timeout, env), dan tombol test.
 
 ### P2 — Job cron: pause/resume + attach skill + penanda kegagalan eksplisit — **Implemented**
 - **Hermes:** job bisa pause/resume/edit, melampirkan skill, dan turn gagal dideklarasikan lewat penanda eksplisit (`[CRON_FAILURE]`) yang tercatat di last_status/failure streak.
@@ -45,7 +46,7 @@
 - **Implementasi Tiko:** `expandContextRefs()` (tiko_runtime) dipanggil di awal `chatWithStatus` — semua channel (CLI/web/gateway/cron) mendapat ekspansi; perintah internal (`/…`) dan isi code fence tidak disentuh. Sintaks satu token: `@file:<rel>`, `@folder:<rel>`, `@git-diff`, `@url:<http(s)://…>`.
 - **Fail-closed:** path relatif workspace saja (tanpa `..`/`~`/absolut, tervalidasi ulang setelah normalisasi); file ≤ 64 KiB dan bukan biner; folder listing ≤ 200 entri / depth 3; URL GET ≤ 64 KiB, hanya http(s), timeout 15s; maks 8 ref/pesan; budget total ≤ 96 KiB.
 - **Gagal jujur:** ref invalid diganti penanda inline `[@<ref> gagal: <alasan>]` — pesan tetap terkirim, tidak ada konten bocor keluar workspace.
-- **Observability:** setiap ekspansi memancarkan event `context.expanded {session_id, ok, failed, refs[].ref/kind/status/bytes/error}`. Indikator chip ekspansi di composer UI web menyusul.
+- **Observability:** setiap ekspansi memancarkan event `context.expanded {session_id, ok, failed, refs[].ref/kind/status/bytes/error}`. Composer Flutter menampilkan chip visual per context ref (`@file:`/`@dir:`/`@url:`/`@git:`) plus autocomplete (builtin + path workspace via `/v1/artifacts`, debounce).
 
 ### P4 — Endpoint OpenAI-compat (`/v1/chat/completions`) di agent_gateway — **Implemented**
 - **Hermes:** expose agent sebagai endpoint OpenAI-compatible agar bisa dipakai Open WebUI/LibreChat/dll.
@@ -85,9 +86,9 @@
 
 ## 4. Langkah tindak lanjut
 
-1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + snapshot `/v1/plugins`; wiring GUI menyusul di PR berikutnya.
+1. ~~Implementasi P1 (Event Hooks)~~ — **selesai**: config `hooks:` + HookExecutor (webhook/script) + observability `hook.executed` + CRUD API/GUI `Settings → Hooks` (SETTINGS-HOOKS).
 2. ~~P2 pause/resume job~~ — **selesai**: `Job.paused` + endpoint `/v1/jobs/<id>/pause|resume` + `Job.skill` (fail-closed lewat skill registry) + `last_status`/`failure_streak` dengan penanda `[CRON_FAILURE]`.
-3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip indikator UI web menyusul.
+3. ~~P3 @ context references~~ — **selesai**: `expandContextRefs()` di `chatWithStatus` (@file/@folder/@git-diff/@url, fail-closed, event `context.expanded`); chip + autocomplete di composer Flutter.
 4. ~~P4 endpoint OpenAI-compat~~ — **selesai**: `POST /v1/chat/completions` (system+transcript+user-terakhir, stream/non-stream, error shape OpenAI, cap 400k karakter).
 5. ~~P5 batch processing + trajektori export~~ — **selesai**: `tiko batch run --tasks/--concurrency/--label` (BatchRolloutRunner + trajektori JSONL + laporan `data/batch/`) dan `tiko batch export --out` (JSONL/ShareGPT, redaksi aktif).
 6. ~~P6 kontrol routing per provider~~ — **selesai**: `providers.chat.<id>.weight/cost` + `TikoConfig.fallbackChainIds` (weight desc, cost asc, config order stabil); lihat §2 P6.

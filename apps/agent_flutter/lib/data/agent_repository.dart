@@ -47,6 +47,11 @@ abstract class AgentRepository {
   });
   Future<PluginsToolsSnapshot> pluginsTools();
   Future<String> setPluginConsent(String plugin, String action);
+  Future<HooksSnapshot> hooks();
+  Future<HooksSnapshot> addHook(Map<String, dynamic> body);
+  Future<HooksSnapshot> updateHook(int index, Map<String, dynamic> body);
+  Future<HooksSnapshot> deleteHook(int index);
+  Future<Map<String, dynamic>> testHook(int index);
   Future<ChannelsSnapshot> channels();
   Future<JobsSnapshot> jobs();
   Future<SecuritySnapshot> security();
@@ -263,6 +268,30 @@ class HttpAgentRepository implements AgentRepository {
     final res = await _guard(() => _client.setPluginConsent(plugin, action));
     return '${res['message'] ?? ''}';
   }
+
+  @override
+  Future<HooksSnapshot> hooks() async =>
+      HooksSnapshot.fromMap(await _guard(_client.fetchHooks));
+
+  @override
+  Future<HooksSnapshot> addHook(Map<String, dynamic> body) async =>
+      HooksSnapshot.fromMap(await _guard(() => _client.addHook(body)));
+
+  @override
+  Future<HooksSnapshot> updateHook(
+    int index,
+    Map<String, dynamic> body,
+  ) async =>
+      HooksSnapshot.fromMap(
+          await _guard(() => _client.updateHook(index, body)));
+
+  @override
+  Future<HooksSnapshot> deleteHook(int index) async =>
+      HooksSnapshot.fromMap(await _guard(() => _client.deleteHook(index)));
+
+  @override
+  Future<Map<String, dynamic>> testHook(int index) async =>
+      _guard(() => _client.testHook(index));
 
   @override
   Future<ChannelsSnapshot> channels() async =>

@@ -366,7 +366,86 @@ class HookRuleConfig {
         if (webhookUrl != null) 'webhook': webhookUrl,
         if (script != null) 'script': script,
         'timeout_sec': timeoutSec,
+        'env': env,
       };
+
+  /// Aturan siap ditulis ke config `hooks:` (Hermes-parity P1).
+  Map<String, dynamic> toYamlEntry() => {
+        'event': event,
+        if (webhookUrl != null) 'webhook': webhookUrl,
+        if (script != null) 'script': script,
+        'timeout_sec': timeoutSec,
+        if (env.isNotEmpty) 'env': env,
+      };
+
+  /// Validasi satu aturan dari payload JSON (API/GUI). Konsisten dengan
+  /// parser config `_parseHooks`: aturan tanpa target, timeout out-of-range,
+  /// atau path script yang keluar workspace ditolak.
+  static List<String> validateJson(Map<String, dynamic> raw) {
+    final errors = <String>[];
+    final event = raw['event'];
+    if (event is! String || event.trim().isEmpty) {
+      errors.add('event harus string non-kosong (nama event atau *)');
+    }
+    final webhook = raw['webhook'];
+    if (webhook != null &&
+        (webhook is! String ||
+            !(webhook.startsWith('http://') ||
+                webhook.startsWith('https://')))) {
+      errors.add('webhook harus URL http:// atau https://');
+    }
+    final script = raw['script'];
+    if (script != null && script is! String) {
+      errors.add('script harus berupa path string');
+    }
+    final scriptPath = script is String ? script.trim() : null;
+    if (scriptPath != null &&
+        (scriptPath.startsWith('/') ||
+            scriptPath.startsWith('~') ||
+            scriptPath.split('/').contains('..'))) {
+      errors.add('script harus path relatif dalam workspace (tanpa .. atau absolut)');
+    }
+    if ((webhook == null || (webhook as String?)!.trim().isEmpty) &&
+        (scriptPath == null || scriptPath.isEmpty)) {
+      errors.add('butuh salah satu webhook atau script');
+    }
+    final timeout = raw['timeout_sec'];
+    if (timeout != null &&
+        (timeout is! int || timeout < 1 || timeout > 120)) {
+      errors.add('timeout_sec harus integer 1..120');
+    }
+    final env = raw['env'];
+    if (env != null) {
+      if (env is! Map) {
+        errors.add('env harus mapping string');
+      } else if (env.keys.any((k) => k is! String) ||
+          env.values.any((v) => v is! String)) {
+        errors.add('env harus mapping string');
+      }
+    }
+    return errors;
+  }
+
+  /// Bangun aturan dari payload JSON yang sudah lolos [validateJson];
+  /// field tidak dikenal diabaikan.
+  static HookRuleConfig fromJson(Map<String, dynamic> raw) {
+    final event = (raw['event'] as String).trim();
+    final webhook = (raw['webhook'] as String?)?.trim();
+    final script = (raw['script'] as String?)?.trim();
+    final timeout = raw['timeout_sec'];
+    final envRaw = raw['env'];
+    return HookRuleConfig(
+      event: event,
+      webhookUrl: (webhook == null || webhook.isEmpty) ? null : webhook,
+      script: (script == null || script.isEmpty) ? null : script,
+      timeoutSec: timeout is int ? timeout : 30,
+      env: envRaw is Map
+          ? {
+              for (final e in envRaw.entries) '${e.key}': '${e.value}',
+            }
+          : const {},
+    );
+  }
 }
 
 class TikoConfig {

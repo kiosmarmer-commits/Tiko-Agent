@@ -23,6 +23,7 @@ class SettingsView extends StatefulWidget {
     required this.onConnect,
     required this.onSettingsChanged,
     this.daemonCard,
+    this.onOpenHooks,
     this.daemonStatus,
   });
 
@@ -33,6 +34,9 @@ class SettingsView extends StatefulWidget {
   final OnConnect onConnect;
   final void Function(AppSettings) onSettingsChanged;
   final Widget? daemonCard;
+
+  /// SETTINGS-HOOKS: buka halaman Hooks (null = sembunyikan pintasan).
+  final VoidCallback? onOpenHooks;
 
   /// Status daemon dari `GET /v1/status` (GUI-P1-08): ditampilkan
   /// read-only — config daemon immutable saat hidup (ubah config + restart).
@@ -412,6 +416,28 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+        if (widget.onOpenHooks != null) ...[
+          const SizedBox(height: SimpulTheme.xxl),
+          _scopeCaption(context, 'Event hooks webhook/script \u2014 read/write via API'),
+          _sectionTitle(context, 'Hooks'),
+          _panel(
+            brightness,
+            child: ListTile(
+              key: const Key('settings-open-hooks'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.webhook_outlined, size: 18),
+              title: const Text('Kelola hooks'),
+              subtitle: Text(
+                'Lihat hook aktif, webhook/script, statistik sukses/gagal, '
+                'dan test fire.',
+                style: TextStyle(color: SimpulTheme.mutedText(brightness)),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: widget.onOpenHooks,
             ),
           ),
         ],

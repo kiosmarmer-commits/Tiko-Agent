@@ -20,6 +20,7 @@ import 'attachment_ingest.dart';
 import 'context_file.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
+import 'config_store.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
 import 'event_bus.dart';
@@ -415,6 +416,7 @@ class TikoRuntime {
     SelfEvolutionEngine? selfEvolution,
     this.smartHomeTool,
     SandboxRunner? sandbox,
+    this.configFilePath,
   }) : _sandbox = sandbox {
     _tokenAnomaly = config.tokenAnomaly.enabled
         ? TokenAnomalyDetector(
@@ -699,6 +701,11 @@ class TikoRuntime {
 
   /// Hook lifecycle Hermes-parity (P1); null bila tanpa aturan `hooks:`.
   HookExecutor? hookExecutor;
+
+  /// Absolut path config aktif (dari [TikoRuntime.create]); dipakai CRUD
+  /// hooks via [ConfigStore] agar perubahan dari GUI/GUI API tervalidasi,
+  /// terevisi, dan bisa di-rollback. Null pada runtime uji sintetis.
+  final String? configFilePath;
   // Non-final agar tes dapat menyuntik broker dengan TTL pendek.
   late ApprovalBroker approvals;
   late final SkillApprovalLedger skillLedger;
@@ -1176,6 +1183,7 @@ class TikoRuntime {
 
     final rt = TikoRuntime._(
       config: cfg,
+      configFilePath: p.absolute(configPath),
       issues: issues,
       errorMemory: errorMemory,
       jobOutputs: jobOutputs,
@@ -2836,6 +2844,120 @@ class TikoRuntime {
       };
     }
     return executor.snapshot();
+  }
+
+  /// Pastikan executor hidup (GUI CRUD hooks): sebelumnya executor hanya
+  /// dibuat bila config punya aturan, sehingga aturan pertama dari GUI
+  /// perlu executor baru yang langsung berlangganan EventBus.
+  HookExecutor _hookExecutorForMutation() {
+    return hookExecutor ??= HookExecutor(
+      events: events,
+      rules: const [],
+      workspace: workspace,
+    )..start();
+  }
+
+  /// Simpan daftar aturan ke config `hooks:` (Hermes-parity P1) lewat
+  /// [ConfigStore] — atomik, terevisi, tervalidasi penuh. Berhasil null
+  /// hanya bila file config tidak tersedia (runtime uji); pesan kesalahan
+  /// dikembalikan sebagai string.
+  Future<String?> _hookPersist(List<HookRuleConfig> rules) async {
+    final configPath = configFilePath;
+    if (configPath == null) return null;
+    final file = File(configPath);
+    if (!file.existsSync()) {
+      return 'config tidak ditemukan: $configPath (aturan hanya berlaku live)';
+    }
+    final store = ConfigStore(
+      configPath: configPath,
+      revisionsDir: p.join(dataDir, 'config_revisions'),
+    );
+    final (:revision, :issues) = await store.replaceKey(
+      'hooks',
+      [for (final r in rules) r.toYamlEntry()],
+      actor: 'gui',
+      note:
+          'hooks CRUD melalui API/GUI (${rules.length} aturan)',
+    );
+    final fatal = issues.where((i) => i.fatal).toList();
+    if (fatal.isNotEmpty) {
+      return fatal.map((i) => '${i.path}: ${i.message}').join('; ');
+    }
+    return null;
+  }
+
+  Future<void> _hookApply(List<HookRuleConfig> rules) async {
+    final persistError = await _hookPersist(rules);
+    if (persistError != null) {
+      throw StateError(persistError);
+    }
+    _hookExecutorForMutation().updateRules(rules);
+  }
+
+  /// GET /v1/hooks + POST/PATCH/DELETE: CRUD aturan hooks (SETTINGS-HOOKS).
+  /// Aturan baru berlaku live dan dipersist ke config `hooks:`.
+  Future<Map<String, dynamic>> hookAddRule(Map<String, dynamic> body) async {
+    final errors = HookRuleConfig.validateJson(body);
+    if (errors.isNotEmpty) {
+      throw ArgumentError(errors.join('; '));
+    }
+    final rules = List.of(hookRules);
+    final rule = HookRuleConfig.fromJson(body);
+    rules.add(rule);
+    await _hookApply(rules);
+    events.emit('hook.updated', {'action': 'add', 'event': rule.event});
+    return hookSnapshot();
+  }
+
+  Future<Map<String, dynamic>> hookUpdateRule(
+    int index,
+    Map<String, dynamic> body,
+  ) async {
+    final errors = HookRuleConfig.validateJson(body);
+    if (errors.isNotEmpty) {
+      throw ArgumentError(errors.join('; '));
+    }
+    final rules = List.of(hookRules);
+    if (index < 0 || index >= rules.length) {
+      throw RangeError.index(index, rules, 'index');
+    }
+    rules[index] = HookRuleConfig.fromJson(body);
+    await _hookApply(rules);
+    events.emit('hook.updated', {'action': 'update', 'index': index});
+    return hookSnapshot();
+  }
+
+  Future<Map<String, dynamic>> hookRemoveRule(int index) async {
+    final rules = List.of(hookRules);
+    if (index < 0 || index >= rules.length) {
+      throw RangeError.index(index, rules, 'index');
+    }
+    rules.removeAt(index);
+    await _hookApply(rules);
+    events.emit('hook.updated', {'action': 'remove', 'index': index});
+    return hookSnapshot();
+  }
+
+  /// POST /v1/hooks/test: eksekusi target satu aturan dengan event
+  /// sintetis tanpa mengubah config; hasil per-target + statistik.
+  Future<Map<String, dynamic>> hookTestRule(int index) async {
+    final executor = _hookExecutorForMutation();
+    if (index < 0 || index >= executor.rules.length) {
+      throw RangeError.index(index, executor.rules, 'index');
+    }
+    final result = await executor.testRule(index);
+    return {
+      ...result,
+      'stats': executor.snapshot()['stats'],
+    };
+  }
+
+  List<HookRuleConfig> get hookRules {
+    final executor = hookExecutor;
+    if (executor == null) {
+      return List.of(config.hooks);
+    }
+    return List.of(executor.rules);
   }
 
   /// Snapshot plugin + consent untuk REST/GUI (GUI-P1-06, paritas
