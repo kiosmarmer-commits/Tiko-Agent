@@ -139,6 +139,7 @@ class Router {
     this.thresholds = const DecisionThresholds(),
     this.clock,
     this.onFallback,
+    this.providerCosts = const <String, double>{},
   });
 
   final Map<String, LlmProvider> providers;
@@ -147,6 +148,12 @@ class Router {
   final Map<int, String> tierProviders;
   /// Explicit fallback chain (provider ids), after primary.
   final List<String> fallbackOrder;
+
+  /// P6 cost-aware selection: biaya relatif per provider (opsional). Saat
+  /// scoring dinamis, provider dengan cost terdaftar kena penalti proporsional
+  /// terhadap cost maksimum (swing maks 0.1 — di bawah sinyal capability,
+  /// local-preference dan health). Kosong/tanpa cost = perilaku lama.
+  final Map<String, double> providerCosts;
   final DecisionThresholds thresholds;
 
   /// Clock yang dapat disuntik untuk fase breaker deterministik di test;
@@ -241,6 +248,10 @@ class Router {
     final id = _pickPrimary(prefer: prefer, tier: tier);
     final score = _score(id, needTools: needTools);
     explain.add('selected $id score=${score.toStringAsFixed(2)}');
+    final penalty = _costPenalty(id);
+    if (penalty > 0) {
+      explain.add('cost ${providerCosts[id]} penalti=${penalty.toStringAsFixed(2)}');
+    }
     final fb = _fallbackChain(id);
     if (fb.isNotEmpty) explain.add('fallback ${fb.join(" → ")}');
 
@@ -388,7 +399,21 @@ class Router {
     if (h.lastLatencyMs > 0) {
       s += 0.05 * (1.0 / (1.0 + h.lastLatencyMs / 1000));
     }
+    s -= _costPenalty(id);
     return s;
+  }
+
+  /// P6: penalti cost relatif 0..0.1; 0 bila provider tak berbiaya terdaftar
+  /// atau tidak ada satupun cost terdaftar.
+  double _costPenalty(String id) {
+    final cost = providerCosts[id];
+    if (cost == null || providerCosts.isEmpty) return 0;
+    var maxCost = 0.0;
+    for (final c in providerCosts.values) {
+      if (c > maxCost) maxCost = c;
+    }
+    if (maxCost <= 0) return 0;
+    return 0.1 * (cost / maxCost);
   }
 
   List<String> _fallbackChain(String primary) {

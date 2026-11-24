@@ -43,7 +43,8 @@ Perilaku saat ini:
 3. Bila DecisionProvider tidak aktif, heuristic keyword menentukan kebutuhan tool; panjang pesan `> 200` karakter menjadi heuristic berat, selainnya ringan; tier menjadi 2 bila perlu tool, jika tidak tier 1.
 4. Bila DecisionProvider melempar error, `needTools` kembali ke heuristic; kompleksitas awal tetap sedang, sehingga tier efektif 2.
 5. Provider preference dicoba jika selectable; jika tidak, Router menilai provider lain berdasarkan kemampuan tool, ID lokal, kegagalan dan latensi. Fallback chain mencoba ID tersisa tanpa mengulang provider yang sudah dicoba pada request itu.
-6. Hermes-parity P6 — fallback chain chat provider diurutkan oleh `TikoConfig.fallbackChainIds`: default provider tetap di depan, lalu provider enabled diurutkan `weight` desc → `cost` asc → urutan config (stabil). Tanpa `weight`/`cost` di config, urutan tetap perilaku lama. Contoh:
+6. Hermes-parity P6 — cost-aware selection dinamis: `providerCosts` (dari `providers.chat.<id>.cost` yang enabled) mengurangi skor pemilihan primary secara proporsional terhadap cost maksimum — swing maks 0.1, selalu tunduk pada sinyal capability (0.2), local-preference (0.15) dan health; provider tanpa cost dianggap netral; tanpa cost di config, scoring identik perilaku lama. Penalti terlihat di `tiko route explain` (`cost <n> penalti=<x>`).
+7. Hermes-parity P6 — fallback chain chat provider diurutkan oleh `TikoConfig.fallbackChainIds`: default provider tetap di depan, lalu provider enabled diurutkan `weight` desc → `cost` asc → urutan config (stabil). Tanpa `weight`/`cost` di config, urutan tetap perilaku lama. Contoh:
 
 ```yaml
 providers:
