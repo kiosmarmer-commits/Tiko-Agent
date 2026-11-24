@@ -1353,6 +1353,11 @@ bar|line|area|donut, maks 31 titik).
 Untuk permintaan persetujuan berisiko gunakan ApprovalSheet (risk low|medium|high,
 summary, commands[] berupa string); tombol setuju/tolak tetap komponen Button
 dengan action terpisah.
+Konvensi penargetan halaman GUI: beri surfaceId prefix `page.<halaman>.`
+(contoh `page.tasks.dashboard`) dan surface akan muncul di halaman GUI yang
+dituju — halaman yang didukung: tasks, bots, automation, runs, skills,
+security. Update surface dengan updateComponents pada surfaceId yang sama
+agar halaman selalu menampilkan versi terbaru.
 Tombol link memakai action.name `open_url` dengan payload {"url":"https://host/path"};
 hanya URL https yang cocok dengan allowlist host (config
 a2ui.open_url_allow) yang dibuka, URL lain ditolak (fail-closed).

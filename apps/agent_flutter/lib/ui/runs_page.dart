@@ -15,6 +15,7 @@ class RunsPage extends StatelessWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
     this.teamRuns,
   });
 
@@ -23,6 +24,9 @@ class RunsPage extends StatelessWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
 
   /// Laporan run team (`BotTeamStore.listRunReports`); null = belum dimuat.
   final List<Map<String, dynamic>>? teamRuns;
@@ -45,6 +49,7 @@ class RunsPage extends StatelessWidget {
               : IconButton(
                   onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
+        if (surfaceSection != null) surfaceSection!,
         if (loading) const LinearProgressIndicator(minHeight: 2),
         if (error != null)
           Padding(

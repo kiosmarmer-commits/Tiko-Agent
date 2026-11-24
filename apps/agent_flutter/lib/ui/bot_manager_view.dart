@@ -21,6 +21,7 @@ class BotsPage extends StatefulWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
     this.onCreate,
     this.onUpdate,
     this.onDelete,
@@ -35,6 +36,9 @@ class BotsPage extends StatefulWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
   final Future<void> Function(Map<String, dynamic> body)? onCreate;
   final Future<void> Function(String id, Map<String, dynamic> body)? onUpdate;
   final Future<bool> Function(String id)? onDelete;
@@ -90,6 +94,7 @@ class _BotsPageState extends State<BotsPage> {
             ],
           ),
         ),
+        if (widget.surfaceSection != null) widget.surfaceSection!,
         if (widget.loading) const LinearProgressIndicator(minHeight: 2),
         if (widget.error != null)
           Padding(
