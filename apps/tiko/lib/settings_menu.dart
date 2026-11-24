@@ -47,10 +47,16 @@ bool _colorAllowed() => TuiTheme.terminalColorAllowed();
 
 /// Satu field yang dapat diubah di layar settings.
 class _Setting {
-  const _Setting(this.label, this.path, {this.choices = const []});
+  const _Setting(
+    this.label,
+    this.path, {
+    this.choices = const [],
+    this.group = 'Umum',
+  });
   final String label;
   final String path;
   final List<String> choices;
+  final String group;
 }
 
 String _valueOf(TikoConfig cfg, _Setting s) {
@@ -89,7 +95,15 @@ String _panel(
   buf.writeln(
     palette.dim('┌${'─ Pengaturan Tiko '.padRight(width - 2, '─')}┐'),
   );
+  String? lastGroup;
   for (var i = 0; i < fields.length; i++) {
+    if (fields[i].group != lastGroup) {
+      lastGroup = fields[i].group;
+      buf.writeln('${palette.dim('│')}${fit('')}${palette.dim('│')}');
+      buf.writeln(
+        '${palette.dim('│')}${fit(palette.cyan('  ${fields[i].group}'))}${palette.dim('│')}',
+      );
+    }
     buf.writeln(
       '${palette.dim('│')}${fit('${i + 1}  ${fields[i].label}: '
       '${_valueOf(cfg, fields[i])}')}${palette.dim('│')}',
@@ -215,26 +229,39 @@ List<_Setting> _settingsOf(TikoConfig c) {
       'Provider utama',
       'providers.default_chat',
       choices: c.providers.keys.toList(),
+      group: 'Provider',
     ),
-    _Setting('Model', 'providers.chat.$id.model'),
-    _Setting('Base URL', 'providers.chat.$id.base_url'),
-    _Setting('API key (SecretRef env:VAR)', 'providers.chat.$id.api_key'),
+    _Setting('Model', 'providers.chat.$id.model', group: 'Provider'),
+    _Setting('Base URL', 'providers.chat.$id.base_url', group: 'Provider'),
+    _Setting(
+      'API key (SecretRef env:VAR)',
+      'providers.chat.$id.api_key',
+      group: 'Provider',
+    ),
     const _Setting(
       'Mode keamanan',
       'security.mode',
       choices: ['ask', 'auto', 'deny'],
+      group: 'Keamanan',
     ),
-    const _Setting('Port API daemon', 'api.port'),
-    const _Setting('Vision', 'features.vision', choices: ['true', 'false']),
+    const _Setting('Port API daemon', 'api.port', group: 'Runtime'),
+    const _Setting(
+      'Vision',
+      'features.vision',
+      choices: ['true', 'false'],
+      group: 'Fitur',
+    ),
     const _Setting(
       'Image generation',
       'features.image_generation',
       choices: ['true', 'false'],
+      group: 'Fitur',
     ),
     _Setting(
       'Enabled provider "$id"',
       'providers.chat.$id.enabled',
       choices: const ['true', 'false'],
+      group: 'Provider lanjutan',
     ),
   ];
 }

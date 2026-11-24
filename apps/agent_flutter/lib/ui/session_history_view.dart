@@ -17,6 +17,7 @@ class SessionHistoryView extends StatefulWidget {
     required this.onSelect,
     required this.onRename,
     required this.onDelete,
+    this.onNewChat,
     this.error,
     this.embedded = false,
   });
@@ -30,6 +31,7 @@ class SessionHistoryView extends StatefulWidget {
   final void Function(String id) onSelect;
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
+  final VoidCallback? onNewChat;
   final bool embedded;
 
   @override
@@ -53,7 +55,13 @@ class _SessionHistoryViewState extends State<SessionHistoryView> {
       return session.displayTitle.toLowerCase().contains(query) ||
           session.channel.toLowerCase().contains(query) ||
           session.id.toLowerCase().contains(query);
-    }).toList();
+    }).toList()..sort(_compareSessions);
+    final grouped = <String, List<SessionSummary>>{};
+    for (final session in filtered) {
+      grouped
+          .putIfAbsent(_sessionGroupLabel(session.updatedAt), () => [])
+          .add(session);
+    }
     final content = Column(
       children: [
         if (!widget.embedded)
@@ -61,10 +69,23 @@ class _SessionHistoryViewState extends State<SessionHistoryView> {
             title: 'History',
             subtitle: '${widget.sessions.length} percakapan tersimpan',
             online: widget.online,
-            trailing: IconButton(
-              tooltip: 'Muat ulang history',
-              onPressed: widget.onRefresh,
-              icon: const Icon(Icons.refresh),
+            trailing: Wrap(
+              spacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (widget.onNewChat != null)
+                  FilledButton.icon(
+                    key: const Key('btn-history-new-chat'),
+                    onPressed: widget.onNewChat,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Chat baru'),
+                  ),
+                IconButton(
+                  tooltip: 'Muat ulang history',
+                  onPressed: widget.onRefresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
             ),
           ),
         Padding(
@@ -77,13 +98,34 @@ class _SessionHistoryViewState extends State<SessionHistoryView> {
           child: TextField(
             controller: search,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               prefixIcon: Icon(Icons.search),
               hintText: 'Cari percakapan…',
               isDense: true,
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Hapus pencarian',
+                      onPressed: () {
+                        search.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
             ),
           ),
         ),
+        if (query.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+              child: Text(
+                '${filtered.length} hasil untuk “${search.text.trim()}”',
+                style: TextStyle(color: context.simpulMuted, fontSize: 12),
+              ),
+            ),
+          ),
         if (widget.loading) const LinearProgressIndicator(minHeight: 2),
         if (widget.error != null)
           Padding(
@@ -104,15 +146,23 @@ class _SessionHistoryViewState extends State<SessionHistoryView> {
                     20,
                   ),
                   children: [
-                    _group(context, 'Terbaru', filtered.take(8).toList()),
-                    if (filtered.length > 8)
-                      _group(context, 'Sebelumnya', filtered.skip(8).toList()),
+                    for (final entry in grouped.entries)
+                      _group(context, entry.key, entry.value),
                   ],
                 ),
         ),
       ],
     );
     return content;
+  }
+
+  int _compareSessions(SessionSummary a, SessionSummary b) {
+    final aDate = DateTime.tryParse(a.updatedAt);
+    final bDate = DateTime.tryParse(b.updatedAt);
+    if (aDate == null && bDate == null) return 0;
+    if (aDate == null) return 1;
+    if (bDate == null) return -1;
+    return bDate.compareTo(aDate);
   }
 
   Widget _group(
@@ -222,41 +272,46 @@ class _HistoryTile extends StatelessWidget {
         ? 'Percakapan tanpa judul'
         : session.title.trim();
     final channel = session.channel.trim().isEmpty ? 'lokal' : session.channel;
-    return ListTile(
+    return Semantics(
       selected: selected,
-      selectedTileColor: context.simpulSurfaceSelected,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(SimpulTheme.radiusSmall),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      leading: CircleAvatar(
-        radius: 17,
-        backgroundColor: context.simpulSurfaceRaised,
-        child: Icon(
-          Icons.chat_bubble_outline,
-          size: 17,
-          color: context.simpulMuted,
+      button: true,
+      label: selected ? '$title, sesi aktif' : title,
+      child: ListTile(
+        selected: selected,
+        selectedTileColor: context.simpulSurfaceSelected,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(SimpulTheme.radiusSmall),
         ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        leading: CircleAvatar(
+          radius: 17,
+          backgroundColor: context.simpulSurfaceRaised,
+          child: Icon(
+            Icons.chat_bubble_outline,
+            size: 17,
+            color: context.simpulMuted,
+          ),
+        ),
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          '${selected ? 'Aktif · ' : ''}${sessionAgeLabel(session.updatedAt)} · $channel · ${session.turns} turn',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: context.simpulMuted, fontSize: 11),
+        ),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Opsi percakapan',
+          onSelected: (action) {
+            if (action == 'rename') onRename();
+            if (action == 'delete') onDelete();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'rename', child: Text('Beri nama')),
+            PopupMenuItem(value: 'delete', child: Text('Hapus')),
+          ],
+        ),
+        onTap: onTap,
       ),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        '${sessionAgeLabel(session.updatedAt)} · $channel · ${session.turns} turn',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: context.simpulMuted, fontSize: 11),
-      ),
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Opsi percakapan',
-        onSelected: (action) {
-          if (action == 'rename') onRename();
-          if (action == 'delete') onDelete();
-        },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'rename', child: Text('Beri nama')),
-          PopupMenuItem(value: 'delete', child: Text('Hapus')),
-        ],
-      ),
-      onTap: onTap,
     );
   }
 }
@@ -302,4 +357,17 @@ String sessionAgeLabel(String raw) {
   if (delta.inDays < 1) return '${delta.inHours} j lalu';
   if (delta.inDays < 7) return '${delta.inDays} hari lalu';
   return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+}
+
+String _sessionGroupLabel(String raw) {
+  final parsed = DateTime.tryParse(raw)?.toLocal();
+  if (parsed == null) return 'Tanpa tanggal';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final date = DateTime(parsed.year, parsed.month, parsed.day);
+  final days = today.difference(date).inDays;
+  if (days <= 0) return 'Hari ini';
+  if (days == 1) return 'Kemarin';
+  if (days < 7) return 'Minggu ini';
+  return 'Lebih lama';
 }

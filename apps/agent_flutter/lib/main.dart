@@ -839,6 +839,7 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingAdmin,
           error: adminError,
           onRefresh: refreshAdmin,
+          onNewChat: _newChatSession,
           onSelect: (id) {
             setState(() {
               sessionKey = id;
@@ -2245,6 +2246,7 @@ class _SessionsPage extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRefresh,
+    required this.onNewChat,
     required this.onSelect,
     required this.onRename,
     required this.onDelete,
@@ -2256,6 +2258,7 @@ class _SessionsPage extends StatelessWidget {
   final bool loading;
   final String? error;
   final Future<void> Function() onRefresh;
+  final VoidCallback onNewChat;
   final void Function(String id) onSelect;
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
@@ -2269,6 +2272,7 @@ class _SessionsPage extends StatelessWidget {
       loading: loading,
       error: error,
       onRefresh: onRefresh,
+      onNewChat: onNewChat,
       onSelect: onSelect,
       onRename: onRename,
       onDelete: onDelete,
@@ -3004,36 +3008,52 @@ class _TurnProgressStrip extends StatelessWidget {
           ? 'Menghentikan…'
           : (tool == null || tool.isEmpty)
               ? 'Menyusun…'
-              : 'Menjalankan $tool…';
-      return Container(
-        padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: context.simpulMuted),
+              : 'Menjalankan ${_friendlyToolName(tool)}…';
+      return Semantics(
+        liveRegion: true,
+        label: 'Status agent: $label',
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+          decoration: BoxDecoration(
+            color: context.simpulSurfaceHover,
+            border: Border(top: BorderSide(color: context.simpulBorder)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: chat.stopRequested
+                    ? Icon(
+                        Icons.hourglass_top,
+                        size: 14,
+                        color: context.simpulWarn,
+                      )
+                    : const CircularProgressIndicator(strokeWidth: 2),
               ),
-            ),
-            IconButton(
-              key: const Key('btn-chat-stop'),
-              tooltip: 'Hentikan turn (kooperatif)',
-              icon: Icon(
-                Icons.stop_circle_outlined,
-                size: 20,
-                color: context.simpulDanger,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: context.simpulMuted),
+                ),
               ),
-              onPressed: chat.stop,
-            ),
-          ],
+              IconButton(
+                key: const Key('btn-chat-stop'),
+                tooltip: chat.stopRequested
+                    ? 'Menunggu agent berhenti'
+                    : 'Hentikan proses agent',
+                icon: Icon(
+                  Icons.stop_circle_outlined,
+                  size: 20,
+                  color: context.simpulDanger,
+                ),
+                onPressed: chat.stopRequested ? null : chat.stop,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -3053,7 +3073,7 @@ class _TurnProgressStrip extends StatelessWidget {
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         dense: true,
         title: Text(
-          'Turn selesai — ${chat.lastTurnTrace.length} tool calls '
+          '${chat.lastTurnTrace.length} langkah agent selesai '
           '(total ${(totalMs / 1000).toStringAsFixed(1)}s)'
           '${errCount > 0 ? ' · $errCount error' : ''}',
           style: TextStyle(fontSize: 12, color: context.simpulMuted),
@@ -3094,6 +3114,18 @@ class _TurnProgressStrip extends StatelessWidget {
       ),
     );
   }
+}
+
+String _friendlyToolName(String? raw) {
+  final value = raw?.trim() ?? '';
+  if (value.isEmpty) return 'tool';
+  return value
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
 }
 
 class _FileCard extends StatelessWidget {

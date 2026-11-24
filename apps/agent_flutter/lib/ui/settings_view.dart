@@ -58,9 +58,12 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final settings = widget.settings;
-    return ListView(
-      padding: const EdgeInsets.all(SimpulTheme.xl),
-      children: [
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 980),
+        child: ListView(
+          padding: const EdgeInsets.all(SimpulTheme.xl),
+          children: [
         _scopeCaption(
           context,
           'Perangkat \u2014 tersimpan lokal di perangkat ini (shared_preferences)',
@@ -356,7 +359,9 @@ class _SettingsViewState extends State<SettingsView> {
             height: 1.5,
           ),
         ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
