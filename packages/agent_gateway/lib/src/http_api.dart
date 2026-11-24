@@ -1636,6 +1636,24 @@ class HttpApiServer {
           _error(req, e.status, e.code, e.message);
           return;
         }
+        final wantStream = body['stream'] == true ||
+            (req.headers.value(HttpHeaders.acceptHeader) ?? '')
+                .contains('text/event-stream');
+        if (wantStream &&
+            idempotencyKey.trim().isEmpty &&
+            onMessageWithProgress != null) {
+          await _streamMessagesSse(
+            req,
+            InboundMessage(
+              channel: 'http',
+              userKey: userKey,
+              sessionKey: sessionKey,
+              text: text,
+              attachments: attachments,
+            ),
+          );
+          return;
+        }
         if (idempotencyKey.trim().isEmpty) {
           final answer = await onMessage(
             InboundMessage(
@@ -2968,5 +2986,60 @@ class HttpApiServer {
       ...event,
     };
     ws.add(jsonEncode(eventWithMetadata));
+  }
+
+  /// Hermes-P5: progress live untuk POST `/v1/messages` via Server-Sent
+  /// Events. Frame `chat.status`/`chat.toolStart`/`chat.tool`/`chat.delta`
+  /// sama dengan jalur WS `/v1/stream`, lalu frame `text` (jawaban final)
+  /// dan `done`. Klien tanpa stream tetap memakai jalur JSON sinkron.
+  /// Jalur ini tidak memakai idempotency-key (respons streaming tidak dapat
+  /// direplay dari cache). Pembatalan turn tetap via WS `{type: cancel}`.
+  Future<void> _streamMessagesSse(
+    HttpRequest req,
+    InboundMessage m,
+  ) async {
+    final res = req.response;
+    res.headers.set(HttpHeaders.contentTypeHeader, 'text/event-stream');
+    res.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+    res.headers.set('X-Accel-Buffering', 'no');
+    // dart:io: saat flush() masih berjalan sink "bound to a stream" — tulis
+    // berikutnya yang dipanggil sinkron (typedef progress `void Function`)
+    // akan melempar Bad state. Semua write+flush diantrekan dalam rantai
+    // future yang berjalan berurutan; close() menunggu rantai selesai.
+    Future<void> writeChain = Future.value();
+    void sendFrame(Map<String, dynamic> frame) {
+      writeChain = writeChain.then((_) {
+        res.write('data: ${jsonEncode(frame)}\n\n');
+        return res.flush();
+      }).catchError((_) {});
+    }
+
+    Future<void> drainFrames() async {
+      await writeChain;
+    }
+
+    sendFrame({
+      'type': 'chat.status',
+      'state': 'running',
+      'session': m.sessionKey,
+    });
+    String answer;
+    try {
+      answer = await onMessageWithProgress!(m, sendFrame);
+    } on ApiRequestException catch (e) {
+      sendFrame({'type': 'error', 'message': e.message, 'code': e.code});
+      await drainFrames();
+      await res.close().catchError((_) {});
+      return;
+    } catch (e) {
+      sendFrame({'type': 'error', 'message': e.toString()});
+      await drainFrames();
+      await res.close().catchError((_) {});
+      return;
+    }
+    sendFrame({'type': 'text', 'text': answer});
+    sendFrame({'type': 'done', 'session': m.sessionKey});
+    await drainFrames();
+    await res.close().catchError((_) {});
   }
 }

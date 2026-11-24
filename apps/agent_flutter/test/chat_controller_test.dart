@@ -64,6 +64,39 @@ void main() {
     expect(controller.messages.last['text'], contains('connection dropped'));
   });
 
+  test('chat.delta mengalirkan teks assistant secara bertahap', () async {
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        yield {'type': 'chat.status', 'state': 'running'};
+        yield {'type': 'chat.delta', 'text': 'Halo, '};
+        yield {'type': 'chat.toolStart', 'name': 'read_file'};
+        yield {'type': 'chat.delta', 'text': 'ini jawaban'};
+        yield {
+          'type': 'chat.tool',
+          'name': 'read_file',
+          'is_error': false,
+          'duration_ms': 120,
+        };
+        yield {'type': 'text', 'text': 'Halo, ini jawaban lengkap'};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    final snapshots = <String>[];
+    controller.addListener(() {
+      final t = controller.messages.last['text'] ?? '';
+      if (snapshots.isEmpty || snapshots.last != t) snapshots.add(t);
+    });
+
+    await controller.send('sapa');
+
+    expect(snapshots, contains('Halo, '));
+    expect(snapshots, contains('Halo, ini jawaban'));
+    expect(controller.messages.last['text'], 'Halo, ini jawaban lengkap');
+    expect(controller.lastTurnTrace, hasLength(1));
+  });
+
   test('retryLast mengulang prompt hanya setelah user meminta retry', () async {
     var attempts = 0;
     final client = _FakeAgentApiClient()
