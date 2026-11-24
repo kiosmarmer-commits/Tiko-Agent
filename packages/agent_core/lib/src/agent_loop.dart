@@ -560,6 +560,8 @@ class AgentLoop {
           user: m.text,
           assistant: answer,
           tools: List<String>.from(_lastToolNames),
+          provider: activeProviderId,
+          model: _modelFor(route, activeLlm),
         );
         await memory.addMessage(
           Message(sessionId: session.id, role: 'user', content: m.text),
@@ -642,6 +644,17 @@ class AgentLoop {
     trace.span(success ? 'done' : 'fail');
     metrics?.recordTask(success: success, latencyMs: sw.elapsedMilliseconds);
 
+    // Hermes S6: simpan status turn terakhir + provider/model untuk indikator
+    // dan filter history; kegagalan pencatatan tidak mengubah hasil turn.
+    try {
+      await sessionStore?.markTurnOutcome(
+        session.id,
+        ok: success,
+        provider: activeProviderId,
+        model: _modelFor(route, activeLlm),
+      );
+    } catch (_) {}
+
     // ignore: discarded_futures
     trajectory?.logTurn(
       sessionId: session.id,
@@ -651,6 +664,10 @@ class AgentLoop {
       latencyMs: sw.elapsedMilliseconds,
       success: success,
     );
+  }
+
+  String? _modelFor(RouteDecision route, LlmProvider llm) {
+    return route.model ?? (llm.id == route.providerId ? null : llm.id);
   }
 
   String? _explicitMemoryRequest(String raw) {

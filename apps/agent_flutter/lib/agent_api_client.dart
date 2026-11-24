@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'data/api_error.dart';
+import 'data/models.dart';
 
 /// Payload lampiran chat (C2 Chat-UX): inline base64, divalidasi daemon
 /// (maks 4 file, 2 MiB/file, mime text/* + subset application + image).
@@ -117,6 +118,64 @@ class AgentApiClient {
     if (res.statusCode >= 400) return false;
     final json = jsonDecode(res.body) as Map<String, dynamic>;
     return json['ok'] == true;
+  }
+
+  /// Hermes S6: perbarui metadata sesi (title/pinned/archived) via PATCH.
+  Future<bool> updateSession(
+    String sessionId, {
+    String? title,
+    bool? pinned,
+    bool? archived,
+  }) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .patch(_u('/v1/sessions/$safeId'),
+            headers: _headers,
+            body: jsonEncode({
+              if (title != null) 'title': title,
+              if (pinned != null) 'pinned': pinned,
+              if (archived != null) 'archived': archived,
+            }))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode >= 400) return false;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return json['ok'] == true;
+  }
+
+  /// Hermes S6: hapus banyak sesi; return jumlah yang benar-benar terhapus.
+  Future<int> deleteSessions(List<String> sessionIds) async {
+    final res = await _http
+        .post(_u('/v1/sessions/delete-bulk'),
+            headers: _headers,
+            body: jsonEncode(
+                {'ids': [for (final id in sessionIds) id]}))
+        .timeout(const Duration(seconds: 20));
+    _throwIf(res, 'bulk delete sessions');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    return (json['deleted'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Hermes S6: duplikat/fork sesi ke sesi baru lengkap dengan pesannya.
+  Future<SessionSummary?> duplicateSession(String sessionId) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .post(_u('/v1/sessions/$safeId/duplicate'), headers: _headers)
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode >= 400) return null;
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final s = json['session'];
+    if (s is! Map) return null;
+    return SessionSummary.fromMap(Map<String, dynamic>.from(s));
+  }
+
+  /// Hermes S6: unduh transcript sesi (md/json/txt) sebagai teks.
+  Future<String> exportSession(String sessionId, {String format = 'md'}) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .get(_u('/v1/sessions/$safeId/export?format=$format'), headers: _headers)
+        .timeout(const Duration(seconds: 20));
+    _throwIf(res, 'export session');
+    return res.body;
   }
 
   Future<List<Map<String, dynamic>>> listApprovals() async {

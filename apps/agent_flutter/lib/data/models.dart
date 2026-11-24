@@ -7,6 +7,11 @@ class SessionSummary {
     this.channel = '',
     this.updatedAt = '',
     this.turns = 0,
+    this.provider = '',
+    this.model = '',
+    this.pinned = false,
+    this.archived = false,
+    this.lastFailed = false,
   });
 
   final String id;
@@ -14,6 +19,11 @@ class SessionSummary {
   final String channel;
   final String updatedAt;
   final int turns;
+  final String provider;
+  final String model;
+  final bool pinned;
+  final bool archived;
+  final bool lastFailed;
 
   factory SessionSummary.fromMap(Map<String, dynamic> map) => SessionSummary(
         id: '${map['id'] ?? ''}',
@@ -21,9 +31,33 @@ class SessionSummary {
         channel: '${map['channel'] ?? ''}',
         updatedAt: '${map['updated_at'] ?? ''}',
         turns: map['turns'] is num ? (map['turns'] as num).toInt() : 0,
+        provider: '${map['provider'] ?? ''}',
+        model: '${map['model'] ?? ''}',
+        pinned: map['pinned'] == true,
+        archived: map['archived'] == true,
+        lastFailed: map['last_failed'] == true,
       );
 
   String get displayTitle => title.isEmpty ? id : title;
+
+  SessionSummary copyWith({
+    String? title,
+    bool? pinned,
+    bool? archived,
+    bool? lastFailed,
+  }) =>
+      SessionSummary(
+        id: id,
+        title: title ?? this.title,
+        channel: channel,
+        updatedAt: updatedAt,
+        turns: turns,
+        provider: provider,
+        model: model,
+        pinned: pinned ?? this.pinned,
+        archived: archived ?? this.archived,
+        lastFailed: lastFailed ?? this.lastFailed,
+      );
 }
 
 class SessionMessage {

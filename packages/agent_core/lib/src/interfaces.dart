@@ -248,6 +248,7 @@ class RouteDecision {
     this.risk = 'low',
     this.complexity = 'sedang',
     this.providerId = '',
+    this.model,
     this.reason = '',
     this.fallbackIds = const [],
     this.score = 0.0,
@@ -260,6 +261,8 @@ class RouteDecision {
   final String complexity;
   /// Selected provider id for explain/trace.
   final String providerId;
+  /// Nama model yang dipilih untuk sesi metadata (kosong bila tak diketahui).
+  final String? model;
   /// Human-readable routing reason.
   final String reason;
   /// Ordered fallback provider ids if primary fails.
@@ -303,6 +306,11 @@ class SessionInfo {
     required this.updatedAt,
     this.title,
     this.turns = 0,
+    this.provider,
+    this.model,
+    this.pinned = false,
+    this.archived = false,
+    this.lastFailed = false,
   });
 
   final String id;
@@ -312,12 +320,27 @@ class SessionInfo {
   final String? title;
   final int turns;
 
+  /// Metadata turn terakhir (Hermes S6): provider dan model yang dipakai.
+  final String? provider;
+  final String? model;
+
+  /// Filter/organisasi history (Hermes S6): penanda pin, arsip, dan apakah
+  /// turn terakhir gagal.
+  final bool pinned;
+  final bool archived;
+  final bool lastFailed;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'channel': channel,
         'user': userKey,
         'title': title,
         'turns': turns,
+        if (provider != null) 'provider': provider,
+        if (model != null) 'model': model,
+        'pinned': pinned,
+        'archived': archived,
+        'last_failed': lastFailed,
         'updated_at': updatedAt.toIso8601String(),
       };
 }
@@ -340,6 +363,8 @@ abstract class SessionStore {
     required String user,
     required String assistant,
     List<String> tools = const [],
+    String? provider,
+    String? model,
   });
 
   Future<List<SessionInfo>> list();
@@ -351,6 +376,35 @@ abstract class SessionStore {
   /// session does not exist, the store does not support renaming, or the
   /// title is empty.
   Future<bool> rename(String sessionId, String title) async => false;
+
+  /// Hermes S6: pin/unpin sesi agar selalu tampil paling atas di history.
+  Future<bool> setPinned(String sessionId, bool pinned) async => false;
+
+  /// Hermes S6: arsipkan/keluarkan dari arsip sesi (tidak dihapus).
+  Future<bool> setArchived(String sessionId, bool archived) async => false;
+
+  /// Hermes S6: salin sesi beserta seluruh pesannya ke sesi baru; return
+  /// metadata sesi baru, null bila asal tak ada / store tak mendukung.
+  Future<SessionInfo?> duplicate(
+    String sessionId, {
+    String? newId,
+  }) async => null;
+
+  /// Hermes S6: hapus banyak sesi sekaligus; return jumlah yang benar-benar
+  /// terhapus.
+  Future<int> deleteMany(List<String> sessionIds) async => 0;
+
+  /// Hermes S6: catat hasil turn terakhir (sukses/gagal) + provider/model
+  /// yang dipakai, untuk filter dan indikator status di history GUI.
+  Future<bool> markTurnOutcome(
+    String sessionId, {
+    required bool ok,
+    String? provider,
+    String? model,
+  }) async => false;
+
+  /// Hermes S6: ambil satu sesi (metadata), null bila tidak ada.
+  Future<SessionInfo?> get(String sessionId) async => null;
 
   /// Cross-conversation search over stored turns (P1: session search).
   /// Implementations without search support return an empty list.
