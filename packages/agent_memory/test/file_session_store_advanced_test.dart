@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:agent_core/agent_core.dart';
 import 'package:agent_memory/agent_memory.dart';
 import 'package:test/test.dart';
 
