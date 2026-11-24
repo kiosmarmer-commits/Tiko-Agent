@@ -1588,10 +1588,10 @@ class TikoRuntime {
         defaultProviderId: config.defaultProvider,
         tierProviders: config.tierProviders,
         decision: decision,
-        fallbackOrder: [
-          config.defaultProvider,
-          ...providers.keys.where((k) => k != config.defaultProvider),
-        ],
+        // Hermes-parity P6: fallback chain menghormati weight/cost provider
+        // (weight desc, cost asc, config order stabil); tanpa nilai sama
+        // dengan perilaku lama.
+        fallbackOrder: config.fallbackChainIds(config.defaultProvider),
         onFallback: (event) => events.emit('provider.fallback', event),
       );
 
