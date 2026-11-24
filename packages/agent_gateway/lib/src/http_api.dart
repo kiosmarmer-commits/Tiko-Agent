@@ -109,6 +109,8 @@ class HttpApiServer {
     this.artifactsListProvider,
     this.artifactsReadProvider,
     this.artifactsDiffProvider,
+    this.artifactsPublishProvider,
+    this.artifactsDownloadProvider,
     this.runsProvider,
     this.memoryCuratedProvider,
     this.memoryCuratedSetProvider,
@@ -1175,6 +1177,14 @@ class HttpApiServer {
   artifactsReadProvider;
   final Future<Map<String, dynamic>> Function(String path)?
   artifactsDiffProvider;
+
+  /// Hermes S7: publish/share artifact (snapshot read-only ke
+  /// `.tiko/published/`) dan download byte mentah. Callback null membuat
+  /// endpoint terkait merespons 501 not_implemented.
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+      artifactsPublishProvider;
+  final Future<Map<String, dynamic>> Function(String path)?
+      artifactsDownloadProvider;
 
   /// Run-inspector callback (GUI-P2-04, read-only): snapshot {active, recent,
   /// truncated} — callback null membuat GET /v1/runs merespons 501.
@@ -2633,6 +2643,58 @@ class HttpApiServer {
                   'artifacts not configured',
                 )));
         _json(req, result);
+      } else if (path == '/v1/artifacts/publish' &&
+          req.method == 'POST') {
+        if (artifactsPublishProvider == null) {
+          _error(req, 501, 'not_implemented',
+              'artifacts publish not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final filePath = _parseArtifactsPath(
+          '${body['path'] ?? ''}',
+          field: 'path',
+        );
+        final result = await artifactsPublishProvider!.call({
+          'path': filePath,
+          'session_id': '${body['session_id'] ?? ''}',
+        });
+        _json(req, result);
+      } else if (path == '/v1/artifacts/download' &&
+          req.method == 'GET') {
+        if (artifactsDownloadProvider == null) {
+          _error(req, 501, 'not_implemented',
+              'artifacts download not configured');
+          return;
+        }
+        final filePath = _parseArtifactsPath(
+          req.uri.queryParameters['path'],
+          field: 'path',
+        );
+        final downloaded =
+            await (artifactsDownloadProvider?.call(filePath) ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'artifacts not configured',
+                )));
+        final bytes = downloaded['bytes'];
+        final filename =
+            '${downloaded['filename'] ?? 'artifact'}';
+        req.response.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'application/octet-stream',
+        );
+        req.response.headers.set(
+          'content-disposition',
+          'attachment; filename="${Uri.encodeComponent(filename)}"',
+        );
+        req.response.headers.set('x-artifact-bytes',
+            '${downloaded['bytes_size'] ?? (bytes is List ? bytes.length : 0)}');
+        if (bytes is List) req.response.add(List<int>.from(bytes));
+        await req.response.close();
         // Run-inspector endpoint (GUI-P2-04, read-only): live + recent turns.
       } else if (path == '/v1/runs' && req.method == 'GET') {
         final result =

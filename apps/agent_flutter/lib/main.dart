@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'attachment_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -10,6 +12,7 @@ import 'app/app_routes.dart';
 import 'daemon/desktop_daemon.dart';
 import 'data/admin_event_feed.dart';
 import 'data/agent_repository.dart';
+import 'data/artifact_saver.dart';
 import 'data/models.dart';
 import 'shell/desktop_shell.dart';
 import 'shell/mobile_shell.dart';
@@ -305,6 +308,95 @@ class _AgentAppState extends State<AgentApp> {
       if (mounted) setState(() => artifactsError = e.toString());
     } finally {
       if (mounted) setState(() => loadingArtifacts = false);
+    }
+  }
+
+  /// Hermes S7: sesi chat aktif (untuk binding panel artifacts).
+  SessionSummary? get _currentSession {
+    for (final session in sessions) {
+      if (session.id == sessionKey) return session;
+    }
+    return null;
+  }
+
+  /// Hermes S7: muat byte gambar (base64 inline) untuk thumbnail/preview.
+  Future<List<int>?> _loadArtifactImage(String path) async {
+    try {
+      final content = await repo.artifactRead(path);
+      if (!content.isImage || content.contentBase64.isEmpty) return null;
+      return base64Decode(content.contentBase64);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Hermes S7: unduh artifact — web via anchor, desktop ke Downloads/temp.
+  Future<void> _downloadArtifact(String path) async {
+    try {
+      final file = await repo.artifactDownload(path);
+      saveArtifactDownloaded(file.filename, Uint8List.fromList(file.bytes));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('File terunduh: ${file.filename}'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengunduh file: $error')),
+      );
+    }
+  }
+
+  /// Hermes S7: publish/share artifact — salinan read-only di
+  /// `.tiko/published/` milik runtime, pesan share bisa disalin.
+  Future<void> _publishArtifact(String path) async {
+    try {
+      final published = await repo.artifactPublish(
+        path,
+        sessionId: sessionKey,
+      );
+      final shareText =
+          '${published['share_text'] ?? published['published_path'] ?? path}';
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Artifact dipublikasikan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Salinan read-only tersimpan di workspace daemon:'),
+              const SizedBox(height: 8),
+              SelectableText(
+                '${published['published_path'] ?? path}',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton.icon(
+              key: const Key('btn-artifact-share-copy'),
+              onPressed: () =>
+                  Clipboard.setData(ClipboardData(text: shareText)),
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Salin pesan share'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Tutup'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mempublikasikan: $error')),
+      );
     }
   }
 
@@ -732,6 +824,7 @@ class _AgentAppState extends State<AgentApp> {
         artifactDiff: artifactDiff,
         loadingArtifacts: loadingArtifacts,
         artifactsError: artifactsError,
+        sessionOptions: sessions,
         onOpenArtifactsDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
         onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
         onCloseArtifactPreview: () => _openArtifact(''),
@@ -777,6 +870,11 @@ class _AgentAppState extends State<AgentApp> {
           onListWorkspace: (dir) async => [
                 for (final f in (await repo.artifacts(dir: dir)).files) f.path,
               ],
+          sessionStartedAt: _currentSession?.createdAt ?? _currentSession?.updatedAt ?? '',
+          sessionLabel: _currentSession?.displayTitle,
+          onLoadArtifactImage: _loadArtifactImage,
+          onDownloadArtifact: (path) => unawaited(_downloadArtifact(path)),
+          onPublishArtifact: (path) => unawaited(_publishArtifact(path)),
         );
         // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
         if (!settings.multiPane) return chatPage;
@@ -1156,6 +1254,7 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingArtifacts,
           error: artifactsError,
           dir: artifactsDir,
+          sessionOptions: sessions,
           onOpenDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
           onOpenFile: (path) => unawaited(_openArtifact(path)),
           onClosePreview: () => _openArtifact(''),
@@ -1272,6 +1371,11 @@ class _ChatPage extends StatefulWidget {
     this.onOpenArtifactDiff,
     this.onCloseArtifactFile,
     this.onListWorkspace,
+    this.sessionStartedAt = '',
+    this.sessionLabel,
+    this.onLoadArtifactImage,
+    this.onDownloadArtifact,
+    this.onPublishArtifact,
   });
   final ChatController chat;
   final String sessionKey;
@@ -1302,6 +1406,14 @@ class _ChatPage extends StatefulWidget {
   /// SETTINGS-CONTEXT-REFS: daftar path file workspace untuk autocomplete
   /// chip `@file:`/`@dir:` di composer (null = autocomplete nonaktif).
   final Future<List<String>> Function(String dir)? onListWorkspace;
+
+  /// Hermes S7: binding panel artifacts ke sesi — waktu mulai sesi aktif
+  /// untuk filter "Sesi ini", loader gambar inline, unduh, dan publish.
+  final String sessionStartedAt;
+  final String? sessionLabel;
+  final Future<List<int>?> Function(String path)? onLoadArtifactImage;
+  final void Function(String path)? onDownloadArtifact;
+  final void Function(String path)? onPublishArtifact;
 
   @override
   State<_ChatPage> createState() => _ChatPageState();
@@ -1910,6 +2022,15 @@ class _ChatPageState extends State<_ChatPage> {
           onOpenFile: widget.onOpenArtifactFile,
           onClosePreview: widget.onCloseArtifactFile,
           onRefresh: widget.onLoadArtifacts,
+          sessionStartedAt: widget.sessionStartedAt,
+          sessionLabel: widget.sessionLabel,
+          sessionRefs: [
+            for (final message in chat.messages)
+              ...collectFileRefs(message['content'] ?? ''),
+          ],
+          onLoadImage: widget.onLoadArtifactImage,
+          onDownload: widget.onDownloadArtifact,
+          onPublish: widget.onPublishArtifact,
         );
         if (wide) {
           return Row(
@@ -2901,6 +3022,7 @@ class _MorePage extends StatelessWidget {
     required this.artifactDiff,
     required this.loadingArtifacts,
     required this.artifactsError,
+    required this.sessionOptions,
     required this.onOpenArtifactsDir,
     required this.onOpenArtifactFile,
     required this.onCloseArtifactPreview,
@@ -2939,6 +3061,7 @@ class _MorePage extends StatelessWidget {
   final ArtifactDiff? artifactDiff;
   final bool loadingArtifacts;
   final String? artifactsError;
+  final List<SessionSummary> sessionOptions;
   final void Function(String dir) onOpenArtifactsDir;
   final void Function(String path) onOpenArtifactFile;
   final VoidCallback onCloseArtifactPreview;
@@ -3269,6 +3392,7 @@ class _MorePage extends StatelessWidget {
                       loading: loadingArtifacts,
                       error: artifactsError,
                       dir: artifactsDir,
+                      sessionOptions: sessionOptions,
                       onOpenDir: onOpenArtifactsDir,
                       onOpenFile: onOpenArtifactFile,
                       onClosePreview: onCloseArtifactPreview,

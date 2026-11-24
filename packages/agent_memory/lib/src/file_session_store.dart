@@ -252,6 +252,7 @@ class FileSessionStore implements SessionStore {
       pinned: s.pinned,
       archived: s.archived,
       lastFailed: s.lastFailed,
+      createdAt: s.createdAt,
     );
   }
 

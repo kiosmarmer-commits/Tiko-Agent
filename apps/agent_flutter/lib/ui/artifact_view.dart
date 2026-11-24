@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,6 +27,7 @@ class ArtifactsPage extends StatefulWidget {
     this.diff,
     this.contentLoading = false,
     this.onClosePreview,
+    this.sessionOptions = const [],
   });
 
   final ArtifactsListing? listing;
@@ -41,12 +45,16 @@ class ArtifactsPage extends StatefulWidget {
   final bool contentLoading;
   final VoidCallback? onClosePreview;
 
+  /// Hermes S7: daftar sesi untuk filter artifacts per session.
+  final List<SessionSummary> sessionOptions;
+
   @override
   State<ArtifactsPage> createState() => _ArtifactsPageState();
 }
 
 class _ArtifactsPageState extends State<ArtifactsPage> {
-  bool _showDiff = false;
+  String _mode = 'preview';
+  String _sessionFilter = '';
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +72,28 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (widget.sessionOptions.isNotEmpty)
+                DropdownButton<String>(
+                  key: const Key('filter-artifacts-session'),
+                  value: _sessionFilter.isEmpty ? null : _sessionFilter,
+                  hint: const Text('Sesi', style: TextStyle(fontSize: 12)),
+                  isDense: true,
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text('Semua sesi')),
+                    for (final session in widget.sessionOptions)
+                      DropdownMenuItem(
+                        value: session.id,
+                        child: Text(
+                          session.displayTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _sessionFilter = value ?? ''),
+                ),
               if (widget.onRefresh != null)
                 IconButton(
                     onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
@@ -93,13 +123,13 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
                         title: const Text('.. (naik)',
                             style: TextStyle(fontSize: 13)),
                         onTap: () {
-                          setState(() => _showDiff = false);
+                          setState(() => _mode = 'preview');
                           final parent =
                               widget.dir.split('/')..removeLast();
                           widget.onOpenDir?.call(parent.join('/'));
                         },
                       ),
-                    for (final file in listing.files)
+                    for (final file in _visibleFiles(listing))
                       ListTile(
                         dense: true,
                         leading: Icon(
@@ -117,7 +147,7 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
                                 fontSize: 11,
                                 color: context.simpulMuted)),
                         onTap: () {
-                          setState(() => _showDiff = false);
+                          setState(() => _mode = 'preview');
                           widget.onOpenFile?.call(
                               widget.dir.isEmpty
                                   ? file.path
@@ -130,12 +160,30 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
         if (content != null) _PreviewCard(
           content: content,
           diff: widget.diff,
-          showDiff: _showDiff,
-          onToggleDiff: (v) => setState(() => _showDiff = v),
+          mode: content.bakExists && widget.diff != null
+              ? _mode
+              : (_mode == 'diff' ? 'preview' : _mode),
+          onModeChanged: (candidate) {
+            if (candidate == 'diff' && !widget.content!.bakExists) return;
+            setState(() => _mode = candidate);
+          },
           onClose: widget.onClosePreview,
         ),
       ],
     );
+  }
+
+  List<ArtifactFileInfo> _visibleFiles(ArtifactsListing listing) {
+    if (_sessionFilter.isEmpty) return listing.files;
+    final started = widget.sessionOptions
+        .where((s) => s.id == _sessionFilter)
+        .map((s) => DateTime.tryParse(s.createdAt))
+        .firstWhere((d) => d != null, orElse: () => null);
+    if (started == null) return listing.files;
+    return listing.files
+        .where((file) => file.path.endsWith('/') ||
+            (DateTime.tryParse(file.modified)?.isAfter(started) ?? false))
+        .toList();
   }
 
   String _sizeLabel(int bytes) {
@@ -155,6 +203,10 @@ class ArtifactPreviewPanel extends StatefulWidget {
     this.diff,
     this.initialShowDiff = false,
     this.onClose,
+    this.thumbnail,
+    this.onLoadImage,
+    this.onDownload,
+    this.onPublish,
   });
 
   final ArtifactContent content;
@@ -162,30 +214,88 @@ class ArtifactPreviewPanel extends StatefulWidget {
   final bool initialShowDiff;
   final VoidCallback? onClose;
 
+  /// Hermes S7: thumbnail gambar yang sudah dimuat panel chat.
+  final Uint8List? thumbnail;
+
+  /// Hermes S7: muat byte gambar bila base64 inline belum tersedia.
+  final Future<List<int>?> Function(String path)? onLoadImage;
+
+  /// Hermes S7: tombol unduh (null → disembunyikan).
+  final VoidCallback? onDownload;
+
+  /// Hermes S7: tombol publish/share (null → disembunyikan).
+  final VoidCallback? onPublish;
+
   @override
   State<ArtifactPreviewPanel> createState() => _ArtifactPreviewPanelState();
 }
 
 class _ArtifactPreviewPanelState extends State<ArtifactPreviewPanel> {
-  late bool _showDiff = widget.initialShowDiff;
+  static const _modes = ['preview', 'code', 'diff'];
+
+  late String _mode = widget.initialShowDiff ? 'diff' : 'preview';
+  Uint8List? _imageBytes;
+  bool _imageTried = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageBytes = _decodeBase64Image();
+  }
 
   @override
   void didUpdateWidget(ArtifactPreviewPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.content.path != widget.content.path ||
         oldWidget.initialShowDiff != widget.initialShowDiff) {
-      _showDiff = widget.initialShowDiff;
+      _mode = widget.initialShowDiff ? 'diff' : 'preview';
+      _imageTried = false;
+      if (!_modes.contains(_mode)) _mode = 'preview';
+      _imageBytes = _decodeBase64Image();
     }
+  }
+
+  Uint8List? _decodeBase64Image() {
+    if (!widget.content.isImage || widget.content.contentBase64.isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(widget.content.contentBase64);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<void> _maybeLoadImageBytes() async {
+    final loader = widget.onLoadImage;
+    final current = _imageBytes ?? widget.thumbnail;
+    if (_imageTried || loader == null || !widget.content.isImage) return;
+    if (current != null) return;
+    _imageTried = true;
+    final bytes = await loader(widget.content.path).catchError((_) => null);
+    if (!mounted || bytes == null || bytes.isEmpty) return;
+    setState(() => _imageBytes = Uint8List.fromList(bytes));
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasDiff = widget.content.bakExists && widget.diff != null;
+    final mode = hasDiff ? _mode : (_mode == 'diff' ? 'preview' : _mode);
+    if (mode == 'preview' && widget.content.isImage) {
+      unawaited(_maybeLoadImageBytes());
+    }
     return _PreviewCard(
       content: widget.content,
       diff: widget.diff,
-      showDiff: _showDiff,
-      onToggleDiff: (v) => setState(() => _showDiff = v),
+      mode: mode,
+      imageBytes: _imageBytes,
+      onModeChanged: (candidate) {
+        if (candidate == 'diff' && !hasDiff) return;
+        setState(() => _mode = candidate);
+      },
       onClose: widget.onClose,
+      onDownload: widget.onDownload,
+      onPublish: widget.onPublish,
     );
   }
 }
@@ -194,22 +304,28 @@ class _PreviewCard extends StatelessWidget {
   const _PreviewCard({
     required this.content,
     required this.diff,
-    required this.showDiff,
-    required this.onToggleDiff,
+    required this.mode,
+    required this.onModeChanged,
+    this.imageBytes,
     this.onClose,
+    this.onDownload,
+    this.onPublish,
   });
 
   final ArtifactContent content;
   final ArtifactDiff? diff;
-  final bool showDiff;
-  final ValueChanged<bool> onToggleDiff;
+  final String mode;
+  final ValueChanged<String> onModeChanged;
+  final Uint8List? imageBytes;
   final VoidCallback? onClose;
+  final VoidCallback? onDownload;
+  final VoidCallback? onPublish;
 
   @override
   Widget build(BuildContext context) {
     final diff = this.diff;
     return Container(
-      constraints: const BoxConstraints(maxHeight: 320),
+      constraints: const BoxConstraints(maxHeight: 380),
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -247,15 +363,34 @@ class _PreviewCard extends StatelessWidget {
                   },
                   icon: const Icon(Icons.copy_rounded, size: 18),
                 ),
+              if (onDownload != null)
+                IconButton(
+                  key: const Key('btn-artifact-download'),
+                  tooltip: 'Unduh file',
+                  onPressed: onDownload,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                ),
+              if (onPublish != null)
+                IconButton(
+                  key: const Key('btn-artifact-publish'),
+                  tooltip: 'Publikasikan artifact (share)',
+                  onPressed: onPublish,
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                ),
               if (content.bakExists && diff != null)
                 ToggleButtons(
-                  isSelected: [!showDiff, showDiff],
-                  onPressed: (i) => onToggleDiff(i == 1),
+                  isSelected: [
+                    mode == 'preview',
+                    mode == 'code',
+                    mode == 'diff',
+                  ],
+                  onPressed: (i) => onModeChanged(['preview', 'code', 'diff'][i]),
                   borderRadius: BorderRadius.circular(8),
                   constraints:
-                      const BoxConstraints(minHeight: 28, minWidth: 48),
+                      const BoxConstraints(minHeight: 28, minWidth: 44),
                   children: const [
                     Text('Preview', style: TextStyle(fontSize: 11)),
+                    Text('Code', style: TextStyle(fontSize: 11)),
                     Text('Diff', style: TextStyle(fontSize: 11)),
                   ],
                 ),
@@ -264,26 +399,73 @@ class _PreviewCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Flexible(
-            child: content.binary
-                ? Text('(File biner \u2014 pratinjau teks tidak tersedia)',
-                    style: TextStyle(color: context.simpulMuted, fontSize: 12))
-                : showDiff && diff != null
-                    ? SingleChildScrollView(
-                        child: _DiffView(diff: diff),
-                      )
-                    : SingleChildScrollView(
-                        child: Text(
-                          content.content +
-                              (content.truncated
-                                  ? '\n\u2026 (terpotong di batas server)'
-                                  : ''),
-                          style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 11),
-                        ),
-                      ),
-          ),
+          Flexible(child: _body(context, diff)),
         ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, ArtifactDiff? diff) {
+    if (content.binary &&
+        !(content.isImage && imageBytes != null)) {
+      return Text('(File biner \u2014 pratinjau teks tidak tersedia)',
+          style: TextStyle(color: context.simpulMuted, fontSize: 12));
+    }
+    if (mode == 'diff' && diff != null) {
+      return SingleChildScrollView(child: _DiffView(diff: diff));
+    }
+    if (mode == 'preview' && content.isImage) {
+      if (imageBytes == null) {
+        return Text('(Gambar belum termuat...)',
+            style: TextStyle(color: context.simpulMuted, fontSize: 12));
+      }
+      return Center(
+        child: InteractiveViewer(
+          maxScale: 8,
+          child: Image.memory(imageBytes!, fit: BoxFit.contain, height: 220),
+        ),
+      );
+    }
+    if (mode == 'code') {
+      final lines = content.content.split('\n');
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < lines.length; i++)
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${(i + 1).toString().padLeft(4, ' ')}  ',
+                      style: TextStyle(
+                        color: context.simpulMuted,
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                    ),
+                    TextSpan(
+                      text: lines[i],
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (content.truncated)
+              Text('\u2026 (terpotong di batas server)',
+                  style: TextStyle(color: context.simpulMuted, fontSize: 11)),
+          ],
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      child: Text(
+        content.content +
+            (content.truncated ? '\n\u2026 (terpotong di batas server)' : ''),
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
       ),
     );
   }

@@ -311,6 +311,7 @@ class SessionInfo {
     this.pinned = false,
     this.archived = false,
     this.lastFailed = false,
+    this.createdAt,
   });
 
   final String id;
@@ -330,6 +331,10 @@ class SessionInfo {
   final bool archived;
   final bool lastFailed;
 
+  /// Filter artifacts per session (Hermes S7): time of session creation,
+  /// used to hide files from before the session started.
+  final DateTime? createdAt;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'channel': channel,
@@ -342,6 +347,7 @@ class SessionInfo {
         'archived': archived,
         'last_failed': lastFailed,
         'updated_at': updatedAt.toIso8601String(),
+        if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       };
 }
 

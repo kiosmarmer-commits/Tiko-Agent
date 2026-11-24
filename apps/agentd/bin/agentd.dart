@@ -891,6 +891,8 @@ Future<void> main(List<String> args) async {
                     'title': s.title,
                     'updated_at': s.updatedAt.toIso8601String(),
                     'turns': s.turns,
+                    if (s.createdAt != null)
+                      'created_at': s.createdAt!.toIso8601String(),
                     if (s.provider != null) 'provider': s.provider,
                     if (s.model != null) 'model': s.model,
                     'pinned': s.pinned,
@@ -1446,6 +1448,31 @@ Future<void> main(List<String> args) async {
             return rt.artifactsDiff(path);
           } on ArgumentError catch (e) {
             throw ApiRequestException(400, 'invalid_request', '$e');
+          }
+        },
+        artifactsPublishProvider: (body) async {
+          try {
+            return rt.artifactsPublish(
+              '${body['path'] ?? ''}',
+              sessionId: '${body['session_id'] ?? ''}',
+            );
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on StateError catch (e) {
+            throw ApiRequestException(
+              '$e'.contains('tidak ditemukan') ? 404 : 400,
+              'invalid_request',
+              '$e',
+            );
+          }
+        },
+        artifactsDownloadProvider: (path) async {
+          try {
+            return rt.artifactsDownload(path);
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on StateError catch (e) {
+            throw ApiRequestException(404, 'not_found', '$e');
           }
         },
         runsProvider: () async => rt.turnInspectorSnapshot(),
