@@ -65,6 +65,8 @@ class RuntimeLock {
   }
 
   /// True when a process with [pid] exists (POSIX `kill -0`; Linux/Termux/macOS).
+  /// A zombie answers `kill -0` but is dead for every practical purpose, so on
+  /// Linux the kernel state flag in `/proc/<pid>/stat` is checked as well.
   static bool isAlive(int pid) {
     if (pid <= 0) return false;
     try {
@@ -75,10 +77,25 @@ class RuntimeLock {
         );
         return result.exitCode == 0 && result.stdout.toString().contains('"$pid"');
       }
-      return Process.runSync('kill', ['-0', '$pid']).exitCode == 0;
+      if (Process.runSync('kill', ['-0', '$pid']).exitCode != 0) return false;
+      return !_isZombie(pid);
     } catch (_) {
       // Unknown process state is not proof that the owner is dead.
       return true;
+    }
+  }
+
+  /// Linux only: state flag from `/proc/<pid>/stat`, parsed after the final
+  /// `)` so command names containing spaces cannot shift the field. Returns
+  /// false when the entry cannot be read (non-Linux, race with process exit).
+  static bool _isZombie(int pid) {
+    try {
+      final stat = File('/proc/$pid/stat').readAsStringSync();
+      final closeParen = stat.lastIndexOf(')');
+      if (closeParen < 0 || closeParen + 2 >= stat.length) return false;
+      return stat.codeUnitAt(closeParen + 2) == 0x5A; // 'Z'
+    } catch (_) {
+      return false;
     }
   }
 
