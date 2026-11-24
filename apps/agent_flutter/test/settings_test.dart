@@ -83,6 +83,29 @@ void main() {
     expect(latest.themeMode, ThemeMode.light);
   });
 
+  testWidgets('SettingsView menampilkan feedback saat koneksi diperbarui',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsView(
+            settings: AppSettings(),
+            baseUrl: 'http://127.0.0.1:8787',
+            token: '',
+            online: false,
+            onConnect: ({required base, required tok}) async {},
+            onSettingsChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Simpan & hubungkan'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Konfigurasi diperbarui'), findsOneWidget);
+  });
+
   testWidgets('GUI-P1-08: scope terpisah — caption perangkat/kredensial/daemon',
       (tester) async {
     SharedPreferences.setMockInitialValues({});

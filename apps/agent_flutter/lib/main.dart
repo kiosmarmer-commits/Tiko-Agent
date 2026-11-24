@@ -440,19 +440,19 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
-  void updateConnection({required String base, required String tok}) {
+  Future<void> updateConnection({required String base, required String tok}) async {
     setState(() {
       baseUrl = base;
       token = tok;
       client.baseUrl = base;
       client.token = tok;
-      chat.checkOnline();
     });
     // Kredensial berubah — buang feed lama; refresh penuh akan memulai ulang
     // feed WS dengan kredensial baru bila daemon terhubung.
     eventFeed?.dispose();
     _eventFeedStarted = false;
-    unawaited(refreshAdmin(force: true));
+    await chat.checkOnline();
+    await refreshAdmin(force: true);
   }
 
   Future<void> _applySettings(AppSettings next) async {
@@ -1225,6 +1225,41 @@ class _ChatPageState extends State<_ChatPage> {
     );
   }
 
+  Future<void> _editAndResend(String text) async {
+    final controller = TextEditingController(text: text);
+    final edited = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit prompt'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: 'Tulis ulang prompt…',
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Kirim ulang'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final value = edited?.trim() ?? '';
+    if (value.isNotEmpty && value != text.trim()) {
+      await _onSend(value, const []);
+    }
+  }
+
   /// Voice UI: tombol "dengarkan" per pesan assistant; bila sedang berbicara,
   /// tap menghentikan TTS.
   void _speakOrStop(String text) {
@@ -1599,6 +1634,38 @@ class _ChatPageState extends State<_ChatPage> {
                                   ),
                                   label: Text(
                                     'Dengarkan',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.simpulMuted,
+                                    ),
+                                  ),
+                                ),
+                              if (user && messageText.trim().isNotEmpty)
+                                TextButton.icon(
+                                  key: Key('btn-edit-msg-$i'),
+                                  onPressed: () => _editAndResend(messageText),
+                                  icon: const Icon(Icons.edit_outlined, size: 16),
+                                  label: Text(
+                                    'Edit',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.simpulMuted,
+                                    ),
+                                  ),
+                                ),
+                              if (!user && messageText.startsWith('Gagal:'))
+                                TextButton.icon(
+                                  key: Key('btn-retry-msg-$i'),
+                                  onPressed: chat.retryText == null
+                                      ? null
+                                      : () => unawaited(
+                                            chat.retryLast(
+                                              sessionKey: widget.sessionKey,
+                                            ),
+                                          ),
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: Text(
+                                    'Coba lagi',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: context.simpulMuted,

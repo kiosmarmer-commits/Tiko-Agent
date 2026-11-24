@@ -43,6 +43,11 @@ class ChatController extends ChangeNotifier {
   /// collapsible + kartu file otomatis; nama + durasi + status error.
   final List<Map<String, dynamic>> lastTurnTrace = [];
 
+  /// Prompt terakhir yang gagal dikirim. UI menawarkan retry eksplisit;
+  /// tidak ada replay otomatis karena request bisa saja sudah diterima daemon.
+  String? retryText;
+  List<ChatAttachmentPayload> retryAttachments = const [];
+
   /// C4: minta daemon menghentikan turn aktif (kooperatif via cancel token
   /// runtime). Tidak ada jaminan langsung; UI menampilkan "Menghentikan…"
   /// sampai frame akhir (done/error) datang.
@@ -95,6 +100,9 @@ class ChatController extends ChangeNotifier {
     activeTool = null;
     stopRequested = false;
     lastTurnTrace.clear();
+    retryText = null;
+    retryAttachments = const [];
+    var failed = false;
 
     try {
       if (useStreaming) {
@@ -155,6 +163,9 @@ class ChatController extends ChangeNotifier {
               }
             }
           } else if (type == 'error') {
+            failed = true;
+            retryText = t;
+            retryAttachments = List.of(attachments);
             messages[aiIndex]['text'] = 'Gagal: ${ev['message']}';
             notifyListeners();
           } else if (type == 'done') {
@@ -165,6 +176,7 @@ class ChatController extends ChangeNotifier {
             }
             _applyTurnFiles(aiIndex);
             activeTool = null;
+            if (!failed) retryText = null;
             notifyListeners();
           }
         }
@@ -179,12 +191,31 @@ class ChatController extends ChangeNotifier {
       // the server may already have accepted it and started side effects.
       // The user can explicitly retry after checking the session state.
       messages[aiIndex]['text'] = 'Gagal: $e';
+      retryText = t;
+      retryAttachments = List.of(attachments);
       notifyListeners();
     } finally {
       busy = false;
       activeTool = null;
       notifyListeners();
     }
+  }
+
+  /// Mengulang prompt terakhir yang gagal setelah user menekan Retry.
+  /// Pesan user/error lama dibuang agar transcript tidak menggandakan turn.
+  Future<void> retryLast({String? sessionKey}) async {
+    final text = retryText;
+    if (text == null || busy) return;
+    final attachments = List<ChatAttachmentPayload>.of(retryAttachments);
+    if (messages.length >= 2 &&
+        messages.last['role'] == 'assistant' &&
+        messages[messages.length - 2]['role'] == 'user') {
+      messages.removeRange(messages.length - 2, messages.length);
+    }
+    retryText = null;
+    retryAttachments = const [];
+    notifyListeners();
+    await send(text, sessionKey: sessionKey, attachments: attachments);
   }
 
   /// C4 + C3: sumber OTOMATIS kartu file chat — path dari frame `chat.tool`
@@ -235,6 +266,8 @@ class ChatController extends ChangeNotifier {
     messages.clear();
     lastTurnTrace.clear();
     activeTool = null;
+    retryText = null;
+    retryAttachments = const [];
     notifyListeners();
   }
 

@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'settings_store.dart';
 import 'theme.dart';
 
 /// Callback signature mirroring the existing connection update flow.
-typedef OnConnect = void Function({required String base, required String tok});
+typedef OnConnect = FutureOr<void> Function({
+  required String base,
+  required String tok,
+});
 
 /// Unified settings screen (UI-SET) used by the desktop rail, the mobile
 /// "More" page and the web build: appearance, connection, behaviour.
@@ -42,6 +47,9 @@ class _SettingsViewState extends State<SettingsView> {
   late final baseC = TextEditingController(text: widget.baseUrl);
   late final tokC = TextEditingController(text: widget.token);
   bool _tokenVisible = false;
+  bool _connecting = false;
+  String? _connectionFeedback;
+  bool _connectionFailed = false;
 
   @override
   void dispose() {
@@ -179,19 +187,78 @@ class _SettingsViewState extends State<SettingsView> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () {
+                    onPressed: _connecting
+                        ? null
+                        : () async {
                       if (!_formKey.currentState!.validate()) return;
-                      widget.onConnect(
-                        base: baseC.text.trim().replaceFirst(
-                          RegExp(r'/+$'),
-                          '',
-                        ),
-                        tok: tokC.text.trim(),
-                      );
+                      setState(() {
+                        _connecting = true;
+                        _connectionFailed = false;
+                        _connectionFeedback = 'Menghubungkan ke daemon…';
+                      });
+                      try {
+                        await widget.onConnect(
+                          base: baseC.text.trim().replaceFirst(
+                            RegExp(r'/+$'),
+                            '',
+                          ),
+                          tok: tokC.text.trim(),
+                        );
+                        if (mounted) {
+                          setState(() {
+                            _connectionFeedback =
+                                'Konfigurasi diperbarui. Status sedang diperiksa…';
+                          });
+                        }
+                      } catch (error) {
+                        if (mounted) {
+                          setState(() {
+                            _connectionFailed = true;
+                            _connectionFeedback =
+                                'Gagal menghubungkan: $error';
+                          });
+                        }
+                      } finally {
+                        if (mounted) setState(() => _connecting = false);
+                      }
                     },
-                    child: const Text('Simpan & hubungkan'),
+                    child: _connecting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Simpan & hubungkan'),
                   ),
                 ),
+                if (_connectionFeedback != null) ...[
+                  const SizedBox(height: SimpulTheme.m),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _connectionFailed
+                            ? Icons.error_outline
+                            : Icons.info_outline,
+                        size: 18,
+                        color: _connectionFailed
+                            ? context.simpulDanger
+                            : context.simpulMuted,
+                      ),
+                      const SizedBox(width: SimpulTheme.m),
+                      Expanded(
+                        child: Text(
+                          _connectionFeedback!,
+                          style: TextStyle(
+                            color: _connectionFailed
+                                ? context.simpulDanger
+                                : context.simpulMuted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

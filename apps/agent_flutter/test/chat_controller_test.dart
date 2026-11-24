@@ -64,6 +64,36 @@ void main() {
     expect(controller.messages.last['text'], contains('connection dropped'));
   });
 
+  test('retryLast mengulang prompt hanya setelah user meminta retry', () async {
+    var attempts = 0;
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        attempts++;
+        if (attempts == 1) {
+          throw StateError('temporary failure');
+        }
+        yield {'type': 'text', 'text': 'berhasil pada percobaan kedua'};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    await controller.send('coba lagi nanti');
+
+    expect(attempts, 1);
+    expect(controller.retryText, 'coba lagi nanti');
+    expect(controller.messages.last['text'], contains('temporary failure'));
+
+    await controller.retryLast();
+
+    expect(attempts, 2);
+    expect(controller.retryText, isNull);
+    expect(controller.messages.map((m) => m['text']).toList(), [
+      'coba lagi nanti',
+      'berhasil pada percobaan kedua',
+    ]);
+  });
+
   test('approval decided in another UI surface clears the chat prompt', () async {
     final client = _FakeAgentApiClient()
       ..streamHandler = (_) async* {
