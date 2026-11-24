@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import 'session_history_view.dart';
 import 'theme.dart';
 
 /// Multi-pane workspace (GUI-P2-03): pada layar lebar, chat ditampilkan
@@ -40,7 +41,7 @@ class SessionsPane extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _PaneHeader(
-            title: 'Sessions',
+            title: 'History',
             online: online,
             actions: [
               if (onRefresh != null)
@@ -76,18 +77,23 @@ class SessionsPane extends StatelessWidget {
                           ListTile(
                             dense: true,
                             selected: session.id == current,
+                            selectedTileColor: context.simpulSurfaceSelected,
                             leading: const Icon(
                               Icons.chat_bubble_outline,
                               size: 18,
                             ),
                             title: Text(
-                              session.displayTitle,
+                              session.title.trim().isEmpty ||
+                                      session.title == session.id
+                                  ? 'Percakapan tanpa judul'
+                                  : session.displayTitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${session.channel.isEmpty ? 'internal' : session.channel}'
-                              ' \u00b7 ${session.turns} turn',
+                              '${sessionAgeLabel(session.updatedAt)} · '
+                              '${session.channel.isEmpty ? 'lokal' : session.channel}'
+                              ' · ${session.turns} turn',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

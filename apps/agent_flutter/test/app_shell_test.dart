@@ -22,7 +22,7 @@ void main() {
       final primary = kMobilePrimaryRoutes;
       expect(primary.length, 4);
       expect(primary.map((e) => e.route),
-          [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.sessions]);
+          [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.runs]);
       final grouped = kAppRoutes
           .where((e) => !e.primaryOnMobile)
           .map((e) => e.route)
@@ -32,13 +32,13 @@ void main() {
           {AppRoute.tasks, AppRoute.skills, AppRoute.bots, AppRoute.providers,
               AppRoute.plugins, AppRoute.channels, AppRoute.automations,
               AppRoute.security, AppRoute.audit, AppRoute.artifacts,
-              AppRoute.surfaces, AppRoute.runs, AppRoute.memory,
+              AppRoute.surfaces, AppRoute.sessions, AppRoute.memory,
               AppRoute.events, AppRoute.logs, AppRoute.settings});
     });
   });
 
   group('GUI-P0-01: DesktopShell dari route map', () {
-    testWidgets('rail menampilkan semua route dengan label bersama',
+    testWidgets('sidebar menampilkan menu primer dan tools yang dapat dilipat',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -51,10 +51,16 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.byType(NavigationRail), findsOneWidget);
-      for (final entry in kAppRoutes) {
-        expect(find.text(entry.label), findsOneWidget);
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.text('More tools'), findsOneWidget);
+      for (final entry in kAppRoutes.where(
+          (entry) => const {'Workspace', 'Build', 'Agents'}.contains(entry.section))) {
+        expect(find.text(entry.navigationLabel), findsOneWidget);
       }
+      await tester.ensureVisible(find.text('More tools'));
+      await tester.tap(find.text('More tools'));
+      await tester.pump();
+      expect(find.text('Settings'), findsOneWidget);
     });
 
     testWidgets('tap destinasi memanggil onSelect dengan route yang tepat',
@@ -128,7 +134,7 @@ void main() {
 
       expect(find.byType(NavigationBar), findsOneWidget);
       for (final entry in kMobilePrimaryRoutes) {
-        expect(find.text(entry.label), findsOneWidget);
+        expect(find.text(entry.navigationLabel), findsOneWidget);
       }
       expect(find.text(kMobileMoreLabel), findsOneWidget);
       expect(find.text('Memory'), findsNothing);

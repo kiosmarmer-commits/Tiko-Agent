@@ -51,7 +51,7 @@ class MobileShell extends StatelessWidget {
             for (final entry in primary)
               NavigationDestination(
                 icon: _navIcon(entry, pendingApprovals),
-                label: entry.label,
+                label: entry.navigationLabel,
               ),
             const NavigationDestination(
               icon: Icon(Icons.more_horiz),

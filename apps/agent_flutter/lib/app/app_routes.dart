@@ -32,6 +32,8 @@ class AppRouteInfo {
     this.label,
     this.icon, {
     this.primaryOnMobile = true,
+    this.section = 'Workspace',
+    this.shortLabel,
   });
 
   final AppRoute route;
@@ -41,108 +43,156 @@ class AppRouteInfo {
   /// Primary routes appear in the mobile bottom navigation bar; the rest are
   /// grouped under the mobile "More" entry.
   final bool primaryOnMobile;
+
+  /// Presentation group used by the compact desktop sidebar. This does not
+  /// change route identity or runtime behaviour.
+  final String section;
+
+  /// Short label for narrow navigation surfaces. The full [label] remains
+  /// available in page headers, menus and accessibility labels.
+  final String? shortLabel;
+
+  String get navigationLabel => shortLabel ?? label;
 }
 
 const List<AppRouteInfo> kAppRoutes = [
-  AppRouteInfo(AppRoute.chat, 'Chat', Icons.chat_bubble_outline),
-  AppRouteInfo(AppRoute.dashboard, 'Dashboard', Icons.dashboard_outlined),
-  AppRouteInfo(AppRoute.approvals, 'Approvals', Icons.verified_user_outlined),
+  AppRouteInfo(
+    AppRoute.chat,
+    'Chat',
+    Icons.chat_bubble_outline,
+    section: 'Workspace',
+  ),
+  AppRouteInfo(
+    AppRoute.dashboard,
+    'Dashboard',
+    Icons.dashboard_outlined,
+    section: 'Workspace',
+    shortLabel: 'Home',
+  ),
+  AppRouteInfo(
+    AppRoute.approvals,
+    'Approvals',
+    Icons.verified_user_outlined,
+    section: 'Agents',
+  ),
   AppRouteInfo(
     AppRoute.surfaces,
     'Surface',
     Icons.web_asset_outlined,
     primaryOnMobile: false,
+    section: 'Build',
   ),
-  AppRouteInfo(AppRoute.sessions, 'Sessions', Icons.forum_outlined),
+  AppRouteInfo(
+    AppRoute.sessions,
+    'Sessions',
+    Icons.forum_outlined,
+    primaryOnMobile: false,
+    section: 'Workspace',
+  ),
   AppRouteInfo(
     AppRoute.tasks,
     'Tasks',
     Icons.view_kanban_outlined,
     primaryOnMobile: false,
+    section: 'Build',
   ),
   AppRouteInfo(
     AppRoute.skills,
     'Skills',
     Icons.auto_awesome_outlined,
     primaryOnMobile: false,
+    section: 'Integrations',
   ),
   AppRouteInfo(
     AppRoute.bots,
     'Bots',
     Icons.smart_toy_outlined,
     primaryOnMobile: false,
+    section: 'Agents',
   ),
   AppRouteInfo(
     AppRoute.providers,
     'Providers',
     Icons.route_outlined,
     primaryOnMobile: false,
+    section: 'Integrations',
   ),
   AppRouteInfo(
     AppRoute.plugins,
     'Plugins',
     Icons.extension_outlined,
     primaryOnMobile: false,
+    section: 'Integrations',
   ),
   AppRouteInfo(
     AppRoute.channels,
     'Channels',
     Icons.hub_outlined,
     primaryOnMobile: false,
+    section: 'Integrations',
   ),
   AppRouteInfo(
     AppRoute.automations,
     'Automation',
     Icons.schedule_outlined,
     primaryOnMobile: false,
+    section: 'Agents',
   ),
   AppRouteInfo(
     AppRoute.security,
     'Security',
     Icons.security_outlined,
     primaryOnMobile: false,
+    section: 'Operations',
   ),
   AppRouteInfo(
     AppRoute.audit,
     'Audit',
     Icons.receipt_long_outlined,
     primaryOnMobile: false,
+    section: 'Operations',
   ),
   AppRouteInfo(
     AppRoute.artifacts,
     'Artifacts',
     Icons.folder_copy_outlined,
     primaryOnMobile: false,
+    section: 'Build',
   ),
   AppRouteInfo(
     AppRoute.runs,
     'Runs',
     Icons.play_circle_outline,
-    primaryOnMobile: false,
+    primaryOnMobile: true,
+    section: 'Agents',
   ),
   AppRouteInfo(
     AppRoute.memory,
     'Memory',
     Icons.memory_outlined,
     primaryOnMobile: false,
+    section: 'Knowledge',
   ),
   AppRouteInfo(
     AppRoute.events,
     'Events',
     Icons.bolt_outlined,
     primaryOnMobile: false,
+    section: 'Operations',
   ),
   AppRouteInfo(
     AppRoute.logs,
     'Logs',
     Icons.article_outlined,
     primaryOnMobile: false,
+    section: 'Operations',
   ),
   AppRouteInfo(
     AppRoute.settings,
     'Settings',
     Icons.settings_outlined,
     primaryOnMobile: false,
+    section: 'Settings',
   ),
 ];
 

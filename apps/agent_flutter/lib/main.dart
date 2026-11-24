@@ -28,6 +28,7 @@ import 'ui/chat_artifact_panel.dart';
 import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
 import 'ui/multi_pane_view.dart';
+import 'ui/session_history_view.dart';
 import 'ui/runs_page.dart';
 import 'ui/surfaces_view.dart';
 import 'ui/security_view.dart';
@@ -2273,82 +2274,16 @@ class _SessionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        PageHeader(
-          title: 'Sessions',
-          subtitle: '${sessions.length} sesi',
-          online: online,
-          trailing: IconButton(
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
-        Expanded(
-          child: sessions.isEmpty
-              ? Center(
-                  child: Text(
-                    'Belum ada sesi.',
-                    style: TextStyle(color: context.simpulMuted),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: sessions.length,
-                  itemBuilder: (context, i) {
-                    final session = sessions[i];
-                    final id = session.id;
-                    final title = session.displayTitle;
-                    return ListTile(
-                      selected: id == current,
-                      leading: const Icon(Icons.forum_outlined),
-                      title: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '$id · ${session.channel} · ${session.updatedAt} · turns=${session.turns}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        tooltip: 'Aksi sesi',
-                        onSelected: (action) {
-                          if (action == 'rename') {
-                            unawaited(_confirmRename(context, session));
-                          } else if (action == 'delete') {
-                            unawaited(_confirmDelete(context, id));
-                          }
-                        },
-                        itemBuilder: (menuContext) => const [
-                          PopupMenuItem(
-                            value: 'rename',
-                            child: ListTile(
-                              leading: Icon(Icons.edit_outlined),
-                              title: Text('Ganti nama'),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: ListTile(
-                              leading: Icon(Icons.delete_outline),
-                              title: Text('Hapus'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: () => onSelect(id),
-                    );
-                  },
-                ),
-        ),
-      ],
+    return SessionHistoryView(
+      sessions: sessions,
+      current: current,
+      online: online,
+      loading: loading,
+      error: error,
+      onRefresh: onRefresh,
+      onSelect: onSelect,
+      onRename: onRename,
+      onDelete: onDelete,
     );
   }
 }

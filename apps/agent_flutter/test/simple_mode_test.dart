@@ -55,9 +55,13 @@ void main() {
         ),
       );
 
-      for (final label in ['Chat', 'Dashboard', 'Approvals', 'Settings']) {
+      for (final label in ['Chat', 'Home', 'Approvals', 'More tools']) {
         expect(find.text(label), findsOneWidget);
       }
+      expect(find.text('Settings'), findsNothing);
+      await tester.tap(find.text('More tools'));
+      await tester.pump();
+      expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Providers'), findsNothing);
       expect(find.text('Bots'), findsNothing);
       expect(find.text('Skills'), findsNothing);
