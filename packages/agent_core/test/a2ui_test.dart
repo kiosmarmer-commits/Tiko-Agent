@@ -642,6 +642,14 @@ void main() {
     expect(prompt, contains('open_url'));
   });
 
+  test('system prompt addon menyebut konvensi penargetan halaman GUI (Hermes S8)', () {
+    final prompt = tikoA2uiSystemPromptAddon();
+    expect(prompt, contains('page.<halaman>.'));
+    for (final page in ['tasks', 'bots', 'automation', 'runs', 'skills', 'security']) {
+      expect(prompt, contains(page));
+    }
+  });
+
   group('A2uiOpenUrlPolicy', () {
     test('allowlist kosong menolak semua URL (fail-closed)', () {
       final p = A2uiOpenUrlPolicy();

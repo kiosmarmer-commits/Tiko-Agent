@@ -27,7 +27,9 @@ class RenderA2uiTool implements Tool {
             'tepat satu komponen id "root". Maksimal 24 pesan, 120 komponen '
             'per surface, depth 8, teks 4000 karakter, 8 aksi per surface. '
             'Gunakan untuk dashboard, kartu status, form input, tabel, atau '
-            'wizard — bukan pengganti jawaban teks.',
+            'wizard — bukan pengganti jawaban teks. Beri surfaceId prefix '
+            'page.<halaman>. (halaman: tasks, bots, automation, runs, skills, '
+            'security) agar surface tampil di halaman GUI tersebut.',
         inputSchema: {
           'type': 'object',
           'properties': {

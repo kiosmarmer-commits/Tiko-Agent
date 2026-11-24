@@ -17,6 +17,7 @@ class SecurityPage extends StatelessWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
   });
 
   final SecuritySnapshot? snapshot;
@@ -24,6 +25,9 @@ class SecurityPage extends StatelessWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +50,7 @@ class SecurityPage extends StatelessWidget {
             ],
           ),
         ),
+        if (surfaceSection != null) surfaceSection!,
         if (loading) const LinearProgressIndicator(minHeight: 2),
         if (error != null)
           Padding(

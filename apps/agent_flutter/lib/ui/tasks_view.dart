@@ -18,6 +18,7 @@ class TaskBoardPage extends StatelessWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
   });
 
   final List<TaskItem> tasks;
@@ -25,6 +26,9 @@ class TaskBoardPage extends StatelessWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
 
   List<TaskItem> _ofState(String state) =>
       tasks.where((task) => task.state == state).toList();
@@ -40,6 +44,7 @@ class TaskBoardPage extends StatelessWidget {
           trailing:
               onRefresh == null ? null : IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
+        if (surfaceSection != null) surfaceSection!,
         if (loading) const LinearProgressIndicator(minHeight: 2),
         if (error != null)
           Padding(

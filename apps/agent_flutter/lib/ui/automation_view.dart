@@ -18,6 +18,7 @@ class AutomationPage extends StatefulWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
     this.onCreate,
     this.onUpdate,
     this.onDelete,
@@ -29,6 +30,9 @@ class AutomationPage extends StatefulWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
 
   /// Body create: cron + prompt (wajib), channel/user_key/missed_policy/
   /// timezone (opsional). Melempar ApiError bila ditolak daemon (400).
@@ -91,6 +95,7 @@ class _AutomationPageState extends State<AutomationPage> {
             ],
           ),
         ),
+        if (widget.surfaceSection != null) widget.surfaceSection!,
         if (widget.loading) const LinearProgressIndicator(minHeight: 2),
         if (widget.error != null)
           Padding(

@@ -29,6 +29,7 @@ import 'ui/context_ref_suggest.dart';
 import 'ui/hooks_view.dart';
 import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
+import 'ui/a2ui_page_surface_section.dart';
 import 'ui/chat_artifact_panel.dart';
 import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
@@ -537,6 +538,67 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  /// Hermes S8: rute halaman yang memuat seksi surface A2UI dinamis.
+  static const Set<AppRoute> _a2uiSurfaceRoutes = {
+    AppRoute.surfaces,
+    AppRoute.tasks,
+    AppRoute.bots,
+    AppRoute.automations,
+    AppRoute.runs,
+    AppRoute.skills,
+    AppRoute.security,
+  };
+
+  /// Hermes S8: seksi surface dinamis untuk halaman statik `target`.
+  /// Konvensi surfaceId `page.<target>.` (agent_core, system prompt addon).
+  Widget _a2uiSection(String target) => A2uiPageSurfaceSection(
+        target: target,
+        surfaces: surfacesSnapshot,
+        online: chat.online,
+        onRefresh: _loadSurfaces,
+        onOpenManager: () => _selectRoute(AppRoute.surfaces),
+        onLoadSurface: repo.surface,
+        onAction: (surfaceId, actionName, payload, sessionKey) => unawaited(
+          _submitPageSurfaceAction(surfaceId, actionName, payload, sessionKey),
+        ),
+        onDelete: (surfaceId) async {
+          final deleted = await repo.deleteSurface(surfaceId);
+          await _loadSurfaces();
+          return deleted;
+        },
+      );
+
+  /// Hermes S8: aksi surface dari halaman GUI tetap melalui pipeline
+  /// anti-replay host (`POST /v1/ui/actions`), sama seperti di chat.
+  Future<void> _submitPageSurfaceAction(
+    String surfaceId,
+    String actionName,
+    Map<String, dynamic> payload,
+    String sessionKey,
+  ) async {
+    try {
+      final reply = await repo.submitUiAction(
+        sessionKey,
+        actionName,
+        payload,
+        surfaceId: surfaceId,
+      );
+      if (!mounted) return;
+      final preview = reply.isEmpty
+          ? ''
+          : ' — ${reply.length > 120 ? '${reply.substring(0, 120)}…' : reply}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Aksi "$actionName" terkirim$preview')),
+      );
+      await _loadSurfaces();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengirim aksi surface: $e')),
+      );
+    }
+  }
+
   Future<void> updateConnection({required String base, required String tok}) async {
     setState(() {
       baseUrl = base;
@@ -770,7 +832,7 @@ class _AgentAppState extends State<AgentApp> {
     if (next == AppRoute.runs && teamRunsSnapshot == null) {
       unawaited(_loadTeamRuns());
     }
-    if (next == AppRoute.surfaces && surfacesSnapshot == null) {
+    if (_a2uiSurfaceRoutes.contains(next) && surfacesSnapshot == null) {
       unawaited(_loadSurfaces());
     }
     // GUI-P2-03: inspector pane di chat butuh snapshot runs saat pertama
@@ -804,6 +866,7 @@ class _AgentAppState extends State<AgentApp> {
         repo: repo,
         baseUrl: baseUrl,
         token: token,
+        surfaceSectionFor: _a2uiSection,
         memories: memories,
         tasks: tasks,
         logFiles: logFiles,
@@ -1107,6 +1170,7 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingAdmin,
           error: adminError,
           onRefresh: refreshAdmin,
+          surfaceSection: _a2uiSection('tasks'),
         );
       case AppRoute.events:
         return EventsPage(
@@ -1137,6 +1201,7 @@ class _AgentAppState extends State<AgentApp> {
           onApprove: repo.approveSkill,
           onRollback: repo.rollbackSkill,
           onLoadHistory: repo.skillHistory,
+          surfaceSection: _a2uiSection('skills'),
         );
       case AppRoute.bots:
         return BotsPage(
@@ -1164,6 +1229,7 @@ class _AgentAppState extends State<AgentApp> {
             if (ok) unawaited(refreshAdmin(force: true));
             return ok;
           },
+          surfaceSection: _a2uiSection('bots'),
         );
       case AppRoute.providers:
         return ProviderManagerPage(
@@ -1225,6 +1291,7 @@ class _AgentAppState extends State<AgentApp> {
             if (job != null) unawaited(refreshAdmin(force: true));
             return job;
           },
+          surfaceSection: _a2uiSection('automation'),
         );
       case AppRoute.security:
         return SecurityPage(
@@ -1233,6 +1300,7 @@ class _AgentAppState extends State<AgentApp> {
           loading: loadingAdmin,
           error: adminError,
           onRefresh: refreshAdmin,
+          surfaceSection: _a2uiSection('security'),
         );
       case AppRoute.audit:
         return AuditPage(
@@ -1268,6 +1336,7 @@ class _AgentAppState extends State<AgentApp> {
           error: runsError,
           onRefresh: _loadRuns,
           teamRuns: teamRunsSnapshot,
+          surfaceSection: _a2uiSection('runs'),
         );
       case AppRoute.surfaces:
         return SurfacesPage(
@@ -3037,7 +3106,12 @@ class _MorePage extends StatelessWidget {
     required this.onConnect,
     required this.settings,
     required this.onSettingsChanged,
+    required this.surfaceSectionFor,
   });
+
+  /// Hermes S8: builder seksi surface A2UI dinamis untuk halaman yang
+  /// dibuka sebagai push route dari menu More.
+  final Widget? Function(String target)? surfaceSectionFor;
   final AgentRepository repo;
   final String baseUrl;
   final String token;
@@ -3100,6 +3174,7 @@ class _MorePage extends StatelessWidget {
                     loading: false,
                     error: null,
                     onRefresh: onRefresh,
+                    surfaceSection: surfaceSectionFor?.call('tasks'),
                   ),
                 ),
               ),
@@ -3170,6 +3245,7 @@ class _MorePage extends StatelessWidget {
                       onApprove: repo.approveSkill,
                       onRollback: repo.rollbackSkill,
                       onLoadHistory: repo.skillHistory,
+                      surfaceSection: surfaceSectionFor?.call('skills'),
                     ),
                   ),
                 ),
@@ -3203,6 +3279,7 @@ class _MorePage extends StatelessWidget {
                       onDelete: repo.deleteBot,
                       onBind: repo.bindBot,
                       onUnbind: repo.unbindBot,
+                      surfaceSection: surfaceSectionFor?.call('bots'),
                     ),
                   ),
                 ),
@@ -3324,6 +3401,7 @@ class _MorePage extends StatelessWidget {
                         await onRefresh();
                         return job;
                       },
+                      surfaceSection: surfaceSectionFor?.call('automation'),
                     ),
                   ),
                 ),
@@ -3346,6 +3424,7 @@ class _MorePage extends StatelessWidget {
                       loading: false,
                       error: null,
                       onRefresh: onRefresh,
+                      surfaceSection: surfaceSectionFor?.call('security'),
                     ),
                   ),
                 ),
@@ -3424,6 +3503,7 @@ class _MorePage extends StatelessWidget {
                         loading: runsLoading,
                         error: runsError,
                         onRefresh: onLoadRuns,
+                        surfaceSection: surfaceSectionFor?.call('runs'),
                       ),
                     ),
                   ),

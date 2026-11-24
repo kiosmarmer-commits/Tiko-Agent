@@ -17,6 +17,7 @@ class SkillsPage extends StatefulWidget {
     required this.loading,
     this.error,
     this.onRefresh,
+    this.surfaceSection,
     this.onFeedback,
     this.onEvaluate,
     this.onApprove,
@@ -29,6 +30,9 @@ class SkillsPage extends StatefulWidget {
   final bool loading;
   final String? error;
   final Future<void> Function()? onRefresh;
+
+  /// Hermes S8: seksi surface A2UI dinamis yang dirender di atas konten.
+  final Widget? surfaceSection;
   final Future<bool> Function(String slug, bool positive)? onFeedback;
   final Future<SkillGateOutcome> Function(String slug)? onEvaluate;
   final Future<SkillGateOutcome> Function(String slug)? onApprove;
@@ -67,6 +71,7 @@ class _SkillsPageState extends State<SkillsPage> {
               : IconButton(
                   onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
         ),
+        if (widget.surfaceSection != null) widget.surfaceSection!,
         if (widget.loading) const LinearProgressIndicator(minHeight: 2),
         if (widget.error != null)
           Padding(
