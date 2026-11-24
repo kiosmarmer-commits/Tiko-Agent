@@ -511,6 +511,7 @@ Future<void> main(List<String> args) async {
     Gateway? replyVia,
     void Function(String toolName)? onToolStart,
     void Function(ToolCallTrace trace)? onToolTrace,
+    void Function(String delta)? onTextDelta,
   }) async {
     if (!rateLimiter.allow(m.userKey)) {
       await replyVia?.send(
@@ -617,7 +618,7 @@ Future<void> main(List<String> args) async {
       channel: m.channel,
       userKey: m.userKey,
       confirm: confirm,
-      onTextDelta: streamer?.add,
+      onTextDelta: onTextDelta ?? streamer?.add,
       onToolStart: onToolStart,
       onToolTrace: onToolTrace,
       attachments: m.attachments,
@@ -746,6 +747,8 @@ Future<void> main(List<String> args) async {
         replyVia: _CollectGateway(c),
         onToolStart: (name) =>
             progress({'type': 'chat.toolStart', 'name': name}),
+        onTextDelta: (d) =>
+            progress(<String, dynamic>{'type': 'chat.delta', 'text': d}),
         onToolTrace: (t) => progress({
               'type': 'chat.tool',
               'name': t.name,

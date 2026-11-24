@@ -119,6 +119,15 @@ class ChatController extends ChangeNotifier {
               messages[aiIndex]['text'] = 'Menyusun…';
               notifyListeners();
             }
+          } else if (type == 'chat.delta') {
+            final d = ev['text'] as String? ?? '';
+            if (d.isNotEmpty) {
+              final cur = messages[aiIndex]['text'] ?? '';
+              final placeholder =
+                  cur == '…' || cur == 'Menulis…' || cur == 'Menyusun…';
+              messages[aiIndex]['text'] = placeholder ? d : cur + d;
+              notifyListeners();
+            }
           } else if (type == 'chat.toolStart') {
             activeTool = ev['name'] as String? ?? '';
             notifyListeners();

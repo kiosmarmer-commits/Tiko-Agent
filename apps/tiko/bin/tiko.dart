@@ -1604,6 +1604,7 @@ Future<void> main(List<String> argv) async {
         return;
       }
       // interactive
+      TuiProgress? turnProgress;
       await TuiSession(
         handler: (input) async {
           if (input == '/help') {
@@ -1639,10 +1640,37 @@ Future<void> main(List<String> argv) async {
                   'memory=${rt.memoryBackend}',
             ]);
           }
-          final answer = await rt.chat(input, confirm: askUser);
-          return TuiOutcome(['tiko> $answer']);
+          // TUI-P3: progress live — status tool/durasi saat turn berjalan,
+          // ringkasan tool setelah respons, Ctrl-C kooperatif membatalkan.
+          final p = turnProgress;
+          final traces = <ToolCallTrace>[];
+          final res = await rt.chatWithStatus(
+            input,
+            confirm: askUser,
+            onToolStart:
+                p == null ? null : (name) => p.status('tool $name…'),
+            onToolTrace: (t) {
+              traces.add(t);
+              p?.status(
+                'tool ${t.name} ${t.isError ? 'gagal' : 'selesai'} '
+                '(${(t.durationMs / 1000).toStringAsFixed(1)}s)',
+              );
+            },
+          );
+          final lines = <String>['tiko> ${res.text}'];
+          if (res.toolCallTraces.isNotEmpty) {
+            lines.add('tools: ${res.toolCallCount} call · '
+                '${res.tokensUsed} token');
+            for (final t in res.toolCallTraces) {
+              lines.add('  [${t.isError ? 'err' : 'ok'}] ${t.name} '
+                  '${(t.durationMs / 1000).toStringAsFixed(1)}s');
+            }
+          }
+          return TuiOutcome(lines);
         },
         completer: chatCompleter,
+        onTurnStart: (progress) => turnProgress = progress,
+        onCancelKey: () => rt.cancelTurn('cli:default'),
         historyStore: TuiHistoryStore(
           p.join(rt.dataDir, 'tui-history.txt'),
         ),
