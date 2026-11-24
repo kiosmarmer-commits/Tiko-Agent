@@ -2219,59 +2219,6 @@ class _SessionsPage extends StatelessWidget {
   final Future<void> Function(String id, String title) onRename;
   final Future<void> Function(String id) onDelete;
 
-  Future<void> _confirmRename(
-    BuildContext context,
-    SessionSummary session,
-  ) async {
-    final id = session.id;
-    final controller = TextEditingController(text: session.displayTitle);
-    final title = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Ganti nama sesi'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Judul sesi'),
-          onSubmitted: (value) => Navigator.pop(dialogContext, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-    final trimmed = title?.trim() ?? '';
-    if (trimmed.isNotEmpty) await onRename(id, trimmed);
-  }
-
-  Future<void> _confirmDelete(BuildContext context, String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Hapus sesi?'),
-        content: Text('Transcript "$id" akan dihapus permanen dari daemon.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await onDelete(id);
-  }
-
   @override
   Widget build(BuildContext context) {
     return SessionHistoryView(
