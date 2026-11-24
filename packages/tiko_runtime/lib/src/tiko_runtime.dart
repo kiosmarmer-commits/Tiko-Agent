@@ -3149,8 +3149,17 @@ class TikoRuntime {
   }
 
   static const _artifactSkipDirs = {
-    '.git', 'build', '.dart_tool', 'node_modules', '.vibe', '__pycache__',
+    '.git', 'build', '.dart_tool', 'node_modules', '.vibe', '.tiko',
+    '__pycache__',
   };
+
+  /// Hermes S7: ekstensi gambar yang bisa dirender inline GUI, plus batas
+  /// ukuran base64 agar respons tetap ringan.
+  static const _imageExtensions = {
+    'png', 'jpg', 'jpeg', 'gif', 'webp',
+  };
+  static const _maxInlineImageBytes = 1024 * 1024;
+  static const _maxDownloadBytes = 8 * 1024 * 1024;
 
   /// Artifacts browser (GUI-P2-04, read-only): daftar file di workspace
   /// (rekursif terbatas, skip direktori build/VC) — path relatif + ukuran
@@ -3207,6 +3216,9 @@ class TikoRuntime {
     final probeLen = bytes.length < 8000 ? bytes.length : 8000;
     final binary =
         bytes.take(probeLen).contains(0) || _looksBinary(bytes.take(probeLen));
+    final extension = p.extension(path.trim()).toLowerCase().replaceFirst('.', '');
+    final isImage = _imageExtensions.contains(extension) &&
+        bytes.length <= _maxInlineImageBytes;
     if (binary) {
       return {
         'path': p.relative(resolved, from: workspace),
@@ -3214,6 +3226,8 @@ class TikoRuntime {
         'binary': true,
         'truncated': false,
         'bak_exists': _bakExists(path.trim()),
+        'is_image': isImage,
+        if (isImage) 'content_base64': base64Encode(bytes),
       };
     }
     final truncated = bytes.length > maxBytes;
@@ -3225,6 +3239,69 @@ class TikoRuntime {
       'truncated': truncated,
       'content': utf8.decode(slice, allowMalformed: true),
       'bak_exists': _bakExists(path.trim()),
+      'is_image': isImage,
+      if (isImage) 'content_base64': base64Encode(bytes),
+    };
+  }
+
+  /// Hermes S7 (publish/share): snapshot file workspace ke
+  /// `.tiko/published/` sebagai salinan read-only yang bisa dibagikan;
+  /// path tetap divalidasi PathSafety (fail-closed).
+  Map<String, dynamic> artifactsPublish(
+    String path, {
+    String sessionId = '',
+  }) {
+    final resolved = PathSafety.resolveInRoot(workspace, path.trim());
+    if (resolved == null) throw ArgumentError('path di luar workspace');
+    final file = File(resolved);
+    if (!file.existsSync()) throw StateError('file tidak ditemukan');
+    final stat = file.statSync();
+    if (stat.size > _maxDownloadBytes) {
+      throw StateError('file terlalu besar untuk dipublikasikan (maks 8 MB)');
+    }
+    final name = p.basename(resolved);
+    final publishedDir = Directory(p.join(workspace, '.tiko', 'published'));
+    if (!publishedDir.existsSync()) publishedDir.createSync(recursive: true);
+
+    final stem = p.basenameWithoutExtension(name);
+    final extension = p.extension(name);
+    final slug = stem
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final target = p.join(
+      publishedDir.path,
+      '${slug.isEmpty || slug == '-' ? 'artifact' : slug}'
+      '${sessionId.isEmpty ? '' : '-${sessionId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '-')}'}'
+      '-$stamp$extension',
+    );
+    final bytes = file.readAsBytesSync();
+    File(target).writeAsBytesSync(bytes, flush: true);
+    final relative = p.relative(target, from: workspace);
+    return {
+      'published_path': relative,
+      'bytes': bytes.length,
+      'source': p.relative(resolved, from: workspace),
+      'share_text': 'Artifact "$name" sudah dipublikasikan ke $relative',
+    };
+  }
+
+  /// Hermes S7 (download): salinan byte mentah untuk diunduh GUI — files
+  /// biner ikut lewat sini karena read teks memotong/tandai biner.
+  Map<String, dynamic> artifactsDownload(String path) {
+    final resolved = PathSafety.resolveInRoot(workspace, path.trim());
+    if (resolved == null) throw ArgumentError('path di luar workspace');
+    final file = File(resolved);
+    if (!file.existsSync()) throw StateError('file tidak ditemukan');
+    final stat = file.statSync();
+    if (stat.size > _maxDownloadBytes) {
+      throw StateError('file terlalu besar untuk diunduh (maks 8 MB)');
+    }
+    return {
+      'filename': p.basename(resolved),
+      'bytes': file.readAsBytesSync(),
+      'bytes_size': stat.size,
     };
   }
 

@@ -6,6 +6,7 @@ class SessionSummary {
     this.title = '',
     this.channel = '',
     this.updatedAt = '',
+    this.createdAt = '',
     this.turns = 0,
     this.provider = '',
     this.model = '',
@@ -18,6 +19,9 @@ class SessionSummary {
   final String title;
   final String channel;
   final String updatedAt;
+
+  /// Hermes S7: waktu sesi dibuat — dasar filter artifacts "sesi ini".
+  final String createdAt;
   final int turns;
   final String provider;
   final String model;
@@ -30,6 +34,7 @@ class SessionSummary {
         title: '${map['title'] ?? ''}',
         channel: '${map['channel'] ?? ''}',
         updatedAt: '${map['updated_at'] ?? ''}',
+        createdAt: '${map['created_at'] ?? map['updated_at'] ?? ''}',
         turns: map['turns'] is num ? (map['turns'] as num).toInt() : 0,
         provider: '${map['provider'] ?? ''}',
         model: '${map['model'] ?? ''}',
@@ -51,6 +56,7 @@ class SessionSummary {
         title: title ?? this.title,
         channel: channel,
         updatedAt: updatedAt,
+        createdAt: createdAt,
         turns: turns,
         provider: provider,
         model: model,
@@ -1008,6 +1014,8 @@ class ArtifactContent {
     this.truncated = false,
     this.content = '',
     this.bakExists = false,
+    this.isImage = false,
+    this.contentBase64 = '',
   });
 
   final String path;
@@ -1017,6 +1025,11 @@ class ArtifactContent {
   final String content;
   final bool bakExists;
 
+  /// Hermes S7: gambar inline (<= 1 MB) untuk thumbnail + preview;
+  /// payload base64 ada di [contentBase64].
+  final bool isImage;
+  final String contentBase64;
+
   factory ArtifactContent.fromMap(Map<String, dynamic> map) =>
       ArtifactContent(
         path: '${map['path'] ?? ''}',
@@ -1025,7 +1038,18 @@ class ArtifactContent {
         truncated: map['truncated'] == true,
         content: map['content'] == null ? '' : '${map['content']}',
         bakExists: map['bak_exists'] == true,
+        isImage: map['is_image'] == true,
+        contentBase64: '${map['content_base64'] ?? ''}',
       );
+}
+
+/// Hermes S7: hasil unduhan artifact byte mentah dari
+/// `GET /v1/artifacts/download`.
+class DownloadedArtifact {
+  const DownloadedArtifact({required this.filename, required this.bytes});
+
+  final String filename;
+  final List<int> bytes;
 }
 
 /// Satu baris diff (GUI-P2-04): '=' konteks, '-' baris lama, '+' baru.

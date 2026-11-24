@@ -76,6 +76,13 @@ abstract class AgentRepository {
   Future<ArtifactsListing> artifacts({String dir = ''});
   Future<ArtifactContent> artifactRead(String path);
   Future<ArtifactDiff> artifactDiff(String path);
+
+  /// Hermes S7: publish/share artifact + unduh byte mentah.
+  Future<Map<String, dynamic>> artifactPublish(
+    String path, {
+    String sessionId = '',
+  });
+  Future<DownloadedArtifact> artifactDownload(String path);
   Future<RunsSnapshot> runInspector();
   Future<JobInfo> createJob(Map<String, dynamic> body);
   Future<JobInfo> updateJob(String id, Map<String, dynamic> body);
@@ -368,6 +375,17 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<ArtifactDiff> artifactDiff(String path) async =>
       ArtifactDiff.fromMap(await _guard(() => _client.diffArtifact(path)));
+
+  @override
+  Future<Map<String, dynamic>> artifactPublish(
+    String path, {
+    String sessionId = '',
+  }) async =>
+      _guard(() => _client.publishArtifact(path, sessionId: sessionId));
+
+  @override
+  Future<DownloadedArtifact> artifactDownload(String path) async =>
+      _guard(() => _client.downloadArtifact(path));
 
   @override
   Future<RunsSnapshot> runInspector() async =>

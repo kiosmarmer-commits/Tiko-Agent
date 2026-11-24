@@ -135,4 +135,58 @@ mcp:
     expect((r['lines'] as List).length, 10);
     expect(r['truncated'], isTrue);
   });
+
+  test('artifactsRead: gambar inline base64 + thumbnail field (Hermes S7)',
+      () async {
+    final ws = Directory('${temp.path}/workspace');
+    final png = File('${ws.path}/gambar.png');
+    png.writeAsBytesSync([0x89, 0x50, 0x4E, 0x47, 0x0A, 0x1B, 0x0A, 0x30]);
+
+    final r = rt.artifactsRead('gambar.png');
+    expect(r['is_image'], isTrue);
+    expect((r['content_base64'] as String), isNotEmpty);
+    expect(r['binary'], isTrue);
+
+    final txt = File('${ws.path}/catatan.txt');
+    txt.writeAsStringSync('teks biasa');
+    final plain = rt.artifactsRead('catatan.txt');
+    expect(plain['is_image'], isFalse);
+    expect(plain.containsKey('content_base64'), isFalse);
+  });
+
+  test('artifactsDownload: byte mentah + filename, path di luar gagal',
+      () async {
+    final ws = Directory('${temp.path}/workspace');
+    File('${ws.path}/data.bin').writeAsBytesSync([1, 2, 3, 4, 5]);
+
+    final r = rt.artifactsDownload('data.bin');
+    expect(r['filename'], 'data.bin');
+    expect(r['bytes'], [1, 2, 3, 4, 5]);
+    expect(r['bytes_size'], 5);
+
+    expect(() => rt.artifactsDownload('../escape.bin'), throwsArgumentError);
+    expect(() => rt.artifactsDownload('hantu.bin'), throwsStateError);
+  });
+
+  test('artifactsPublish: salinan read-only di .tiko/published (Hermes S7)',
+      () async {
+    final ws = Directory('${temp.path}/workspace');
+    File('${ws.path}/laporan.md').writeAsStringSync('# Laporan\nisi');
+
+    final r = rt.artifactsPublish('laporan.md', sessionId: 'flutter:demo');
+    final publishedPath = r['published_path'] as String;
+    expect(publishedPath, startsWith('.tiko/published/laporan-'));
+    expect(publishedPath, contains('flutter-demo'));
+    final copy = File('${ws.path}/$publishedPath');
+    expect(copy.existsSync(), isTrue);
+    expect(copy.readAsStringSync(), contains('# Laporan'));
+    expect(r['share_text'], contains(publishedPath));
+
+    final listing = rt.artifactsList();
+    expect((listing['files'] as List).map((f) => (f as Map)['path']),
+        isNot(contains(publishedPath)));
+
+    expect(() => rt.artifactsPublish('../secret.md'), throwsArgumentError);
+    expect(() => rt.artifactsPublish('hantu.md'), throwsStateError);
+  });
 }

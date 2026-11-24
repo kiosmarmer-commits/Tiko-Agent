@@ -538,6 +538,37 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Hermes S7: publish/share artifact — snapshot read-only di
+  /// `.tiko/published/` milik runtime daemon.
+  Future<Map<String, dynamic>> publishArtifact(
+    String path, {
+    String sessionId = '',
+  }) async {
+    final res = await _http
+        .post(
+          _u('/v1/artifacts/publish'),
+          headers: _headers,
+          body: jsonEncode({'path': path, 'session_id': sessionId}),
+        )
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'artifacts publish');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Hermes S7: unduh byte mentah file workspace (termasuk biner).
+  Future<DownloadedArtifact> downloadArtifact(String path) async {
+    final res = await _http
+        .get(_u('/v1/artifacts/download?path=${Uri.encodeQueryComponent(path)}'),
+            headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    _throwIf(res, 'artifacts download');
+    var filename = 'artifact';
+    final disposition = res.headers['content-disposition'];
+    final match = RegExp('filename="([^"]+)"').firstMatch(disposition ?? '');
+    if (match != null) filename = Uri.decodeComponent(match.group(1)!);
+    return DownloadedArtifact(filename: filename, bytes: res.bodyBytes);
+  }
+
   /// Run-inspector (GUI-P2-04, read-only): snapshot turn aktif + riwayat.
   Future<Map<String, dynamic>> listRuns() async {
     final res = await _http
