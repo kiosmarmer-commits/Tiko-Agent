@@ -1592,6 +1592,11 @@ class TikoRuntime {
         // (weight desc, cost asc, config order stabil); tanpa nilai sama
         // dengan perilaku lama.
         fallbackOrder: config.fallbackChainIds(config.defaultProvider),
+        // P6 cost-aware: cost terdaftar ikut memengaruhi scoring dinamis.
+        providerCosts: {
+          for (final e in config.providers.entries)
+            if (e.value.enabled && e.value.cost != null) e.key: e.value.cost!,
+        },
         onFallback: (event) => events.emit('provider.fallback', event),
       );
 
