@@ -1178,6 +1178,45 @@ Future<void> main(List<String> args) async {
               : await rt.revokePluginConsent(plugin);
           return {'ok': result.ok, 'message': result.message};
         },
+        hooksSnapshotProvider: () async => rt.hookSnapshot(),
+        hookAddProvider: (body) async {
+          try {
+            return await rt.hookAddRule(body);
+          } on RangeError {
+            throw ApiRequestException(404, 'not_found', 'indeks hook tidak ada');
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on StateError catch (e) {
+            throw ApiRequestException(500, 'persist_failed', '$e');
+          }
+        },
+        hookUpdateProvider: (index, body) async {
+          try {
+            return await rt.hookUpdateRule(index, body);
+          } on RangeError {
+            throw ApiRequestException(404, 'not_found', 'indeks hook tidak ada');
+          } on ArgumentError catch (e) {
+            throw ApiRequestException(400, 'invalid_request', '$e');
+          } on StateError catch (e) {
+            throw ApiRequestException(500, 'persist_failed', '$e');
+          }
+        },
+        hookDeleteProvider: (index) async {
+          try {
+            return await rt.hookRemoveRule(index);
+          } on RangeError {
+            throw ApiRequestException(404, 'not_found', 'indeks hook tidak ada');
+          } on StateError catch (e) {
+            throw ApiRequestException(500, 'persist_failed', '$e');
+          }
+        },
+        hookTestProvider: (index) async {
+          try {
+            return await rt.hookTestRule(index);
+          } on RangeError {
+            throw ApiRequestException(404, 'not_found', 'indeks hook tidak ada');
+          }
+        },
         jobsProvider: () async => [
           // (wiring teams berada di atas; helper _saveTeam di bawah)
           for (final job in rt.jobs.all)

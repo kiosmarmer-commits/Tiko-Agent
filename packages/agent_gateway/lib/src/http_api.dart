@@ -85,6 +85,11 @@ class HttpApiServer {
     this.sessionProviderSetter,
     this.pluginProvider,
     this.pluginConsentSetter,
+    this.hooksSnapshotProvider,
+    this.hookAddProvider,
+    this.hookUpdateProvider,
+    this.hookDeleteProvider,
+    this.hookTestProvider,
     this.channelsProvider,
     this.jobsProvider,
     this.createJob,
@@ -464,6 +469,39 @@ class HttpApiServer {
       );
     }
     return {'plugin': plugin.trim().toLowerCase(), 'action': action};
+  }
+
+  /// Path item hook `/v1/hooks/<n>` (SETTINGS-HOOKS) — hanya indeks numerik
+  /// agar `/v1/hooks/test` tidak tertelan.
+  static final _hookIndexRe = RegExp(r'^/v1/hooks/\d+$');
+
+  int _parseHookIndex(String path) {
+    final raw = path.split('/').last;
+    final index = int.tryParse(raw);
+    if (index == null) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'index hook wajib integer',
+      );
+    }
+    return index;
+  }
+
+  /// Validasi payload POST/PATCH /v1/hooks (SETTINGS-HOOKS): satu mapping
+  /// aturan `{event, webhook?/script?, timeout_sec?, env?}`. Validasi
+  /// semantik penuh (range timeout, path script) di runtime `HookRuleConfig
+  /// .validateJson` — tingkat server hanya menjamin bentuk mapping.
+  Map<String, dynamic> _validateHookRulePayload(Object? decoded) {
+    if (decoded is! Map<String, dynamic>) {
+      throw ApiRequestException(
+        400,
+        'invalid_request',
+        'body wajib berupa mapping aturan hook '
+            '{event, webhook/script, timeout_sec?, env?}',
+      );
+    }
+    return decoded;
   }
 
   /// Validasi path query /v1/artifacts: non-kosong (kecuali dir), maksimal
@@ -1060,6 +1098,17 @@ class HttpApiServer {
   /// [action] adalah `grant` atau `revoke`; hasil memuat `ok` dan `message`.
   final Future<Map<String, dynamic>> Function(String plugin, String action)?
   pluginConsentSetter;
+
+  /// Hooks manager callbacks (SETTINGS-HOOKS): snapshot aturan + statistik,
+  /// CRUD aturan (berlaku live + persist config `hooks:`), dan uji fire.
+  /// Callback null membuat endpoint `/v1/hooks*` merespons 501.
+  final Future<Map<String, dynamic>> Function()? hooksSnapshotProvider;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
+  hookAddProvider;
+  final Future<Map<String, dynamic>> Function(int index, Map<String, dynamic> body)?
+  hookUpdateProvider;
+  final Future<Map<String, dynamic>> Function(int index)? hookDeleteProvider;
+  final Future<Map<String, dynamic>> Function(int index)? hookTestProvider;
 
   /// Channels setup (GUI-P1-07): status channel gateway aktif + nama env
   /// yang mengonfigurasinya (read-only; env + restart untuk mengubah).
@@ -2310,6 +2359,59 @@ class HttpApiServer {
         } else {
           _json(req, {'ok': true, 'message': '${result['message'] ?? ''}'});
         }
+      } else if (path == '/v1/hooks' && req.method == 'GET') {
+        final snapshot =
+            await (hooksSnapshotProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'hooks manager not configured',
+                )));
+        _json(req, snapshot);
+      } else if (path == '/v1/hooks' && req.method == 'POST') {
+        if (hookAddProvider == null) {
+          _error(req, 501, 'not_implemented', 'hooks manager not configured');
+          return;
+        }
+        final rule = _validateHookRulePayload(
+          jsonDecode(await utf8.decoder.bind(req).join()),
+        );
+        final result = await hookAddProvider!(rule);
+        _json(req, {'ok': true, ...result});
+      } else if (path == '/v1/hooks/test' && req.method == 'POST') {
+        if (hookTestProvider == null) {
+          _error(req, 501, 'not_implemented', 'hooks manager not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join()) as Map? ??
+                const {};
+        final rawIndex = body['index'];
+        if (rawIndex is! int) {
+          _error(req, 400, 'invalid_request', 'index wajib integer');
+          return;
+        }
+        final result = await hookTestProvider!(rawIndex);
+        _json(req, {'ok': true, ...result});
+      } else if (_hookIndexRe.hasMatch(path) && req.method == 'PATCH') {
+        if (hookUpdateProvider == null) {
+          _error(req, 501, 'not_implemented', 'hooks manager not configured');
+          return;
+        }
+        final index = _parseHookIndex(path);
+        final rule = _validateHookRulePayload(
+          jsonDecode(await utf8.decoder.bind(req).join()),
+        );
+        final result = await hookUpdateProvider!(index, rule);
+        _json(req, {'ok': true, ...result});
+      } else if (_hookIndexRe.hasMatch(path) && req.method == 'DELETE') {
+        if (hookDeleteProvider == null) {
+          _error(req, 501, 'not_implemented', 'hooks manager not configured');
+          return;
+        }
+        final index = _parseHookIndex(path);
+        final result = await hookDeleteProvider!(index);
+        _json(req, {'ok': true, ...result});
       } else if (path == '/v1/channels' && req.method == 'GET') {
         final snapshot =
             await (channelsProvider?.call() ??

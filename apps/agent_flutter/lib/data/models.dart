@@ -1374,3 +1374,87 @@ class CostSummaryBucket {
         success: map['success'] is int ? map['success'] as int : 0,
       );
 }
+
+/// Snapshot event hooks (SETTINGS-HOOKS): aturan aktif + statistik fire
+/// dari GET /v1/hooks.
+class HooksSnapshot {
+  const HooksSnapshot({
+    this.rules = const [],
+    this.stats = const {},
+  });
+
+  final List<HookRuleInfo> rules;
+
+  /// Kunci statistik `hooks[<index>]:<target>` dari daemon
+  /// (mis. `hooks[0]:webhook`, `hooks[0]:script`).
+  final Map<String, HookStatInfo> stats;
+
+  factory HooksSnapshot.fromMap(Map<String, dynamic> map) => HooksSnapshot(
+        rules: [
+          for (final r in map['rules'] as List? ?? const [])
+            HookRuleInfo.fromMap(Map<String, dynamic>.from(r as Map)),
+        ],
+        stats: {
+          for (final e in (map['stats'] as Map? ?? const {}).entries)
+            '${e.key}': HookStatInfo.fromMap(
+                Map<String, dynamic>.from(e.value as Map)),
+        },
+      );
+}
+
+class HookRuleInfo {
+  const HookRuleInfo({
+    required this.event,
+    this.webhookUrl,
+    this.script,
+    this.timeoutSec = 30,
+    this.env = const {},
+  });
+
+  final String event;
+  final String? webhookUrl;
+  final String? script;
+  final int timeoutSec;
+  final Map<String, String> env;
+
+  factory HookRuleInfo.fromMap(Map<String, dynamic> map) => HookRuleInfo(
+        event: '${map['event'] ?? ''}',
+        webhookUrl: map['webhook'] as String?,
+        script: map['script'] as String?,
+        timeoutSec: map['timeout_sec'] is int ? map['timeout_sec'] as int : 30,
+        env: {
+          for (final e in (map['env'] as Map? ?? const {}).entries)
+            '${e.key}': '${e.value}',
+        },
+      );
+
+  Map<String, dynamic> toPayload() => {
+        'event': event,
+        if (webhookUrl != null && webhookUrl!.isNotEmpty)
+          'webhook': webhookUrl,
+        if (script != null && script!.isNotEmpty) 'script': script,
+        'timeout_sec': timeoutSec,
+        if (env.isNotEmpty) 'env': env,
+      };
+}
+
+class HookStatInfo {
+  const HookStatInfo({
+    this.fires = 0,
+    this.failures = 0,
+    this.lastError,
+    this.lastAt,
+  });
+
+  final int fires;
+  final int failures;
+  final String? lastError;
+  final String? lastAt;
+
+  factory HookStatInfo.fromMap(Map<String, dynamic> map) => HookStatInfo(
+        fires: map['fires'] is int ? map['fires'] as int : 0,
+        failures: map['failures'] is int ? map['failures'] as int : 0,
+        lastError: map['last_error'] as String?,
+        lastAt: map['last_at'] as String?,
+      );
+}

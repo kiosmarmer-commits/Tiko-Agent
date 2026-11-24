@@ -341,4 +341,178 @@ hooks:
       expect(rt.hookExecutor, isNull);
     });
   });
+
+  group('HookExecutor mutation (SETTINGS-HOOKS)', () {
+    late Directory temp;
+    late EventBus events;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('tiko_hooks_crud_');
+      events = EventBus();
+    });
+
+    tearDown(() {
+      temp.deleteSync(recursive: true);
+    });
+
+    test('updateRules mengganti aturan aktif secara atomic', () async {
+      File(p.join(temp.path, 'a.sh')).writeAsStringSync(
+        r'printf "a\n" >> out.txt',
+      );
+      File(p.join(temp.path, 'b.sh')).writeAsStringSync(
+        r'printf "b\n" >> out.txt',
+      );
+      final exec = HookExecutor(
+        events: events,
+        rules: [const HookRuleConfig(event: '*', script: 'a.sh')],
+        workspace: temp.path,
+      )..start();
+
+      events.emit('model.switched', {'provider': 'gemini'});
+      await _pump();
+      exec.updateRules([
+        const HookRuleConfig(event: 'approval.denied', script: 'b.sh'),
+      ]);
+      expect(exec.rules, hasLength(1));
+      expect(exec.rules.first.script, 'b.sh');
+
+      File(p.join(temp.path, 'out.txt')).deleteSync();
+      events.emit('model.switched', {'provider': 'gpt'});
+      events.emit('approval.denied', {'tool': 'shell'});
+      await _pump();
+      final out = File(p.join(temp.path, 'out.txt')).readAsStringSync();
+      expect(out, contains('b'));
+      expect(out, isNot(contains('a')));
+      await exec.dispose();
+    });
+
+    test('testRule menjalankan target langsung dan mencatat statistik',
+        () async {
+      File(p.join(temp.path, 'probe.sh')).writeAsStringSync(
+        r'printf "%s\n" "$TIKO_EVENT" >> out.txt',
+      );
+      final exec = HookExecutor(
+        events: events,
+        rules: [const HookRuleConfig(event: 'model.switched', script: 'probe.sh')],
+        workspace: temp.path,
+      )..start();
+
+      final result = await exec.testRule(0).timeout(
+            const Duration(seconds: 10),
+          );
+      expect(result['index'], 0);
+      final results = result['results'] as List<dynamic>;
+      expect(results, hasLength(1));
+      expect((results.first as Map)['target'], 'script');
+      expect((results.first as Map)['ok'], isTrue);
+      expect(
+        File(p.join(temp.path, 'out.txt')).readAsStringSync(),
+        contains('hook.test'),
+      );
+      final stats = exec.snapshot()['stats'] as Map<String, dynamic>;
+      final s = stats['hooks[0]:script'] as Map<String, dynamic>;
+      expect(s['fires'], 1);
+      expect(s['failures'], 0);
+      await exec.dispose();
+    });
+
+    test('testRule indeks di luar jangkauan melempar RangeError', () async {
+      final exec = HookExecutor(
+        events: events,
+        rules: const [],
+        workspace: temp.path,
+      );
+      expect(() => exec.testRule(0), throwsRangeError);
+    });
+  });
+
+  group('RuntimeTiko hooks CRUD (SETTINGS-HOOKS)', () {
+    late Directory temp;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('tiko_hooks_api_');
+    });
+
+    tearDown(() {
+      temp.deleteSync(recursive: true);
+    });
+
+    Future<String> prepare() async {
+      Directory(p.join(temp.path, 'config')).createSync();
+      final config = File(p.join(temp.path, 'config', 'agent.yaml'));
+      await config.writeAsString('''
+profile: default
+workspace: ${temp.path}
+storage:
+  data_dir: ${p.join(temp.path, 'data')}
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+agent:
+  max_iterations: 4
+''');
+      return config.path;
+    }
+
+    test('hookAddRule persist config + berlaku live', () async {
+      final configPath = await prepare();
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      expect(rt.hookExecutor, isNull);
+
+      await rt.hookAddRule({
+        'event': 'model.switched',
+        'webhook': 'https://hook.example/induk',
+        'timeout_sec': 10,
+      });
+      expect(rt.hookExecutor, isNotNull);
+      expect(rt.hookRules, hasLength(1));
+      expect(rt.hookRules.first.webhookUrl, 'https://hook.example/induk');
+
+      final persisted = File(configPath).readAsStringSync();
+      expect(persisted, contains('hooks:'));
+      expect(persisted, contains('https://hook.example/induk'));
+    });
+
+    test('hookAddRule menolak aturan invalid dengan ArgumentError', () async {
+      final configPath = await prepare();
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      expect(
+        () => rt.hookAddRule({'event': 'model.switched'}),
+        throwsArgumentError,
+      );
+      expect(
+        () => rt.hookAddRule({
+              'event': 'model.switched',
+              'script': '../escape.sh',
+            }),
+        throwsArgumentError,
+      );
+    });
+
+    test('hookRemoveRule menghapus aturan dari config', () async {
+      final configPath = await prepare();
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      await rt.hookAddRule({
+        'event': 'model.switched',
+        'script': 'hooks/on_event.sh',
+      });
+      final updated = await rt.hookRemoveRule(0);
+      expect(updated['rules'] as List<dynamic>, isEmpty);
+      final persisted = File(configPath).readAsStringSync();
+      expect(persisted, contains('hooks: []'));
+    });
+
+    test('hookTestRule index di luar jangkauan melempar RangeError',
+        () async {
+      final configPath = await prepare();
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      await expectLater(rt.hookTestRule(7), throwsRangeError);
+    });
+  });
 }

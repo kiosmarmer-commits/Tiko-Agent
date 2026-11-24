@@ -22,6 +22,8 @@ import 'ui/bot_manager_view.dart';
 import 'ui/provider_manager_view.dart';
 import 'ui/plugin_manager_view.dart';
 import 'ui/channels_view.dart';
+import 'ui/context_ref_suggest.dart';
+import 'ui/hooks_view.dart';
 import 'ui/automation_view.dart';
 import 'ui/artifact_view.dart';
 import 'ui/chat_artifact_panel.dart';
@@ -126,6 +128,7 @@ class _AgentAppState extends State<AgentApp> {
   ChannelsSnapshot? channelSnapshot;
   JobsSnapshot? jobsSnapshot;
   SecuritySnapshot? securitySnapshot;
+  HooksSnapshot? hooksSnapshot;
   AuditQueryResult? auditResult;
   Map<String, String> auditFilters = const {};
   int auditOffset = 0;
@@ -219,6 +222,7 @@ class _AgentAppState extends State<AgentApp> {
         repo.channels(),
         repo.jobs(),
         repo.security(),
+        repo.hooks(),
       ]);
       if (!mounted || generation != adminRefreshGeneration) return;
       setState(() {
@@ -239,6 +243,7 @@ class _AgentAppState extends State<AgentApp> {
         channelSnapshot = results[14] as ChannelsSnapshot;
         jobsSnapshot = results[15] as JobsSnapshot;
         securitySnapshot = results[16] as SecuritySnapshot;
+        hooksSnapshot = results[17] as HooksSnapshot;
       });
       if (!_eventFeedStarted) {
         _eventFeedStarted = true;
@@ -578,6 +583,13 @@ class _AgentAppState extends State<AgentApp> {
     unawaited(refreshAdmin(force: true));
   }
 
+  /// Hooks CRUD (SETTINGS-HOOKS): mutasi diikuti refresh admin agar aturan
+  /// live + statistik di UI sinkron dengan daemon.
+  Future<void> _mutateHooks(Future<void> Function() action) async {
+    await action();
+    unawaited(refreshAdmin(force: true));
+  }
+
   @override
   void dispose() {
     statusTimer?.cancel();
@@ -762,6 +774,9 @@ class _AgentAppState extends State<AgentApp> {
           onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
           onOpenArtifactDiff: (path) => unawaited(_openArtifactDiff(path)),
           onCloseArtifactFile: () => _openArtifact(''),
+          onListWorkspace: (dir) async => [
+                for (final f in (await repo.artifacts(dir: dir)).files) f.path,
+              ],
         );
         // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
         if (!settings.multiPane) return chatPage;
@@ -1091,6 +1106,21 @@ class _AgentAppState extends State<AgentApp> {
           onAddLayer: _addLayerEntry,
           onDeleteLayer: _deleteLayerEntry,
         );
+      case AppRoute.hooks:
+        return HooksPage(
+          snapshot: hooksSnapshot,
+          online: chat.online,
+          loading: loadingAdmin,
+          error: adminError,
+          onRefresh: refreshAdmin,
+          onAdd: (body) => _mutateHooks(() => repo.addHook(body)),
+          onUpdate: (index, body) =>
+              _mutateHooks(() => repo.updateHook(index, body)),
+          onDelete: (index) => _mutateHooks(() async {
+            await repo.deleteHook(index);
+          }),
+          onTest: (index) => repo.testHook(index),
+        );
       case AppRoute.settings:
         return SettingsView(
           settings: settings,
@@ -1101,6 +1131,7 @@ class _AgentAppState extends State<AgentApp> {
           onSettingsChanged: _applySettings,
           daemonCard: _DaemonStatusCard(),
           daemonStatus: status,
+          onOpenHooks: () => _selectRoute(AppRoute.hooks),
         );
     }
   }
@@ -1132,6 +1163,7 @@ class _ChatPage extends StatefulWidget {
     this.onOpenArtifactFile,
     this.onOpenArtifactDiff,
     this.onCloseArtifactFile,
+    this.onListWorkspace,
   });
   final ChatController chat;
   final String sessionKey;
@@ -1158,6 +1190,10 @@ class _ChatPage extends StatefulWidget {
   final ValueChanged<String>? onOpenArtifactFile;
   final ValueChanged<String>? onOpenArtifactDiff;
   final VoidCallback? onCloseArtifactFile;
+
+  /// SETTINGS-CONTEXT-REFS: daftar path file workspace untuk autocomplete
+  /// chip `@file:`/`@dir:` di composer (null = autocomplete nonaktif).
+  final Future<List<String>> Function(String dir)? onListWorkspace;
 
   @override
   State<_ChatPage> createState() => _ChatPageState();
@@ -1464,9 +1500,16 @@ class _ChatPageState extends State<_ChatPage> {
             ),
             Expanded(
               child: chat.messages.isEmpty
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
+                  ? LayoutBuilder(
+                      builder: (context, emptyConstraints) =>
+                          SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: emptyConstraints.maxHeight,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                         Container(
                           width: 56,
                           height: 56,
@@ -1524,6 +1567,9 @@ class _ChatPageState extends State<_ChatPage> {
                           ],
                         ),
                       ],
+                          ),
+                        ),
+                      ),
                     )
                   : ListView.builder(
                       controller: _scrollController,
@@ -1731,7 +1777,11 @@ class _ChatPageState extends State<_ChatPage> {
               animation: chat,
               builder: (context, _) => _TurnProgressStrip(chat: chat),
             ),
-            _Composer(onSend: _onSend, voice: widget.voice),
+            _Composer(
+              onSend: _onSend,
+              voice: widget.voice,
+              onListWorkspace: widget.onListWorkspace,
+            ),
           ],
         );
     if (!_filesOpen || widget.onOpenArtifactFile == null) return chatColumn;
@@ -1786,9 +1836,10 @@ class _ChatPageState extends State<_ChatPage> {
 }
 
 class _Composer extends StatefulWidget {
-  const _Composer({required this.onSend, this.voice});
+  const _Composer({required this.onSend, this.voice, this.onListWorkspace});
   final Future<void> Function(String, List<ChatAttachmentPayload>) onSend;
   final VoiceService? voice;
+  final Future<List<String>> Function(String dir)? onListWorkspace;
   @override
   State<_Composer> createState() => _ComposerState();
 }
@@ -1799,12 +1850,187 @@ class _ComposerState extends State<_Composer> {
   VoiceService? _ownedVoice;
   final attachments = <ChatAttachmentPayload>[];
 
+  /// SETTINGS-CONTEXT-REFS: chip visual + autocomplete `@file:`/`@dir:`/
+  /// `@url:`/`@git:` saat mengetik. Entri workspace di-fetch debounced via
+  /// [widget.onListWorkspace] dan dicache per direktori.
+  List<ContextRefToken> _contextRefs = const [];
+  ContextRefSuggestion _suggestion = const ContextRefSuggestion();
+  Timer? _entriesDebounce;
+  List<String> _workspaceEntries = const [];
+  String _entriesDir = '';
+
   VoiceService get voice => widget.voice ?? _ownedVoice!;
 
   @override
   void initState() {
     super.initState();
     if (widget.voice == null) _ownedVoice = VoiceService();
+    c.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    final caret = c.selection.baseOffset;
+    final text = c.text;
+    setState(() {
+      _contextRefs = parseContextRefs(text);
+      _suggestion = caret >= 0 && caret <= text.length
+          ? suggestAt(text, caret)
+          : const ContextRefSuggestion();
+    });
+    _maybeLoadEntries(_suggestion);
+  }
+
+  void _maybeLoadEntries(ContextRefSuggestion suggestion) {
+    final callback = widget.onListWorkspace;
+    if (callback == null) return;
+    final kind = suggestion.activeKind;
+    if (kind != 'file' && kind != 'dir') return;
+    final prefix = suggestion.targetPrefix;
+    final slash = prefix.lastIndexOf('/');
+    final dir = slash < 0 ? '' : prefix.substring(0, slash);
+    if (dir == _entriesDir || _entriesDebounce?.isActive == true) return;
+    _entriesDebounce?.cancel();
+    _entriesDebounce = Timer(const Duration(milliseconds: 180), () {
+      unawaited(_loadEntries(dir, callback));
+    });
+  }
+
+  Future<void> _loadEntries(
+    String dir,
+    Future<List<String>> Function(String) fetch,
+  ) async {
+    try {
+      final entries = await fetch(dir);
+      if (!mounted) return;
+      setState(() {
+        _entriesDir = dir;
+        _workspaceEntries = entries;
+      });
+    } catch (_) {
+      // Listing workspace gagal: autocomplete tetap jalan tanpa entri.
+    }
+  }
+
+  int get _caret {
+    final offset = c.selection.baseOffset;
+    return offset < 0 ? c.text.length : offset;
+  }
+
+  /// Pasangan (path penuh, label) saran workspace sesuai kind aktif.
+  /// Path relatif terhadap [_entriesDir].
+  List<(String, String)> get _entrySuggestions {
+    final suggestion = _suggestion;
+    final kind = suggestion.activeKind;
+    if (kind != 'file' && kind != 'dir') return const [];
+    final dir = _entriesDir;
+    final prefix = suggestion.targetPrefix;
+    var rel = prefix;
+    if (dir.isNotEmpty) {
+      if (prefix.startsWith('$dir/')) {
+        rel = prefix.substring(dir.length + 1);
+      } else {
+        return const [];
+      }
+    }
+    final lower = rel.toLowerCase();
+    final files = [
+      for (final e in _workspaceEntries)
+        if (e.toLowerCase().startsWith(lower)) e,
+    ];
+    if (kind == 'file') return [for (final f in files) (f, f)];
+    return [for (final d in parentDirsOf(files)) (d, d)];
+  }
+
+  void _removeContextRef(ContextRefToken token) {
+    final text = removeRange(c.text, token.start, token.end);
+    final collapsed = text.replaceAll(RegExp(r'\s{2,}'), ' ');
+    final caret = token.start.clamp(0, collapsed.length);
+    c.value = c.value.copyWith(
+      text: collapsed,
+      selection: TextSelection.collapsed(offset: caret),
+    );
+  }
+
+  /// Sisipkan token builtin (`@file:`, `@git:diff`, ...) — mengganti partial
+  /// `@fi` bila caret masih menempel, atau menyisipkan posisi caret.
+  void _insertBuiltin(String token) {
+    final caret = _caret;
+    if (caret > 0) {
+      final at = c.text.lastIndexOf('@', caret - 1);
+      if (at >= 0) {
+        final partial = c.text.substring(at, caret);
+        if (partial.length >= 2 &&
+            !partial.contains(' ') &&
+            !partial.contains(':')) {
+          c.value = c.value.copyWith(
+            text: c.text.replaceRange(at, caret, token),
+            selection: TextSelection.collapsed(offset: at + token.length),
+          );
+          return;
+        }
+      }
+    }
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(caret, caret, token),
+      selection: TextSelection.collapsed(offset: caret + token.length),
+    );
+  }
+
+  /// Terima saran path workspace: ganti target token aktif dengan path
+  /// penuh, kind (`@file:`/`@dir:`) dipertahankan.
+  void _acceptEntry(String path) {
+    final active = activeTokenAt(c.text, _caret);
+    if (active == null) return;
+    final targetStart = active.start + active.kind.length + 2;
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(targetStart, active.end, path),
+      selection: TextSelection.collapsed(offset: targetStart + path.length),
+    );
+  }
+
+  IconData _refIcon(String kind) => switch (kind) {
+        'file' => Icons.insert_drive_file_outlined,
+        'dir' => Icons.folder_outlined,
+        'url' => Icons.link,
+        _ => Icons.merge,
+      };
+
+  Widget? _buildSuggestionRow(BuildContext context) {
+    if (busy) return null;
+    final builtins = _suggestion.builtins;
+    final entries = _entrySuggestions;
+    if (builtins.isEmpty && entries.isEmpty) return null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      child: SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final b in builtins)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  key: Key('chip-suggest-builtin-$b'),
+                  label: Text(b, style: const TextStyle(fontSize: 12)),
+                  tooltip: 'Sisipkan $b',
+                  onPressed: () => _insertBuiltin(b),
+                ),
+              ),
+            for (final (path, label) in entries.take(12))
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  key: Key('chip-suggest-entry-$label'),
+                  label: Text(label, style: const TextStyle(fontSize: 12)),
+                  tooltip: path,
+                  onPressed: () => _acceptEntry(path),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// C2 Chat-UX: pilih lampiran (Web: input file native browser; platform
@@ -1863,6 +2089,7 @@ class _ComposerState extends State<_Composer> {
 
   @override
   void dispose() {
+    _entriesDebounce?.cancel();
     _ownedVoice
       ?..stopListening()
       ..stopSpeaking()
@@ -1940,6 +2167,36 @@ class _ComposerState extends State<_Composer> {
                           ],
                         ),
                       ),
+                    if (_contextRefs.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (var i = 0; i < _contextRefs.length; i++)
+                              InputChip(
+                                key: Key('chip-context-ref-$i'),
+                                avatar: Icon(
+                                  _refIcon(_contextRefs[i].kind),
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  _contextRefs[i].fullLabel,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                tooltip:
+                                    'Context reference ${_contextRefs[i].kind}'
+                                    ': ${_contextRefs[i].target}',
+                                onDeleted: () => _removeContextRef(_contextRefs[i]),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if ((_suggestion.builtins.isNotEmpty ||
+                            _entrySuggestions.isNotEmpty) &&
+                        !busy)
+                      _buildSuggestionRow(context)!,
                     Row(
                       children: [
                         IconButton(

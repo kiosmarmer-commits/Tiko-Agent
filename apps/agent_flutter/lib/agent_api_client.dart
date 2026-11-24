@@ -328,6 +328,53 @@ class AgentApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// Hooks manager (SETTINGS-HOOKS): snapshot aturan aktif + statistik
+  /// fire dari GET /v1/hooks.
+  Future<Map<String, dynamic>> fetchHooks() async {
+    final res = await _http
+        .get(_u('/v1/hooks'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'hooks');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> addHook(Map<String, dynamic> body) async {
+    final res = await _http
+        .post(_u('/v1/hooks'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'add hook');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateHook(
+    int index,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _http
+        .patch(_u('/v1/hooks/$index'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'update hook');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> deleteHook(int index) async {
+    final res = await _http
+        .delete(_u('/v1/hooks/$index'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'delete hook');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> testHook(int index) async {
+    final res = await _http
+        .post(_u('/v1/hooks/test'),
+            headers: _headers,
+            body: jsonEncode({'index': index}))
+        .timeout(const Duration(seconds: 30));
+    _throwIf(res, 'test hook');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   /// Bot manager (GUI-P1-04). Backend memakai error model typed
   /// (401/400/404/409/501), jadi cukup `_throwIf`.
   Future<List<Map<String, dynamic>>> listBots() async {

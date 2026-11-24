@@ -55,6 +55,29 @@ class ConfigStore {
     return _commit(map, actor: actor, note: 'set $dottedPath');
   }
 
+  /// Ganti satu key top-level dengan nilai terstruktur (list/map) — dipakai
+  /// GUI untuk CRUD `hooks:` (Hermes-parity P1). Commit tetap tervalidasi
+  /// penuh oleh [TikoConfig.load] sebelum menimpa file config.
+  Future<({int revision, List<ConfigIssue> issues})> replaceKey(
+    String key,
+    dynamic value, {
+    String actor = 'gui',
+    String? note,
+  }) async {
+    await ensure();
+    final raw = await File(configPath).readAsString();
+    final root = _convert(loadYaml(raw));
+    if (root is! Map) {
+      return const (
+        revision: 0,
+        issues: [ConfigIssue('config', 'root bukan map')],
+      );
+    }
+    final map = Map<String, dynamic>.from(root);
+    map[key] = value;
+    return _commit(map, actor: actor, note: note ?? 'replace $key');
+  }
+
   Future<({int revision, List<ConfigIssue> issues})> writeFull(
     String yamlContent, {
     String actor = 'cli',

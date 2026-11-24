@@ -33,7 +33,8 @@ void main() {
               AppRoute.plugins, AppRoute.channels, AppRoute.automations,
               AppRoute.security, AppRoute.audit, AppRoute.artifacts,
               AppRoute.surfaces, AppRoute.sessions, AppRoute.memory,
-              AppRoute.events, AppRoute.logs, AppRoute.settings});
+              AppRoute.events, AppRoute.logs, AppRoute.hooks,
+              AppRoute.settings});
     });
   });
 

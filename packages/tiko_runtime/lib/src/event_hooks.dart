@@ -21,18 +21,30 @@ import 'tiko_config.dart';
 ///   turn chat (fire-and-forget).
 /// - Event `hook.*` hasil sendiri tidak pernah memicu hook (anti-loop).
 class HookExecutor {
-  HookExecutor({
-    required this.events,
-    required this.rules,
-    required this.workspace,
-  });
 
   final EventBus events;
-  final List<HookRuleConfig> rules;
   final String workspace;
+
+  List<HookRuleConfig> _rules;
 
   StreamSubscription<TikoEvent>? _sub;
   final Map<String, Map<String, dynamic>> _stats = {};
+
+  HookExecutor({
+    required this.events,
+    required List<HookRuleConfig> rules,
+    required this.workspace,
+  }) : _rules = List.unmodifiable(rules);
+
+  /// Aturan aktif saat ini (snapshot read-only).
+  List<HookRuleConfig> get rules => _rules;
+
+  /// Ganti seluruh daftar aturan secara atomik (config + GUI):
+  /// event yang sedang dievaluasi memakai snapshot lama atau baru,
+  /// tidak pernah campuran.
+  void updateRules(List<HookRuleConfig> next) {
+    _rules = List.unmodifiable(next);
+  }
 
   void start() {
     _sub ??= events.stream.listen(_onEvent);
@@ -52,6 +64,46 @@ class HookExecutor {
       'rules': <Map<String, dynamic>>[for (final r in rules) r.toJson()],
       'stats': stats,
     };
+  }
+
+  /// Uji satu aturan dengan event sintetis `hook.test` (GUI SETTINGS-HOOKS):
+  /// target dieksekusi langsung tanpa lewat EventBus (aturan `*` tidak ikut
+  /// memicu aturan lain) dan hasil tiap target dikembalikan eksplisit.
+  Future<Map<String, dynamic>> testRule(int index) async {
+    if (index < 0 || index >= _rules.length) {
+      throw RangeError.index(index, _rules, 'index');
+    }
+    final rule = _rules[index];
+    final ev = TikoEvent('hook.test', {
+      'test': true,
+      'rule_index': index,
+      'rule_event': rule.event,
+      'sent_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    final results = <Map<String, dynamic>>[];
+    if (rule.webhookUrl != null) {
+      try {
+        await _callWebhook(rule, ev);
+        _record('hooks[$index]:webhook', ok: true);
+        results.add({'target': 'webhook', 'ok': true});
+      } catch (error) {
+        final message = '$error';
+        _record('hooks[$index]:webhook', ok: false, error: message);
+        results.add({'target': 'webhook', 'ok': false, 'error': message});
+      }
+    }
+    if (rule.script != null) {
+      try {
+        await _runScript(rule, ev);
+        _record('hooks[$index]:script', ok: true);
+        results.add({'target': 'script', 'ok': true});
+      } catch (error) {
+        final message = '$error';
+        _record('hooks[$index]:script', ok: false, error: message);
+        results.add({'target': 'script', 'ok': false, 'error': message});
+      }
+    }
+    return {'index': index, 'results': results};
   }
 
   void _onEvent(TikoEvent ev) {
