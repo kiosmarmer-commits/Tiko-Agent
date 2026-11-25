@@ -29,8 +29,9 @@ Perintah utama:
   version
 
 Config:
-  settings                   menu pengaturan interaktif (provider, model,
-                             keamanan, port) — bisa juga `/settings` di chat
+  settings                   TUI pengaturan layar penuh (provider, model,
+                             keamanan, port; search/preview/dirty-state) —
+                             bisa juga `/settings` di chat
   context                    tampilkan project context file aktif
                              (TIKO.md | AGENTS.md | CLAUDE.md | GEMINI.md)
   fix "<tugas>" --verify "<cmd>" [--iter 1-8]

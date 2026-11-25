@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:tiko_tui/tiko_tui.dart';
-
 /// Antarmuka palet ANSI untuk panel settings (versi polos saat warna nonaktif).
 abstract final class _Palette {
   String cyan(String text);
@@ -121,11 +121,403 @@ String _panel(
   return buf.toString();
 }
 
+/// Hermes S9: TUI settings layar penuh gaya Hermes — sidebar kategori di
+/// kiri, panel detail di kanan, navigasi tab (←/→/Tab/Shift-Tab), pencarian
+/// (`/`), preview perubahan (`p`), dirty-state (`*` per kategori + hitungan
+/// di header sebelum disimpan), simpan ber-revisi (`s`), reset (`r`), dan
+/// keluar ter-guard saat ada perubahan (`q` ditahan sekali).
+///
+/// Merender ulang satu region (cursor-up + clear) per event key; bila raw
+/// mode tak tersedia, pemanggil ([runSettingsMenu]) jatuh ke menu
+/// line-mode lama sehingga perilaku pipe/CI tetap aman.
+Future<void> _runSettingsTui({
+  required String configPath,
+  required String revisionsDir,
+  required StringSink out,
+  required Stream<List<int>> Function() makeChunks,
+  required _Palette palette,
+  required bool controlsStdin,
+}) async {
+  const width = 96;
+  const sideW = 26;
+  final store = ConfigStore(configPath: configPath, revisionsDir: revisionsDir);
+  var cfg = TikoConfig.load(configPath).$1;
+  final chunks = StreamIterator(makeChunks());
+
+  var lastLines = 0;
+  var categoryIdx = 0;
+  var itemIdx = 0;
+  var searchMode = false;
+  var query = '';
+  var previewMode = false;
+  var editing = false;
+  var editedPath = '';
+  var editBuffer = '';
+  var quitArmed = false;
+  String message = 'Gunakan / cari · p preview · s simpan · Enter ubah';
+  final pending = <String, String>{};
+
+  List<_Setting> allFields() => _settingsOf(cfg);
+
+  List<String> categories() {
+    final seen = <String>[];
+    for (final f in allFields()) {
+      if (!seen.contains(f.group)) seen.add(f.group);
+    }
+    return seen;
+  }
+
+  bool categoryDirty(String group) => pending.keys.any(
+        (path) =>
+            allFields().any((f) => f.path == path && f.group == group),
+      );
+
+  List<_Setting> visibleFields() {
+    if (query.trim().isNotEmpty) {
+      final q = query.trim().toLowerCase();
+      return [
+        for (final f in allFields())
+          if (f.label.toLowerCase().contains(q) ||
+              f.path.toLowerCase().contains(q))
+            f,
+      ];
+    }
+    final cats = categories();
+    if (categoryIdx >= cats.length) categoryIdx = cats.length - 1;
+    final group = cats[categoryIdx.clamp(0, cats.length - 1)];
+    return [for (final f in allFields()) if (f.group == group) f];
+  }
+
+  void renormalizeCursor() {
+    final n = visibleFields().length;
+    if (itemIdx >= n) itemIdx = n - 1;
+    if (itemIdx < 0) itemIdx = 0;
+  }
+
+  String frame() {
+    final cats = categories();
+    final fields = visibleFields();
+    if (categoryIdx >= cats.length) categoryIdx = cats.length - 1;
+    renormalizeCursor();
+
+    final dirtyCount = pending.length;
+    final header = '┌─ Pengaturan Tiko '
+        '${dirtyCount == 0 ? '' : palette.yellow('● $dirtyCount perubahan belum disimpan ')}';
+
+    final statusLine = searchMode
+        ? 'Cari: $query█  (Enter/Esc selesai)'
+        : (previewMode
+            ? '${palette.cyan('PREVIEW')} perubahan tertunda (p kembali)'
+            : 'Kategori: ${cats[categoryIdx.clamp(0, cats.length - 1)]} '
+                '(${categoryIdx + 1}/${cats.length})');
+
+    final sideRows = <String>[
+      for (var i = 0; i < cats.length; i++)
+        '${i == categoryIdx && !searchMode ? '>' : ' '}'
+        ' ${cats[i]}'
+        '${categoryDirty(cats[i]) ? ' *' : ''}',
+    ];
+
+    final detailRows = <String>[
+      if (previewMode)
+        for (final e in pending.entries)
+          '* ${e.key}: ${_valueOf(cfg, allFields().firstWhere((f) => f.path == e.key, orElse: () => _Setting(e.key, e.key)))} → ${e.value}'
+      else
+        for (var i = 0; i < fields.length; i++)
+          '${i == itemIdx && !searchMode ? '>' : ' '}'
+          '${pending.containsKey(fields[i].path) ? '*' : ' '}'
+          '${i + 1}. ${fields[i].label}: ${_valueOf(cfg, fields[i])}'
+          '${pending.containsKey(fields[i].path) ? ' → ${pending[fields[i].path]}' : ''}',
+    ];
+
+    const minRows = 8;
+    final rows = [sideRows.length, detailRows.length, minRows]
+        .reduce((a, b) => a > b ? a : b);
+
+    String side(int r) =>
+        r < sideRows.length ? sideRows[r].padRight(sideW) : ' ' * sideW;
+    String detail(int r) =>
+        r < detailRows.length ? detailRows[r] : '';
+
+    final lines = <String>[
+      '$header┐',
+      '├ $statusLine',
+      '├ ${'KATEGORI'.padRight(sideW)}│ ${'PENGATURAN / PREVIEW'}',
+      for (var r = 0; r < rows; r++)
+        '│ ${side(r)}│ ${_clip(detail(r), width - sideW - 3)}',
+      '├ ←/→/Tab/Shift-Tab kategori · ↑/↓ pilih · Enter ubah',
+      '├ / cari · p preview · s simpan · r reset · q keluar',
+      '└ ${_clip(message, width - 4)}┘',
+      if (editing)
+        '>'
+            '${_editingLabel(cfg, editedPath)}'
+            ' [$editBuffer█]'
+            ' · ${_editingHint(cfg, editedPath)}',
+    ];
+    return '${lines.join('\n')}\n';
+  }
+
+  void render() {
+    final rendered = frame();
+    final lineCount = rendered.split('\n').length - 1;
+    if (lastLines > 0) out.write('\x1B[${lastLines}A\x1B[J');
+    out.write(rendered);
+    lastLines = lineCount;
+  }
+
+  Future<void> savePending() async {
+    if (pending.isEmpty) {
+      message = palette.dim('(tidak ada perubahan untuk disimpan)');
+      return;
+    }
+    var saved = 0;
+    var revision = 0;
+    String? failure;
+    final savedPaths = <String>[];
+    for (final entry in pending.entries) {
+      try {
+        final result = await store.setPath(entry.key, entry.value);
+        final fatal = result.issues.where((i) => i.fatal).toList();
+        if (fatal.isNotEmpty) {
+          failure = '${entry.key}: ${fatal.join('; ')}';
+        } else {
+          saved++;
+          revision = result.revision;
+          savedPaths.add(entry.key);
+        }
+      } catch (e) {
+        failure = '${entry.key}: $e';
+      }
+    }
+    if (saved > 0) {
+      cfg = TikoConfig.load(configPath).$1;
+      for (final path in List.of(savedPaths)) {
+        pending.remove(path);
+      }
+      message = palette.green(
+        'OK: $saved perubahan tersimpan (revision $revision) — config diterapkan untuk perintah baru',
+      );
+      if (savedPaths.contains('api.port')) {
+        message += ' · daemon perlu restart untuk port baru';
+      }
+      if (savedPaths.contains('security.mode') &&
+          cfg.permissionMode == 'auto') {
+        message += " · mode 'auto' mengurangi konfirmasi tool";
+      }
+    }
+    if (failure != null) {
+      message = palette.yellow('Gagal: $failure — perubahan itu dibatalkan');
+    }
+  }
+
+  try {
+    if (controlsStdin) {
+      try {
+        stdin.lineMode = false;
+        stdin.echoMode = false;
+      } on StdinException {
+        // Terminal tidak mendukung raw; StreamIterator tetap mencoba.
+      }
+    }
+    render();
+    while (await chunks.moveNext()) {
+      for (final e in decodeKeys(chunks.current)) {
+        if (e.type == KeyType.ctrlC || e.type == KeyType.ctrlD) {
+          out.write('\n');
+          throw const PromptAborted('settings tui');
+        }
+        if (editing) {
+          switch (e.type) {
+            case KeyType.enter:
+              final value = editBuffer.trim();
+              if (value.isEmpty) {
+                editing = false;
+                message = palette.dim('(edit dibatalkan — kosong)');
+                break;
+              }
+              final field = allFields().firstWhere(
+                (f) => f.path == editedPath,
+                orElse: () => _Setting(editedPath, editedPath),
+              );
+              final problem = _validate(field, value, cfg);
+              if (problem != null) {
+                message = palette.yellow(problem);
+              } else {
+                pending[editedPath] = value;
+                editing = false;
+                quitArmed = false;
+                message = palette.dim(
+                  "${field.label} → '$value' masuk daftar perubahan (s untuk simpan)",
+                );
+              }
+            case KeyType.backspace:
+              if (editBuffer.isNotEmpty) {
+                editBuffer = editBuffer.substring(0, editBuffer.length - 1);
+              }
+            case KeyType.char:
+              if (editBuffer.length < 120) editBuffer += e.char;
+            case KeyType.ctrlU:
+            case KeyType.ctrlW:
+              editBuffer = '';
+            default:
+              break;
+          }
+          continue;
+        }
+        final cats = categories();
+        final fields = visibleFields();
+        switch (e.type) {
+          case KeyType.up:
+            itemIdx = (itemIdx - 1 + fields.length) % (fields.isEmpty ? 1 : fields.length);
+            quitArmed = false;
+          case KeyType.down:
+            itemIdx = (itemIdx + 1) % (fields.isEmpty ? 1 : fields.length);
+            quitArmed = false;
+          case KeyType.left:
+          case KeyType.tab:
+            if (!searchMode) {
+              categoryIdx =
+                  (categoryIdx - 1 + cats.length) % (cats.isEmpty ? 1 : cats.length);
+            } else {
+              query = '';
+              searchMode = false;
+            }
+            itemIdx = 0;
+            quitArmed = false;
+          case KeyType.right:
+          case KeyType.shiftTab:
+            if (!searchMode) {
+              categoryIdx = (categoryIdx + 1) % (cats.isEmpty ? 1 : cats.length);
+            } else {
+              query = '';
+              searchMode = false;
+            }
+            itemIdx = 0;
+            quitArmed = false;
+          case KeyType.enter:
+            if (searchMode) {
+              searchMode = false;
+              itemIdx = 0;
+            } else if (fields.isEmpty) {
+              message = palette.yellow('Tidak ada pengaturan yang cocok.');
+            } else {
+              editing = true;
+              editedPath = fields[itemIdx].path;
+              editBuffer = '';
+              quitArmed = false;
+            }
+          case KeyType.backspace:
+            if (searchMode && query.isNotEmpty) {
+              query = query.substring(0, query.length - 1);
+            }
+            quitArmed = false;
+          case KeyType.char:
+            if (searchMode) {
+              if (query.length < 80) query += e.char;
+              itemIdx = 0;
+            } else {
+              switch (e.char) {
+                case '/':
+                  searchMode = true;
+                  query = '';
+                  quitArmed = false;
+                case 'p':
+                  previewMode = !previewMode;
+                  quitArmed = false;
+                case 's':
+                  await savePending();
+                  quitArmed = false;
+                case 'r':
+                  pending.clear();
+                  quitArmed = false;
+                  message = palette.dim('Perubahan tertunda dibuang.');
+                case 'k':
+                  itemIdx = (itemIdx - 1 + fields.length) %
+                      (fields.isEmpty ? 1 : fields.length);
+                case 'j':
+                  itemIdx = (itemIdx + 1) % (fields.isEmpty ? 1 : fields.length);
+                case 'q':
+                  if (pending.isNotEmpty && !quitArmed) {
+                    quitArmed = true;
+                    message = palette.yellow(
+                      '${pending.length} perubahan belum disimpan — s simpan, r buang, u lagi untuk keluar tanpa menyimpan',
+                    );
+                  } else {
+                    out.write('\n');
+                    lastLines = 0;
+                    return;
+                  }
+                case 'h':
+                case '?':
+                  message = '↑/↓ pilih · ←/→/Tab kategori · Enter ubah · '
+                      '/ cari · p preview · s simpan · r reset · q keluar';
+                default:
+                  break;
+              }
+            }
+          default:
+            break;
+        }
+      }
+      if (lastLines == 0 && quitArmed) {
+        lastLines = 0;
+      }
+      render();
+    }
+  } finally {
+    if (lastLines > 0) out.write('\x1B[${lastLines}A\x1B[J');
+    if (controlsStdin) {
+      try {
+        stdin.lineMode = true;
+        stdin.echoMode = true;
+      } on StdinException {
+        // Terminal sudah ditutup; tidak ada yang perlu dipulihkan.
+      }
+    }
+  }
+}
+
+String _editingHint(TikoConfig cfg, String path) {
+  final field = _settingsOf(cfg).firstWhere(
+    (f) => f.path == path,
+    orElse: () => _Setting(path, path),
+  );
+  return field.choices.isEmpty
+      ? 'Enter simpan ke daftar perubahan · Esc batal'
+      : 'pilihan: ${field.choices.join(' | ')} · Esc batal';
+}
+
+String _editingLabel(TikoConfig cfg, String path) {
+  final field = _settingsOf(cfg).firstWhere(
+    (f) => f.path == path,
+    orElse: () => _Setting(path, path),
+  );
+  return '${field.label} (${_valueOf(cfg, field)})';
+}
+
+String _clip(String text, int width) {
+  final probe = text.length + 1;
+  return probe > width ? text.substring(0, width - 1) : text.padRight(width);
+}
+
+bool _supportsRawStdin() {
+  try {
+    stdin.lineMode = false;
+    stdin.echoMode = false;
+    stdin.lineMode = true;
+    stdin.echoMode = true;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
 /// Layar pengaturan interaktif di terminal (Hermes-parity `tiko settings`
-/// dan `/settings` pada REPL chat). Merender panel berbingkai dengan nilai
-/// config saat ini; perubahan ditulis lewat [ConfigStore.setPath] sehingga
-/// selalu tervalidasi TikoConfig dan ber-revisi (rollback via
-/// `tiko config rollback`).
+/// dan `/settings` pada REPL chat). Secara otomatis memakai TUI layar penuh
+/// (Hermes S9) bila raw mode tersedia; bila tidak (pipe/CI/test scripted),
+/// merender panel berbingkai dengan nilai config saat ini; perubahan ditulis
+/// lewat [ConfigStore.setPath] sehingga selalu tervalidasi TikoConfig dan
+/// ber-revisi (rollback via `tiko config rollback`).
 ///
 /// Testable: injeksi [out], [inputStream], atau [scriptedLines] (memaksa
 /// line mode) seperti [PromptRunner].
@@ -139,6 +531,22 @@ Future<void> runSettingsMenu({
   bool color = true,
 }) async {
   final sink = out ?? stdout;
+  final useTui = !forceLineMode &&
+      scriptedLines.isEmpty &&
+      (inputStream != null || (stdin.hasTerminal && _supportsRawStdin()));
+  if (useTui) {
+    await _runSettingsTui(
+      configPath: configPath,
+      revisionsDir: revisionsDir,
+      out: sink,
+      makeChunks: () => inputStream ?? stdin,
+      palette: (color && _colorAllowed())
+          ? const _AnsiPalette()
+          : const _PlainPalette(),
+      controlsStdin: inputStream == null,
+    );
+    return;
+  }
   final palette = (color && _colorAllowed())
       ? const _AnsiPalette()
       : const _PlainPalette();
