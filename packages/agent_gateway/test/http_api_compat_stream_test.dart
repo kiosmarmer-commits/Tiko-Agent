@@ -130,4 +130,44 @@ void main() {
       await fallback.stop();
     }
   });
+
+  // S20-C: frame chat.usage dengan prompt/completion terpisah terus
+  // terpropagasi ke usage JSON (prompt_tokens_reported/completion_tokens_reported).
+  test('chat.usage split: prompt_tokens_reported + completion_tokens_reported',
+      () async {
+    final split = HttpApiServer(
+      onMessage: (msg) async => 'ok',
+      onMessageWithProgress: (msg, progress) async {
+        progress({'type': 'chat.usage', 'tokens': 421,
+            'prompt': 390, 'completion': 31});
+        return 'ok';
+      },
+      authToken: 'manager-token-0123456789abcdef',
+      port: 0,
+    );
+    await split.start();
+    try {
+      final client = HttpClient();
+      final req = await client.openUrl(
+        'POST',
+        Uri.parse('http://127.0.0.1:${split.boundPort}/v1/chat/completions'),
+      );
+      req.headers
+          .set('authorization', 'Bearer manager-token-0123456789abcdef');
+      req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      req.add(utf8.encode(jsonEncode({
+        'messages': [
+          {'role': 'user', 'content': 'sapa'},
+        ],
+      })));
+      final res = await req.close();
+      final body = jsonDecode(await res.transform(utf8.decoder).join()) as Map;
+      expect(body['usage']['total_tokens_reported'], 421);
+      expect(body['usage']['prompt_tokens_reported'], 390);
+      expect(body['usage']['completion_tokens_reported'], 31);
+      client.close(force: true);
+    } finally {
+      await split.stop();
+    }
+  });
 }

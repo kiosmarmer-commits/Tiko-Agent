@@ -107,6 +107,10 @@ Evaluation:
                [--limit N] [--require-tools]
                              S19-D: panen golden eval dari trajektori sukses
                              (dedupe prompt, anti-timpa file output)
+  eval swebench --dataset sweb.jsonl [--limit N] [--repo name]
+               [--baseline report.json] [--out report.json]
+                             S20-B: putar dataset SWE-bench JSONL sebagai
+                             gate eval (skip baris korup/kosong)
 
 Batch:
   batch run --tasks tasks.jsonl [--concurrency N] [--label L]
@@ -815,6 +819,42 @@ Future<void> main(List<String> argv) async {
                 (int.tryParse(limitRaw ?? '') ?? 100).clamp(1, 1000),
           );
           emit(report, 'eval harvest: ${report['harvested']} kasus golden');
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
+          exitCode = 2;
+        }
+        return;
+      }
+      // S20-B: `eval swebench` memutar dataset SWE-bench JSONL jadi gate eval.
+      if (args.isNotEmpty && args.first == 'swebench') {
+        final swbArgs = args.skip(1).toList();
+        final dataset = optValue(swbArgs, '--dataset');
+        if (dataset == null || dataset.trim().isEmpty) {
+          stderr.writeln(
+              'eval swebench membutuhkan --dataset <file.jsonl>');
+          exitCode = 2;
+          return;
+        }
+        String? opt(String key) => optValue(swbArgs, key);
+        final limitRaw = optValue(swbArgs, '--limit');
+        try {
+          final report = await runSwebenchReplay(
+            rt,
+            datasetPath: dataset.trim(),
+            limit: (int.tryParse(limitRaw ?? '') ?? 50).clamp(1, 200),
+            subsetRepo: opt('--repo'),
+            baselinePath: opt('--baseline'),
+            outPath: opt('--out'),
+          );
+          emit(report, 'eval swebench: ${report['total']} kasus');
+          final comparison = report['comparison'] as Map<String, dynamic>?;
+          if (comparison != null) {
+            final regressed = comparison['regressed'] as List? ?? const [];
+            exitCode = comparison['gate_passed'] == true ? 0 : 1;
+            if (regressed.isNotEmpty) {
+              stderr.writeln('REGRESI: ${regressed.join(', ')}');
+            }
+          }
         } on ArgumentError catch (error) {
           stderr.writeln(error.message);
           exitCode = 2;

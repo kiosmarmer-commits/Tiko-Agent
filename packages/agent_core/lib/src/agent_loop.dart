@@ -194,6 +194,13 @@ class AgentLoop {
 
   /// Total tokens reported by providers during the most recent handle() call.
   int get lastTokensUsed => _budget.tokensUsed;
+
+  /// S20-C: rincian prompt tokens dilaporkan provider pada handle() terakhir.
+  int get lastPromptTokens => _budget.promptTokens;
+
+  /// S20-C: rincian completion tokens dilaporkan provider pada handle()
+  /// terakhir.
+  int get lastCompletionTokens => _budget.completionTokens;
   String? _lastAnswer;
 
   /// True only when the most recent handle() call completed without a

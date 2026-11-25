@@ -513,6 +513,7 @@ class TikoConfig {
     this.sandboxAllowHostExec = false,
     this.agentEditLoopVerify = false,
     this.agentIdeIntegration = false,
+    this.agentComputerUse = false,
     this.agentErrorRecall = true,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
@@ -666,6 +667,11 @@ class TikoConfig {
   /// Fase F2 — wiring tool `ide_integration` (`agent.ide_integration`, default
   /// false): daftar tool live dari registry diteruskan ke ACP.
   final bool agentIdeIntegration;
+
+  /// S20-A — Opt-in eksplisit tool computer-use (`agent.computer_use`,
+  /// default false). Bila aktif, tool `computer_use` terdaftar dengan risk
+  /// `high` (approval PermissionGate tetap wajib per aksi).
+  final bool agentComputerUse;
 
   /// Fase F3 — auto-recall error memory (`agent.error_recall`, default true):
   /// ContextBuilder menarik maks 3 kecocokan dari ErrorMemoryStore per turn
@@ -1615,6 +1621,9 @@ class TikoConfig {
       agentIdeIntegration:
           root['agent'] is YamlMap &&
               (root['agent'] as YamlMap)['ide_integration'] == true,
+      agentComputerUse:
+          root['agent'] is YamlMap &&
+              (root['agent'] as YamlMap)['computer_use'] == true,
       agentErrorRecall: root['agent'] is YamlMap
           ? (root['agent'] as YamlMap)['error_recall'] != false
           : true,

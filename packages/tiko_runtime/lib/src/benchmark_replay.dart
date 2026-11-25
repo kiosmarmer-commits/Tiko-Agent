@@ -330,3 +330,104 @@ Future<Map<String, dynamic>> harvestGoldenEvals({
     'wrote_file': buffer.isNotEmpty,
   };
 }
+
+/// S20-B — loader dataset SWE-bench (JSONL per baris, format resmi
+/// SWE-bench: `instance_id`, `problem_statement`, `repo`, antara lain).
+/// Setiap baris valid jadi satu [EvalTaskSpec]:
+///  - id = `instance_id` yang di-sanitize (whitespace -> `-`), fallback
+///    `swebench-<lineNumber>` bila kosong.
+///  - prompt = `problem_statement` (dibatasi `FAILED_TO_RUN`/baris korup
+///    di-skip, tidak menggagalkan seluruh dataset).
+///  - batas [limit] kasus (default 50, maks 200) agar replay terukur.
+Future<List<EvalTaskSpec>> specsFromSwebenchFile(
+  String path, {
+  int limit = 50,
+  String? subsetRepo,
+}) async {
+  final file = File(path);
+  if (!file.existsSync()) return const [];
+  final safeLimit = limit.clamp(1, 200);
+  final tasks = <EvalTaskSpec>[];
+  var lineNumber = 0;
+  await for (final line
+      in file.openRead().transform(utf8.decoder).transform(const LineSplitter())) {
+    lineNumber++;
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(trimmed);
+    } on FormatException {
+      continue;
+    }
+    if (decoded is! Map<String, dynamic>) continue;
+    final rawProblem = (decoded['problem_statement'] ?? '').toString();
+    final problem = rawProblem.trim();
+    if (problem.isEmpty) continue;
+    final repo = (decoded['repo'] ?? '').toString().trim();
+    if (subsetRepo != null &&
+        subsetRepo.trim().isNotEmpty &&
+        repo != subsetRepo.trim()) {
+      continue;
+    }
+    final rawId = (decoded['instance_id'] ?? '').toString().trim();
+    final id = rawId.isEmpty
+        ? 'swebench-$lineNumber'
+        : 'swebench-${rawId.replaceAll(RegExp(r'\s+'), '-')}';
+    tasks.add(EvalTaskSpec(
+      id: id,
+      prompt: problem,
+      expectSuccess: true,
+    ));
+    if (tasks.length >= safeLimit) break;
+  }
+  return tasks;
+}
+
+/// S20-B — jalankan replay SWE-bench: dataset JSONL jadi kasus eval lalu
+/// lewat [runEvalGate]; tanpa overlay (ekspektasi sukses murni gate runtime).
+/// Laporan ditulis ke `outPath` bila diberi; `baselinePath` memakai
+/// [compareEvalReports] seperti replay trayektori.
+Future<Map<String, dynamic>> runSwebenchReplay(
+  TikoRuntime rt, {
+  required String datasetPath,
+  int limit = 50,
+  String? subsetRepo,
+  String? baselinePath,
+  String? outPath,
+  String channel = 'eval-swebench',
+}) async {
+  final tasks =
+      await specsFromSwebenchFile(datasetPath, limit: limit, subsetRepo: subsetRepo);
+  final gate = await runEvalGate(rt, tasks, channel: channel);
+
+  Map<String, dynamic>? comparison;
+  if (baselinePath != null && baselinePath.trim().isNotEmpty) {
+    final baselineFile = File(baselinePath);
+    if (!baselineFile.existsSync()) {
+      throw ArgumentError('baseline tidak ditemukan: $baselinePath');
+    }
+    final baseline =
+        jsonDecode(baselineFile.readAsStringSync()) as Map<String, dynamic>;
+    comparison = compareEvalReports(current: gate, baseline: baseline);
+  }
+
+  final report = <String, dynamic>{
+    'scenario': 'swebench-replay',
+    'at': DateTime.now().toUtc().toIso8601String(),
+    'dataset_path': datasetPath,
+    'limit': limit,
+    if (subsetRepo != null && subsetRepo.trim().isNotEmpty)
+      'subset_repo': subsetRepo,
+    ...gate,
+    if (comparison != null) 'comparison': comparison,
+  };
+
+  if (outPath != null && outPath.trim().isNotEmpty) {
+    final out = File(outPath);
+    await out.create(recursive: false);
+    await out.writeAsString(const JsonEncoder.withIndent('  ').convert(report));
+    report['report_path'] = outPath;
+  }
+  return report;
+}

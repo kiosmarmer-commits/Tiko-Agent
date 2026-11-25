@@ -512,7 +512,11 @@ Future<void> main(List<String> args) async {
     void Function(String toolName)? onToolStart,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String delta)? onTextDelta,
-    void Function(int tokensUsed)? onTurnUsage,
+    void Function({
+      required int tokensUsed,
+      required int promptTokens,
+      required int completionTokens,
+    })? onTurnUsage,
   }) async {
     if (!rateLimiter.allow(m.userKey)) {
       await replyVia?.send(
@@ -625,7 +629,11 @@ Future<void> main(List<String> args) async {
       attachments: m.attachments,
     );
     final answer = run.text;
-    onTurnUsage?.call(run.tokensUsed);
+    onTurnUsage?.call(
+      tokensUsed: run.tokensUsed,
+      promptTokens: run.promptTokens,
+      completionTokens: run.completionTokens,
+    );
 
     if (streamer != null && gw != null) {
       final ids = await streamer.finish(answer);
@@ -759,8 +767,13 @@ Future<void> main(List<String> args) async {
               'duration_ms': t.durationMs,
               if (t.args['path'] is String) 'path': t.args['path'],
             }),
-        onTurnUsage: (tokens) =>
-            progress({'type': 'chat.usage', 'tokens': tokens}),
+        onTurnUsage: ({required int tokensUsed, required int promptTokens, required int completionTokens}) =>
+            progress({
+              'type': 'chat.usage',
+              'tokens': tokensUsed,
+              if (promptTokens > 0) 'prompt': promptTokens,
+              if (completionTokens > 0) 'completion': completionTokens,
+            }),
       );
       String reply;
       try {

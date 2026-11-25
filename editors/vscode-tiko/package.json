@@ -1,0 +1,78 @@
+{
+  "name": "tiko-agent",
+  "displayName": "Tiko Agent",
+  "description": "Tiko-Agent di dalam VS Code: chat streaming ke daemon agentd (SSE /v1/messages), status tool live, dan pembatalan turn.",
+  "version": "0.1.0",
+  "publisher": "tiko-agent",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "activationEvents": [
+    "onCommand:tiko-agent.openChat"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tiko-agent.openChat",
+        "title": "Tiko Agent: Open Chat"
+      },
+      {
+        "command": "tiko-agent.cancelTurn",
+        "title": "Tiko Agent: Cancel Turn"
+      },
+      {
+        "command": "tiko-agent.sendSelection",
+        "title": "Tiko Agent: Send Selection to Tiko"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "tiko-agent.openChat",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t"
+      },
+      {
+        "command": "tiko-agent.sendSelection",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
+      }
+    ],
+    "configuration": {
+      "title": "Tiko Agent",
+      "properties": {
+        "tikoAgent.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8787",
+          "description": "Base URL daemon agentd (loopback-only disarankan)."
+        },
+        "tikoAgent.authToken": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token API agentd (opsional bila daemon mengizinkan tanpa token)."
+        },
+        "tikoAgent.sessionKey": {
+          "type": "string",
+          "default": "vscode:default",
+          "description": "Session key yang dipakai di sisi agentd."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

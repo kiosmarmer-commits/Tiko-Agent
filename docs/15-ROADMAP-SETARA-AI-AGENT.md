@@ -118,3 +118,12 @@ Sumber: analisis perbandingan vs 28 AI agent (Claude Code, Codex CLI, Cursor, De
 4. **`tiko eval harvest` (self-improvement loop)** — trajektori sukses → golden eval JSONL (dedupe prompt, non-internal, anti-timpa) → diputar ulang oleh `tiko eval`/`eval replay` sebagai gerbang regresi.
 
 Defer eksplisit (butuh infrastruktur eksternal / artefak terpisah, menunggu arahan): computer-use headless (screenshot/klik desktop — butuh infra display + desain approval baru), benchmark publik SWE-bench (dataset eksternal + etika lisensinya), ekstensi editor ACP (repo artefak VS Code terpisah).
+
+## 11. Fase F10 — S20 penutup gap defer eksplisit (S20)
+
+Tiga item yang sempat didefer di fase F9 kini terealisasi additive tanpa dependensi baru:
+
+1. **`computer_use` headless (S20-A)** — kontrol desktop GUI via `xdotool`/`scrot`/`import`/`pyautogui` (screenshot, click, type, key, scroll), semua spawn argv array tanpa interpreter shell; engine tidak tersedia → jawaban jujur + hint provisioning, bukan error kabur; jail screenshot `data/screenshots/`; **default off** (`agent.computer_use: true` untuk aktif) dan risk `high` (approval PermissionGate per aksi).
+2. **SWE-bench replay (S20-B)** — dataset JSONL resmi diterjemahkan menjadi kasus eval (`specsFromSwebenchFile`: fail-soft baris korup/kosong, sanitasi id, subset repo, limit ≤200) lalu diputar `runSwebenchReplay` dengan gate + baseline regresi seperti replay trayektori; CLI `tiko eval swebench`.
+3. **Ekstensi editor VS Code (S20-D)** — `editors/vscode-tiko/`: chat webview tersambung SSE `/v1/messages` agentd (delta token-level, status tool live, usage, cancel turn, kirim seleksi); artefak terpisah, di luar CI Dart, build manual npm/tsc.
+4. **Usage split (S20-C)** — rincian `promptTokens`/`completionTokens` mengalir end-to-end: `BudgetGuard` → `AgentLoop.lastPromptTokens/lastCompletionTokens` → `ChatRunResult` → frame `chat.usage` (WS + SSE) → `prompt_tokens_reported`/`completion_tokens_reported` di `/v1/chat/completions`.
