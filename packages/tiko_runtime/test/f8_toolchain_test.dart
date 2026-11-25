@@ -332,6 +332,135 @@ void main() {
       expect(result.message, contains('gagal'));
       expect(result.message, contains('lua5.4'));
     });
+    group('seleksi provisioning (Hermes S14)', () {
+      test('preset core -> hanya resep inti yang tersisa di plan', () {
+        final plan = buildToolchainPlan(
+          environment: const {'PATH': '/nonexistent-tiko-8f2'},
+        );
+        final sel = filterToolchainPlan(plan, preset: 'core');
+        expect(sel.unknown, isEmpty);
+        final bins = sel.plan.aptInstallable.map((r) => r.bin).toSet();
+        expect(
+          bins,
+          containsAll(['python3', 'node', 'bash', 'awk', 'sqlite3']),
+        );
+        expect(bins.contains('rustc'), isFalse);
+        expect(bins.contains('gfortran'), isFalse);
+      });
+
+      test('preset all -> plan tidak tersaring', () {
+        final plan = buildToolchainPlan(
+          environment: const {'PATH': '/nonexistent-tiko-8f2'},
+        );
+        final sel = filterToolchainPlan(plan, preset: 'all');
+        expect(sel.plan.aptInstallable.length, plan.aptInstallable.length);
+        expect(sel.plan.manual.length, plan.manual.length);
+        expect(sel.unknown, isEmpty);
+      });
+
+      test('preset tidak dikenal -> ArgumentError (fail-closed)', () {
+        final plan = buildToolchainPlan(
+          environment: const {'PATH': '/nonexistent-tiko-8f2'},
+        );
+        expect(
+          () => filterToolchainPlan(plan, preset: 'tidak-ada'),
+          throwsArgumentError,
+        );
+      });
+
+      test(
+        'onlyBins: nama bin, alias bahasa, dan paket apt semua dicocokkan',
+        () {
+          final plan = buildToolchainPlan(
+            environment: const {'PATH': '/nonexistent-tiko-8f2'},
+          );
+          final sel = filterToolchainPlan(
+            plan,
+            onlyBins: ['lua', 'javascript', 'nodejs', 'zebra-tidak-ada'],
+          );
+          final bins = sel.plan.aptInstallable.map((r) => r.bin).toSet();
+          expect(bins.contains('lua'), isTrue, reason: 'cocok nama bin');
+          expect(
+            bins.contains('node'),
+            isTrue,
+            reason: "cocok alias bahasa 'javascript'",
+          );
+          expect(bins.contains('nodejs'), isFalse);
+          expect(sel.unknown, ['zebra-tidak-ada']);
+        },
+      );
+
+      test('bin di katalog tapi tidak hilang di host diabaikan diam-diam', () {
+        final dir = Directory.systemTemp.createTempSync('tiko_sel_s14_');
+        File('${dir.path}/python3').writeAsStringSync('#!/bin/sh\n');
+        final plan = buildToolchainPlan(environment: {'PATH': dir.path});
+        final sel = filterToolchainPlan(plan, onlyBins: ['python3', 'node']);
+        expect(
+          sel.unknown,
+          isEmpty,
+          reason: 'python3 ada di katalog, tidak dilaporkan unknown',
+        );
+        final bins = sel.plan.aptInstallable.map((r) => r.bin).toSet();
+        expect(bins, ['node']);
+        dir.deleteSync(recursive: true);
+      });
+
+      test('resep manual selalu punya kandidat URL unduhan terbaru', () {
+        for (final r in kToolchainRecipes) {
+          if (r.installableViaApt || r.manualHint == null) continue;
+          expect(
+            r.manualUrls,
+            isNotEmpty,
+            reason: 'resep manual ${r.bin} harus punya manualUrls',
+          );
+          expect(
+            Uri.tryParse(r.manualUrls.first),
+            isNotNull,
+            reason: 'URL pertama ${r.bin} harus valid',
+          );
+        }
+      });
+
+      test(
+        'resolveManualHintUrl: fallback ke URL kedua bila pertama mati',
+        () async {
+          final r = kToolchainRecipes.firstWhere((r) => r.bin == 'swift');
+          final probed = <String>[];
+          final res = await resolveManualHintUrl(
+            r,
+            probe: (url) async {
+              probed.add(url);
+              return url == r.manualUrls.last;
+            },
+          );
+          expect(res.ok, isTrue);
+          expect(res.url, r.manualUrls.last);
+          expect(probed.length, r.manualUrls.length);
+          expect(res.failed.first, r.manualUrls.first);
+        },
+      );
+
+      test(
+        'resolveManualHintUrl: semua URL mati -> ok=false + laporan jujur',
+        () async {
+          final r = kToolchainRecipes.firstWhere((r) => r.bin == 'zig');
+          final res = await resolveManualHintUrl(
+            r,
+            probe: (_) async => false,
+            candidates: ['https://kustom-tiko.invalid/download'],
+          );
+          expect(res.ok, isFalse);
+          expect(res.url, isNull);
+          expect(
+            res.failed.first,
+            'https://kustom-tiko.invalid/download',
+            reason: 'kandidat kustom diuji lebih dulu',
+          );
+          expect(res.failed.length, r.manualUrls.length + 1);
+        },
+      );
+    });
+
     test(
       'probe melempar ProcessException -> lanjut instalasi full list',
       () async {

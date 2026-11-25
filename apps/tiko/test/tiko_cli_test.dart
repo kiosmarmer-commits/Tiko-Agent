@@ -50,6 +50,39 @@ void main() {
       final a = parseTikoArgs(['config', 'set', 'api.port', '9000']);
       expect(a.rest, ['config', 'set', 'api.port', '9000']);
     });
+
+    test('--bin dipisah koma dan bisa diulang (Hermes S14)', () {
+      final a = parseTikoArgs([
+        'doctor',
+        '--fix',
+        '--bin',
+        'node, lua',
+        '--bin',
+        'php',
+      ]);
+      expect(a.fix, isTrue);
+      expect(a.binList, ['node', 'lua', 'php']);
+      expect(a.preset, isNull);
+    });
+
+    test('--preset terbaca dan --bin kosong tidak menyisakan entry', () {
+      final a = parseTikoArgs(['doctor', '--fix', '--preset', 'core']);
+      expect(a.preset, 'core');
+      expect(a.binList, isEmpty);
+    });
+
+    test('--preset tanpa nilai jatuh ke rest (perilaku --mode)', () {
+      final a = parseTikoArgs(['doctor', '--fix', '--preset']);
+      expect(a.preset, isNull);
+      expect(a.rest, ['doctor', '--preset']);
+    });
+
+    test('default tanpa --bin/--preset -> seleksi kosong (mode default)', () {
+      final a = parseTikoArgs(['doctor', '--fix']);
+      expect(a.fix, isTrue);
+      expect(a.binList, isEmpty);
+      expect(a.preset, isNull);
+    });
   });
 
   group('parseSetupArgs', () {
