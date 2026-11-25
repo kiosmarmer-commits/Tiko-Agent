@@ -21,7 +21,7 @@
 | Prompt caching | `prompt_cache.dart` |
 | MCP (stdio + HTTP) + per-server filtering | MCP manager + allowlist |
 | Browser automation | CDP lokal + Browserbase/Browser Use/Firecrawl cloud |
-| Voice (TTS/STT) + wake word | Voice loop Discord/CLI; wake word partial |
+| Voice (TTS/STT) + wake word | Voice loop Discord/CLI; wake word: listener proses eksternal (FR-08) + push-to-talk + factory native |
 
 ## 2. Gap yang layak diadopsi (urutan prioritas)
 
@@ -104,3 +104,5 @@
 15. ~~Global shortcut keyboard GUI~~ (Codex item 11) — **selesai**: `GlobalShortcuts` (apps/agent_flutter/lib/ui/global_shortcuts.dart) mengikat Ctrl/Cmd+K dan Ctrl/Cmd+P (command palette), Ctrl/Cmd+N (chat baru), Ctrl/Cmd+H (history), Ctrl/Cmd+Alt+↑/↓ (pindah session), Esc global (tutup pratinjau artifact lalu inspector); Ctrl/Cmd+Enter di composer mengirim pesan. Semua binding duplikat `control:`/`meta:` untuk parity lintas platform; `CallbackShortcuts` harus induk dari `Focus(autofocus)` agar event sampai; diuji `test/global_shortcuts_test.dart` (3 test termasuk Esc saat TextField fokus).
 16. ~~Error/loading/empty state seragam~~ (Codex item 13) — **selesai**: komponen bersama `StatusViews` di apps/tiko_widgets (`errorBanner` dengan tombol "Coba lagi" + `Semantics(liveRegion)`, `loadingBanner` liveRegion, `empty` terpusat dengan icon/detail/action); diadopsi di main.dart dan 20+ view GUI — banner error ad-hoc (`Padding(...simpulDanger)`), loading `LinearProgressIndicator(minHeight: 2)`, dan empty-state `Center(child: Text('Belum ada ...'))` diganti seragam tanpa mengubah teks pesan (test finder tetap valid); ditambah tooltip eksplisit pada seluruh `IconButton` aksi.
 17. ~~Audit responsive/accessibility~~ (Codex item 12) — **selesai (statis)**: dokumen [16-AUDIT-RESPONSIVE-ACCESSIBILITY.md](16-AUDIT-RESPONSIVE-ACCESSIBILITY.md) merangkum penerapan shortcut, StatusViews, tooltip, token warna high-contrast-aware, dan daftar periksa verifikasi visual nyata (layar kecil, tablet, font scaling, high contrast, keyboard-only, screen reader, zoom 200%) yang masih butuh perangat fisik.
+
+18. ~~Hermes S12 wake word nyata (FR-08)~~ — **selesai**: `SubprocessHotwordListener` (packages/agent_gateway/lib/src/subprocess_hotword.dart) - `HotwordListener` konkret yang menjalankan detector CLI eksternal apa pun (openWakeWord/python/vosk/skrip kustom; satu baris stdout non-kosong = satu deteksi): start idempoten (proses tidak di-spawn ganda), stop menghentikan proses dengan grace lalu SIGKILL bila timeout, proses mati tidak pernah memicu deteksi palsu (fail-closed), spawn gagal → `ProcessException` ke pemanggil. `WakeWordDetectorFactory.create` kini menerima `subprocessCommand` dan memilihnya pertama (di atas Porcupine/nativeProcessor yang tanpa binding hanya fallback energi-naive); tanpa command perilaku lama tetap. Uji: `subprocess_hotword_test.dart` (6 test).
