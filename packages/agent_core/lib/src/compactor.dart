@@ -14,6 +14,7 @@ class CompactionStats {
     required this.estTokensAfter,
     required this.usedLlm,
     this.summary,
+    this.rulesRetained = 0,
   });
 
   final bool compacted;
@@ -27,6 +28,10 @@ class CompactionStats {
   final bool usedLlm;
   final String? summary;
 
+  /// Type-aware (R2): jumlah pesan aturan/keamanan yang dipertahankan
+  /// verbatim dan tidak pernah masuk ringkasan yang dipangkas.
+  final int rulesRetained;
+
   Map<String, dynamic> toJson() => {
     'compacted': compacted,
     'messages_before': messagesBefore,
@@ -34,6 +39,7 @@ class CompactionStats {
     'est_tokens_before': estTokensBefore,
     'est_tokens_after': estTokensAfter,
     'used_llm': usedLlm,
+    'rules_retained': rulesRetained,
   };
 }
 
@@ -46,6 +52,7 @@ class Compactor {
     this.maxSoftTokens = 6000,
     this.llm,
     this.onCompaction,
+    this.preserve,
   });
 
   /// False menonaktifkan kompresi penuh: ctx selalu dilewati tanpa diubah.
@@ -62,6 +69,50 @@ class Compactor {
   /// benar-benar dipangkas. Kegagalan callback tidak dipropagasi.
   final void Function(CompactionStats stats)? onCompaction;
 
+  /// Type-aware retention (R2): predicate tambahan untuk menandai pesan yang
+  /// harus dipertahankan verbatim (mis. aturan keamanan kustom dari caller).
+  /// Pesan aturan bawaan (role system non-ringkasan, atau teks dengan penanda
+  /// aturan) sudah dilindungi otomatis oleh [isRuleMessage].
+  final bool Function(ChatMessage message)? preserve;
+
+  /// Pesan yang berasal dari kompresi ini tidak boleh dianggap aturan agar
+  /// tidak menumpuk tak terhingga lintas putaran kompresi.
+  static const _summaryPrefix = 'Ringkasan percakapan sebelumnya:';
+
+  /// Penanda pesan aturan/keamanan yang dipertahankan verbatim saat
+  /// kompresi. Pencocokan case-insensitive pada awal tiap baris.
+  static const _ruleLinePrefixes = <String>{
+    '[rule]',
+    '[rules]',
+    '[safety]',
+    '[aturan]',
+    'safety rules',
+    'aturan keamanan',
+    'aturan mutlak',
+    'must never',
+    'must always',
+    'jangan pernah',
+    'harus selalu',
+    'dilarang keras',
+    'never execute',
+    'jangan pernah mengeksekusi',
+  };
+
+  /// True bila pesan ini adalah pesan aturan/keamanan yang tidak boleh
+  /// dipangkas atau diringkas (harus dipertahankan verbatim).
+  static bool isRuleMessage(ChatMessage m) {
+    if (m.role == 'system' && !m.content.startsWith(_summaryPrefix)) {
+      return true;
+    }
+    for (final line in m.content.split('\n')) {
+      final trimmed = line.trim().toLowerCase();
+      for (final prefix in _ruleLinePrefixes) {
+        if (trimmed.startsWith(prefix)) return true;
+      }
+    }
+    return false;
+  }
+
   /// Statistik kompresi terakhir (null bila belum ada yang dipangkas).
   CompactionStats? lastCompaction;
 
@@ -75,22 +126,43 @@ class Compactor {
     if (estTokensBefore < maxSoftTokens * thresholdRatio) return ctx;
 
     final messagesBefore = ctx.messages.length;
-    final keep = messagesBefore <= keepLastN
-        ? ctx.messages
-        : ctx.messages.sublist(messagesBefore - keepLastN);
+
+    // Type-aware retention (R2): pesan aturan/keamanan tidak pernah masuk
+    // wilayah yang dipangkas. keepLastN hanya berlaku untuk pesan biasa.
+    final trimmable = <ChatMessage>[];
+    final rules = <ChatMessage>[];
+    for (final m in ctx.messages) {
+      final protected =
+          isRuleMessage(m) || (preserve != null && preserve!(m));
+      if (protected) {
+        rules.add(m);
+      } else {
+        trimmable.add(m);
+      }
+    }
+    final keep = trimmable.length <= keepLastN
+        ? trimmable
+        : trimmable.sublist(trimmable.length - keepLastN);
+    final dropped = trimmable.length <= keepLastN
+        ? <ChatMessage>[]
+        : trimmable.sublist(0, trimmable.length - keepLastN);
 
     final summarizer = llmOverride ?? llm;
+    // Sumber ringkasan hanya pesan yang benar-benar dibuang; pesan aturan
+    // dipertahankan verbatim, bukan ditebak oleh peringkas.
+    final summarySource = dropped.isEmpty ? trimmable : dropped;
     final summary = summarizer != null
-        ? await _llmSummary(summarizer, ctx.messages)
-        : _naiveSummary(ctx.messages);
-    final estTokensAfter = summary.length ~/ 4 + _estTokens(keep);
+        ? await _llmSummary(summarizer, summarySource)
+        : _naiveSummary(summarySource);
+    final retained = [...rules, ...keep];
+    final estTokensAfter = summary.length ~/ 4 + _estTokens(retained);
 
     final compacted = <ChatMessage>[
       ChatMessage(
         role: 'system',
-        content: 'Ringkasan percakapan sebelumnya:\n$summary',
+        content: '$_summaryPrefix\n$summary',
       ),
-      ...keep,
+      ...retained,
     ];
 
     final stats = CompactionStats(
@@ -101,6 +173,7 @@ class Compactor {
       estTokensAfter: estTokensAfter,
       usedLlm: summarizer != null,
       summary: summary,
+      rulesRetained: rules.length,
     );
     lastCompaction = stats;
     try {

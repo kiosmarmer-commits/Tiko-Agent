@@ -30,6 +30,9 @@ class ProviderConfig {
     this.oauthTokenCache,
     this.weight = 1,
     this.cost,
+    this.members = const [],
+    this.moaStrategy,
+    this.moaRanker,
   });
 
   final String id;
@@ -93,6 +96,16 @@ class ProviderConfig {
   /// hanya penentu urutan saat [weight] sama, dan `null` = tak diketahui
   /// (diperlakukan netral).
   final double? cost;
+
+  /// MoA (R3): id provider member (proposer) yang dirujuk dari
+  /// `providers.chat.*`. Hanya untuk `type: moa`.
+  final List<String> members;
+
+  /// MoA: `majority` (default) | `ranker` | `first`.
+  final String? moaStrategy;
+
+  /// MoA: id provider aggregator untuk `strategy: ranker`.
+  final String? moaRanker;
 }
 
 class ConfigValidationException implements Exception {
@@ -695,6 +708,7 @@ class TikoConfig {
     'ollama_native',
     'anthropic',
     'gemini',
+    'moa',
   };
 
   /// Parses YAML text with a real YAML parser (duplicate keys are an error).
@@ -1069,9 +1083,17 @@ class TikoConfig {
           return null;
         }
 
+        final membersValue = <String>[
+          if (v['members'] is YamlList)
+            for (final m in v['members'] as YamlList)
+              if ('$m'.trim().isNotEmpty) '$m'.trim(),
+        ];
         providers[id] = ProviderConfig(
           id: id,
           type: type,
+          members: membersValue,
+          moaStrategy: v['strategy'] is String ? v['strategy'] as String : null,
+          moaRanker: v['ranker'] is String ? v['ranker'] as String : null,
           baseUrl: baseUrlValue as String?,
           model: modelValue as String?,
           apiKeyRef: keyRef is String && keyRef.isNotEmpty ? keyRef : null,

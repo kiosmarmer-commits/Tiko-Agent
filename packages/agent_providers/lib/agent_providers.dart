@@ -43,3 +43,4 @@ export 'src/commandcode_provider.dart';
 export 'src/actual_provider.dart';
 export 'src/ramprouter_provider.dart';
 export 'src/langchain_gateway_provider.dart';
+export 'src/moa_provider.dart';
