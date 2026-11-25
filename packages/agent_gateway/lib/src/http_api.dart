@@ -1892,9 +1892,16 @@ class HttpApiServer {
             (model == null || model.isEmpty) ? 'tiko-agent' : model;
         final progressHandler = onMessageWithProgress;
         int reportedTokens = 0;
+        int reportedPrompt = 0;
+        int reportedCompletion = 0;
         void noteUsage(Map<String, dynamic> frame) {
-          if (frame case {'type': 'chat.usage', 'tokens': final int t}) {
-            if (t > 0) reportedTokens = t;
+          if (frame case {'type': 'chat.usage'}) {
+            final t = frame['tokens'];
+            if (t is int && t > 0) reportedTokens = t;
+            final p = frame['prompt'];
+            if (p is int && p > 0) reportedPrompt = p;
+            final comp = frame['completion'];
+            if (comp is int && comp > 0) reportedCompletion = comp;
           }
         }
 
@@ -1905,7 +1912,11 @@ class HttpApiServer {
             'prompt_tokens': promptTokens,
             'completion_tokens': completionTokens,
             'total_tokens': promptTokens + completionTokens,
-            if (reportedTokens > 0) 'total_tokens_reported': reportedTokens,
+            if (reportedTokens > 0)
+              'total_tokens_reported': reportedTokens,
+            if (reportedPrompt > 0) 'prompt_tokens_reported': reportedPrompt,
+            if (reportedCompletion > 0)
+              'completion_tokens_reported': reportedCompletion,
           };
         }
 

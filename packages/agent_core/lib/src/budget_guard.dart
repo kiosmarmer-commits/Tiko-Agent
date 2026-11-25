@@ -21,6 +21,8 @@ class BudgetGuard {
     _iterations = 0;
     _toolCalls = 0;
     _tokens = 0;
+    _promptTokens = 0;
+    _completionTokens = 0;
     _start = DateTime.now().toUtc();
     _maxIterations = maxIterations;
     _maxTokens = maxTokens;
@@ -33,8 +35,18 @@ class BudgetGuard {
   void tickToolCall() => _toolCalls++;
   int get tokensUsed => _tokens;
 
-  void addTokens(TokenUsage u) =>
-      _tokens += u.total > 0 ? u.total : (u.prompt + u.completion);
+  /// Aksesori S20-C: rincian prompt/completion terakumulasi dari
+  /// [TokenUsage] yang dilaporkan provider (0 bila tidak dilaporkan).
+  int get promptTokens => _promptTokens;
+  int get completionTokens => _completionTokens;
+  int _promptTokens = 0;
+  int _completionTokens = 0;
+
+  void addTokens(TokenUsage u) {
+    _promptTokens += u.prompt;
+    _completionTokens += u.completion;
+    _tokens += u.total > 0 ? u.total : (u.prompt + u.completion);
+  }
 
   bool get exceeded {
     if (_iterations >= _maxIterations) {

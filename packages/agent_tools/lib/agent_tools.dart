@@ -44,6 +44,7 @@ export 'src/verify_tool.dart';
 export 'src/log_probe_tool.dart';
 export 'src/code_context_tool.dart';
 export 'src/code_search_tool.dart';
+export 'src/computer_use_tool.dart';
 export 'src/git_tools.dart';
 export 'src/checkpoint.dart';
 export 'src/cdp_browser.dart';

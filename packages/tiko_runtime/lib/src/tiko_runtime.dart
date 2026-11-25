@@ -65,6 +65,8 @@ class ChatRunResult {
     required this.success,
     this.retryable = false,
     this.tokensUsed = 0,
+    this.promptTokens = 0,
+    this.completionTokens = 0,
     this.toolCallCount = 0,
     this.toolCallTraces = const [],
     this.skillsUsed = const [],
@@ -75,6 +77,13 @@ class ChatRunResult {
 
   /// Real token usage reported by providers during the turn.
   final int tokensUsed;
+
+  /// S20-C: rincian prompt tokens dari provider (0 bila tidak dilaporkan).
+  final int promptTokens;
+
+  /// S20-C: rincian completion tokens dari provider (0 bila tidak
+  /// dilaporkan).
+  final int completionTokens;
 
   /// Number of tool adapters that actually ran in the turn.
   final int toolCallCount;
@@ -91,6 +100,8 @@ class ChatRunResult {
         'success': success,
         'retryable': retryable,
         'tokens_used': tokensUsed,
+        if (promptTokens > 0) 'prompt_tokens': promptTokens,
+        if (completionTokens > 0) 'completion_tokens': completionTokens,
         'tool_call_count': toolCallCount,
         'skills_used': skillsUsed,
       };
@@ -1094,6 +1105,14 @@ class TikoRuntime {
 
     // Custom scripts are loaded only when the host has a working OS sandbox.
     // Each tool is namespaced and treated as untrusted output.
+    // S20-A: computer-use headless — hanya terdaftar bila operator
+    // mengaktifkan `agent.computer_use: true` (fail-closed default off).
+    if (cfg.agentComputerUse) {
+      registry.register(
+        ComputerUseTool(timeout: const Duration(seconds: 45)),
+      );
+    }
+
     final scriptRunner = ScriptToolRunner(
       toolsDir: abs('tools'),
       sandbox: sandbox,
@@ -2671,6 +2690,8 @@ class TikoRuntime {
         success: loop.lastTurnSucceeded,
         retryable: !loop.lastTurnSucceeded,
         tokensUsed: loop.lastTokensUsed,
+        promptTokens: loop.lastPromptTokens,
+        completionTokens: loop.lastCompletionTokens,
         toolCallCount: loop.lastToolCalls.length,
         toolCallTraces: loop.lastToolCalls,
         skillsUsed: loop.lastSkillsUsed,
