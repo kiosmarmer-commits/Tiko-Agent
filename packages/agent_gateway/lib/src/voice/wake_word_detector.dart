@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../hotword.dart';
+import '../subprocess_hotword.dart';
 
 /// Configuration for wake word detection.
 class WakeWordConfig {
@@ -341,7 +342,14 @@ class WakeWordDetectorFactory {
     String wakeWord = 'hey tiko',
     bool usePorcupine = true,
     bool useOpenWakeWord = false,
+    List<String>? subprocessCommand,
   }) {
+    // Detektor proses eksternal lebih dulu: deteksinya nyata dari engine
+    // host (bukan fallback energi-naive).
+    if (subprocessCommand != null && subprocessCommand.isNotEmpty) {
+      return SubprocessHotwordListener(command: subprocessCommand);
+    }
+
     // Try Porcupine first if available
     if (usePorcupine && porcupinePath != null) {
       try {
