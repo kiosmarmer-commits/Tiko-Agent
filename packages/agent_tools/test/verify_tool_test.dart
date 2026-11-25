@@ -62,7 +62,7 @@ void main() {
     final r = await runVerification('tiko-tidak-ada-komando --x',
         workspacePath: tmp.path);
     expect(r.ok, isFalse);
-    expect(r.output, contains('gagal jalan'));
+    expect(r.output, contains('toolchain tidak tersedia'));
   });
 
   test('perintah kosong → gagal jujur', () async {
@@ -108,6 +108,7 @@ void main() {
     final spec = tool().spec;
     expect(spec.name, 'verify_project');
     expect(spec.risk, 'high');
-    expect((spec.inputSchema['required'] as List).contains('cmd'), isTrue);
+    expect((spec.inputSchema['properties'] as Map).containsKey('cmd'), isTrue);
+    expect((spec.inputSchema['properties'] as Map).containsKey('auto'), isTrue);
   });
 }

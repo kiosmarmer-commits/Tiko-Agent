@@ -256,3 +256,77 @@ Future<Map<String, dynamic>> runBenchmarkReplay(
   }
   return report;
 }
+
+/// S19-D — self-improvement loop: panen golden eval dari trajektori sukses.
+/// Trajektori hasil batch/chat (TrajectoryLogger) difilter hanya sesi yang
+/// SELURUH turn-nya sukses, prompt non-internal (bukan `/…`), dedupe prompt,
+/// lalu ditulis sebagai kasus eval JSONL (`EvalTaskSpec.fromJson`) yang bisa
+/// langsung diputar `tiko eval <file>` atau di-overlay via `eval replay`.
+/// Fail-closed: file output yang sudah ada ditolak (anti-timpa).
+Future<Map<String, dynamic>> harvestGoldenEvals({
+  required String trajectoryDir,
+  required String outPath,
+  bool requireTools = false,
+  int limit = 100,
+}) async {
+  final target = File(outPath);
+  if (target.existsSync()) {
+    throw ArgumentError('file output sudah ada, tolak timpa: $outPath');
+  }
+  final specs = await specsFromTrajectoryDir(trajectoryDir, requireTools: requireTools);
+  final seen = <String>{};
+  final harvested = <EvalTaskSpec>[];
+  var skippedFailed = 0;
+  var skippedInternal = 0;
+  var duplicates = 0;
+  for (final spec in specs) {
+    if (!spec.expectSuccess) {
+      skippedFailed++;
+      continue;
+    }
+    if (spec.prompt.startsWith('/')) {
+      skippedInternal++;
+      continue;
+    }
+    final key = spec.prompt.trim().toLowerCase();
+    if (!seen.add(key)) {
+      duplicates++;
+      continue;
+    }
+    if (harvested.length >= limit) continue;
+    harvested.add(EvalTaskSpec(
+      id: spec.id,
+      prompt: spec.prompt,
+      expectSuccess: true,
+      minToolCalls: spec.minToolCalls,
+    ));
+  }
+
+  final buffer = StringBuffer();
+  for (final spec in harvested) {
+    buffer.writeln(jsonEncode({
+      'id': spec.id,
+      'prompt': spec.prompt,
+      'expect_success': spec.expectSuccess,
+      'min_tool_calls': spec.minToolCalls,
+    }));
+  }
+  if (buffer.isNotEmpty) {
+    final dir = Directory(p.dirname(outPath));
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
+    }
+    await target.writeAsString(buffer.toString());
+  }
+  return {
+    'trajectory_dir': trajectoryDir,
+    'out_path': outPath,
+    'total_sessions': specs.length,
+    'harvested': harvested.length,
+    'skipped_failed': skippedFailed,
+    'skipped_internal': skippedInternal,
+    'duplicates': duplicates,
+    'limit': limit,
+    'wrote_file': buffer.isNotEmpty,
+  };
+}

@@ -21,6 +21,7 @@ class VerifyOutcome {
     required this.exitCode,
     required this.output,
     this.command,
+    this.processError,
   });
 
   final bool ok;
@@ -28,12 +29,38 @@ class VerifyOutcome {
   final String output;
   final String? command;
 
+  /// Terisi bila proses tidak bisa dijalankan sama sekali (toolchain
+  /// tidak ada di PATH) — dipakai mode `auto` untuk lompat ke kandidat
+  /// berikutnya, alih-alih menganggap party verifikasi gagal.
+  final ProcessException? processError;
+
   Map<String, dynamic> toJson() => {
         'ok': ok,
         'exit_code': exitCode,
         if (command != null) 'command': command,
         'output': output,
       };
+}
+
+/// S19-C — deteksi toolchain verifikasi dari manifest project di [root].
+/// Data-driven (menambah bahasa = menambah entri), urutan = prioritas.
+/// Perintah dipilih yang pasti read-only/analyze (bukan build penuh) dan
+/// tanpa metachar (kontrak [runVerification]).
+List<String> detectVerifyCandidates(String root) {
+  final out = <String>[];
+  final pubspec = File(p.join(root, 'pubspec.yaml'));
+  if (pubspec.existsSync()) {
+    final content = pubspec.readAsStringSync();
+    final usesFlutter =
+        content.contains('sdk: flutter') || content.contains('sdk: flutter ');
+    out.add(usesFlutter ? 'flutter analyze' : 'dart analyze');
+  }
+  if (File(p.join(root, 'go.mod')).existsSync()) out.add('go vet ./...');
+  if (File(p.join(root, 'Cargo.toml')).existsSync()) out.add('cargo check');
+  if (File(p.join(root, 'tsconfig.json')).existsSync()) {
+    out.add('npx tsc --noEmit');
+  }
+  return out;
 }
 
 /// Metacharacter yang dilarang — kontrak sama dengan `ShellTool`.
@@ -123,11 +150,15 @@ Future<VerifyOutcome> runVerification(
       command: cmd,
     );
   } catch (e) {
+    final processError = e is ProcessException ? e : null;
     return VerifyOutcome(
       ok: false,
       exitCode: -1,
-      output: 'error: perintah verifikasi gagal jalan ($e)',
+      output: processError != null
+          ? 'error: toolchain tidak tersedia (${processError.executable})'
+          : 'error: perintah verifikasi gagal jalan ($e)',
       command: cmd,
+      processError: processError,
     );
   }
 }
@@ -158,14 +189,20 @@ class VerifyProjectTool implements Tool {
               'type': 'string',
               'description':
                   'Perintah verifikasi, mis. "dart analyze" atau "dart test". '
-                  'Tanpa pipe/redirect/&&.',
+                  'Tanpa pipe/redirect/&&. Kosongkan bila auto=true.',
+            },
+            'auto': {
+              'type': 'boolean',
+              'description':
+                  'S19-C: deteksi toolchain dari manifest project (pubspec/'
+                  'go.mod/Cargo.toml/tsconfig) lalu jalankan kandidat verifikasi '
+                  'nyata yang pertama tersedia. Diabaikan bila cmd diisi.',
             },
             'timeout_sec': {
               'type': 'integer',
               'description': 'Batas waktu 15..600 detik (default 180).',
             },
           },
-          'required': ['cmd'],
         },
         risk: 'high',
         timeoutSec: 600,
@@ -175,15 +212,59 @@ class VerifyProjectTool implements Tool {
   @override
   Future<ToolResult> run(Map<String, dynamic> args, ToolContext ctx) async {
     final cmd = (args['cmd'] as String?)?.trim() ?? '';
+    final timeoutSec = (args['timeout_sec'] as num?)?.toInt();
+    final timeout = Duration(seconds: (timeoutSec ?? 180).clamp(15, 600));
     if (cmd.isEmpty) {
-      return const ToolResult(
+      final auto = args['auto'] == true;
+      if (!auto) {
+        return const ToolResult(
+          callId: '',
+          content: 'error: cmd kosong (isi cmd atau auto=true)',
+          isError: true,
+        );
+      }
+      final root = p.normalize(Directory(ctx.workspacePath).absolute.path);
+      final candidates = detectVerifyCandidates(root);
+      if (candidates.isEmpty) {
+        return const ToolResult(
+          callId: '',
+          content:
+              'tidak ada manifest verifikasi dikenali di root workspace '
+              '(didukung: pubspec.yaml, go.mod, Cargo.toml, tsconfig.json)',
+          isError: true,
+        );
+      }
+      for (final candidate in candidates) {
+        final outcome = await runVerification(
+          candidate,
+          workspacePath: ctx.workspacePath,
+          sandbox: sandbox,
+          unsandboxedFallback: unsandboxedFallback,
+          timeout: timeout,
+          maxOutputChars: 8000,
+        );
+        if (outcome.processError != null) continue;
+        return ToolResult(
+          callId: '',
+          content: [
+            '[auto] kandidat: $candidate',
+            outcome.ok ? 'VERIFIKASI OK' : 'VERIFIKASI GAGAL',
+            'exit: ${outcome.exitCode}',
+            '--- output ---',
+            outcome.output,
+          ].join('\n'),
+          isError: !outcome.ok,
+        );
+      }
+      return ToolResult(
         callId: '',
-        content: 'error: cmd kosong',
+        content:
+            'tidak ada toolchain verifikasi tersedia di PATH (kandidat: '
+            '${candidates.join(', ')}) — jalankan `tiko doctor --fix` atau '
+            'pasang manual, lalu ulangi',
         isError: true,
       );
     }
-    final timeoutSec = (args['timeout_sec'] as num?)?.toInt();
-    final timeout = Duration(seconds: (timeoutSec ?? 180).clamp(15, 600));
     final outcome = await runVerification(
       cmd,
       workspacePath: ctx.workspacePath,
