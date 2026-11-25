@@ -603,6 +603,33 @@ class AgentApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Mission Control (swarm mode): snapshot live run orkestra tim dari
+  /// registri runtime `GET /v1/teams/runs/live` (terbaru dulu).
+  Future<List<Map<String, dynamic>>> listTeamLiveRuns() async {
+    final res = await _http
+        .get(_u('/v1/teams/runs/live'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'team live runs');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = json['runs'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Mission Control: pembatalan kooperatif run tim
+  /// `POST /v1/teams/runs/cancel`; false bila run tak dikenal/sudah selesai.
+  Future<bool> cancelTeamRun(String runId) async {
+    final res = await _http
+        .post(
+          _u('/v1/teams/runs/cancel'),
+          headers: _headers,
+          body: jsonEncode({'run_id': runId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode == 404) return false;
+    _throwIf(res, 'cancel team run');
+    return true;
+  }
+
   /// Detail surface (dengan body komponen + data model); null bila 404.
   Future<Map<String, dynamic>?> getSurface(String surfaceId) async {
     final safeId = Uri.encodeComponent(surfaceId);

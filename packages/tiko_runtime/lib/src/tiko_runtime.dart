@@ -21,6 +21,7 @@ import 'context_file.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'config_store.dart';
+import 'swarm_control.dart';
 import 'tiko_config.dart';
 import 'capability.dart';
 import 'event_bus.dart';
@@ -692,6 +693,10 @@ class TikoRuntime {
   /// token per running turn; subagent turns chain to their parent's token so
   /// cancelling a parent session also stops its nested subagents.
   final CancellationRegistry cancellations = CancellationRegistry();
+
+  /// Mission Control (swarm mode): registri live run orkestra tim — snapshot
+  /// status per-node untuk REST/GUI dan titik pembatalan kooperatif per run.
+  final SwarmControl swarmControl = SwarmControl();
   final CapabilityVault capabilities;
   final EventBus events = EventBus();
 
@@ -1962,6 +1967,19 @@ class TikoRuntime {
 
   /// Cancels every live turn (runtime shutdown / kill switch support).
   void cancelAllTurns() => cancellations.cancelAll();
+
+  /// Mission Control: pembatalan run tim. Menandai run live `cancelling`,
+  /// lalu membatalkan semua session turn anggota/planner yang tercatat
+  /// (kooperatif via registri cancellation). Return true bila run aktif
+  /// ditemukan dan permintaan pembatalan diteruskan.
+  bool cancelTeamRun(String runId) {
+    final sessions = swarmControl.cancelRun(runId);
+    if (sessions == null) return false;
+    for (final sid in sessions) {
+      cancellations.cancel(sid);
+    }
+    return true;
+  }
 
   /// Provider instance by config id (for `tiko models` discovery).
   LlmProvider? providerById(String id) => _router.providers[id];

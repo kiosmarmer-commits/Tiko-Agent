@@ -1166,6 +1166,8 @@ Future<void> main(List<String> args) async {
                   (body['max_concurrency'] as int?) ?? 4,
             )
             .then((r) => r.toJson()),
+        teamLiveProvider: () async => rt.swarmControl.snapshot(),
+        cancelTeamRun: (runId) async => rt.cancelTeamRun(runId),
         providersProvider: () async {
           final health = rt.providerHealth();
           return {
