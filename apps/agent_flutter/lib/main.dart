@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'attachment_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, LogicalKeyboardKey;
 
 import 'agent_api_client.dart';
 import 'app/app_routes.dart';
@@ -18,7 +19,7 @@ import 'shell/desktop_shell.dart';
 import 'shell/mobile_shell.dart';
 import 'ui/chat_controller.dart';
 import 'ui/command_palette.dart';
-import 'ui/gen_ui_view.dart';
+import 'ui/global_shortcuts.dart';
 import 'ui/logs_view.dart';
 import 'ui/page_header.dart';
 import 'ui/bot_manager_view.dart';
@@ -47,7 +48,7 @@ import 'ui/events_view.dart';
 import 'ui/voice_service.dart';
 import 'ui/graph_view.dart';
 import 'ui/note_editor.dart';
-import 'ui/status_view.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -632,6 +633,36 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
+  /// Buka halaman session history via shortcut Ctrl/Cmd+H.
+  void _openSessionHistory() {
+    setState(() {
+      route = AppRoute.sessions;
+      adminError = null;
+    });
+  }
+
+  /// Pindah ke session sebelumnya/berikutnya pada daftar session
+  /// (Ctrl/Cmd+Alt+ArrowUp/Down), wrap-around seperti tab switcher.
+  void _cycleSession(int delta) {
+    if (sessions.length < 2) return;
+    final idx = sessions.indexWhere((session) => session.id == sessionKey);
+    final base = idx < 0
+        ? (delta < 0 ? sessions.length - 1 : 0)
+        : (idx + delta + sessions.length) % sessions.length;
+    _openSessionFromPane(sessions[base].id);
+  }
+
+  /// Esc global: tutup pratinjau artifact, lalu inspector. Fokus di dalam
+  /// dialog berada di luar subtree GlobalShortcuts sehingga Esc dialog
+  /// tetap bekerja normal.
+  void _globalEscape() {
+    if (artifactContent != null) {
+      _openArtifact('');
+      return;
+    }
+    if (inspectorVisible) _toggleInspector();
+  }
+
   void _openSessionFromPane(String id) {
     setState(() {
       sessionKey = id;
@@ -785,8 +816,13 @@ class _AgentAppState extends State<AgentApp> {
       theme: SimpulTheme.theme(Brightness.light, settings.accent),
       darkTheme: SimpulTheme.theme(Brightness.dark, settings.accent),
       themeMode: settings.themeMode,
-      home: PaletteShortcut(
+      home: GlobalShortcuts(
         onPalette: _openCommandPalette,
+        onNewChat: _newChatSession,
+        onOpenHistory: _openSessionHistory,
+        onPreviousSession: () => _cycleSession(-1),
+        onNextSession: () => _cycleSession(1),
+        onEscape: _globalEscape,
         child: Scaffold(
           body: wide
               ? DesktopShell(
@@ -2517,7 +2553,16 @@ class _ComposerState extends State<_Composer> {
                           ),
                         ),
                         Expanded(
-                          child: TextField(
+                          child: CallbackShortcuts(
+                            bindings: {
+                              SingleActivator(LogicalKeyboardKey.enter,
+                                      control: true):
+                                  () => _submit(c.text),
+                              SingleActivator(LogicalKeyboardKey.enter,
+                                      meta: true):
+                                  () => _submit(c.text),
+                            },
+                            child: TextField(
                             controller: c,
                         minLines: 1,
                         maxLines: 4,
@@ -2536,7 +2581,8 @@ class _ComposerState extends State<_Composer> {
                           isDense: true,
                         ),
                         onSubmitted: (value) => _submit(value),
-                      ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 4),
                         IconButton.filled(
@@ -2600,16 +2646,14 @@ class _DashboardPage extends StatelessWidget {
           subtitle: online ? 'online' : 'offline',
           online: online,
           trailing: IconButton(
+            tooltip: 'Muat ulang',
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh),
           ),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -2772,11 +2816,12 @@ class _ApprovalsPage extends StatelessWidget {
           subtitle: '${pending.length} pending',
           online: online,
           trailing: IconButton(
+            tooltip: 'Muat ulang',
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh),
           ),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(12),
@@ -2943,24 +2988,17 @@ class _MemoryPage extends StatelessWidget {
           subtitle: '${memories.length} fakta',
           online: online,
           trailing: IconButton(
+            tooltip: 'Muat ulang',
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh),
           ),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: memories.isEmpty
-              ? Center(
-                  child: Text(
-                    'Kosong',
-                    style: TextStyle(color: context.simpulMuted),
-                  ),
-                )
+              ? StatusViews.empty(context, message: 'Kosong')
               : ListView.builder(
                   itemCount: memories.length,
                   itemBuilder: (context, i) {

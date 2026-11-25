@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 final RegExp _botIdPattern = RegExp(r'^[a-z0-9][a-z0-9_-]{0,63}$');
 
@@ -88,6 +89,7 @@ class _BotsPageState extends State<BotsPage> {
                 ),
               if (widget.onRefresh != null)
                 IconButton(
+                  tooltip: 'Muat ulang',
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
                 ),
@@ -95,13 +97,9 @@ class _BotsPageState extends State<BotsPage> {
           ),
         ),
         if (widget.surfaceSection != null) widget.surfaceSection!,
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child:
-                Text(widget.error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
@@ -116,13 +114,11 @@ class _BotsPageState extends State<BotsPage> {
         ),
         Expanded(
           child: bots.isEmpty
-              ? Center(
-                  child: Text(
-                    _query.isEmpty
-                        ? 'Belum ada bot. Buat bot pertama lewat tombol +'
-                        : 'Tidak ada bot yang cocok.',
-                    style: TextStyle(color: context.simpulMuted),
-                  ),
+              ? StatusViews.empty(
+                  context,
+                  message: _query.isEmpty
+                      ? 'Belum ada bot. Buat bot pertama lewat tombol +'
+                      : 'Tidak ada bot yang cocok.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 16),

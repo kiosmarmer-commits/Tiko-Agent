@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'artifact_view.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// C3: pola referensi `@file:` dalam pesan (user maupun assistant) — chip
 /// bisa ditap untuk membuka file di panel. Karakter berisiko (`..`, `\\`)
@@ -274,7 +275,7 @@ class _ChatArtifactPanelState extends State<ChatArtifactPanel> {
                 ),
               ),
             if (widget.listingLoading || widget.previewLoading)
-              const LinearProgressIndicator(minHeight: 2),
+              StatusViews.loadingBanner(context),
             if (widget.listingError != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -285,12 +286,7 @@ class _ChatArtifactPanelState extends State<ChatArtifactPanel> {
               ),
             Expanded(
               child: widget.listing == null
-                  ? Center(
-                      child: Text(
-                        'Belum ada daftar file artifacts.',
-                        style: TextStyle(color: context.simpulMuted),
-                      ),
-                    )
+                  ? StatusViews.empty(context, message: 'Belum ada daftar file artifacts.')
                   : ListView(
                       padding: const EdgeInsets.only(bottom: 8),
                       children: [

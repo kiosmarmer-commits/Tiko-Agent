@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Skills Manager (GUI-P1-03): list + feedback + lifecycle gate
 /// (evaluate/approve/rollback) di atas `GET/POST /v1/skills/*`, satu sumber
@@ -69,16 +70,13 @@ class _SkillsPageState extends State<SkillsPage> {
           trailing: widget.onRefresh == null
               ? null
               : IconButton(
+                  tooltip: 'Muat ulang',
                   onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
         ),
         if (widget.surfaceSection != null) widget.surfaceSection!,
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child:
-                Text(widget.error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
@@ -93,9 +91,12 @@ class _SkillsPageState extends State<SkillsPage> {
         ),
         Expanded(
           child: skills.isEmpty
-              ? Center(
-                  child: Text(_query.isEmpty ? 'Belum ada skill terdaftar.' : 'Tidak ada skill yang cocok.',
-                      style: TextStyle(color: context.simpulMuted)))
+              ? StatusViews.empty(
+                  context,
+                  message: _query.isEmpty
+                      ? 'Belum ada skill terdaftar.'
+                      : 'Tidak ada skill yang cocok.',
+                )
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 16),
                   itemCount: skills.length,

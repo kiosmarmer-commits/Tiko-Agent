@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Run-inspector (GUI-P2-04): snapshot turn agent aktif + riwayat terbaru
 /// dengan langkah tool per run — read-only via `GET /v1/runs`. Dibawahnya
@@ -47,23 +48,20 @@ class RunsPage extends StatelessWidget {
           trailing: onRefresh == null
               ? null
               : IconButton(
+                  tooltip: 'Muat ulang',
                   onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
         if (surfaceSection != null) surfaceSection!,
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: !hasContent(snap, teamRuns)
-              ? Center(
-                  child: Text(
-                      snap == null
-                          ? 'Belum ada snapshot \u2014 tekan refresh.'
-                          : 'Belum ada run terekam.',
-                      style: TextStyle(color: context.simpulMuted)),
+              ? StatusViews.empty(
+                  context,
+                  message: snap == null
+                      ? 'Belum ada snapshot \u2014 tekan refresh.'
+                      : 'Belum ada run terekam.',
                 )
               : ListView(
                       padding: const EdgeInsets.only(bottom: 16),
@@ -399,6 +397,7 @@ class _TeamRunDagSheet extends StatelessWidget {
                 ),
               ),
               IconButton(
+                tooltip: 'Tutup',
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context),
               ),

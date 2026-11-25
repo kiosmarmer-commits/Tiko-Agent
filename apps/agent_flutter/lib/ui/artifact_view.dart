@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Artifacts browser & diff viewer (GUI-P2-04, read-only): daftar file
 /// workspace, preview isi teks, dan diff versus `.bak` — semua via API
@@ -96,23 +97,18 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
                 ),
               if (widget.onRefresh != null)
                 IconButton(
+                    tooltip: 'Muat ulang',
                     onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
             ],
           ),
         ),
         if (widget.loading || widget.contentLoading)
-          const LinearProgressIndicator(minHeight: 2),
+          StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(widget.error!,
-                style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Expanded(
           child: listing == null
-              ? Center(
-                  child: Text('Belum ada data artifacts.',
-                      style: TextStyle(color: context.simpulMuted)))
+              ? StatusViews.empty(context, message: 'Belum ada data artifacts.')
               : ListView(
                   padding: const EdgeInsets.only(bottom: 16),
                   children: [
@@ -395,6 +391,7 @@ class _PreviewCard extends StatelessWidget {
                   ],
                 ),
               IconButton(
+                  tooltip: 'Tutup pratinjau',
                   onPressed: onClose, icon: const Icon(Icons.close, size: 18)),
             ],
           ),

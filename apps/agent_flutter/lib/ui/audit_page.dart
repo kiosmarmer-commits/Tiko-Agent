@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Audit query browser (GUI-P1-11): filter entri audit runtime
 /// (tool/session/risk/verdict/taint) dan pagination — read-only via
@@ -79,20 +80,18 @@ class _AuditPageState extends State<AuditPage> {
             children: [
               if (widget.onQuery != null)
                 IconButton(
+                    tooltip: 'Cari',
                     onPressed: _submit, icon: const Icon(Icons.search)),
               if (widget.onRefresh != null)
                 IconButton(
+                    tooltip: 'Muat ulang',
                     onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
             ],
           ),
         ),
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(widget.error!,
-                style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         _FilterBar(
           tool: _tool,
           session: _session,
@@ -108,15 +107,9 @@ class _AuditPageState extends State<AuditPage> {
         ),
         Expanded(
           child: result == null
-              ? Center(
-                  child: Text('Belum ada query audit \u2014 tekan cari.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada query audit \u2014 tekan cari.')
               : result.entries.isEmpty
-                  ? Center(
-                      child: Text('Tidak ada entri yang cocok.',
-                          style: TextStyle(color: context.simpulMuted)),
-                    )
+                  ? StatusViews.empty(context, message: 'Tidak ada entri yang cocok.')
                   : ListView.builder(
                       padding: const EdgeInsets.only(bottom: 16),
                       itemCount: result.entries.length +

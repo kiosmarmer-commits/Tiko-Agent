@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Plugin & Tools Manager (GUI-P1-06): status plugin + capability consent
 /// (grant/revoke paritas `/plugin consent`), katalog tool registry host
@@ -55,25 +56,19 @@ class _PluginManagerPageState extends State<PluginManagerPage> {
             children: [
               if (widget.onRefresh != null)
                 IconButton(
+                  tooltip: 'Muat ulang',
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
                 ),
             ],
           ),
         ),
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child:
-                Text(widget.error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Expanded(
           child: snapshot == null
-              ? Center(
-                  child: Text('Belum ada data plugin.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada data plugin.')
               : ListView(
                   padding: const EdgeInsets.only(bottom: 16),
                   children: [

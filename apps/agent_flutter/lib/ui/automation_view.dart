@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Automation / Cron CRUD (GUI-P1-09): kelola cron job scheduler durabel
 /// via REST `GET/POST /v1/jobs`, `PATCH/DELETE /v1/jobs/:id`,
@@ -91,23 +92,19 @@ class _AutomationPageState extends State<AutomationPage> {
                   icon: const Icon(Icons.add),
                 ),
               if (widget.onRefresh != null)
-                IconButton(onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
+                IconButton(
+                  tooltip: 'Muat ulang',
+                  onPressed: widget.onRefresh, icon: const Icon(Icons.refresh)),
             ],
           ),
         ),
         if (widget.surfaceSection != null) widget.surfaceSection!,
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(widget.error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Expanded(
           child: snapshot == null
-              ? Center(
-                  child: Text('Belum ada data job.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada data job.')
               : snapshot.jobs.isEmpty
                   ? ListView(
                       children: [
