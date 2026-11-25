@@ -17,6 +17,7 @@ export 'src/ollama_embed.dart';
 export 'src/capability_probe.dart';
 export 'src/ollama_native.dart';
 export 'src/model_discovery.dart';
+export 'src/onboarding_probe.dart';
 export 'src/prompt_cache.dart';
 export 'src/mistral_provider.dart';
 export 'src/minimax_provider.dart';

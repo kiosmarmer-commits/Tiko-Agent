@@ -17,9 +17,14 @@ class OnboardingProfile {
     this.baseUrl,
     this.model,
     this.apiKeyEnvVar,
+    this.securityMode = 'ask',
     Map<String, String> env = const {},
   })  : assert(providerId.isNotEmpty),
         assert(workspace.isNotEmpty),
+        assert(
+          const {'auto', 'guided', 'ask', 'deny'}.contains(securityMode),
+          'securityMode harus auto|guided|ask|deny',
+        ),
         env = Map.unmodifiable(env);
 
   /// Built-in type (`mock`, `ollama_native`, `openai_compat`, `anthropic`,
@@ -34,6 +39,10 @@ class OnboardingProfile {
   /// Env var name holding the API key (e.g. `OPENAI_API_KEY`); null when the
   /// provider needs no key (mock, local Ollama).
   final String? apiKeyEnvVar;
+
+  /// Mode keamanan hasil wizard (rekomendasi OnboardingProbe). Bawaan `ask`
+  /// sama seperti template konfigurasi.
+  final String securityMode;
 
   /// Gateway and provider credentials written to the 0600 env file.
   final Map<String, String> env;
@@ -108,7 +117,7 @@ abstract final class OnboardingWizard {
         '      enabled: true',
       ],
       'security:',
-      '  mode: ask',
+      '  mode: ${profile.securityMode}',
       '  shell_allowlist: ["ls", "pwd", "echo", "git status"]',
       '  require_confirm: ["write_file", "patch_file", "shell", "http_request"]',
       'storage:',
@@ -240,5 +249,117 @@ abstract final class OnboardingWizard {
       if (await existing.exists()) await existing.delete();
       await temporary.rename(target);
     }
+  }
+}
+
+/// Laporan pemeriksaan satu tool eksternal untuk wizard onboarding.
+class DependencyReport {
+  const DependencyReport({
+    required this.command,
+    required this.found,
+    this.detail,
+  });
+
+  final String command;
+  final bool found;
+  final String? detail;
+}
+
+/// Recovery onboarding (Hermes S10): validasi konfigurasi pasca-writeAll dan
+/// pemulihan otomatis ke revisi valid terakhir bila config korup.
+abstract final class OnboardingRecovery {
+  /// Muat [configPath]; bila ada issue fatal, cari revisi valid terbaik di
+  /// [revisionsDir] (descending), rollback ke sana, dan laporkan. Bila
+  /// config masih valid, tidak ada tulis yang terjadi.
+  static Future<OnboardingRecoveryReport> verifyAndRecover({
+    required String configPath,
+    required String revisionsDir,
+  }) async {
+    final (_, issues) = TikoConfig.load(configPath);
+    final fatal = issues.where((i) => i.fatal).toList();
+    if (fatal.isEmpty) {
+      return OnboardingRecoveryReport(ok: true, issues: issues, detail: 'config valid');
+    }
+    final store = ConfigStore(configPath: configPath, revisionsDir: revisionsDir);
+    final history = await store.history();
+    for (final meta in history) {
+      final revision = (meta['revision'] as num?)?.toInt();
+      if (revision == null || revision < 1) continue;
+      final revisionFile = File(p.join(revisionsDir, 'r$revision.yaml'));
+      if (!revisionFile.existsSync()) continue;
+      try {
+        final (_, revisionIssues) = TikoConfig.parse(revisionFile.readAsStringSync());
+        if (revisionIssues.any((i) => i.fatal)) continue;
+        final rolled = await store.rollback(revision);
+        if (rolled.issues.any((i) => i.fatal)) continue;
+        return OnboardingRecoveryReport(
+          ok: true,
+          issues: revisionIssues,
+          rolledBackTo: revision,
+          detail: 'config pulih dari revisi r$revision',
+        );
+      } catch (_) {
+        continue;
+      }
+    }
+    return OnboardingRecoveryReport(
+      ok: false,
+      issues: issues,
+      detail: 'tidak ada revisi valid untuk di-restore',
+    );
+  }
+}
+
+/// Ringkasan hasil recovery [OnboardingRecovery.verifyAndRecover].
+class OnboardingRecoveryReport {
+  const OnboardingRecoveryReport({
+    required this.ok,
+    required this.issues,
+    required this.detail,
+    this.rolledBackTo,
+  });
+
+  final bool ok;
+  final List<ConfigIssue> issues;
+  final String detail;
+
+  /// Revisi tujuan rollback bila pemulihan dilakukan.
+  final int? rolledBackTo;
+}
+
+/// Pemeriksaan dependency/tool eksternal untuk wizard workspace (Hermes S10):
+/// tiap [command] dicek presence-nya di PATH. [locate] di-inject agar
+/// testable; bawaan memakai `which` (Windows: `where`).
+abstract final class OnboardingAssist {
+  static Future<List<DependencyReport>> checkDependencies(
+    Iterable<String> commands, {
+    Future<({bool found, String? detail})?> Function(String command)? locate,
+  }) async {
+    final reports = <DependencyReport>[];
+    for (final command in commands) {
+      if (locate != null) {
+        final result = await locate(command);
+        reports.add(DependencyReport(
+          command: command,
+          found: result?.found ?? false,
+          detail: result?.detail,
+        ));
+        continue;
+      }
+      final binary = Platform.isWindows ? 'where' : 'which';
+      try {
+        final proc = await Process.run(binary, [command]);
+        final firstLine = ('${proc.stdout}').trim().split('\n').first.trim();
+        final ok = proc.exitCode == 0 && firstLine.isNotEmpty;
+        reports.add(DependencyReport(
+          command: command,
+          found: ok,
+          detail: ok ? firstLine : null,
+        ));
+      } catch (_) {
+        reports.add(DependencyReport(command: command, found: false));
+      }
+    }
+    return reports;
   }
 }
