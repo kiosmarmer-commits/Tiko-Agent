@@ -23,6 +23,7 @@ enum KeyType {
   ctrlW,
   ctrlC,
   ctrlD,
+  esc,
   unknown,
 }
 
@@ -84,6 +85,7 @@ List<KeyEvent> decodeKeys(List<int> bytes) {
         i += 3;
         continue;
       }
+      events.add(const KeyEvent(KeyType.esc));
       i++;
       continue;
     }
@@ -367,6 +369,7 @@ class LineEditor {
         buffer = '';
         cursor = 0;
         _resetCompletion();
+      case KeyType.esc:
       case KeyType.ctrlD || KeyType.unknown:
         break;
     }
