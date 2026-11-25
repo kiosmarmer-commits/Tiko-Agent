@@ -9,6 +9,7 @@ import 'package:tiko_runtime/tiko_runtime.dart';
 import 'package:tiko_tui/tiko_tui.dart';
 import 'package:tiko/batch_cli.dart';
 import 'package:tiko/settings_menu.dart';
+import 'package:tiko/setup_wizard.dart';
 import 'package:tiko/tiko_cli.dart';
 
 const _usage = '''
@@ -18,7 +19,9 @@ tiko — Pasitiko local-first agent (control plane)
 
 Perintah utama:
   setup [--provider mock|ollama] [--workspace PATH] [--force] [--smoke]
-  setup --interactive         wizard kredensial provider + gateway
+  setup --interactive         wizard terpandu penuh (deteksi provider, test
+                              koneksi + model live, rekomendasi keamanan,
+                              workspace + dependency, recovery config)
   chat [prompt]              chat (mode auto: embedded)
   run <prompt>
   daemon start|stop|restart|status
@@ -2165,143 +2168,5 @@ Future<bool> _setupSmokeTurn(String configAbs) async {
 }
 
 Future<void> _setupInteractive(String configPath, bool force) async {
-  stdout.writeln('Wizard onboarding Tiko — kredensial disimpan sebagai SecretRef');
-  stdout.writeln('env:VAR di config, nilai rahasianya di gateway.env (permission 600).');
-  stdout.writeln('');
-  final prompts = PromptRunner();
-  const providerTypes = [
-    'mock',
-    'ollama_native',
-    'openai',
-    'deepseek',
-    'anthropic',
-    'gemini',
-    'openai_compat',
-    'openai_responses',
-    'azure_openai',
-    'bedrock',
-  ];
-  String providerType;
-  while (true) {
-    final choice = await prompts.select(
-      'Tipe provider:',
-      [...providerTypes, 'Lainnya (id preset lain)…'],
-      def: 'mock',
-    );
-    if (choice == 'Lainnya (id preset lain)…') {
-      providerType = await prompts.prompt(
-        'id preset (mis. cerberus)',
-        required: true,
-        completions: providerTypes,
-      );
-    } else {
-      providerType = choice;
-    }
-    try {
-      OnboardingWizard.renderConfigYaml(OnboardingProfile(
-        providerType: providerType,
-        workspace: '.',
-      ));
-      break;
-    } on ArgumentError {
-      stdout.writeln('  Tipe provider tidak dikenal, coba lagi.');
-    }
-  }
-  // Simpan pilihan custom agar langkah berikutnya konsisten dengan menu.
-  stdout.writeln('Provider dipilih: $providerType');
-
-  final needsKey = providerType != 'mock' && providerType != 'ollama_native';
-  final baseUrl = needsKey
-      ? await prompts.prompt('base_url (kosongkan untuk default preset)')
-      : '';
-  final model = await prompts.prompt('model (kosongkan untuk default)');
-
-  final env = <String, String>{};
-  String? apiKeyEnvVar;
-  if (needsKey) {
-    apiKeyEnvVar = OnboardingProfile.defaultApiKeyVar(providerType);
-    env[apiKeyEnvVar] = await prompts.prompt('API key ($apiKeyEnvVar)', required: true);
-  }
-
-  if (await prompts.confirm('Aktifkan gateway Telegram?')) {
-    env['TG_TOKEN'] = await prompts.prompt('TG_TOKEN', required: true);
-    env['TG_ALLOW'] = await prompts.prompt('TG_ALLOW (id user, dipisah koma)', required: true);
-  }
-  if (await prompts.confirm('Aktifkan gateway Discord?')) {
-    env['DISCORD_BOT_TOKEN'] = await prompts.prompt('DISCORD_BOT_TOKEN', required: true);
-    env['DISCORD_ALLOW'] = await prompts.prompt('DISCORD_ALLOW (id user, dipisah koma)');
-  }
-  if (await prompts.confirm('Aktifkan email SMTP (outbound)?')) {
-    env['EMAIL_FROM'] = await prompts.prompt('EMAIL_FROM', required: true);
-    env['SMTP_HOST'] = await prompts.prompt('SMTP_HOST', required: true);
-    env['SMTP_PORT'] = await prompts.prompt('SMTP_PORT', def: '587');
-    final smtpUser = await prompts.prompt('SMTP_USER');
-    if (smtpUser.isNotEmpty) {
-      env['SMTP_USER'] = smtpUser;
-      env['SMTP_PASS'] = await prompts.prompt('SMTP_PASS', required: true);
-      env['SMTP_STARTTLS'] = '1';
-    }
-    final emailAllow = await prompts.prompt('EMAIL_ALLOW (tujuan diizinkan, dipisah koma)');
-    if (emailAllow.isNotEmpty) env['EMAIL_ALLOW'] = emailAllow;
-  }
-  if (await prompts.confirm('Aktifkan email inbound IMAP?')) {
-    env['IMAP_HOST'] = await prompts.prompt('IMAP_HOST', required: true);
-    env['IMAP_PORT'] = await prompts.prompt('IMAP_PORT', def: '993');
-    env['IMAP_USER'] = await prompts.prompt('IMAP_USER', required: true);
-    env['IMAP_PASSWORD'] = await prompts.prompt('IMAP_PASSWORD', required: true);
-    env['IMAP_ALLOW'] = await prompts.prompt('IMAP_ALLOW (pengirim diizinkan)', required: true);
-  }
-
-  final profile = OnboardingProfile(
-    providerType: providerType,
-    workspace: await prompts.prompt('Workspace', def: '.', required: true),
-    baseUrl: baseUrl.isEmpty ? null : baseUrl,
-    model: model.isEmpty ? null : model,
-    apiKeyEnvVar: apiKeyEnvVar,
-    env: env,
-  );
-
-  final configAbs = p.absolute(configPath);
-  final configDir = p.dirname(configAbs);
-  final projectRoot = p.basename(configDir) == 'config'
-      ? p.dirname(configDir)
-      : configDir;
-  try {
-    var forceWrite = force;
-    final existing = File(configPath);
-    if (await existing.exists() && !force) {
-      stdout.writeln('');
-      stdout.writeln('Config sudah ada: ${p.absolute(configPath)}');
-      forceWrite = await prompts.confirm(
-        '  Timpa config dengan hasil wizard ini? (y/t)',
-      );
-      if (!forceWrite) {
-        stdout.writeln(
-          'Config tidak diubah. Untuk overwrite tanpa tanya, jalankan '
-          '`tiko setup --interactive --force`.',
-        );
-        return;
-      }
-    }
-    final paths = await OnboardingWizard.writeAll(
-      configPath: configPath,
-      dataDir: p.join(projectRoot, 'data'),
-      profile: profile,
-      force: forceWrite,
-    );
-    stdout.writeln('');
-    stdout.writeln('✓ Config disimpan: ${paths.configPath}');
-    stdout.writeln('✓ Env file disimpan: ${paths.envPath} (permission 600)');
-    stdout.writeln('');
-    stdout.writeln('Lanjut:');
-    stdout.writeln('  source ${paths.envPath}');
-    stdout.writeln('  tiko doctor --probe && tiko chat');
-  } on StateError catch (error) {
-    stderr.writeln('✗ GAGAL menyimpan: ${error.message}');
-    stderr.writeln('Tidak ada perubahan yang selesai; jalankan ulang wizard.');
-    exitCode = 1;
-  } on ArgumentError catch (error) {
-    stderr.writeln('✗ GAGAL: ${error.message}');
-    exitCode = 2;
-  }
+  exitCode = await runSetupWizard(configPath: configPath, force: force);
 }
