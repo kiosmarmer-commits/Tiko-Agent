@@ -488,6 +488,10 @@ class TikoConfig {
     this.maxToolCalls = 30,
     this.toolSubsetThreshold = 24,
     this.toolSubsetK = 20,
+    this.contextCompaction = true,
+    this.compactorThresholdRatio = 0.7,
+    this.compactorKeepLastN = 6,
+    this.compactorMaxSoftTokens = 6000,
     this.apiPort = 8787,
     this.enableImageGeneration = false,
     this.enableVideoGeneration = false,
@@ -665,6 +669,21 @@ class TikoConfig {
   /// [toolSubsetK] relevant specs plus `tool_search`.
   final int toolSubsetThreshold;
   final int toolSubsetK;
+
+  /// ALG-05 kompresi konteks: false mematikan compactor (riwayat penuh
+  /// selalu dikirim ke provider), true mengaktifkan ringkasan otomatis.
+  final bool contextCompaction;
+
+  /// Kompresi dipicu saat estimasi token riwayat (len/4) melampaui
+  /// [compactorMaxSoftTokens] * [compactorThresholdRatio] (0.1..1.0).
+  final double compactorThresholdRatio;
+
+  /// Jumlah pesan terakhir yang dipertahankan apa adanya saat kompresi.
+  final int compactorKeepLastN;
+
+  /// Ambang token lembut ringkasan (estimasi len/4, bukan hitungan token
+  /// provider); minimal 256, default 6000 sesuai ambang ALG-05.
+  final int compactorMaxSoftTokens;
   final int apiPort;
 
   static const knownProviderTypes = {
@@ -1549,6 +1568,13 @@ class TikoConfig {
       maxToolCalls: intOf(agent['max_tool_calls'], 30),
       toolSubsetThreshold: intOf(agent['tool_subset_threshold'], 24),
       toolSubsetK: intOf(agent['tool_subset_k'], 20),
+      contextCompaction: agent['context_compaction'] is! bool
+          ? true
+          : (agent['context_compaction'] as bool),
+      compactorThresholdRatio: _compactorRatio(agent['compactor_threshold_ratio']),
+      compactorKeepLastN: _compactorKeepLastN(agent['compactor_keep_last_n']),
+      compactorMaxSoftTokens:
+          _compactorSoftTokens(agent['compactor_max_soft_tokens']),
       apiPort: configuredPort is int && configuredPort >= 1 && configuredPort <= 65535
           ? configuredPort
           : 8787,
@@ -1691,6 +1717,24 @@ class TikoConfig {
       maxQuarantinesPerDay: intOf(
           raw['max_quarantines_per_day'], 3, 'max_quarantines_per_day', 0),
     );
+  }
+
+  /// ALG-05: parsing aman knob kompresi konteks. Nilai invalid kembali ke
+  /// default fail-open (runtime tetap jalan), gaya sama dengan knob agent
+  /// lain pada bagian `agent:` config.
+  static double _compactorRatio(Object? v) {
+    if (v is num && v > 0 && v <= 1) return v.toDouble();
+    return 0.7;
+  }
+
+  static int _compactorKeepLastN(Object? v) {
+    if (v is int && v >= 1) return v;
+    return 6;
+  }
+
+  static int _compactorSoftTokens(Object? v) {
+    if (v is int && v >= 256) return v;
+    return 6000;
   }
 
   static DecisionConfig _parseDecision(YamlMap sec, List<ConfigIssue> issues) {

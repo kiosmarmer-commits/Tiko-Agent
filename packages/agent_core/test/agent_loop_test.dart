@@ -202,6 +202,39 @@ void main() {
     expect(skill.successes, 0);
     expect(replies, isEmpty);
   });
+
+  test('loop meneruskan LLM aktif ke compactor sebagai peringkas', () async {
+    final mock = MockLlmProvider(scenario: MockScenario.singleTool);
+    CompactionStats? stats;
+    final loop = AgentLoop(
+      router: Router(providers: {'mock': mock}, defaultProviderId: 'mock'),
+      contextBuilder: ContextBuilder(),
+      compactor: Compactor(
+        maxSoftTokens: 8,
+        thresholdRatio: 0.5,
+        keepLastN: 2,
+        onCompaction: (s) => stats = s,
+      ),
+      gate: AllowAllGate(),
+      executor: MockToolExecutor(),
+      memory: NoopMemory(),
+      reply: (m, text) async => replies.add(text),
+      config: const AgentConfig(maxIterations: 3, maxToolCalls: 10),
+    );
+    await loop.handle(
+      const InboundMessage(
+        channel: 'cli',
+        userKey: 'user1',
+        sessionKey: 'cli:user1',
+        text: 'waktu sekarang',
+      ),
+      session,
+    );
+    expect(stats, isNotNull);
+    expect(stats!.compacted, isTrue);
+    expect(stats!.usedLlm, isTrue);
+    expect(replies, isNotEmpty);
+  });
 }
 
 class _ErrorProvider implements LlmProvider {

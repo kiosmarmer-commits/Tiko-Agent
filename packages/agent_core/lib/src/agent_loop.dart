@@ -508,7 +508,10 @@ class AgentLoop {
           }
         }
 
-        ctx = await compactor.maybeCompact(ctx);
+        // Kompresi konteks memakai LLM aktif turn ini sebagai peringkas
+        // (fallback heuristic naive bila call gagal) sehingga sesi panjang
+        // tidak pernah membawa transkrip penuh ke provider berikutnya.
+        ctx = await compactor.maybeCompact(ctx, llmOverride: activeLlm);
       }
 
     } on OperationCancelledException {
