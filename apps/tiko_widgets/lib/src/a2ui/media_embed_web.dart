@@ -1,8 +1,8 @@
-import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:web/web.dart' as web;
 
 import 'media_embed.dart';
 
@@ -15,16 +15,16 @@ Widget buildMediaEmbed({
   bool loop = false,
 }) {
   final isVideo = kind == 'video';
-  final html.MediaElement element;
+  final web.HTMLMediaElement element;
   if (isVideo) {
-    final video = html.VideoElement()
+    final video = web.HTMLVideoElement()
       ..controls = true
       ..style.width = '100%'
       ..style.height = '100%';
     if (poster != null && poster.isNotEmpty) video.poster = poster;
     element = video;
   } else {
-    final audio = html.AudioElement()..controls = true;
+    final audio = web.HTMLAudioElement()..controls = true;
     if (loop) audio.loop = true;
     element = audio;
   }
@@ -35,7 +35,6 @@ Widget buildMediaEmbed({
   }
   final viewType =
       'tiko-a2ui-media-$kind-${DateTime.now().microsecondsSinceEpoch}';
-  // ignore: unsafe_html
   ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) => element);
   return isVideo
       ? AspectRatio(
