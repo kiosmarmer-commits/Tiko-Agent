@@ -418,5 +418,82 @@ void main() {
       expect(result.content, contains('"success":true'));
       expect(result.content, contains('subagent_id'));
     });
+
   });
+
+  group('Subagent paralel + limit instance (Hermes S15)', () {
+    test('spec spawn_subagent parallel-safe untuk eksekusi paralel', () {
+      final tool = SpawnSubagentTool(maxDepth: 2);
+      expect(tool.spec.parallelSafe, isTrue);
+      expect(tool.spec.name, 'spawn_subagent');
+    });
+
+    test('registerSubagent menegakkan limit dari maxSubagents instance', () {
+      expect(SpawnSubagentTool.registerSubagent('lim-1', limit: 2), isTrue);
+      expect(SpawnSubagentTool.registerSubagent('lim-2', limit: 2), isTrue);
+      expect(SpawnSubagentTool.registerSubagent('lim-3', limit: 2), isFalse);
+      expect(SpawnSubagentTool.activeSubagentCount(), 2);
+      SpawnSubagentTool.unregisterSubagent('lim-1');
+      SpawnSubagentTool.unregisterSubagent('lim-2');
+      expect(SpawnSubagentTool.activeSubagentCount(), 0);
+    });
+
+    test('dua spawn_subagent berjalan paralel lewat ParallelToolRunner',
+        () async {
+      final tool = SpawnSubagentTool(
+        maxDepth: 2,
+        maxSubagents: 4,
+        runner: ({
+          required goal,
+          required context,
+          required parent,
+          required depth,
+          required budget,
+          required allowedTools,
+        }) async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return SubagentResult(
+            success: true,
+            output: 'selesai: $goal',
+            tokenCount: 10,
+          );
+        },
+      );
+      final session = Session(id: 'parser', channel: 'cli', userKey: 'user');
+      final ctx = ToolContext(session: session, workspacePath: '.');
+      const calls = [
+        ToolCall(id: 'c1', name: 'spawn_subagent', args: {'goal': 'A'}),
+        ToolCall(id: 'c2', name: 'spawn_subagent', args: {'goal': 'B'}),
+      ];
+      final runner = ParallelToolRunner(_SubagentAdapter(tool));
+      final sw = Stopwatch()..start();
+      final results = await runner.runAll(
+        calls,
+        ctx,
+        parallel: true,
+        isParallelSafe: (call) => tool.spec.parallelSafe,
+      );
+      sw.stop();
+      expect(results.length, 2);
+      expect(results.every((r) => !r.result.isError), isTrue);
+      expect(results.every((r) => r.result.content.contains('sukses')), isTrue);
+      expect(
+        sw.elapsedMilliseconds,
+        lessThan(45),
+        reason: 'eksekusi paralel harus lebih cepat dari total serial 40ms',
+      );
+      expect(SpawnSubagentTool.activeSubagentCount(), 0);
+    });
+  });
+}
+
+class _SubagentAdapter implements ToolExecutor {
+  _SubagentAdapter(this.tool);
+
+  final SpawnSubagentTool tool;
+
+  @override
+  Future<ToolResult> run(ToolCall call, ToolContext ctx) async {
+    return tool.run(call.args, ctx);
+  }
 }

@@ -101,8 +101,8 @@ class SpawnSubagentTool implements Tool {
   static void setDepth(Session s, int d) => _depth[s.id] = d;
 
   /// Track active subagents to enforce maxSubagents limit (P1-09).
-  static bool registerSubagent(String id) {
-    if (_activeSubagents.length >= 4) return false;
+  static bool registerSubagent(String id, {int limit = 4}) {
+    if (_activeSubagents.length >= limit) return false;
     _activeSubagents[id] = DateTime.now();
     return true;
   }
@@ -117,7 +117,7 @@ class SpawnSubagentTool implements Tool {
   ToolSpec get spec => const ToolSpec(
     name: 'spawn_subagent',
     description:
-        'Bagi tugas independen ke subagent (kedalaman maks 2, maks 4 subagent aktif). Argumen: goal, context opsional, budget opsional, allowed_tools opsional.',
+        'Bagi tugas independen ke subagent (kedalaman maks 2, subagent aktif dibatasi jumlah). Argumen: goal, context opsional, budget opsional, allowed_tools opsional.',
     inputSchema: {
       'type': 'object',
       'properties': {
@@ -141,6 +141,7 @@ class SpawnSubagentTool implements Tool {
     },
     risk: 'medium',
     timeoutSec: 120,
+    parallelSafe: true,
   );
 
   @override
@@ -177,7 +178,7 @@ class SpawnSubagentTool implements Tool {
       
       try {
         // Register subagent before execution
-        if (!registerSubagent(subagentId)) {
+        if (!registerSubagent(subagentId, limit: maxSubagents)) {
           return const ToolResult(
             callId: '',
             content: 'Tidak dapat mendaftarkan subagent',

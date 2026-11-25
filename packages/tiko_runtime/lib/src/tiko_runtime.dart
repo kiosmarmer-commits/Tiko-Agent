@@ -2419,10 +2419,17 @@ class TikoRuntime {
           toolSubsetK: config.toolSubsetK,
           errorRecallBlock: errorRecallBlock,
         ),
-        compactor: Compactor(),
-        // P0-3: the gate never prompts directly. It returns needsConfirm and
-        // the loop's broker-backed confirm below becomes the single path, so
-        // every surface settles the same durable apr_* request ID.
+        compactor: config.contextCompaction
+            ? Compactor(
+                thresholdRatio: config.compactorThresholdRatio,
+                keepLastN: config.compactorKeepLastN,
+                maxSoftTokens: config.compactorMaxSoftTokens,
+                onCompaction: (stats) => events.emit('context.compacted', {
+                  'session': sessionId,
+                  ...stats.toJson(),
+                }),
+              )
+            : Compactor(enabled: false),
         gate: _TirithPreGate(
           gateOverride ?? _botGate(boundBot),
           tirith,
@@ -4465,6 +4472,13 @@ class TikoRuntime {
     int toolCallCount = 0;
     final double cost = 0.0;
 
+    events.emit('subagent.started', {
+      'parent': parent.id,
+      'subagent': subagentId,
+      'depth': depth,
+      'budget': budget.toJson(),
+    });
+    var ok = false;
     try {
       final outcome = await chatWithStatus(
         prompt,
@@ -4484,6 +4498,7 @@ class TikoRuntime {
       toolCallCount = outcome.toolCallCount;
       
       if (outcome.success) {
+        ok = true;
         return SubagentResult(
           success: true,
           output: outcome.text,
@@ -4529,6 +4544,15 @@ class TikoRuntime {
         toolCallCount: toolCallCount,
         cost: cost,
       );
+    } finally {
+      events.emit('subagent.completed', {
+        'parent': parent.id,
+        'subagent': subagentId,
+        'depth': depth,
+        'success': ok,
+        'token_count': tokenCount,
+        'tool_call_count': toolCallCount,
+      });
     }
   }
   /// Start configured MCP child processes after the daemon owns its instance
