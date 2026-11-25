@@ -103,6 +103,8 @@ const Set<String> a2uiAllowedComponents = {
   'List',
   'Tabs',
   'Modal',
+  'Video',
+  'AudioPlayer',
 };
 
 final RegExp _a2uiSafeId = RegExp(r'^[A-Za-z0-9_.\-]{1,64}$');
@@ -142,12 +144,22 @@ const Map<String, Set<String>> _a2uiComponentKeys = {
   'List': {'axis'},
   'Tabs': {'labels'},
   'Modal': {'title'},
+  'Video': {'src', 'poster'},
+  'AudioPlayer': {'src', 'loop'},
 };
 
 const Set<String> _a2uiButtonVariants = {'primary', 'secondary', 'danger'};
 const Set<String> _a2uiTones = {'primary', 'neutral', 'error'};
 const Set<String> _a2uiApprovalRisks = {'low', 'medium', 'high'};
-const Set<String> _a2uiChartKinds = {'bar', 'line', 'area', 'donut'};
+const Set<String> _a2uiChartKinds = {
+  'bar',
+  'line',
+  'area',
+  'donut',
+  'pie',
+  'scatter',
+  'hbar',
+};
 const Set<String> _a2uiTextVariants = {'heading', 'body', 'caption', 'mono'};
 
 /// Komponen input form (Fase E6): aksinya repeatable — tiap perubahan isian
@@ -705,18 +717,24 @@ dynamic _validateProperty(String type, String key, dynamic value) {
       }
       return v;
     case 'src':
+    case 'poster':
       final v = str(value);
       final okHttp = Uri.tryParse(v)?.scheme == 'https' ||
           Uri.tryParse(v)?.scheme == 'http';
       final okFile = v.startsWith('file://data/uploads/');
       if (!okHttp && !okFile) {
         throw const FormatException(
-            'a2ui: Image.src hanya https/http atau file://data/uploads/**');
+            'a2ui: src/poster hanya https/http atau file://data/uploads/**');
       }
       if (v.length > 2048) {
-        throw const FormatException('a2ui: Image.src maksimal 2048 karakter');
+        throw const FormatException('a2ui: src/poster maksimal 2048 karakter');
       }
       return v;
+    case 'loop':
+      if (value is! bool) {
+        throw const FormatException('a2ui: loop harus boolean');
+      }
+      return value;
     case 'name':
       final v = str(value);
       if (!_a2uiIconName.hasMatch(v)) {

@@ -580,3 +580,21 @@ Riset fondasi (Hermes/Claude Code/Codex/Cursor/Gravity) menunjukkan semua punya 
 6. Di Telegram (degradasi): pesan berisi teks ringkas + code fence (nilai kebab), tombol tidak ada — aman.
 
 **Perubahan API yang diantisipasi (contoh):** bila `a2ui_flutter` 0.5.0 mengganti `A2uiSurface` → `A2uiView`, cukup ubah `a2ui_adapter.dart` (1 file), tanpa menyentuh agent_core/gateway/runtime.
+
+## E9 Media dan chart lanjutan (S18)
+
+Komponen `Video` (props `src`, `poster`) dan `AudioPlayer` (props `src`, `loop`)
+masuk whitelist katalog Tiko (`agent_a2ui.dart`) dengan validasi fail-closed:
+`src`/`poster` hanya http/https atau `file://data/uploads/**`, maksimal 2048
+char, `loop` boolean; kunci asing ditolak. Renderer `apps/tiko_widgets` memakai
+embed conditional: Flutter Web menyajikan elemen video/audio asli browser via
+`HtmlElementView` (pemutaran nyata); desktop/mobile tanpa codec native
+menampilkan placeholder jujur (ikon + sumber + keterangan). Katalog `Chart`
+kini juga menerima `pie` (semantik donut penuh), `scatter` (CustomPaint titik
+ternormalisasi), dan `hbar` (bar horizontal). Uji: `a2ui_test.dart`
+(+Video/AudioPlayer/chart lanjutan), `a2ui_surface_view_test.dart` (+2 widget).
+
+Rekomendasi R2 (type-aware compaction), R3 (MoaProvider), R4 (benchmark replay),
+R1/R5 (verifikasi cloud sandbox + MCP server) didokumentasikan di
+docs/12 entri 23-27.
+

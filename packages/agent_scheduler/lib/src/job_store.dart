@@ -400,7 +400,8 @@ class JobStore {
     List<String>? contextFrom,
     WatchProbe? watchProbe,
   }) {
-    final expr = CronExpression.parse(cron);
+    final normalizedCron = normalizeCronInput(cron);
+    final expr = CronExpression.parse(normalizedCron);
     if (prompt.trim().isEmpty || prompt.length > 10000) {
       throw ArgumentError.value(prompt, 'prompt', 'must contain 1..10000 characters');
     }
@@ -435,7 +436,7 @@ class JobStore {
     if (_jobs.containsKey(jobId)) throw StateError('duplicate job id: $jobId');
     final job = Job(
       id: jobId,
-      cron: cron,
+      cron: normalizedCron,
       prompt: prompt.trim(),
       channel: channel,
       userKey: userKey,
@@ -512,7 +513,7 @@ class JobStore {
   }) {
     final job = _jobs[id];
     if (job == null) return null;
-    final newCron = cron?.trim();
+    final newCron = cron == null ? null : normalizeCronInput(cron);
     if (newCron != null && newCron.isNotEmpty) {
       CronExpression.parse(newCron); // throws ArgumentError bila invalid
       job.cron = newCron;

@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   agent_core:
     path: ../../packages/agent_core
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_lints: ^5.0.0

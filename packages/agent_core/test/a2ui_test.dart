@@ -132,7 +132,7 @@ void main() {
           'createSurface': {
             'surfaceId': 's1',
             'components': [
-              {'id': 'root', 'component': 'Video', 'src': 'x'},
+              {'id': 'root', 'component': 'Iframe', 'src': 'x'},
             ],
           },
         }),
@@ -247,7 +247,95 @@ void main() {
       expect(parseA2uiMessages(chart('area')), isNotEmpty);
       expect(parseA2uiMessages(chart('donut')), isNotEmpty);
       expect(
-        () => parseA2uiMessages(chart('scatter')),
+        () => parseA2uiMessages(chart('waterfall')),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('Chart katalog lanjutan: pie|scatter|hbar diterima', () {
+      Map<String, Object> chart(String kind) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-ch2',
+              'components': [
+                {
+                  'id': 'root',
+                  'component': 'Chart',
+                  'kind': kind,
+                  'points': [
+                    {'label': 'L1', 'value': 10},
+                    {'label': 'L2', 'value': 24},
+                  ],
+                },
+              ],
+            },
+          };
+      expect(parseA2uiMessages(chart('pie')), isNotEmpty);
+      expect(parseA2uiMessages(chart('scatter')), isNotEmpty);
+      expect(parseA2uiMessages(chart('hbar')), isNotEmpty);
+    });
+
+    test('Video: src http/file + poster diterima, kunci asing ditolak', () {
+      Map<String, Object> video(Map<String, Object> props) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-video',
+              'components': [
+                {
+                  'id': 'root',
+                  'component': 'Video',
+                  ...props,
+                },
+              ],
+            },
+          };
+      expect(
+        parseA2uiMessages(video({
+          'src': 'https://example.com/a.mp4',
+          'poster': 'file://data/uploads/p.png',
+        })),
+        isNotEmpty,
+      );
+      expect(
+        () => parseA2uiMessages(video({'src': 'ftp://example.com/a.mp4'})),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(video({
+          'src': 'https://example.com/a.mp4',
+          'autoplay': true,
+        })),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('AudioPlayer: src + loop boolean', () {
+      Map<String, Object> audio(Map<String, Object> props) => {
+            'version': '1.0',
+            'createSurface': {
+              'surfaceId': 's-audio',
+              'components': [
+                {
+                  'id': 'root',
+                  'component': 'AudioPlayer',
+                  ...props,
+                },
+              ],
+            },
+          };
+      expect(
+        parseA2uiMessages(audio({
+          'src': 'file://data/uploads/ringtone.mp3',
+          'loop': true,
+        })),
+        isNotEmpty,
+      );
+      expect(
+        () => parseA2uiMessages(audio({'src': 'javascript:alert(1)'})),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseA2uiMessages(audio({'src': 'x.mp3', 'loop': 'yes'})),
         throwsA(isA<FormatException>()),
       );
     });
