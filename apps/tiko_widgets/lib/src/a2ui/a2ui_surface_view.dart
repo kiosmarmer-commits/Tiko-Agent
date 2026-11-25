@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:agent_core/agent_core.dart';
 import 'package:flutter/material.dart';
 
+import 'media_embed.dart';
+
 /// Merender hasil apply sejumlah pesan A2UI menjadi satu tampilan surface
 /// (pola yang dipakai chat inline: pesan tool diubah fence, host mengekstrak
 /// dan mem-parse sebelum masuk sini).
@@ -285,6 +287,18 @@ class A2uiSurfaceView extends StatelessWidget {
         return _buildMetric(context, p);
       case 'Chart':
         return _buildChart(context, p);
+      case 'Video':
+        return a2uiMediaEmbed(
+          kind: 'video',
+          src: p['src']?.toString() ?? '',
+          poster: p['poster']?.toString(),
+        );
+      case 'AudioPlayer':
+        return a2uiMediaEmbed(
+          kind: 'audio',
+          src: p['src']?.toString() ?? '',
+          loop: p['loop'] == true,
+        );
       case 'KanbanCard':
         return _buildKanbanCard(context, p);
       case 'ApprovalSheet':
@@ -385,7 +399,7 @@ class A2uiSurfaceView extends StatelessWidget {
         ),
       );
     }
-    if (kind == 'donut') {
+    if (kind == 'donut' || kind == 'pie') {
       final values =
           points.map((x) => (x['value'] as num).toDouble()).toList();
       return SizedBox(
@@ -422,6 +436,22 @@ class A2uiSurfaceView extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      );
+    }
+    if (kind == 'scatter') {
+      final values =
+          points.map((x) => (x['value'] as num).toDouble()).toList();
+      return SizedBox(
+        height: 120,
+        width: double.infinity,
+        child: CustomPaint(
+          painter: _A2uiScatterPainter(
+            values: values,
+            min: minVal,
+            span: span,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
       );
     }
@@ -1094,6 +1124,42 @@ class _A2uiDonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _A2uiDonutPainter oldDelegate) =>
+      oldDelegate.values.length != values.length;
+}
+
+/// Scatter (katalog lanjutan): titik (indeks, nilai) dinormalisasi ke box;
+/// satu nilai tunggal tetap tergambar di tengah.
+class _A2uiScatterPainter extends CustomPainter {
+  _A2uiScatterPainter({
+    required this.values,
+    required this.min,
+    required this.span,
+    required this.color,
+  });
+
+  final List<double> values;
+  final double min;
+  final double span;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+    for (var i = 0; i < values.length; i++) {
+      final x = values.length == 1
+          ? size.width / 2
+          : size.width * i / (values.length - 1);
+      final y = size.height - (values[i] - min) / span * size.height;
+      canvas.drawCircle(
+        Offset(x.clamp(0.0, size.width), y.clamp(0.0, size.height)),
+        4,
+        Paint()..color = color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _A2uiScatterPainter oldDelegate) =>
       oldDelegate.values.length != values.length;
 }
 

@@ -42,6 +42,7 @@ A2uiMessage createDashboard() =>
     }).first;
 
 void main() {
+  _mediaGroup();
   testWidgets('A2uiSurfaceStreamView merender Metric, Chart, dan tombol',
       (tester) async {
     var actionFired = false;
@@ -420,3 +421,80 @@ void main() {
 final jsonLine =
     '{"version":"1.0","createSurface":{"surfaceId":"s-inline","components":'
     '[{"id":"root","component":"Divider"}]}}';
+
+A2uiMessage createMediaSurface() => parseA2uiMessages({
+      'version': '1.0',
+      'createSurface': {
+        'surfaceId': 's-media',
+        'components': [
+          {
+            'id': 'root',
+            'component': 'Column',
+            'children': ['v1', 'a1', 'ch-s', 'ch-p'],
+          },
+          {
+            'id': 'v1',
+            'component': 'Video',
+            'src': 'https://example.com/clip.mp4',
+            'poster': 'https://example.com/clip.png',
+          },
+          {
+            'id': 'a1',
+            'component': 'AudioPlayer',
+            'src': 'file://data/uploads/ringtone.mp3',
+            'loop': true,
+          },
+          {
+            'id': 'ch-s',
+            'component': 'Chart',
+            'kind': 'scatter',
+            'points': [
+              {'label': 'A', 'value': 3},
+              {'label': 'B', 'value': 9},
+              {'label': 'C', 'value': 6},
+            ],
+          },
+          {
+            'id': 'ch-p',
+            'component': 'Chart',
+            'kind': 'pie',
+            'points': [
+              {'label': 'X', 'value': 1},
+              {'label': 'Y', 'value': 2},
+            ],
+          },
+        ],
+      },
+    }).first;
+
+void _mediaGroup() {
+  testWidgets('Video/AudioPlayer merender placeholder jujur (non-web)',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: [createMediaSurface()]),
+      ),
+    ));
+    await tester.pump();
+    expect(find.textContaining('clip.mp4'), findsOneWidget);
+    expect(find.textContaining('ringtone.mp3'), findsOneWidget);
+    expect(
+      find.text('Pemutaran media tersedia di GUI Flutter Web.'),
+      findsNWidgets(2),
+    );
+    expect(find.byIcon(Icons.videocam_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.audiotrack_outlined), findsOneWidget);
+  });
+
+  testWidgets('Chart scatter & pie merender painter tanpa error',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: A2uiSurfaceStreamView(messages: [createMediaSurface()]),
+      ),
+    ));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
+}
