@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import 'theme.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Memory graph / learning timeline (GUI-P2-05): urutan kronologis entri
 /// memori berlapis dengan provenance akurat dari `GET /v1/memory/layers`
@@ -46,25 +47,16 @@ class MemoryGraphTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-      );
+        return StatusViews.errorBanner(context, error!);
     }
     if (entries.isEmpty) {
-      return Center(
-        child: Text(
-          'Belum ada memori berlapis untuk digambarkan \u2014 tambah lewat tab Lapisan.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: context.simpulMuted),
-        ),
-      );
+      return StatusViews.empty(context, message: 'Belum ada memori berlapis untuk digambarkan \u2014 tambah lewat tab Lapisan.');
     }
     final groups = _groupedByDate();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text(

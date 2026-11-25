@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Channels setup (GUI-P1-07): status channel gateway aktif + nama variabel
 /// env yang mengonfigurasinya — read-only, parity `doctor`/startup log.
@@ -43,22 +44,18 @@ class ChannelsPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (onRefresh != null)
-                IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+                IconButton(
+                  tooltip: 'Muat ulang',
+                  onPressed: onRefresh, icon: const Icon(Icons.refresh)),
             ],
           ),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: snapshot == null
-              ? Center(
-                  child: Text('Belum ada data channel.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada data channel.')
               : ListView(
                   padding: const EdgeInsets.only(bottom: 16),
                   children: [

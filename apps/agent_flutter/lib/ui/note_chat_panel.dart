@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:simpul_core/simpul_core.dart';
 
 import 'theme.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// AI chat panel with active-note context (AI-U01): scope selector
 /// (this note / folder / whole vault), answer with cited sources and token
@@ -314,14 +315,7 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
                     label: const Text('Tanya AI lokal'),
                   ),
           ),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                error!,
-                style: TextStyle(color: context.simpulDanger, fontSize: 12),
-              ),
-            ),
+          if (error != null) StatusViews.errorBanner(context, error!),
           Expanded(child: _answerView()),
         ],
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Kolom kanban identik dengan web UI (`KANBAN_STATES` di app.js).
 const List<String> kKanbanStates = ['backlog', 'doing', 'done', 'failed'];
@@ -42,16 +43,14 @@ class TaskBoardPage extends StatelessWidget {
           subtitle: '${tasks.length} tugas · read-only',
           online: online,
           trailing:
-              onRefresh == null ? null : IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+              onRefresh == null ? null : IconButton(
+                  tooltip: 'Muat ulang',
+                  onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
         if (surfaceSection != null) surfaceSection!,
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child:
-                Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {

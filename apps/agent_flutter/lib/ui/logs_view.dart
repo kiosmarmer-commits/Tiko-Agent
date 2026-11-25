@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Log browser (GUI-P1-02): daftar file log + isi, dapat dicari berdasarkan
 /// nama file dan isi. Konten ditampilkan sebagai teks polos/selectable —
@@ -109,6 +110,7 @@ class _LogsPageState extends State<LogsPage> {
           subtitle: '${widget.logs.length} file log',
           online: widget.online,
           trailing: IconButton(
+            tooltip: 'Muat ulang',
             onPressed: () async {
               await widget.onRefresh();
               if (mounted && selected != null) load(selected!);
@@ -116,13 +118,9 @@ class _LogsPageState extends State<LogsPage> {
             icon: const Icon(Icons.refresh),
           ),
         ),
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(widget.error!,
-                style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: TextField(
@@ -173,10 +171,7 @@ class _LogsPageState extends State<LogsPage> {
                                     TextStyle(color: context.simpulDanger)),
                           )
                         : content == null
-                            ? Center(
-                                child: Text('Pilih file log.',
-                                    style: TextStyle(
-                                        color: context.simpulMuted)))
+                            ? StatusViews.empty(context, message: 'Pilih file log.')
                             : Column(
                                 crossAxisAlignment:
                                     CrossAxisAlignment.start,

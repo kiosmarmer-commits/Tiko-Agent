@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Hooks manager (SETTINGS-HOOKS): melihat hook aktif, menambah/mengubah
 /// webhook atau script, statistik sukses/gagal, dan menguji hook — lewat
@@ -174,25 +175,19 @@ class _HooksPageState extends State<HooksPage> {
               if (widget.onRefresh != null)
                 IconButton(
                   key: const Key('hooks-refresh'),
+                  tooltip: 'Muat ulang',
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
                 ),
             ],
           ),
         ),
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(widget.error!,
-                style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, widget.error!),
         Expanded(
           child: snapshot == null
-              ? Center(
-                  child: Text('Belum ada data hooks.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada data hooks.')
               : snapshot.rules.isEmpty
                   ? ListView(
                       padding: const EdgeInsets.all(16),

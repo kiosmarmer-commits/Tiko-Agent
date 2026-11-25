@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import 'session_history_view.dart';
 import 'theme.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Multi-pane workspace (GUI-P2-03): pada layar lebar, chat ditampilkan
 /// berdampingan dengan pane sesi (kiri) dan pane inspector (kanan) agar
@@ -52,7 +53,7 @@ class SessionsPane extends StatelessWidget {
                 ),
             ],
           ),
-          if (loading) const LinearProgressIndicator(minHeight: 2),
+          if (loading) StatusViews.loadingBanner(context),
           if (error != null)
             Padding(
               padding: const EdgeInsets.all(12),
@@ -63,12 +64,7 @@ class SessionsPane extends StatelessWidget {
             ),
           Expanded(
             child: sessions.isEmpty
-                ? Center(
-                    child: Text(
-                      'Belum ada sesi.',
-                      style: TextStyle(color: context.simpulMuted),
-                    ),
-                  )
+                ? StatusViews.empty(context, message: 'Belum ada sesi.')
                 : Material(
                     color: Colors.transparent,
                     child: ListView(
@@ -223,7 +219,7 @@ class _InspectorPaneState extends State<InspectorPane> {
             style: TextStyle(color: context.simpulDanger),
           ),
         ),
-      if (widget.runsLoading) const LinearProgressIndicator(minHeight: 2),
+      if (widget.runsLoading) StatusViews.loadingBanner(context),
     ];
     final entries = [
       ...?snap?.active.map((r) => MapEntry(r, true)),
@@ -231,23 +227,14 @@ class _InspectorPaneState extends State<InspectorPane> {
     ];
     if (snap == null) {
       children.add(
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            'Belum ada snapshot \u2014 tekan muat ulang.',
-            style: TextStyle(color: context.simpulMuted),
-          ),
+        StatusViews.empty(
+          context,
+          message: 'Belum ada snapshot \u2014 tekan muat ulang.',
         ),
       );
     } else if (entries.isEmpty) {
       children.add(
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            'Belum ada run terekam.',
-            style: TextStyle(color: context.simpulMuted),
-          ),
-        ),
+        StatusViews.empty(context, message: 'Belum ada run terekam.'),
       );
     } else {
       for (final entry in entries) {
@@ -263,21 +250,12 @@ class _InspectorPaneState extends State<InspectorPane> {
   Widget _artifactsBody(BuildContext context) {
     final listing = widget.artifactsListing;
     if (widget.artifactsError != null) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          widget.artifactsError!,
-          style: TextStyle(color: context.simpulDanger),
-        ),
-      );
+      return StatusViews.errorBanner(context, widget.artifactsError!);
     }
     if (listing == null || listing.files.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          'Belum ada file artifacts yang dimuat.',
-          style: TextStyle(color: context.simpulMuted),
-        ),
+      return StatusViews.empty(
+        context,
+        message: 'Belum ada file artifacts yang dimuat.',
       );
     }
     return Material(

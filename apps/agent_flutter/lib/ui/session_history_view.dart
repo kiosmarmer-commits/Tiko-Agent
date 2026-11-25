@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import 'page_header.dart';
 import 'theme.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Human-first session history. Technical session IDs stay secondary so a
 /// new user can recognize a conversation by title and recency first.
@@ -237,7 +238,7 @@ class _SessionHistoryViewState extends State<SessionHistoryView> {
               ),
             ),
           ),
-        if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+        if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
           Padding(
             padding: const EdgeInsets.all(16),
@@ -760,29 +761,13 @@ class _EmptyHistory extends StatelessWidget {
   final String query;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.forum_outlined, size: 40, color: context.simpulMuted),
-          const SizedBox(height: 12),
-          Text(
-            query.isEmpty ? 'Belum ada percakapan' : 'Tidak ditemukan',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            query.isEmpty
-                ? 'Mulai chat baru untuk melihatnya di sini.'
-                : 'Coba kata kunci lain.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: context.simpulMuted),
-          ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => StatusViews.empty(
+    context,
+    message: query.isEmpty ? 'Belum ada percakapan' : 'Tidak ditemukan',
+    detail: query.isEmpty
+        ? 'Mulai chat baru untuk melihatnya di sini.'
+        : 'Coba kata kunci lain.',
+    icon: Icons.forum_outlined,
   );
 }
 

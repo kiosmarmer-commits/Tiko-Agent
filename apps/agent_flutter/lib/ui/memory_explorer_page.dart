@@ -4,6 +4,7 @@ import '../data/models.dart';
 import '../ui/theme.dart';
 import 'memory_graph_view.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Memory Explorer lanjutan (GUI-P1-12): empat tab — Fakta (kurasi kurir
 /// `/v1/memories`), Kurasi (MEMORY.md/USER.md + anggaran karakter),
@@ -240,11 +241,12 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                 ? null
                 : IconButton(
                     key: const Key('btn-refresh-memory'),
+                    tooltip: 'Muat ulang',
                     onPressed: widget.onRefresh,
                     icon: const Icon(Icons.refresh),
                   ),
           ),
-          if (widget.loading) const LinearProgressIndicator(minHeight: 2),
+          if (widget.loading) StatusViews.loadingBanner(context),
           if (widget.error != null)
             Padding(
               padding: const EdgeInsets.all(12),
@@ -291,9 +293,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
 
   Widget _buildFacts(BuildContext context) {
     if (widget.memories.isEmpty) {
-      return Center(
-        child: Text('Kosong', style: TextStyle(color: context.simpulMuted)),
-      );
+      return StatusViews.empty(context, message: 'Kosong');
     }
     return ListView.builder(
       itemCount: widget.memories.length,
@@ -346,12 +346,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
 
   Widget _buildCurated(BuildContext context, CuratedMemoryInfo? cur) {
     if (cur == null) {
-      return Center(
-        child: Text(
-          'Belum ada snapshot \u2014 tekan refresh.',
-          style: TextStyle(color: context.simpulMuted),
-        ),
-      );
+      return StatusViews.empty(context, message: 'Belum ada snapshot \u2014 tekan refresh.');
     }
     final ratio = cur.budget <= 0
         ? 0.0
@@ -435,12 +430,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
 
   Widget _buildLayers(BuildContext context, LayersSnapshot? layers) {
     if (layers == null) {
-      return Center(
-        child: Text(
-          'Belum ada snapshot \u2014 tekan refresh.',
-          style: TextStyle(color: context.simpulMuted),
-        ),
-      );
+      return StatusViews.empty(context, message: 'Belum ada snapshot \u2014 tekan refresh.');
     }
     return Stack(
       children: [
@@ -465,12 +455,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
             ),
             Expanded(
               child: layers.entries.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Belum ada entri berlapis.',
-                        style: TextStyle(color: context.simpulMuted),
-                      ),
-                    )
+                  ? StatusViews.empty(context, message: 'Belum ada entri berlapis.')
                   : ListView.builder(
                       itemCount: layers.entries.length,
                       itemBuilder: (context, i) =>
@@ -496,12 +481,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
 
   Widget _buildRag(BuildContext context, RagSourcesInfo? rag) {
     if (rag == null) {
-      return Center(
-        child: Text(
-          'Belum ada snapshot \u2014 tekan refresh.',
-          style: TextStyle(color: context.simpulMuted),
-        ),
-      );
+      return StatusViews.empty(context, message: 'Belum ada snapshot \u2014 tekan refresh.');
     }
     return ListView(
       key: const Key('rag-list'),

@@ -41,26 +41,17 @@ class SurfacesPage extends StatelessWidget {
           trailing: onRefresh == null
               ? null
               : IconButton(
+                  tooltip: 'Muat ulang',
                   onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: list == null
-              ? Center(
-                  child: Text('Belum ada snapshot — tekan refresh.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada snapshot — tekan refresh.')
               : list.isEmpty
-                  ? Center(
-                      child: Text(
-                          'Belum ada surface. Minta agent merender UI dengan tool render_a2ui.',
-                          style: TextStyle(color: context.simpulMuted)),
-                    )
+                  ? StatusViews.empty(context, message: 'Belum ada surface. Minta agent merender UI dengan tool render_a2ui.')
                   : ListView(
                       padding: const EdgeInsets.only(bottom: 16),
                       children: [
@@ -216,10 +207,12 @@ class _SurfaceDetailSheetState extends State<_SurfaceDetailSheet> {
               ),
             ),
             IconButton(
+              tooltip: 'Muat ulang',
               onPressed: _load,
               icon: const Icon(Icons.refresh),
             ),
             IconButton(
+              tooltip: 'Tutup',
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.close),
             ),

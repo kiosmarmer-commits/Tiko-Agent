@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Security Center (GUI-P1-10): konsolidasi status keamanan runtime —
 /// safe mode/panic, sandbox, state kredensial, consent plugin, token
@@ -46,23 +47,19 @@ class SecurityPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (onRefresh != null)
-                IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+                IconButton(
+                  tooltip: 'Muat ulang',
+                  onPressed: onRefresh, icon: const Icon(Icons.refresh)),
             ],
           ),
         ),
         if (surfaceSection != null) surfaceSection!,
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Expanded(
           child: snapshot == null
-              ? Center(
-                  child: Text('Belum ada data keamanan.',
-                      style: TextStyle(color: context.simpulMuted)),
-                )
+              ? StatusViews.empty(context, message: 'Belum ada data keamanan.')
               : ListView(
                   padding: const EdgeInsets.only(bottom: 16),
                   children: [

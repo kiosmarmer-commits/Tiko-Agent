@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../ui/theme.dart';
 import 'page_header.dart';
+import 'package:tiko_widgets/tiko_widgets.dart';
 
 /// Runtime event feed (GUI-P1-02): live events via polling admin, dapat
 /// difilter berdasarkan tipe event. Event terbaru di atas.
@@ -32,15 +33,13 @@ class EventsPage extends StatelessWidget {
           subtitle: '${events.length} event runtime',
           online: online,
           trailing:
-              onRefresh == null ? null : IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+              onRefresh == null ? null : IconButton(
+                  tooltip: 'Muat ulang',
+                  onPressed: onRefresh, icon: const Icon(Icons.refresh)),
         ),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child:
-                Text(error!, style: TextStyle(color: context.simpulDanger)),
-          ),
+            StatusViews.errorBanner(context, error!),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
@@ -50,9 +49,7 @@ class EventsPage extends StatelessWidget {
         ),
         Expanded(
           child: newestFirst.isEmpty
-              ? Center(
-                  child: Text('Belum ada event.',
-                      style: TextStyle(color: context.simpulMuted)))
+              ? StatusViews.empty(context, message: 'Belum ada event.')
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 16),
                   itemCount: newestFirst.length,
