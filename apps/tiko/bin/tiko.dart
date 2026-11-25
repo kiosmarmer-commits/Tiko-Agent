@@ -26,7 +26,7 @@ Perintah utama:
   run <prompt>
   daemon start|stop|restart|status
   ui                         cetak URL UI
-  doctor [--probe] [--fix]
+  doctor [--probe] [--fix [--bin A,B | --preset core|all]]
   route explain --task "..."
   status
   version
@@ -354,7 +354,37 @@ Future<void> main(List<String> argv) async {
       // F8.4 — `doctor --fix`: provisioning toolchain registry secara
       // interaktif (human-in-loop; tidak pernah auto-install diam-diam).
       if (fix) {
-        final plan = buildToolchainPlan();
+        final basePlan = buildToolchainPlan();
+        ToolchainSelection selected;
+        try {
+          if (parsed.binList.isNotEmpty || parsed.preset != null) {
+            selected = filterToolchainPlan(
+              basePlan,
+              onlyBins:
+                  parsed.binList.isEmpty ? null : parsed.binList,
+              preset: parsed.preset,
+            );
+          } else if (stdin.hasTerminal && !jsonOut) {
+            final picked = pickToolchainsInteractive(basePlan);
+            if (picked == null) {
+              stdout.writeln(
+                  'dibatalkan — tidak ada toolchain yang dipasang');
+              return;
+            }
+            selected = picked;
+          } else {
+            selected = filterToolchainPlan(basePlan, preset: 'core');
+          }
+        } on ArgumentError catch (e) {
+          stderr.writeln('[tiko doctor --fix] ${e.message}');
+          exitCode = 1;
+          return;
+        }
+        if (selected.unknown.isNotEmpty) {
+          stderr.writeln('[tiko doctor --fix] peringatan: seleksi tidak '
+              'dikenal di katalog: ${selected.unknown.join(", ")}');
+        }
+        final plan = selected.plan;
         if (jsonOut) {
           emit({
             'fix_plan': {
@@ -371,7 +401,12 @@ Future<void> main(List<String> argv) async {
           stdout.writeln('\n[tiko doctor --fix] rencana provisioning:');
           stdout.writeln(plan.describe());
         }
-        stdout.write('Pasang paket apt (human-in-loop)? [y/N] ');
+        if (plan.empty) {
+          stdout.writeln(
+              'tidak ada toolchain tersisa di seleksi ini \u2014 tidak ada yang dipasang');
+          return;
+        }
+        stdout.write('Pasang paket apt terpilih (human-in-loop)? [y/N] ');
         final answer = stdin.readLineSync()?.trim().toLowerCase();
         final confirmed = answer == 'y' || answer == 'yes';
         final result = await applyToolchainPlan(
@@ -380,6 +415,23 @@ Future<void> main(List<String> argv) async {
           dryRun: jsonOut,
         );
         stdout.writeln(result.message);
+        if (!jsonOut && plan.manual.isNotEmpty) {
+          final links = await Future.wait(
+            plan.manual.map((r) => resolveManualHintUrl(r)),
+          );
+          stdout.writeln('\nURL unduhan manual (terbaru \u2014 prioritas alias '
+              '`latest` yang terjangkau):');
+          for (final link in links) {
+            if (link.ok) {
+              stdout.writeln('  ${link.recipe.bin}: ${link.url}');
+            } else {
+              stdout.writeln(
+                  '  ${link.recipe.bin}: URL tidak terjangkau '
+                  '(${link.failed.length} dicoba) \u2014 pasang manual: '
+                  '${link.recipe.manualHint}');
+            }
+          }
+        }
         if (!result.success) exitCode = 1;
       }
       if (checks.any((c) => c.status == CheckStatus.fail)) exitCode = 1;
@@ -1696,6 +1748,44 @@ Future<void> main(List<String> argv) async {
   } finally {
     await rt.close();
   }
+}
+
+/// Hermes S14 — picker interaktif toolchain untuk `tiko doctor --fix`
+/// (hanya dipanggil di TTY): daftar biner hilang bernomor, pilih nomor
+/// (mis. `1,3`), Enter = preset core, q = batal (null).
+ToolchainSelection? pickToolchainsInteractive(ToolchainPlan basePlan) {
+  final choices = [...basePlan.aptInstallable, ...basePlan.manual];
+  if (choices.isEmpty) {
+    return ToolchainSelection(plan: basePlan);
+  }
+  stdout.writeln('\n[tiko doctor --fix] pilih toolchain yang dipasang:');
+  for (var i = 0; i < choices.length; i++) {
+    final r = choices[i];
+    final via = r.installableViaApt
+        ? 'apt: ${r.aptPackages.join(" ")}'
+        : 'manual (hint saja)';
+    stdout.writeln(
+        '  ${i + 1}) ${r.bin.padRight(10)} (${r.languages})  $via');
+  }
+  stdout.write(
+      'Nomor (mis: 1,3) — Enter = core, q = batal: ');
+  final line = stdin.readLineSync()?.trim() ?? '';
+  if (line.toLowerCase() == 'q') return null;
+  if (line.isEmpty) {
+    return filterToolchainPlan(basePlan, preset: 'core');
+  }
+  final keys = <String>[];
+  for (final token in line.split(RegExp(r'[\s,]+'))) {
+    final idx = int.tryParse(token);
+    if (idx != null && idx >= 1 && idx <= choices.length) {
+      keys.add(choices[idx - 1].bin);
+    }
+  }
+  if (keys.isEmpty) {
+    stdout.writeln('input tidak valid — memakai preset core');
+    return filterToolchainPlan(basePlan, preset: 'core');
+  }
+  return filterToolchainPlan(basePlan, onlyBins: keys);
 }
 
 Future<void> _configCmd(

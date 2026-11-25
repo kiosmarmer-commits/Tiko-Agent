@@ -8,6 +8,8 @@ class TikoArgs {
     this.safe = true,
     this.probe = false,
     this.fix = false,
+    this.binList = const [],
+    this.preset,
     this.mode = 'auto',
     this.help = false,
     this.rest = const [],
@@ -21,6 +23,14 @@ class TikoArgs {
   /// F8.4 — `tiko doctor --fix`: provisioning toolchain registry setelah
   /// konfirmasi user.
   final bool fix;
+
+  /// Hermes S14 — seleksi toolchain untuk `doctor --fix` (nilai `--bin`,
+  /// boleh dipisah koma dan diulang): nama bin/alias bahasa/paket apt.
+  final List<String> binList;
+
+  /// Hermes S14 — preset seleksi (`core`|`all`); null = ikuti mode default
+  /// (core di non-TTY, picker interaktif di TTY).
+  final String? preset;
   final String mode;
   final bool help;
   final List<String> rest;
@@ -36,6 +46,8 @@ TikoArgs parseTikoArgs(List<String> argv) {
   var fix = false;
   var mode = 'auto';
   var help = false;
+  final binList = <String>[];
+  String? preset;
   final rest = <String>[];
   for (var i = 0; i < argv.length; i++) {
     final a = argv[i];
@@ -49,6 +61,12 @@ TikoArgs parseTikoArgs(List<String> argv) {
       probe = true;
     } else if (a == '--fix') {
       fix = true;
+    } else if (a == '--bin' && i + 1 < argv.length) {
+      binList.addAll(
+        argv[++i].split(',').map((e) => e.trim()).where((e) => e.isNotEmpty),
+      );
+    } else if (a == '--preset' && i + 1 < argv.length) {
+      preset = argv[++i].trim();
     } else if (a == '--mode' && i + 1 < argv.length) {
       mode = argv[++i];
     } else if (a == '-h' || a == '--help') {
@@ -63,6 +81,8 @@ TikoArgs parseTikoArgs(List<String> argv) {
     safe: safe,
     probe: probe,
     fix: fix,
+    binList: binList,
+    preset: preset,
     mode: mode,
     help: help,
     rest: rest,

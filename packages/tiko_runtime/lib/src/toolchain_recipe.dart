@@ -13,6 +13,7 @@ class ToolchainRecipe {
     required this.languages,
     this.aptPackages = const [],
     this.manualHint,
+    this.manualUrls = const [],
   });
 
   /// Biner yang diprobe [LanguageRegistry.interpreterAvailable] / enum.
@@ -26,6 +27,12 @@ class ToolchainRecipe {
 
   /// Instruksi manual bila [aptPackages] kosong (URL installer ofisial).
   final String? manualHint;
+
+  /// Kandidat URL unduhan manual, terurut dari yang paling "selalu terbaru"
+  /// (redirect alias like `aka.ms`/`releases/latest`/halaman unduhan ofisial)
+  /// diikuti halaman dokumentasi cadangan; diprobe [resolveManualHintUrl]
+  /// satu per satu sampai ada yang terjangkau.
+  final List<String> manualUrls;
 
   bool get installableViaApt => aptPackages.isNotEmpty;
 }
@@ -79,6 +86,7 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     manualHint:
         'ikuti https://docs.flutter.dev/get-started/install atau '
         'https://dart.dev/get-dart (wajib ada di PATH sebelum tiko dijalankan)',
+    manualUrls: ['https://dart.dev/get-dart', 'https://docs.flutter.dev/get-started/install'],
   ),
   ToolchainRecipe(
     bin: 'sqlite3',
@@ -91,6 +99,7 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     manualHint:
         'ikuti https://learn.microsoft.com/powershell/scripting/install '
         '(repo packages.microsoft.com)',
+    manualUrls: ['https://aka.ms/install-powershell.sh', 'https://github.com/PowerShell/PowerShell/releases/latest', 'https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux'],
   ),
   ToolchainRecipe(
     bin: 'Rscript',
@@ -119,11 +128,13 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'swift',
     languages: 'swift',
     manualHint: 'ikuti https://www.swift.org/install (tarball ofisial)',
+    manualUrls: ['https://www.swift.org/install/', 'https://www.swift.org/download/'],
   ),
   ToolchainRecipe(
     bin: 'kotlinc',
     languages: 'kotlin',
     manualHint: 'ikuti https://sdkman.io (sdk install kotlin)',
+    manualUrls: ['https://get.sdkman.io', 'https://github.com/JetBrains/kotlin/releases/latest', 'https://kotlinlang.org/docs/command-line.html'],
   ),
   ToolchainRecipe(
     bin: 'runghc',
@@ -134,6 +145,7 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'julia',
     languages: 'julia',
     manualHint: 'ikuti https://julialang.org/downloads (juliaup)',
+    manualUrls: ['https://julialang.org/install/', 'https://julialang.org/downloads/'],
   ),
   ToolchainRecipe(
     bin: 'elixir',
@@ -149,11 +161,13 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'groovy',
     languages: 'groovy',
     manualHint: 'ikuti https://sdkman.io (sdk install groovy)',
+    manualUrls: ['https://get.sdkman.io', 'https://groovy-lang.org/install.html', 'https://groovy-lang.org/download.html'],
   ),
   ToolchainRecipe(
     bin: 'scala',
     languages: 'scala',
     manualHint: 'ikuti https://www.scala-lang.org/download (coursier/sdkman)',
+    manualUrls: ['https://get-coursier.io/', 'https://www.scala-lang.org/download/'],
   ),
   ToolchainRecipe(
     bin: 'perl',
@@ -189,6 +203,7 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'crystal',
     languages: 'crystal',
     manualHint: 'ikuti https://crystal-lang.org/install (repo ofisial)',
+    manualUrls: ['https://crystal-lang.org/install/', 'https://github.com/crystal-lang/crystal/releases/latest'],
   ),
   ToolchainRecipe(
     bin: 'nim',
@@ -199,11 +214,13 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'zig',
     languages: 'zig',
     manualHint: 'ikuti https://ziglang.org/download (tarball ofisial)',
+    manualUrls: ['https://ziglang.org/download/', 'https://github.com/ziglang/zig/releases/latest'],
   ),
   ToolchainRecipe(
     bin: 'dmd',
     languages: 'd',
     manualHint: 'ikuti https://dlang.org/download (install.dlang.org)',
+    manualUrls: ['https://dlang.org/download/', 'https://dlang.org/install.html'],
   ),
   ToolchainRecipe(
     bin: 'gst',
@@ -234,16 +251,19 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     bin: 'io',
     languages: 'io',
     manualHint: 'ikuti https://github.com/stevedekorte/io (build dari source)',
+    manualUrls: ['https://github.com/stevedekorte/io/releases/latest', 'https://iolanguage.org/'],
   ),
   ToolchainRecipe(
     bin: 'factor',
     languages: 'factor',
     manualHint: 'ikuti https://factorcode.org (binary release)',
+    manualUrls: ['https://github.com/factor/factor/releases/latest', 'https://factorcode.org'],
   ),
   ToolchainRecipe(
     bin: 'ijconsole',
     languages: 'j',
     manualHint: 'ikuti https://code.jsoftware.com/wiki/Install',
+    manualUrls: ['https://code.jsoftware.com/wiki/Install', 'https://www.jsoftware.com/download'],
   ),
   ToolchainRecipe(
     bin: 'gs',
@@ -296,6 +316,11 @@ const List<ToolchainRecipe> kToolchainRecipes = [
     manualHint:
         'ikuti https://dotnet.microsoft.com/download (dotnet-install.sh) '
         'atau pasang paket distro dotnet-sdk-<versi>',
+    manualUrls: [
+      'https://dot.net/v1/dotnet-install.sh',
+      'https://dotnet.microsoft.com/download',
+      'https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-install-script',
+    ],
   ),
   ToolchainRecipe(
     bin: 'sh',
@@ -342,6 +367,149 @@ class ToolchainPlan {
         'manual: ${manual.isEmpty ? '-' : manualLine}';
   }
 }
+
+/// Bundel preset provisioning selektif untuk `tiko doctor --fix`; `all`
+/// berarti seluruh katalog (perilaku default lama). Lainnya: daftar
+/// bin/alias/halaman-bahasa — lihat [filterToolchainPlan].
+const Map<String, List<String>> kToolchainPresets = {
+  'core': ['python3', 'node', 'bash', 'awk', 'sqlite3'],
+};
+
+/// Hasil seleksi user terhadap rencana provisioning.
+class ToolchainSelection {
+  const ToolchainSelection({required this.plan, this.unknown = const []});
+
+  /// Rencana hasil seleksi (bisa kosong bila user membatalkan).
+  final ToolchainPlan plan;
+
+  /// Kunci seleksi yang tidak cocok dengan resep mana pun di katalog.
+  final List<String> unknown;
+}
+
+bool _recipeMatchesKey(ToolchainRecipe r, String rawKey) {
+  final key = rawKey.trim().toLowerCase();
+  if (key.isEmpty) return false;
+  if (r.bin.toLowerCase() == key) return true;
+  final langs = r.languages.toLowerCase().split(RegExp(r'[ /,]'));
+  if (langs.contains(key)) return true;
+  return r.aptPackages.any((pkg) => pkg.toLowerCase() == key);
+}
+
+/// Saring rencana provisioning menurut permintaan [onlyBins] (nama bin,
+/// bahasa, atau paket apt) dan [preset] dari [kToolchainPresets]; keduanya
+/// boleh dipakai bersama (digabung). Kunci yang ada di katalog tapi tidak
+/// hilang di host diabaikan diam-diam; yang tidak ada di katalog sama sekali
+/// dilaporkan di [ToolchainSelection.unknown].
+ToolchainSelection filterToolchainPlan(
+  ToolchainPlan plan, {
+  Iterable<String>? onlyBins,
+  String? preset,
+}) {
+  var keys = onlyBins?.toList();
+  if (preset != null && preset != 'all') {
+    final pkgs = kToolchainPresets[preset];
+    if (pkgs == null) throw ArgumentError('preset tidak dikenal: $preset');
+    keys = [...?keys, ...pkgs];
+  }
+  if (keys == null || keys.isEmpty) return ToolchainSelection(plan: plan);
+  final selected = <ToolchainRecipe>{};
+  final unknown = <String>[];
+  for (final key in keys) {
+    var matched = false;
+    for (final r in plan.aptInstallable) {
+      if (_recipeMatchesKey(r, key)) {
+        selected.add(r);
+        matched = true;
+      }
+    }
+    for (final r in plan.manual) {
+      if (_recipeMatchesKey(r, key)) {
+        selected.add(r);
+        matched = true;
+      }
+    }
+    if (!matched &&
+        !kToolchainRecipes.any((r) => _recipeMatchesKey(r, key))) {
+      unknown.add(key);
+    }
+  }
+  return ToolchainSelection(
+    plan: ToolchainPlan(
+      aptInstallable:
+          plan.aptInstallable.where(selected.contains).toList(),
+      manual: plan.manual.where(selected.contains).toList(),
+    ),
+    unknown: unknown,
+  );
+}
+
+/// Hasil resolusi URL unduhan manual satu resep — [url] null bila semua
+/// kandidat tidak terjangkau (lihat [resolveManualHintUrl]).
+class ManualHintResult {
+  const ManualHintResult({
+    required this.recipe,
+    this.url,
+    this.failed = const [],
+  });
+
+  final ToolchainRecipe recipe;
+
+  /// URL pertama yang terjangkau (terprobe sukses), null bila semuanya gagal.
+  final String? url;
+
+  /// URL yang terprobe tapi tidak terjangkau, berurutan.
+  final List<String> failed;
+
+  bool get ok => url != null;
+}
+
+/// Probe URL bawaan: request HEAD dengan timeout pendek; sukses bila status
+/// HTTP 2xx/3xx (HttpClient mengikuti redirect `aka.ms`/`releases/latest`
+/// otomatis). Kegagalan jaringan/timeout dihitung tidak terjangkau, tidak
+/// pernah melempar (fail-closed).
+Future<bool> defaultToolchainLinkProbe(
+  String url, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final client = HttpClient()..connectionTimeout = timeout;
+  try {
+    final req = await client
+        .openUrl('HEAD', Uri.parse(url))
+        .timeout(timeout);
+    final res = await req.close().timeout(timeout);
+    await res.drain<void>().timeout(timeout);
+    return res.statusCode >= 200 && res.statusCode < 400;
+  } catch (_) {
+    return false;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Cari kandidat URL unduhan terbaru yang masih terjangkau untuk [recipe]:
+/// probe satu per satu mengikuti urutan [ToolchainRecipe.manualUrls]
+/// (alias `latest` didahulukan), kandidat [candidates] kustom diuji lebih
+/// dulu. Tanpa URL terjangkau → [ManualHintResult.ok] false dan daftar
+/// [ManualHintResult.failed] berisi semua URL yang dicoba.
+Future<ManualHintResult> resolveManualHintUrl(
+  ToolchainRecipe recipe, {
+  ToolchainLinkProbe? probe,
+  List<String>? candidates,
+}) async {
+  final check = probe ?? defaultToolchainLinkProbe;
+  final urls = [...?candidates, ...recipe.manualUrls];
+  final failed = <String>[];
+  for (final url in urls) {
+    if (await check(url)) {
+      return ManualHintResult(recipe: recipe, url: url, failed: failed);
+    }
+    failed.add(url);
+  }
+  return ManualHintResult(recipe: recipe, failed: failed);
+}
+
+/// Probe URL manual untuk injeksi mock pada unit test.
+typedef ToolchainLinkProbe = Future<bool> Function(String url);
 
 /// Scan biner resep terhadap [environment] (fallback PATH proses). Terpisah
 /// dari [LanguageRegistry.onPath] agar unit test bisa menyuntik PATH mock.
