@@ -97,6 +97,12 @@ IDE / API:
 
 Evaluation:
   eval <cases.json> [--label L]   jalankan suite evaluasi, laporan JSON
+  eval replay --dir data/trajectories [--overlay o.jsonl]
+               [--baseline report.json] [--out report.json]
+               [--require-tools]
+                             gerbang regresi: putar ulang trajektori batch
+                             sebagai kasus eval; bandingkan skor dengan
+                             baseline bila ada (exit 1 saat regresi)
 
 Batch:
   batch run --tasks tasks.jsonl [--concurrency N] [--label L]
@@ -780,6 +786,40 @@ Future<void> main(List<String> argv) async {
     case 'eval':
       // Evaluation harness (P1-6): run a JSON case suite through the real
       // runtime and print the aggregate report.
+      // R4: `eval replay` memutar trajektori batch jadi gerbang regresi.
+      if (args.isNotEmpty && args.first == 'replay') {
+        final replayArgs = args.skip(1).toList();
+        final dir = optValue(replayArgs, '--dir');
+        if (dir == null || dir.trim().isEmpty) {
+          stderr.writeln('eval replay membutuhkan --dir <trajectory-dir>');
+          exitCode = 2;
+          return;
+        }
+        String? opt(String key) => optValue(replayArgs, key);
+        try {
+          final report = await runBenchmarkReplay(
+            rt,
+            trajectoryDir: dir.trim(),
+            overlayPath: opt('--overlay'),
+            baselinePath: opt('--baseline'),
+            outPath: opt('--out'),
+            requireTools: replayArgs.contains('--require-tools'),
+          );
+          emit(report, 'eval replay: ${report['total']} kasus');
+          final comparison = report['comparison'] as Map<String, dynamic>?;
+          if (comparison != null) {
+            final regressed = comparison['regressed'] as List? ?? const [];
+            exitCode = comparison['gate_passed'] == true ? 0 : 1;
+            if (regressed.isNotEmpty) {
+              stderr.writeln('REGRESI: ${regressed.join(', ')}');
+            }
+          }
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
+          exitCode = 2;
+        }
+        return;
+      }
       if (args.isEmpty) {
         stderr.writeln('eval membutuhkan path file kasus JSON');
         exitCode = 2;

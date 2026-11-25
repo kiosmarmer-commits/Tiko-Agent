@@ -49,6 +49,7 @@ part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
 part 'cost_ledger.dart';
 part 'eval_gate.dart';
+part 'benchmark_replay.dart';
 part 'approval_rules.dart';
 part 'toolchain_recipe.dart';
 

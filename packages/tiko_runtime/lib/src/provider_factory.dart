@@ -516,16 +516,51 @@ class ProviderFactory {
           requestTimeout: timeout ?? const Duration(seconds: 120),
         );
 
+      case 'moa':
+        // Ensemble tidak bisa dibangun tunggal; lewat ProviderFactory.buildAll.
+        throw ArgumentError(
+          "provider moa '${c.id}' dibangun oleh buildAll (member dirujuk dari "
+          'providers.chat lain)',
+        );
+
       default:
         throw ArgumentError('Tipe provider tidak didukung: ${c.type}');
     }
   }
 
   /// Builds every enabled provider; returns the map keyed by provider id.
-  Map<String, LlmProvider> buildAll(TikoConfig cfg) => {
-        for (final c in cfg.providers.values)
-          if (c.enabled) c.id: build(c),
-      };
+  /// Provider `type: moa` (R3) dibangun pada pass kedua karena butuh map
+  /// provider lain sebagai member/ranker.
+  Map<String, LlmProvider> buildAll(TikoConfig cfg) {
+    final out = <String, LlmProvider>{
+      for (final c in cfg.providers.values)
+        if (c.enabled && c.type != 'moa') c.id: build(c),
+    };
+    for (final c in cfg.providers.values) {
+      if (!c.enabled || c.type != 'moa') continue;
+      final members = [
+        for (final id in c.members)
+          if (out[id] != null) out[id]!,
+      ];
+      if (members.isEmpty) {
+        throw ArgumentError(
+          'provider moa "${c.id}" butuh minimal 1 member yang valid di '
+          'providers.chat (members: ${c.members.join(', ')})',
+        );
+      }
+      final ranker = (c.moaRanker != null) ? out[c.moaRanker] : null;
+      out[c.id] = MoaProvider(
+        members: members,
+        ranker: ranker,
+        strategy: switch (c.moaStrategy) {
+          'ranker' => MoaStrategy.ranker,
+          'first' => MoaStrategy.first,
+          _ => MoaStrategy.majority,
+        },
+      );
+    }
+    return out;
+  }
 
   /// Builds the decision provider (Jev/Laya systemone, AGD-02) from the
   /// `decision:` config section. Returns null when disabled — the Router
