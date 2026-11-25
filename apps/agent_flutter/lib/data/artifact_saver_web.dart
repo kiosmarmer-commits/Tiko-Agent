@@ -1,15 +1,24 @@
-import 'dart:html' as html;
-// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+import 'dart:js_interop';
 import 'dart:typed_data';
 
-/// Hermes S7 (download): unduh artifact di Web via anchor `dart:html`
-/// — dipilih sadar tanpa dependency baru (pola sama dengan attachment
-/// picker); bytes sudah diambil klien dengan auth header.
+import 'package:web/web.dart' as web;
+
+/// Hermes S7 (download): unduh artifact di Web via anchor `package:web`
+/// (W3C interop modern — pola sama dengan media embed S18); bytes sudah
+/// diambil klien dengan auth header, tanpa dependency baru.
 void saveArtifactDownloaded(String filename, Uint8List bytes) {
-  final blob = html.Blob([bytes]);
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  html.AnchorElement(href: url)
-    ..download = filename
-    ..click();
-  html.Url.revokeObjectUrl(url);
+  final blob = web.Blob([bytes.toJS].toJS);
+  final url = web.URL.createObjectURL(blob);
+  final anchor = web.HTMLAnchorElement()
+    ..href = url
+    ..download = filename;
+  final parent = web.document.body;
+  if (parent == null) {
+    web.URL.revokeObjectURL(url);
+    return;
+  }
+  parent.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  web.URL.revokeObjectURL(url);
 }

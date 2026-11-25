@@ -1,12 +1,13 @@
-// dart:html dipilih sadar (C2 Chat-UX): pemilih file web TANPA dependency
-// baru — `package:web` belum ada di proyek ini. Dua lint di bawah adalah
-// info yang disengaja dan dijelaskan di attachment_picker.dart.
-// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+// `package:web` + `dart:js_interop` (C2 Chat-UX, migrasi W3C dari
+// `dart:html` — pola sama dengan media embed S18): pemilih file web
+// TANPA dependency wajib baru.
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
+import 'dart:js_interop';
 import 'dart:typed_data';
+
+import 'package:web/web.dart' as web;
 
 import 'attachment_picker_model.dart';
 
@@ -84,20 +85,22 @@ String _mimeFor(String name, String browserType) {
 }
 
 Future<List<PickedAttachment>> pickChatAttachments() async {
-  final input = html.FileUploadInputElement()
+  final input = web.HTMLInputElement()
+    ..type = 'file'
     ..multiple = true
     ..accept = _accept;
   input.click();
   await input.onChange.first;
   final files = input.files;
-  if (files == null || files.isEmpty) return const [];
+  if (files == null || files.length == 0) return const [];
   if (files.length > _maxFiles) {
     throw AttachmentPickerException(
       'Maksimum $_maxFiles lampiran per pesan (dipilih ${files.length}).',
     );
   }
   final out = <PickedAttachment>[];
-  for (final file in files) {
+  for (var i = 0; i < files.length; i++) {
+    final file = files.item(i)!;
     if (file.size > _maxBytes) {
       throw AttachmentPickerException(
         '"${file.name}" terlalu besar (${file.size} byte); '
@@ -120,32 +123,11 @@ Future<List<PickedAttachment>> pickChatAttachments() async {
   return out;
 }
 
-Future<Uint8List> _readBytes(html.File file) {
-  final completer = Completer<Uint8List>();
-  final reader = html.FileReader();
-  reader.onLoadEnd.listen((_) {
-    try {
-      final result = reader.result;
-      if (result is ByteBuffer) {
-        completer.complete(result.asUint8List());
-      } else if (result is Uint8List) {
-        completer.complete(result);
-      } else {
-        completer.completeError(
-          AttachmentPickerException('"${file.name}" gagal dibaca.'),
-        );
-      }
-    } catch (e) {
-      completer.completeError(
-        AttachmentPickerException('"${file.name}" gagal dibaca: $e'),
-      );
-    }
-  });
-  reader.onError.listen((_) {
-    completer.completeError(
-      AttachmentPickerException('"${file.name}" gagal dibaca.'),
-    );
-  });
-  reader.readAsArrayBuffer(file);
-  return completer.future;
+Future<Uint8List> _readBytes(web.File file) async {
+  try {
+    final buffer = await file.arrayBuffer().toDart;
+    return buffer.toDart.asUint8List();
+  } on Object {
+    throw AttachmentPickerException('"${file.name}" gagal dibaca.');
+  }
 }

@@ -18,6 +18,7 @@ dependencies:
     path: ../../packages/simpul_core
   path: ^1.9.0
   web_socket_channel: ^3.0.1
+  web: ^1.1.0
   shared_preferences: ^2.5.6
   speech_to_text: ^7.3.0
   flutter_tts: ^4.2.5

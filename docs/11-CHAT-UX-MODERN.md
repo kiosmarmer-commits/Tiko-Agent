@@ -89,15 +89,16 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
   `[lampiran: nama (mime, N byte)] … [/lampiran: nama]`, cap 64 KiB per file
   dan 128 KiB total (potongan ditandai jujur); gambar/biner/audio → metadata
   saja (nama, mime, ukuran, checksum fnv-1a) + penanda bahwa runtime ini
-  TIDAK dapat membaca isinya — dukungan vision provider belum ada (lie-free,
-  bukan pura-pura menganalisis gambar). Lampiran dikerahkan di
+  juga diteruskan sebagai `ChatImage` ke LLM multimodal bila provider mampu
+  (`_attachImages`, maks 4 gambar / 4 MiB per gambar) — provider tanpa
+  vision menerima metadata saja (lie-free). Lampiran dikerahkan di
   `chatWithStatus(..., attachments: …)` setelah ekspansi `@`-refs; event
   `attachments.expanded` berisi ringkasan per file.
 - **agentd**: `handleMessage` meneruskan `m.attachments` ke `rt.chat`.
 - **UI (composer):** tombol attach (`Icons.attach_file`, cap ikut ditampilkan
   di tooltip) + chip pratinjau `InputChip` (nama, tooltip mime, tombol hapus)
   di atas input; pesan user menampilkan ringkasan `📎 nama…`. Picker aktif di
-  Web via `dart:html` (`<input type=file>` + FileReader, tanpa paket baru) —
+  Web via `package:web` + `dart:js_interop` (migasi W3C, S21) —
   deviasi kecil dari rancangan: pratinjau thumbnail image TIDAK dibuat (chip
   teks saja) agar murni tanpa dependency; platform non-web langsung gagal
   jujur (dialog native butuh plugin) dan mengarahkan ke referensi `@file:`
@@ -126,8 +127,8 @@ status inline yang bisa diperluas**; **copy harus selalu ada**.
 - **Catatan jujur (batasan C3 saat ini):**
   - Kartu file/diff **sudah dirender** bila `message['files']` ada; sejak C4
     field ini terisi otomatis dari frame `chat.tool` (lihat fase C4).
-  - Panel memakai listing global `/v1/artifacts`, bukan per-sesi filter —
-    endpoint filter per-sesi belum ada.
+  - Panel memakai listing global `/v1/artifacts` dengan filter per-sesi
+    sisi-klien (chip `@file:` pesan + korelasi `createdAt` sesi, S7).
   - Tidak ada download/thumbnail; preview hanya teks + diff (file biner
     ditandai tanpa isi, sesuai endpoint).
 
