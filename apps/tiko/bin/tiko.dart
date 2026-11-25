@@ -103,6 +103,10 @@ Evaluation:
                              gerbang regresi: putar ulang trajektori batch
                              sebagai kasus eval; bandingkan skor dengan
                              baseline bila ada (exit 1 saat regresi)
+  eval harvest --dir data/trajectories --out golden.jsonl
+               [--limit N] [--require-tools]
+                             S19-D: panen golden eval dari trajektori sukses
+                             (dedupe prompt, anti-timpa file output)
 
 Batch:
   batch run --tasks tasks.jsonl [--concurrency N] [--label L]
@@ -787,6 +791,36 @@ Future<void> main(List<String> argv) async {
       // Evaluation harness (P1-6): run a JSON case suite through the real
       // runtime and print the aggregate report.
       // R4: `eval replay` memutar trajektori batch jadi gerbang regresi.
+      // S19-D: `eval harvest` menanen golden eval dari trajektori sukses.
+      if (args.isNotEmpty && args.first == 'harvest') {
+        final harvestArgs = args.skip(1).toList();
+        final dir = optValue(harvestArgs, '--dir');
+        final outPath = optValue(harvestArgs, '--out');
+        if (dir == null ||
+            dir.trim().isEmpty ||
+            outPath == null ||
+            outPath.trim().isEmpty) {
+          stderr.writeln(
+              'eval harvest membutuhkan --dir <trajectory-dir> dan --out <file.jsonl>');
+          exitCode = 2;
+          return;
+        }
+        final limitRaw = optValue(harvestArgs, '--limit');
+        try {
+          final report = await harvestGoldenEvals(
+            trajectoryDir: dir.trim(),
+            outPath: outPath.trim(),
+            requireTools: harvestArgs.contains('--require-tools'),
+            limit:
+                (int.tryParse(limitRaw ?? '') ?? 100).clamp(1, 1000),
+          );
+          emit(report, 'eval harvest: ${report['harvested']} kasus golden');
+        } on ArgumentError catch (error) {
+          stderr.writeln(error.message);
+          exitCode = 2;
+        }
+        return;
+      }
       if (args.isNotEmpty && args.first == 'replay') {
         final replayArgs = args.skip(1).toList();
         final dir = optValue(replayArgs, '--dir');

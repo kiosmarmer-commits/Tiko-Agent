@@ -1072,6 +1072,7 @@ class TikoRuntime {
     final gitRunner = GitCommandRunner(workspaceRoot: workspace);
     registry
       ..register(CodeContextTool(workspaceRoot: workspace))
+      ..register(CodeSearchTool(workspaceRoot: workspace))
       ..register(GitStatusTool(runner: gitRunner))
       ..register(GitDiffTool(runner: gitRunner))
       ..register(GitLogTool(runner: gitRunner))

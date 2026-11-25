@@ -1887,9 +1887,32 @@ class HttpApiServer {
             : 'openai';
         final stream = body['stream'] == true;
         final id = 'chatcmpl-${_openaiId()}';
-        final String answer;
-        try {
-          answer = await onMessage(InboundMessage(
+        final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final usedModel =
+            (model == null || model.isEmpty) ? 'tiko-agent' : model;
+        final progressHandler = onMessageWithProgress;
+        int reportedTokens = 0;
+        void noteUsage(Map<String, dynamic> frame) {
+          if (frame case {'type': 'chat.usage', 'tokens': final int t}) {
+            if (t > 0) reportedTokens = t;
+          }
+        }
+
+        Map<String, dynamic> usageMap(String promptStr, String answer) {
+          final promptTokens = (promptStr.length / 4).ceil();
+          final completionTokens = (answer.length / 4).ceil();
+          return {
+            'prompt_tokens': promptTokens,
+            'completion_tokens': completionTokens,
+            'total_tokens': promptTokens + completionTokens,
+            if (reportedTokens > 0) 'total_tokens_reported': reportedTokens,
+          };
+        }
+
+        Future<String> runTurn({
+          void Function(Map<String, dynamic> frame)? onFrame,
+        }) async {
+          final message = InboundMessage(
             channel: 'http',
             userKey: userKey,
             sessionKey: sessionKey,
@@ -1898,40 +1921,79 @@ class HttpApiServer {
               'source': 'openai_compat',
               if (model != null && model.isNotEmpty) 'requested_model': model,
             },
-          ));
-        } on ApiRequestException catch (e) {
-          _openaiError(req, e.status, 'invalid_request_error', e.message);
-          return;
-        } catch (e) {
-          _openaiError(req, 500, 'server_error', '$e');
-          return;
+          );
+          if (progressHandler == null) {
+            return onMessage(message);
+          }
+          return progressHandler(message, (frame) {
+            noteUsage(frame);
+            onFrame?.call(frame);
+          });
         }
-        final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        final usedModel =
-            (model == null || model.isEmpty) ? 'tiko-agent' : model;
+
         if (stream) {
-          req.response.headers.contentType =
-              ContentType.parse('text/event-stream');
-          req.response.headers.set('Cache-Control', 'no-cache');
-          req.response.headers.set('Connection', 'keep-alive');
+          // S19-B: streaming token-level when handler progress tersedia —
+          // setiap frame chat.delta direlay sebagai chat.completion.chunk;
+          // tanpa handler progress, satu potong (perilaku lama).
+          final res = req.response;
+          res.headers.contentType = ContentType.parse('text/event-stream');
+          res.headers.set('Cache-Control', 'no-cache');
+          res.headers.set('Connection', 'keep-alive');
+          Future<void> writeChain = Future.value();
           void chunk(Map<String, dynamic> payload) {
-            req.response.write('data: ${jsonEncode(payload)}\n\n');
+            writeChain = writeChain.then((_) {
+              res.write('data: ${jsonEncode(payload)}\n\n');
+              return res.flush();
+            }).catchError((_) {});
           }
 
-          chunk({
-            'id': id,
-            'object': 'chat.completion.chunk',
-            'created': created,
-            'model': usedModel,
-            'choices': [
-              {
-                'index': 0,
-                'delta': {'role': 'assistant', 'content': answer},
-                'finish_reason': null,
+          void deltaChunk(Map<String, dynamic> delta) {
+            chunk({
+              'id': id,
+              'object': 'chat.completion.chunk',
+              'created': created,
+              'model': usedModel,
+              'choices': [
+                {'index': 0, 'delta': delta, 'finish_reason': null},
+              ],
+            });
+          }
+
+          var sentRole = false;
+          String answer;
+          try {
+            answer = await runTurn(onFrame: (frame) {
+              if (frame case {
+                'type': 'chat.delta',
+                'text': final String text,
+              }) {
+                deltaChunk(sentRole
+                    ? {'content': text}
+                    : {'role': 'assistant', 'content': text});
+                sentRole = true;
+              }
+            });
+          } on ApiRequestException catch (e) {
+            chunk({
+              'error': {
+                'message': e.message,
+                'type': 'invalid_request_error',
+                'code': e.code,
               },
-            ],
-          });
-          chunk({
+            });
+            await writeChain;
+            await res.close().catchError((_) {});
+            return;
+          } catch (e) {
+            chunk({
+              'error': {'message': '$e', 'type': 'server_error'},
+            });
+            await writeChain;
+            await res.close().catchError((_) {});
+            return;
+          }
+          if (!sentRole) deltaChunk({'role': 'assistant', 'content': answer});
+          final finishChunk = <String, dynamic>{
             'id': id,
             'object': 'chat.completion.chunk',
             'created': created,
@@ -1943,12 +2005,28 @@ class HttpApiServer {
                 'finish_reason': 'stop',
               },
             ],
-          });
-          req.response.write('data: [DONE]\n\n');
-          await req.response.close();
+            if (reportedTokens > 0) 'usage': usageMap(prompt, answer),
+          };
+          chunk(finishChunk);
+          writeChain = writeChain
+              .then((_) {
+                res.write('data: [DONE]\n\n');
+                return res.flush();
+              })
+              .catchError((_) {});
+          await writeChain;
+          await res.close();
         } else {
-          final promptTokens = (prompt.length / 4).ceil();
-          final completionTokens = (answer.length / 4).ceil();
+          final String answer;
+          try {
+            answer = await runTurn();
+          } on ApiRequestException catch (e) {
+            _openaiError(req, e.status, 'invalid_request_error', e.message);
+            return;
+          } catch (e) {
+            _openaiError(req, 500, 'server_error', '$e');
+            return;
+          }
           _json(req, {
             'id': id,
             'object': 'chat.completion',
@@ -1961,11 +2039,7 @@ class HttpApiServer {
                 'finish_reason': 'stop',
               },
             ],
-            'usage': {
-              'prompt_tokens': promptTokens,
-              'completion_tokens': completionTokens,
-              'total_tokens': promptTokens + completionTokens,
-            },
+            'usage': usageMap(prompt, answer),
           });
         }
       } else if (path == '/v1/shutdown' && req.method == 'POST') {

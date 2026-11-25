@@ -512,6 +512,7 @@ Future<void> main(List<String> args) async {
     void Function(String toolName)? onToolStart,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String delta)? onTextDelta,
+    void Function(int tokensUsed)? onTurnUsage,
   }) async {
     if (!rateLimiter.allow(m.userKey)) {
       await replyVia?.send(
@@ -612,7 +613,7 @@ Future<void> main(List<String> args) async {
       );
     }
 
-    final answer = await rt.chat(
+    final run = await rt.chatWithStatus(
       m.text,
       sessionId: m.sessionKey,
       channel: m.channel,
@@ -623,6 +624,8 @@ Future<void> main(List<String> args) async {
       onToolTrace: onToolTrace,
       attachments: m.attachments,
     );
+    final answer = run.text;
+    onTurnUsage?.call(run.tokensUsed);
 
     if (streamer != null && gw != null) {
       final ids = await streamer.finish(answer);
@@ -756,6 +759,8 @@ Future<void> main(List<String> args) async {
               'duration_ms': t.durationMs,
               if (t.args['path'] is String) 'path': t.args['path'],
             }),
+        onTurnUsage: (tokens) =>
+            progress({'type': 'chat.usage', 'tokens': tokens}),
       );
       String reply;
       try {

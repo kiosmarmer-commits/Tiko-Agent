@@ -23,6 +23,7 @@
 | F6 — Tuntas integrasi | smart-home wiring, voice/memory adapters | ✅ selesai | smart-home REST (F6.1) + STT chain lengkap 10 provider (F6.2); A2UI E9 opsional sesuai docs/14 — lihat §7 |
 | F7 — Keunggulan kompondensal | Eval harness, cost observability | ✅ selesai | eval gate offline-first di CI + ledger cost per user/channel/day (PR #166) — lihat §8 |
 | F8 — Otonomi aman bertingkat | Profil security + approval-remember | ✅ selesai | `security.profile` (strict/standard/trusted_workspace) + mode `guided` + `risk_overrides` + approval-remember session/workspace — lihat §9 |
+| F9 — Rekomendasi benchmark agent | Retrieval, streaming compat, verifier, self-improvement | ✅ selesai | `code_search` BM25-lite hybrid + compat SSE token-level + usage token nyata + `verify_project auto` language-aware + `tiko eval harvest` — lihat §10 |
 
 ## 2. Fase F1 — Daya eksekusi nyata
 
@@ -106,3 +107,14 @@ Prinsip desain: turunkan FREKUENSI konfirmasi, jangan hapus lapisan mediasi host
    - `applyToolchainPlan` fail-soft: confirm=false → dibatalkan tanpa instalasi; non-Linux / apt-get hilang → pesan manual yang jelas; setelah apt, hint manual tetap dicetak untuk biner yang belum tercakup;
    - Uji: `f8_toolchain_test.dart` (13) - invariant resep (apt ATAU manual, cakupan semua biner registry), scan PATH mock (single dir, multi segmen), aptCommand (sudo/dedup), apply flow (kosong/batal/dry-run).
 7. **FFI in-process tetap ditolak** — dengan alasan arsitektur yang sama seperti `video_player` (docs/14): artefak eksekusi bersifat sementara; polyglot lewat proses/container terpisah.
+
+## 10. Fase F9 — Rekomendasi benchmark agent (S19)
+
+Sumber: analisis perbandingan vs 28 AI agent (Claude Code, Codex CLI, Cursor, Devin, OpenHands, dll.) — item yang menutup gap paritas dengan leverage tertinggi. Terimplementasi additive, fail-closed, tanpa dependensi baru:
+
+1. **`code_search` (agentic retrieval)** — BM25-lite atas chunk jendela baris + normalisasi camelCase/snake_case + boost definisi simbol; dipakai model untuk "di mana X dibuat/dipakai" tanpa membaca sekian file; pola `code_context` (scan-fresh, stateless, jail path).
+2. **Compat SSE token-level + usage nyata** — `/v1/chat/completions` `stream: true` via `onMessageWithProgress` (delta token per chunk, role di chunk pertama, `[DONE]` terminator); `chat.usage` (agentd: dari `ChatRunResult.tokensUsed` runtime) → `total_tokens_reported` (pengganti estimasi len/4 di field tambahan, field lama tetap).
+3. **`verify_project auto` (verifier-first)** — deteksi manifest project → kandidat perintah verifikasi analyze/check read-only; kandidat tanpa toolchain dilompati (ProcessException diperiksa `VerifyOutcome.processError`), semua kandidat mati → pesan jujur + hint `tiko doctor --fix`.
+4. **`tiko eval harvest` (self-improvement loop)** — trajektori sukses → golden eval JSONL (dedupe prompt, non-internal, anti-timpa) → diputar ulang oleh `tiko eval`/`eval replay` sebagai gerbang regresi.
+
+Defer eksplisit (butuh infrastruktur eksternal / artefak terpisah, menunggu arahan): computer-use headless (screenshot/klik desktop — butuh infra display + desain approval baru), benchmark publik SWE-bench (dataset eksternal + etika lisensinya), ekstensi editor ACP (repo artefak VS Code terpisah).
