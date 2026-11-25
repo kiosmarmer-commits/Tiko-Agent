@@ -436,9 +436,14 @@ Setelah jawabanmu, verifikasi objektif dijalankan lagi.''';
   /// Jalankan orkestra penuh. Tidak pernah throw — hasil final terstruktur
   /// dengan `success` jujur (semua node sukses DAN, bila verify diset,
   /// exit 0), kecuali bahaya terselubung: node gagal dicatat sebagai gagal.
+  /// [runIdOverride] opsional dipakai host (Mission Control) supaya event
+  /// live `team.*` bisa dirujuk balik ke registri yang sama; [cancelToken]
+  /// opsional untuk pembatalan kooperatif antar-gelombang DAG.
   Future<BotTeamRunResult> run({
     required String goal,
     String? teamId,
+    String? runIdOverride,
+    CancellationToken? cancelToken,
     String? verifyCommand,
     int repairIterations = 1,
     Duration verifyTimeout = const Duration(seconds: 180),
@@ -446,7 +451,7 @@ Setelah jawabanmu, verifikasi objektif dijalankan lagi.''';
   }) async {
     final goalTrim = goal.trim();
     assert(goalTrim.isNotEmpty, 'goal wajib');
-    final runId =
+    final runId = runIdOverride ??
         't${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
     var tokens = 0;
     var toolCalls = 0;
@@ -502,6 +507,8 @@ Setelah jawabanmu, verifikasi objektif dijalankan lagi.''';
             'node': node.id,
             'agent': agent.id,
             'ok': turn.success,
+            // Tail output pendek — bahan Mission Control (live status node).
+            'output': _eventTail(turn.text),
           });
           return turn.text;
         } catch (e) {
@@ -533,7 +540,9 @@ Setelah jawabanmu, verifikasi objektif dijalankan lagi.''';
         planSource: plan.source,
         plan: plan.tasks,
         nodeRecords: const [],
-        synthesis: 'Orkestra gagal dijalankan: $e',
+        synthesis: cancelToken?.isCancelled == true
+            ? 'Orkestra dibatalkan sebelum selesai.'
+            : 'Orkestra gagal dijalankan: $e',
       );
     }
 
@@ -550,6 +559,21 @@ Setelah jawabanmu, verifikasi objektif dijalankan lagi.''';
     ];
     final allNodesOk = teamRun.allSucceeded;
     var synthesis = teamRun.synthesis;
+
+    // Dibatalkan kooperatif: lompati review/verify — node tersisa memang
+    // sudah dicatat gagal/cancel oleh orkestrator, tidak ada kerja lanjut.
+    if (cancelToken?.isCancelled == true) {
+      return BotTeamRunResult(
+        runId: runId,
+        teamId: teamId,
+        goal: goalTrim,
+        success: false,
+        planSource: plan.source,
+        plan: plan.tasks,
+        nodeRecords: nodeRecords,
+        synthesis: synthesis.isEmpty ? 'Run tim dibatalkan.' : synthesis,
+      );
+    }
 
     // ── 3. Review (critic) — advisory, bukan gate ────────────────────────
     String? review;
@@ -661,6 +685,16 @@ $_repairInstruction''',
         '\u2026[tail terpotong ke $maxOutputChars karakter terakhir]';
   }
 
+  /// Sanitasi tail output untuk event live: karakter kontrol dibuang,
+  /// dibatasi 200 karakter terakhir (payload event tetap ringan).
+  static String _eventTail(String s) {
+    final clean =
+        s.replaceAll(RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f]'), ' ').trim();
+    return clean.length <= 200
+        ? clean
+        : '\u2026${clean.substring(clean.length - 200)}';
+  }
+
   AgentSpec? _byRole(AgentRole role) => members.byRole(role);
 
   /// Sintesis: bila ada summarizer, satu turn rangkuman; kalau tidak,
@@ -736,6 +770,15 @@ extension BotTeamWiring on TikoRuntime {
     Set<String>? extraCoderTools,
     void Function(String nodeId, String agentId, bool starting)? onNodeEvent,
   }) async {
+    final goalTrim = goal.trim();
+    final runId =
+        't${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+    final cancelToken = CancellationToken();
+    swarmControl.startRun(
+      runId: runId,
+      teamId: teamId ?? 'adhoc',
+      goal: goalTrim,
+    );
     final savedDoc = teamId == null ? null : botTeamStore.get(teamId);
     final roster = rosterFor(savedDoc);
     final registry = AgentRegistry();
@@ -749,6 +792,10 @@ extension BotTeamWiring on TikoRuntime {
       String slot,
       String prompt,
     ) {
+      final sessionId =
+          'team:${teamId ?? 'adhoc'}:${agent.id}:'
+          '${DateTime.now().microsecondsSinceEpoch}';
+      swarmControl.trackSession(runId, sessionId);
       final allow = agent.toolAllowlist;
       final isRepair = slot.startsWith('__repair');
       final filter = isRepair
@@ -765,9 +812,7 @@ extension BotTeamWiring on TikoRuntime {
                   : Set.of(allow);
       return chatWithStatus(
         prompt,
-        sessionId:
-            'team:${teamId ?? 'adhoc'}:${agent.id}:'
-            '${DateTime.now().microsecondsSinceEpoch}',
+        sessionId: sessionId,
         channel: 'team',
         userKey: 'team',
         toolFilter: filter,
@@ -789,11 +834,13 @@ extension BotTeamWiring on TikoRuntime {
     final runner = BotTeamRunner(
       members: registry,
       plannerTurn: (prompt) {
+        final sessionId =
+            'team:${teamId ?? 'adhoc'}:__plan:'
+            '${DateTime.now().microsecondsSinceEpoch}';
+        swarmControl.trackSession(runId, sessionId);
         return chatWithStatus(
           prompt,
-          sessionId:
-              'team:${teamId ?? 'adhoc'}:__plan:'
-              '${DateTime.now().microsecondsSinceEpoch}',
+          sessionId: sessionId,
           channel: 'team',
           userKey: 'team',
           toolFilter: const <String>{},
@@ -812,18 +859,38 @@ extension BotTeamWiring on TikoRuntime {
       memberTurn: memberTurn,
       workspacePath: workspace,
       maxConcurrency: maxConcurrency.clamp(1, 8).toInt(),
-      emitEvent: (type, data) => events.emit(type, data),
+      emitEvent: (type, data) {
+        events.emit(type, data);
+        _feedSwarm(runId, type, data);
+      },
       onNodeEvent: onNodeEvent,
       sandbox: SandboxRunner(kind: sandboxKind, workspacePath: workspace),
     );
 
-    final result = await runner.run(
-      goal: goal,
-      teamId: teamId,
-      verifyCommand: verifyCommand,
-      repairIterations: repairIterations,
-      verifyTimeout: verifyTimeout,
-      unsandboxedFallback: unsandboxedVerification,
+    BotTeamRunResult result;
+    try {
+      result = await runner.run(
+        goal: goal,
+        teamId: teamId,
+        runIdOverride: runId,
+        cancelToken: cancelToken,
+        verifyCommand: verifyCommand,
+        repairIterations: repairIterations,
+        verifyTimeout: verifyTimeout,
+        unsandboxedFallback: unsandboxedVerification,
+      );
+    } catch (e) {
+      swarmControl.runFinished(
+        runId,
+        success: false,
+        cancelled: cancelToken.isCancelled,
+      );
+      rethrow;
+    }
+    swarmControl.runFinished(
+      runId,
+      success: result.success,
+      cancelled: cancelToken.isCancelled,
     );
     events.emit('team.finished', {
       'run_id': result.runId,
@@ -837,5 +904,41 @@ extension BotTeamWiring on TikoRuntime {
       await botTeamStore.saveRunReport(result.toJson());
     } catch (_) {}
     return result;
+  }
+
+  /// Cermin event `team.*` ke registri Mission Control (best-effort; event
+  /// dari runner selalu valid untuk run [runId] yang sedang berjalan).
+  void _feedSwarm(
+    String runId,
+    String type,
+    Map<String, dynamic> data,
+  ) {
+    switch (type) {
+      case 'team.planned':
+        final nodes = data['nodes'];
+        swarmControl.setPlanned(
+          runId: runId,
+          nodeIds: nodes is List
+              ? nodes.whereType<String>().toList(growable: false)
+              : const <String>[],
+        );
+      case 'team.node_started':
+        final node = data['node'];
+        final agent = data['agent'];
+        if (node is String && agent is String) {
+          swarmControl.nodeStarted(runId, node, agent);
+        }
+      case 'team.node_finished':
+        final node = data['node'];
+        if (node is String) {
+          swarmControl.nodeFinished(
+            runId,
+            node,
+            ok: data['ok'] == true,
+            error: data['error'] is String ? data['error'] as String : null,
+            output: data['output'] is String ? data['output'] as String : null,
+          );
+        }
+    }
   }
 }

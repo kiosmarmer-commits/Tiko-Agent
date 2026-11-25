@@ -36,6 +36,7 @@ import 'ui/audit_page.dart';
 import 'ui/memory_explorer_page.dart';
 import 'ui/multi_pane_view.dart';
 import 'ui/session_history_view.dart';
+import 'ui/mission_control_view.dart';
 import 'ui/runs_page.dart';
 import 'ui/surfaces_view.dart';
 import 'ui/security_view.dart';
@@ -146,6 +147,10 @@ class _AgentAppState extends State<AgentApp> {
   bool artifactPreviewShowDiff = false;
   RunsSnapshot? runsSnapshot;
   List<Map<String, dynamic>>? teamRunsSnapshot;
+  List<Map<String, dynamic>>? missionSnapshot;
+  bool missionLoading = false;
+  String? missionError;
+  Timer? _missionPoll;
   bool runsLoading = false;
   String? runsError;
   List<Map<String, dynamic>>? surfacesSnapshot;
@@ -523,6 +528,42 @@ class _AgentAppState extends State<AgentApp> {
     } catch (_) {}
   }
 
+  /// Mission Control (swarm mode): muat snapshot live run tim + polling
+  /// ringan selama halaman aktif (best-effort; error tampil sebagai banner).
+  Future<void> _loadMissionRuns() async {
+    setState(() {
+      missionLoading = true;
+      missionError = null;
+    });
+    try {
+      final runs = await repo.teamLiveRuns();
+      if (!mounted) return;
+      setState(() => missionSnapshot = runs);
+    } catch (e) {
+      if (mounted) setState(() => missionError = e.toString());
+    } finally {
+      if (mounted) setState(() => missionLoading = false);
+    }
+  }
+
+  Future<bool> _cancelMissionRun(String runId) async {
+    try {
+      return await repo.cancelTeamRun(runId);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _startMissionPolling() {
+    _missionPoll ??=
+        Timer.periodic(const Duration(seconds: 4), (_) => _loadMissionRuns());
+  }
+
+  void _stopMissionPolling() {
+    _missionPoll?.cancel();
+    _missionPoll = null;
+  }
+
   Future<void> _loadSurfaces() async {
     setState(() {
       surfacesLoading = true;
@@ -546,6 +587,7 @@ class _AgentAppState extends State<AgentApp> {
     AppRoute.bots,
     AppRoute.automations,
     AppRoute.runs,
+    AppRoute.mission,
     AppRoute.skills,
     AppRoute.security,
   };
@@ -777,6 +819,7 @@ class _AgentAppState extends State<AgentApp> {
 
   @override
   void dispose() {
+    _stopMissionPolling();
     statusTimer?.cancel();
     eventFeed?.dispose();
     chat.dispose();
@@ -867,6 +910,12 @@ class _AgentAppState extends State<AgentApp> {
     }
     if (next == AppRoute.runs && teamRunsSnapshot == null) {
       unawaited(_loadTeamRuns());
+    }
+    if (next == AppRoute.mission) {
+      unawaited(_loadMissionRuns());
+      _startMissionPolling();
+    } else {
+      _stopMissionPolling();
     }
     if (_a2uiSurfaceRoutes.contains(next) && surfacesSnapshot == null) {
       unawaited(_loadSurfaces());
@@ -1373,6 +1422,15 @@ class _AgentAppState extends State<AgentApp> {
           onRefresh: _loadRuns,
           teamRuns: teamRunsSnapshot,
           surfaceSection: _a2uiSection('runs'),
+        );
+      case AppRoute.mission:
+        return MissionControlView(
+          online: chat.online,
+          runs: missionSnapshot,
+          loading: missionLoading,
+          error: missionError,
+          onRefresh: _loadMissionRuns,
+          onCancelRun: _cancelMissionRun,
         );
       case AppRoute.surfaces:
         return SurfacesPage(

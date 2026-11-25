@@ -103,6 +103,13 @@ abstract class AgentRepository {
 
   /// Laporan run team Fase C untuk DAG view halaman Runs (read-only).
   Future<List<Map<String, dynamic>>> teamRuns();
+
+  /// Mission Control (swarm mode): snapshot live run orkestra tim.
+  Future<List<Map<String, dynamic>>> teamLiveRuns();
+
+  /// Mission Control: minta pembatalan kooperatif run tim; false bila run
+  /// tidak ditemukan atau sudah selesai.
+  Future<bool> cancelTeamRun(String runId);
   Future<CuratedMemoryInfo> curatedMemory();
   Future<CuratedMemoryInfo> setCuratedMemory({required String file, required String text});
   Future<LayersSnapshot> layered({String? query, int? limit});
@@ -459,6 +466,14 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<List<Map<String, dynamic>>> teamRuns() =>
       _guard(_client.listTeamRuns);
+
+  @override
+  Future<List<Map<String, dynamic>>> teamLiveRuns() =>
+      _guard(_client.listTeamLiveRuns);
+
+  @override
+  Future<bool> cancelTeamRun(String runId) =>
+      _guard(() => _client.cancelTeamRun(runId));
 
   @override
   Future<CuratedMemoryInfo> curatedMemory() async => CuratedMemoryInfo.fromMap(

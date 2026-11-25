@@ -20,9 +20,10 @@ void main() {
 
     test('label domain sama lintas platform: route admin dikelompokkan di More', () {
       final primary = kMobilePrimaryRoutes;
-      expect(primary.length, 4);
+      expect(primary.length, 5);
       expect(primary.map((e) => e.route),
-          [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.runs]);
+          [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.runs,
+              AppRoute.mission]);
       final grouped = kAppRoutes
           .where((e) => !e.primaryOnMobile)
           .map((e) => e.route)

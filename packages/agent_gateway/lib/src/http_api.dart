@@ -84,6 +84,8 @@ class HttpApiServer {
     this.deleteTeam,
     this.teamRunsProvider,
     this.teamRunStarter,
+    this.teamLiveProvider,
+    this.cancelTeamRun,
     this.providersProvider,
     this.providerModels,
     this.sessionProviderSetter,
@@ -1100,6 +1102,14 @@ class HttpApiServer {
   final Future<List<Map<String, dynamic>>> Function()? teamRunsProvider;
   final Future<Map<String, dynamic>> Function(Map<String, dynamic> body)?
   teamRunStarter;
+
+  /// Mission Control (swarm mode): snapshot live run orkestra tim. Null →
+  /// endpoint terkait merespons 501 not_implemented (pola callback-null).
+  final Future<List<Map<String, dynamic>>> Function()? teamLiveProvider;
+
+  /// Pembatalan run tim; return true bila run aktif ditemukan dan
+  /// permintaan pembatalan diteruskan.
+  final Future<bool> Function(String runId)? cancelTeamRun;
 
   /// Provider & model manager callbacks (GUI-P1-05). Callback yang null
   /// membuat endpoint terkait merespons 501 not_implemented.
@@ -2324,6 +2334,34 @@ class HttpApiServer {
                   'bot team manager not configured',
                 )));
         _json(req, {'runs': runs});
+      } else if (path == '/v1/teams/runs/live' && req.method == 'GET') {
+        final runs =
+            await (teamLiveProvider?.call() ??
+                (throw ApiRequestException(
+                  501,
+                  'not_implemented',
+                  'mission control not configured',
+                )));
+        _json(req, {'runs': runs});
+      } else if (path == '/v1/teams/runs/cancel' && req.method == 'POST') {
+        if (cancelTeamRun == null) {
+          _error(req, 501, 'not_implemented', 'mission control not configured');
+          return;
+        }
+        final body =
+            jsonDecode(await utf8.decoder.bind(req).join())
+                as Map<String, dynamic>;
+        final runId = (body['run_id'] as String?)?.trim() ?? '';
+        if (runId.isEmpty) {
+          _error(req, 400, 'invalid_request', 'run_id wajib diisi');
+          return;
+        }
+        final ok = await cancelTeamRun!(runId);
+        if (!ok) {
+          _error(req, 404, 'not_found', 'run tidak ditemukan atau sudah selesai');
+          return;
+        }
+        _json(req, {'ok': true, 'run_id': runId, 'cancel_requested': true});
       } else if (path == '/v1/teams/run' && req.method == 'POST') {
         if (teamRunStarter == null) {
           _error(req, 501, 'not_implemented', 'bot team manager not configured');
