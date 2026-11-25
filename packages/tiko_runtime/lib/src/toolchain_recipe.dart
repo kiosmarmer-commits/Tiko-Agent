@@ -376,6 +376,64 @@ bool _recipeOnPath(String bin, Map<String, String>? environment) {
   return false;
 }
 
+/// Wadah hasil eksekusi proses probe (Process.run-style) untuk injeksi mock
+/// pada unit test [applyToolchainPlan].
+class ToolchainProcOut {
+  const ToolchainProcOut(this.exitCode, this.output);
+
+  /// Kode exit proses (0 = sukses).
+  final int exitCode;
+
+  /// Gabungan stdout+stderr proses.
+  final String output;
+}
+
+/// Runner analog `Process.run` — output ditangkap (untuk probe apt).
+typedef ToolchainProcRunner = Future<ToolchainProcOut> Function(
+    String exe, List<String> args);
+
+/// Runner analog `Process.start(inheritStdio)` — hanya kode exit (instalasi).
+typedef ToolchainSpawnRunner = Future<int> Function(List<String> argv);
+
+/// Runner probe bawaan: `Process.run` dengan output stdout+stderr digabung.
+Future<ToolchainProcOut> defaultToolchainProcRunner(
+    String exe, List<String> args) async {
+  final res = await Process.run(exe, args);
+  return ToolchainProcOut(res.exitCode, '${res.stdout}${res.stderr}');
+}
+
+/// Runner instalasi bawaan: `Process.start` dengan stdio diwariskan agar
+/// user melihat progress apt-get langsung.
+Future<int> defaultToolchainSpawnRunner(List<String> argv) async {
+  final proc = await Process.start(
+    argv.first,
+    argv.sublist(1),
+    mode: ProcessStartMode.inheritStdio,
+  );
+  return proc.exitCode;
+}
+
+/// Ambil daftar paket yang dinyatakan apt tidak tersedia dari output gabungan
+/// probe (`apt-get install --dry-run`). Mendukung tiga pola error apt:
+/// `Unable to locate package X`, `Package X is not available`, dan
+/// `Package 'X' has no installation candidate` (kutip tunggal dilepas).
+List<String> parseUnavailableAptPackages(String output) {
+  final missing = <String>{};
+  final patterns = [
+    RegExp(r'Unable to locate package (\S+)'),
+    RegExp(r'Package (\S+) is not available'),
+    RegExp(r"Package '?([^'\s]+)'? has no installation candidate"),
+  ];
+  for (final pattern in patterns) {
+    for (final match in pattern.allMatches(output)) {
+      final name = match.group(1);
+      if (name == null || name.isEmpty) continue;
+      missing.add(name.replaceAll("'", ''));
+    }
+  }
+  return missing.toList();
+}
+
 /// Hasil [applyToolchainPlan].
 class ToolchainApplyResult {
   const ToolchainApplyResult({
@@ -394,11 +452,20 @@ class ToolchainApplyResult {
 /// Jalankan rencana provisioning. Human-in-loop: [confirm] dipanggil dengan
 /// ringkasan rencana; tanpa jawaban eksplisit tidak ada paket yang dipasang.
 /// Stdio diwariskan agar user melihat progress apt-get langsung.
+///
+/// Sebelum instalasi batch, ketersediaan paket diprobe via
+/// `apt-get install --dry-run` ([procRunner]); paket yang tidak ada di repo
+/// distro (mis. gnu-smalltalk pada beberapa Debian) dilewati sehingga satu
+/// paket rusak tidak membatalkan seluruh batch. Bila batch tetap gagal,
+/// fallback per-paket dijalankan via [spawnRunner] dan kegagalannya
+/// dilaporkan jujur di [ToolchainApplyResult.message].
 Future<ToolchainApplyResult> applyToolchainPlan(
   ToolchainPlan plan, {
   required Future<bool> Function(String planMessage) confirm,
   Map<String, String>? environment,
   bool dryRun = false,
+  ToolchainProcRunner? procRunner,
+  ToolchainSpawnRunner? spawnRunner,
 }) async {
   if (plan.empty) {
     return const ToolchainApplyResult(
@@ -429,38 +496,128 @@ Future<ToolchainApplyResult> applyToolchainPlan(
       ran: false,
       message: plan.aptInstallable.isEmpty
           ? 'dry-run: hanya toolchain manual (tidak ada yang dijalankan)'
-          : plan.aptCommand(asRoot: !Platform.environment.containsKey('SUDO_USER') &&
-              Platform.environment['USER'] != 'root').join(' '),
+          : plan
+                .aptCommand(
+                  asRoot:
+                      !Platform.environment.containsKey('SUDO_USER') &&
+                      Platform.environment['USER'] != 'root',
+                )
+                .join(' '),
     );
   }
   if (plan.aptInstallable.isNotEmpty) {
-    final asRoot = Platform.environment['SUDO_USER'] == null &&
+    final runner = procRunner ?? defaultToolchainProcRunner;
+    final spawn = spawnRunner ?? defaultToolchainSpawnRunner;
+    final asRoot =
+        Platform.environment['SUDO_USER'] == null &&
         Platform.environment['USER'] == 'root';
-    final argv = plan.aptCommand(asRoot: asRoot);
+    final pkgs = plan.aptCommand(asRoot: asRoot).sublist(asRoot ? 3 : 4);
+    var available = pkgs;
+    var skipped = <String>[];
+    try {
+      final probeArgv = [
+        if (!asRoot) 'sudo',
+        'apt-get',
+        'install',
+        '--dry-run',
+        '-y',
+        ...pkgs,
+      ];
+      final probe = await runner(probeArgv.first, probeArgv.sublist(1));
+      final missing = parseUnavailableAptPackages(probe.output);
+      if (missing.isNotEmpty) {
+        skipped = [
+          for (final pkg in pkgs)
+            if (missing.contains(pkg)) pkg,
+        ];
+        available = [
+          for (final pkg in pkgs)
+            if (!missing.contains(pkg)) pkg,
+        ];
+      }
+    } on ProcessException {
+      available = pkgs;
+      skipped = const [];
+    }
+    if (available.isEmpty) {
+      return ToolchainApplyResult(
+        success: false,
+        ran: true,
+        message:
+            'semua ${skipped.length} paket apt tidak tersedia di repo '
+            'distro ini: ${skipped.join(", ")} — cek nama paket '
+            'Debian/Ubuntu terbaru atau pasang manual',
+      );
+    }
+    final baseArgv = [if (!asRoot) 'sudo', 'apt-get', 'install', '-y'];
     int code;
     try {
-      final proc = await Process.start(
-        argv.first,
-        argv.sublist(1),
-        mode: ProcessStartMode.inheritStdio,
-      );
-      code = await proc.exitCode;
+      code = await spawn([...baseArgv, ...available]);
     } on ProcessException catch (error) {
       return ToolchainApplyResult(
         success: false,
         ran: true,
-        message: 'gagal menjalankan ${argv.first}: '
+        message:
+            'gagal menjalankan ${baseArgv.first}: '
             '${error.message} (sudo tersedia? apt terpasang?)',
       );
     }
+    var installed = List<String>.of(available);
+    var failed = <String>[];
     if (code != 0) {
+      installed = <String>[];
+      for (final pkg in available) {
+        try {
+          if (await spawn([...baseArgv, pkg]) == 0) {
+            installed.add(pkg);
+          } else {
+            failed.add(pkg);
+          }
+        } on ProcessException catch (error) {
+          return ToolchainApplyResult(
+            success: false,
+            ran: true,
+            message:
+                'gagal menjalankan ${baseArgv.first}: '
+                '${error.message} (sudo tersedia? apt terpasang?)',
+          );
+        }
+      }
+    }
+    final skippedNote = skipped.isEmpty
+        ? ''
+        : '\nDilewati (tidak tersedia di repo distro ini — coba repo '
+              'distro lain / pasang manual): ${skipped.join(", ")}';
+    if (failed.isNotEmpty && installed.isEmpty) {
       return ToolchainApplyResult(
         success: false,
         ran: true,
-        message: 'apt-get exit $code — periksa output di atas, lalu jalankan '
-            '`tiko doctor` ulang',
+        message:
+            'gagal memasang paket terpilih: ${failed.join(", ")}$skippedNote',
       );
     }
+    if (failed.isNotEmpty) {
+      return ToolchainApplyResult(
+        success: false,
+        ran: true,
+        message:
+            'sebagian berhasil: ${installed.join(", ")}; gagal: '
+            '${failed.join(", ")} — jalankan `tiko doctor` ulang'
+            '$skippedNote',
+      );
+    }
+    final stillAptManual = plan.manual
+        .map((r) => '${r.bin}: ${r.manualHint}')
+        .join('\n  ');
+    return ToolchainApplyResult(
+      success: true,
+      ran: true,
+      message: plan.manual.isEmpty
+          ? 'selesai — jalankan `tiko doctor` untuk verifikasi'
+                '$skippedNote'
+          : 'selesai (apt) — berikut yang perlu dipasang manual sekali '
+                'saja:\n  $stillAptManual$skippedNote',
+    );
   }
   final stillManual = plan.manual
       .map((r) => '${r.bin}: ${r.manualHint}')
@@ -471,6 +628,6 @@ Future<ToolchainApplyResult> applyToolchainPlan(
     message: plan.manual.isEmpty
         ? 'selesai — jalankan `tiko doctor` untuk verifikasi'
         : 'selesai (apt) — berikut yang perlu dipasang manual sekali saja:\n'
-            '  $stillManual',
+              '  $stillManual',
   );
 }
