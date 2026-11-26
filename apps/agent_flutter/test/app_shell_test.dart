@@ -181,11 +181,42 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.byType(Badge), findsOneWidget);
-      expect(find.descendant(
-        of: find.byType(Badge),
-        matching: find.text('2'),
-      ), findsOneWidget);
+      final moreDestination = find.ancestor(
+        of: find.text(kMobileMoreLabel),
+        matching: find.byType(NavigationDestination),
+      );
+      expect(moreDestination, findsOneWidget);
+      expect(
+        find.descendant(of: moreDestination, matching: find.byType(Badge)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: moreDestination, matching: find.text('2')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('More signals unavailable approval status', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MobileShell(
+            selected: AppRoute.chat,
+            onSelect: (_) {},
+            approvalStatusUnavailable: true,
+            child: const SizedBox(),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final moreDestination = find.ancestor(
+        of: find.text(kMobileMoreLabel),
+        matching: find.byType(NavigationDestination),
+      );
+      expect(
+        find.descendant(of: moreDestination, matching: find.text('!')),
+        findsOneWidget,
+      );
     });
   });
 

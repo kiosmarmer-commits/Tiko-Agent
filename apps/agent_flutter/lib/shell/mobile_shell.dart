@@ -13,6 +13,7 @@ class MobileShell extends StatelessWidget {
     required this.onSelect,
     required this.child,
     this.pendingApprovals = 0,
+    this.approvalStatusUnavailable = false,
     this.entries = kAppRoutes,
   });
 
@@ -21,8 +22,10 @@ class MobileShell extends StatelessWidget {
   final ValueChanged<AppRoute?> onSelect;
   final Widget child;
 
-  /// Jumlah approval pending (GUI-P0-06): badge pada destinasi Approvals.
+  /// Jumlah approval pending (GUI-P0-06): badge pada More saat Approvals
+  /// bukan destinasi primer. Saat status tidak tersedia, More menampilkan !.
   final int pendingApprovals;
+  final bool approvalStatusUnavailable;
 
   /// Destinasi aktif — difilter per mode Simple/Advanced (GUI-P2-01).
   final List<AppRouteInfo> entries;
@@ -54,7 +57,12 @@ class MobileShell extends StatelessWidget {
                 label: entry.navigationLabel,
               ),
             NavigationDestination(
-              icon: pendingApprovals > 0
+              icon: approvalStatusUnavailable
+                  ? const Badge(
+                      label: Text('!'),
+                      child: Icon(Icons.more_horiz),
+                    )
+                  : pendingApprovals > 0
                   ? Badge(
                       label: Text('$pendingApprovals'),
                       child: const Icon(Icons.more_horiz),
