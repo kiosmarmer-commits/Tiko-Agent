@@ -41,6 +41,7 @@ Aturan zona masa depan mengikuti versi data tzdata yang dibawa package `timezone
 | Email (outbound SMTP) | `EMAIL_FROM` | `SMTP_HOST`, `SMTP_PORT`, `EMAIL_ALLOW`, `EMAIL_TO`, `SMTP_STARTTLS`, `SMTP_USER`, `SMTP_PASS`; inbound receiver belum di-wire |
 | WhatsApp webhook | `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET` harus lengkap | Inbound melalui endpoint webhook; signature Meta diverifikasi |
 | Slack webhook | `SLACK_SIGNING_SECRET` + `SLACK_WEBHOOK_URL` atau `SLACK_BOT_TOKEN` | Signature inbound diverifikasi; outbound memakai webhook/bot sesuai konfigurasi |
+| LINE webhook | `LINE_CHANNEL_ACCESS_TOKEN` + `LINE_CHANNEL_SECRET` | `POST /webhooks/line`; signature diverifikasi dan balasan inbound memakai reply token LINE |
 
 Ketersediaan kode gateway bukan bukti akun/platform nyata telah diuji. Credentials/allowlist/endpoint harus disediakan pengguna.
 
@@ -72,7 +73,7 @@ API menggunakan Bearer token pada endpoint admin/operasional. `/health` dikecual
 | GET | `/v1/teams/runs` | Laporan run orkestra terbaru (`data/teams/runs/`) |
 | POST | `/v1/teams/run` | Jalankan orkestra tim (goal wajib; sinkron — progress via `/v1/stream` event `team.*`) |
 
-Webhook WhatsApp/Slack dipasang pada server yang sama jika gateway dikonfigurasi.
+Webhook WhatsApp, Slack, dan LINE dipasang pada server yang sama jika gateway terkait dikonfigurasi.
 
 Token dibuat acak bila `API_TOKEN` tidak diset, minimal 32 karakter jika disediakan manual, disimpan di `data/api.token` dengan POSIX mode `0600`, dan tidak dicetak ke daemon log. Default `API_HOST=127.0.0.1`; port berasal dari `api.port` atau `API_PORT`.
 

@@ -81,6 +81,8 @@ class LineGateway implements Gateway {
           final sessionKey = groupId != null
               ? 'line:group:$groupId'
               : (roomId != null ? 'line:room:$roomId' : 'line:user:$userId');
+          final replyToken = eventMap['replyToken'] as String?;
+          final recipient = groupId ?? roomId ?? userId;
 
           _inbound.add(
             InboundMessage(
@@ -88,7 +90,14 @@ class LineGateway implements Gateway {
               userKey: userId,
               sessionKey: sessionKey,
               text: text,
-              meta: {'source': source, 'message': message, 'event': eventMap},
+              meta: {
+                'source': source,
+                'message': message,
+                'event': eventMap,
+                if (replyToken != null && replyToken.isNotEmpty)
+                  'reply_token': replyToken,
+                if (recipient.isNotEmpty) 'to': recipient,
+              },
             ),
           );
         }
@@ -104,16 +113,17 @@ class LineGateway implements Gateway {
     try {
       final replyToken = m.meta['reply_token'] as String?;
       final to = m.meta['to'] as String?;
+      final isReply = replyToken != null && replyToken.isNotEmpty;
 
-      if (replyToken == null && to == null) {
+      if (!isReply && (to == null || to.isEmpty)) {
         throw StateError(
           'LINE: reply_token or to (userId/groupId/roomId) required',
         );
       }
 
       final payload = {
-        if (replyToken != null) 'replyToken': replyToken,
-        if (to != null) 'to': to,
+        if (isReply) 'replyToken': replyToken,
+        if (!isReply) 'to': to,
         'messages': [
           {'type': 'text', 'text': m.text},
         ],
@@ -121,7 +131,11 @@ class LineGateway implements Gateway {
 
       final response = await client
           .post(
-            Uri.parse('https://api.line.me/v2/bot/message/push'),
+            Uri.parse(
+              isReply
+                  ? 'https://api.line.me/v2/bot/message/reply'
+                  : 'https://api.line.me/v2/bot/message/push',
+            ),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $channelAccessToken',

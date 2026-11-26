@@ -52,6 +52,7 @@ class ChatController extends ChangeNotifier {
   /// (dari frame `chat.toolStart`) dan sinyal stop yang sudah dikirim.
   String? activeTool;
   bool stopRequested = false;
+  String? _activeSessionKey;
 
   /// C4 Chat-UX: trace tool turn terakhir (`chat.tool`) untuk ringkasan
   /// collapsible + kartu file otomatis; nama + durasi + status error.
@@ -71,11 +72,25 @@ class ChatController extends ChangeNotifier {
     activityPhase = AgentActivityPhase.stopping;
     notifyListeners();
     try {
-      await repo.cancelTurn(sessionKey);
+      final accepted = await repo.cancelTurn(_activeSessionKey ?? sessionKey);
+      if (!accepted && busy) {
+        _reportStopNotAccepted();
+      }
     } catch (_) {
-      // Kegagalan jaringan saat cancel tidak mengubah hasil turn yang
-      // tetap mengalir lewat frame done/error; strip menandai jujur.
+      if (busy) _reportStopNotAccepted();
     }
+  }
+
+  void _reportStopNotAccepted() {
+    stopRequested = false;
+    if (activityPhase == AgentActivityPhase.stopping) {
+      activityPhase = AgentActivityPhase.processing;
+    }
+    messages.add({
+      'role': 'system',
+      'text': 'Daemon belum mengonfirmasi penghentian. Turn masih berjalan.',
+    });
+    notifyListeners();
   }
 
   Future<void> checkOnline() async {
@@ -103,6 +118,7 @@ class ChatController extends ChangeNotifier {
     final t = text.trim();
     if (t.isEmpty || busy) return;
     busy = true;
+    _activeSessionKey = sk;
     activityPhase = AgentActivityPhase.submitting;
     // C2 Chat-UX: lampiran ditampilkan jujur sebagai ringkasan di gelembung
     // user (isi file nyata diekspansi runtime menjadi konteks `[lampiran:]`).
@@ -119,6 +135,7 @@ class ChatController extends ChangeNotifier {
     retryText = null;
     retryAttachments = const [];
     var failed = false;
+    var receivedTerminalFrame = false;
 
     try {
       if (useStreaming) {
@@ -216,6 +233,7 @@ class ChatController extends ChangeNotifier {
               }
             }
           } else if (type == 'error') {
+            receivedTerminalFrame = true;
             failed = true;
             activityPhase = AgentActivityPhase.failed;
             retryText = t;
@@ -223,6 +241,7 @@ class ChatController extends ChangeNotifier {
             messages[aiIndex]['text'] = 'Gagal: ${ev['message']}';
             notifyListeners();
           } else if (type == 'done') {
+            receivedTerminalFrame = true;
             activityPhase = failed
                 ? AgentActivityPhase.failed
                 : stopRequested
@@ -239,6 +258,15 @@ class ChatController extends ChangeNotifier {
             if (!failed) retryText = null;
             notifyListeners();
           }
+        }
+        if (!receivedTerminalFrame) {
+          failed = true;
+          activityPhase = AgentActivityPhase.failed;
+          retryText = t;
+          retryAttachments = List.of(attachments);
+          messages[aiIndex]['text'] =
+              'Gagal: koneksi ditutup sebelum turn selesai.';
+          notifyListeners();
         }
       } else {
         activityPhase = AgentActivityPhase.processing;
@@ -280,6 +308,7 @@ class ChatController extends ChangeNotifier {
             : AgentActivityPhase.complete;
       }
       busy = false;
+      _activeSessionKey = null;
       activeTool = null;
       notifyListeners();
     }

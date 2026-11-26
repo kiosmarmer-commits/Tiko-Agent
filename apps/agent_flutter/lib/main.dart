@@ -1604,8 +1604,13 @@ class _ChatPageState extends State<_ChatPage> {
     if (!shouldFollow) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
+      final target = _scrollController.position.maxScrollExtent;
+      if (_prefersReducedMotion(context)) {
+        _scrollController.jumpTo(target);
+        return;
+      }
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        target,
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
       );
