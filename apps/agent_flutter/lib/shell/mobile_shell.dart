@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../app/app_routes.dart';
 import '../ui/theme.dart';
 
-/// Narrow-layout shell (Android / narrow browser): bottom navigation bar with
-/// the primary routes plus a "More" entry selecting [onSelect] with `null`.
+/// Narrow-layout shell (Android / narrow browser): three daily destinations
+/// plus a "More" entry selecting [onSelect] with `null`.
 /// Destinations come from the shared route map.
 class MobileShell extends StatelessWidget {
   const MobileShell({
@@ -53,8 +53,13 @@ class MobileShell extends StatelessWidget {
                 icon: _navIcon(entry, pendingApprovals),
                 label: entry.navigationLabel,
               ),
-            const NavigationDestination(
-              icon: Icon(Icons.more_horiz),
+            NavigationDestination(
+              icon: pendingApprovals > 0
+                  ? Badge(
+                      label: Text('$pendingApprovals'),
+                      child: const Icon(Icons.more_horiz),
+                    )
+                  : const Icon(Icons.more_horiz),
               label: kMobileMoreLabel,
             ),
           ],

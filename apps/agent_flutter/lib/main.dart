@@ -946,7 +946,7 @@ class _AgentAppState extends State<AgentApp> {
   }
 
   Widget _body({required bool wide}) {
-    if (!wide && !route.primaryOnMobile) {
+    if (!wide && !route.primaryOnMobile && route != AppRoute.approvals) {
       return _MorePage(
         repo: repo,
         baseUrl: baseUrl,
@@ -983,6 +983,8 @@ class _AgentAppState extends State<AgentApp> {
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
+        pendingApprovals: _pendingApprovals,
+        onOpenApprovals: () => _selectRoute(AppRoute.approvals),
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
         settings: settings,
@@ -3198,6 +3200,8 @@ class _MorePage extends StatelessWidget {
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
+    required this.pendingApprovals,
+    required this.onOpenApprovals,
     required this.onRefresh,
     required this.onConnect,
     required this.settings,
@@ -3242,6 +3246,8 @@ class _MorePage extends StatelessWidget {
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
+  final int pendingApprovals;
+  final VoidCallback onOpenApprovals;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
   final AppSettings settings;
@@ -3254,8 +3260,22 @@ class _MorePage extends StatelessWidget {
       children: [
         PageHeader(
           title: 'More',
-          subtitle: 'Tasks, Memory, Tools',
+          subtitle: 'Knowledge, connections, and controls',
           online: online,
+        ),
+        ListTile(
+          leading: Badge(
+            isLabelVisible: pendingApprovals > 0,
+            label: Text('$pendingApprovals'),
+            child: const Icon(Icons.verified_user_outlined),
+          ),
+          title: const Text('Approvals'),
+          subtitle: Text(
+            pendingApprovals == 0
+                ? 'Review requested actions'
+                : '$pendingApprovals actions waiting for review',
+          ),
+          onTap: onOpenApprovals,
         ),
         ListTile(
           leading: const Icon(Icons.view_kanban_outlined),

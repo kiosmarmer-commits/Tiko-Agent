@@ -352,7 +352,7 @@ class _SettingsViewState extends State<SettingsView> {
                 secondary: const Icon(Icons.tune),
                 title: const Text('Mode Advanced (GUI-P2-01)'),
                 subtitle: Text(
-                  'Simple: Chat, Dashboard, Approvals, Sessions, Tasks, Memory, Settings saja. Advanced: semua modul.',
+        'Simple: Chat, Workspace, Activity, Approvals, Chat history, Tasks, Memory, dan Settings. Advanced: semua modul.',
                   style: TextStyle(color: SimpulTheme.mutedText(brightness)),
                 ),
                 value: settings.advancedMode,

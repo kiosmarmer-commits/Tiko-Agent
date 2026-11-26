@@ -66,27 +66,27 @@ const List<AppRouteInfo> kAppRoutes = [
   ),
   AppRouteInfo(
     AppRoute.dashboard,
-    'Dashboard',
+    'Workspace',
     Icons.dashboard_outlined,
     section: 'Workspace',
-    shortLabel: 'Home',
   ),
   AppRouteInfo(
     AppRoute.approvals,
     'Approvals',
     Icons.verified_user_outlined,
+    primaryOnMobile: false,
     section: 'Agents',
   ),
   AppRouteInfo(
     AppRoute.surfaces,
-    'Surface',
+    'Interactive UI',
     Icons.web_asset_outlined,
     primaryOnMobile: false,
-    section: 'Build',
+    section: 'Workspace',
   ),
   AppRouteInfo(
     AppRoute.sessions,
-    'Sessions',
+    'Chat history',
     Icons.forum_outlined,
     primaryOnMobile: false,
     section: 'Workspace',
@@ -96,14 +96,14 @@ const List<AppRouteInfo> kAppRoutes = [
     'Tasks',
     Icons.view_kanban_outlined,
     primaryOnMobile: false,
-    section: 'Build',
+    section: 'Workspace',
   ),
   AppRouteInfo(
     AppRoute.skills,
     'Skills',
     Icons.auto_awesome_outlined,
     primaryOnMobile: false,
-    section: 'Integrations',
+    section: 'Knowledge',
   ),
   AppRouteInfo(
     AppRoute.bots,
@@ -114,28 +114,28 @@ const List<AppRouteInfo> kAppRoutes = [
   ),
   AppRouteInfo(
     AppRoute.providers,
-    'Providers',
+    'Models & providers',
     Icons.route_outlined,
     primaryOnMobile: false,
-    section: 'Integrations',
+    section: 'Connections',
   ),
   AppRouteInfo(
     AppRoute.plugins,
-    'Plugins',
+    'Extensions',
     Icons.extension_outlined,
     primaryOnMobile: false,
-    section: 'Integrations',
+    section: 'Connections',
   ),
   AppRouteInfo(
     AppRoute.channels,
-    'Channels',
+    'Messaging channels',
     Icons.hub_outlined,
     primaryOnMobile: false,
-    section: 'Integrations',
+    section: 'Connections',
   ),
   AppRouteInfo(
     AppRoute.automations,
-    'Automation',
+    'Automations',
     Icons.schedule_outlined,
     primaryOnMobile: false,
     section: 'Agents',
@@ -145,34 +145,34 @@ const List<AppRouteInfo> kAppRoutes = [
     'Security',
     Icons.security_outlined,
     primaryOnMobile: false,
-    section: 'Operations',
+    section: 'Control',
   ),
   AppRouteInfo(
     AppRoute.audit,
-    'Audit',
+    'Security activity',
     Icons.receipt_long_outlined,
     primaryOnMobile: false,
-    section: 'Operations',
+    section: 'Control',
   ),
   AppRouteInfo(
     AppRoute.artifacts,
-    'Artifacts',
+    'Files & outputs',
     Icons.folder_copy_outlined,
     primaryOnMobile: false,
-    section: 'Build',
+    section: 'Workspace',
   ),
   AppRouteInfo(
     AppRoute.runs,
-    'Runs',
+    'Activity',
     Icons.play_circle_outline,
     primaryOnMobile: true,
     section: 'Agents',
   ),
   AppRouteInfo(
     AppRoute.mission,
-    'Mission Control',
+    'Team runs',
     Icons.hub_outlined,
-    primaryOnMobile: true,
+    primaryOnMobile: false,
     section: 'Agents',
   ),
   AppRouteInfo(
@@ -187,18 +187,18 @@ const List<AppRouteInfo> kAppRoutes = [
     'Events',
     Icons.bolt_outlined,
     primaryOnMobile: false,
-    section: 'Operations',
+    section: 'Control',
   ),
   AppRouteInfo(
     AppRoute.logs,
     'Logs',
     Icons.article_outlined,
     primaryOnMobile: false,
-    section: 'Operations',
+    section: 'Control',
   ),
   AppRouteInfo(
     AppRoute.hooks,
-    'Hooks',
+    'Event rules',
     Icons.webhook_outlined,
     primaryOnMobile: false,
     section: 'Settings',
@@ -214,15 +214,16 @@ const List<AppRouteInfo> kAppRoutes = [
 
 const String kMobileMoreLabel = 'More';
 
-/// GUI-P2-01: Simple mode keeps the everyday control center (chat, satu
-/// halaman status, approval, sesi, tasks, memory, settings); modul teknis
+/// GUI-P2-01: Simple mode keeps the everyday control center (chat, workspace,
+/// activity, approval, history, tasks, memory, settings); modul teknis
 /// (skills, bots, providers, tools/MCP/plugins, channels, automation,
-/// security, audit, artifacts, runs, events, logs, graf/editor) hanya
+/// security, audit, artifacts, team runs, events, logs, graf/editor) hanya
 /// muncul pada Advanced mode. Kemampuan runtime tidak berubah — ini murni
 /// progressive disclosure di layer navigasi.
 const Set<AppRoute> kSimpleRoutes = {
   AppRoute.chat,
   AppRoute.dashboard,
+  AppRoute.runs,
   AppRoute.approvals,
   AppRoute.sessions,
   AppRoute.tasks,
