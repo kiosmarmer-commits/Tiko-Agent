@@ -1,8 +1,8 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `ddb7ceb` pada branch `main`.
+**Source snapshot:** commit `e5db409` pada branch `codex/tiko-gui-cli-audit` (PR #199; status merge lihat GitHub).
 
-**Terakhir diperbarui:** 20 November 2026.
+**Terakhir diperbarui:** 26 November 2026.
 
 **Aturan status:** source code dan test adalah bukti utama. “Tersedia sebagai library” tidak sama dengan “terhubung ke runtime/user command”. Status CI harus dibaca dari [GitHub Actions](https://github.com/kiosmarmer-commits/Tiko-Agent/actions).
 
@@ -25,6 +25,8 @@
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
 | 14 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E7 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface, ApprovalSheet, surface riset + DAG team run, aksi `open_url` allowlist host) |
 | 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F8 selesai; prinsip additive, status per fase) |
+| 16 | [16-AUDIT-RESPONSIVE-ACCESSIBILITY.md](16-AUDIT-RESPONSIVE-ACCESSIBILITY.md) | Snapshot audit responsive/accessibility historis; checklist perangkat yang belum diverifikasi tetap berguna |
+| 17 | [17-AUDIT-GUI-CLI-UX-2026-11-26.md](17-AUDIT-GUI-CLI-UX-2026-11-26.md) | Catatan terbaru perbaikan GUI/CLI PR #199, kontrak JSON, status verifikasi, dan klaim lama yang usang |
 
 ## Status implementasi
 
@@ -61,6 +63,8 @@
 | Google Home | Conditional via Home Assistant | Tidak ada direct Google Home API provider di repo |
 | Self-learning/reflection | Implemented with guards | Sintesis tetap dibatasi gate, score, dan approval |
 | Flutter client/widgets | Implemented/conditional | Memerlukan Flutter SDK dan daemon/API |
+| Desktop/mobile GUI accessibility & error recovery (PR #199) | Implemented (source-level) | Reduced motion, kontras foreground, semantics, target sentuh, dan retry sudah diperbaiki; verifikasi screen reader/perangkat masih belum dilakukan — lihat [audit GUI/CLI](17-AUDIT-GUI-CLI-UX-2026-11-26.md) |
+| CLI JSON/recovery output (PR #199) | Implemented (source-level) | `doctor --json --fix` merupakan dry-run plan; lihat kontrak perintah dan batas stdout di [audit GUI/CLI](17-AUDIT-GUI-CLI-UX-2026-11-26.md) |
 | Web dashboard agentd (Jalur A) | Implemented/conditional | Flutter Web sebagai satu-satunya webRoot + cookie sesi same-origin + auto-open browser; butuh `flutter build web` sebelum daemon dapat menyajikan UI |
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
 | Semantic code index + embeddings (S22) | Implemented | `code_semantic` + `tiko code-index` — hybrid BM25+cosine RRF atas indeks persisten `data/index/code-semantic.jsonl`; embedder provider `memory.embed` bila aktif, tanpa itu fallback hashing offline (dilabel jujur bukan model semantik); refresh inkremental hash sha256 per file; `code.index.enabled` default true |
