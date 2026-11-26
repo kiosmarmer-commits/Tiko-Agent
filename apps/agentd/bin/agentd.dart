@@ -368,6 +368,29 @@ Future<void> main(List<String> args) async {
     );
   }
 
+  // LINE webhook: verify inbound signatures and reply with LINE's
+  // single-use reply token, falling back to a push to the source chat.
+  final lineAccessToken = Platform.environment['LINE_CHANNEL_ACCESS_TOKEN'];
+  final lineChannelSecret = Platform.environment['LINE_CHANNEL_SECRET'];
+  LineGateway? lineGw;
+  if (lineAccessToken != null &&
+      lineAccessToken.isNotEmpty &&
+      lineChannelSecret != null &&
+      lineChannelSecret.isNotEmpty) {
+    lineGw = LineGateway(
+      channelAccessToken: lineAccessToken,
+      channelSecret: lineChannelSecret,
+    );
+    addGateway(lineGw);
+    stdout.writeln('LINE webhook aktif');
+  } else if ((lineAccessToken?.isNotEmpty ?? false) ||
+      (lineChannelSecret?.isNotEmpty ?? false)) {
+    stdout.writeln(
+      'LINE webhook dilewati: LINE_CHANNEL_ACCESS_TOKEN dan '
+      'LINE_CHANNEL_SECRET wajib lengkap',
+    );
+  }
+
   final slackWebhookUrl = Platform.environment['SLACK_WEBHOOK_URL'];
   final slackBotToken = Platform.environment['SLACK_BOT_TOKEN'];
   final slackSigningSecret = Platform.environment['SLACK_SIGNING_SECRET'];
@@ -569,6 +592,13 @@ Future<void> main(List<String> args) async {
     }
 
     final gw = replyVia ?? gatewayForChannel(m.channel);
+    final replyMeta = m.channel == 'line'
+        ? <String, Object?>{
+            if (m.meta['reply_token'] != null)
+              'reply_token': m.meta['reply_token'],
+            if (m.meta['to'] != null) 'to': m.meta['to'],
+          }
+        : const <String, Object?>{};
 
     // Closed feedback loop: chat users on any channel can rate the skill(s)
     // of the previous turn with `/feedback <slug> up|down` (or 👍/👎).
@@ -639,10 +669,18 @@ Future<void> main(List<String> args) async {
       final ids = await streamer.finish(answer);
       if (ids.isEmpty) {
         // Live edits never landed (network/platform): fall back to plain send.
-        await gw.send(OutboundMessage(sessionKey: m.sessionKey, text: answer));
+        await gw.send(OutboundMessage(
+          sessionKey: m.sessionKey,
+          text: answer,
+          meta: replyMeta,
+        ));
       }
     } else if (gw != null) {
-      await gw.send(OutboundMessage(sessionKey: m.sessionKey, text: answer));
+      await gw.send(OutboundMessage(
+        sessionKey: m.sessionKey,
+        text: answer,
+        meta: replyMeta,
+      ));
     } else if (m.channel == 'cli') {
       stdout.writeln('assistant> $answer');
     } else {
@@ -686,12 +724,14 @@ Future<void> main(List<String> args) async {
     'Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)',
   );
 
-  final webhooks = (wa != null || slackGw != null)
+  final webhooks = (wa != null || slackGw != null || lineGw != null)
       ? WebhookEndpoint(
           whatsapp: wa,
           whatsappAppSecret: waAppSecret,
           slack: slackGw,
           slackSigningSecret: slackSigningSecret,
+          line: lineGw,
+          lineChannelSecret: lineChannelSecret,
           onMessage: (m) => handleMessage(m),
         )
       : null;
@@ -1243,6 +1283,7 @@ Future<void> main(List<String> args) async {
           'imap': imap != null,
           'whatsapp': wa != null,
           'slack': slackGw != null,
+          'line': lineGw != null,
           'signal': gatewayForChannel('signal') != null,
           'matrix': gatewayForChannel('matrix') != null,
           'openai': openAiServer != null,
@@ -1834,6 +1875,7 @@ const Map<String, List<String>> _channelEnv = {
     'WHATSAPP_APP_SECRET',
   ],
   'slack': ['SLACK_WEBHOOK_URL', 'SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET'],
+  'line': ['LINE_CHANNEL_ACCESS_TOKEN', 'LINE_CHANNEL_SECRET'],
   'signal': ['SIGNAL_RPC_URL', 'SIGNAL_ACCOUNT', 'SIGNAL_ALLOW'],
   'matrix': ['MATRIX_HOMESERVER', 'MATRIX_ACCESS_TOKEN', 'MATRIX_ALLOW'],
   'openai': ['OPENAI_API_PORT', 'OPENAI_API_KEY'],
