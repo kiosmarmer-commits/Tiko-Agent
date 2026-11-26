@@ -8,7 +8,7 @@ import '../data/api_error.dart';
 
 class ChatMessageVm {
   ChatMessageVm({required this.role, required this.text, DateTime? at})
-      : at = at ?? DateTime.now();
+    : at = at ?? DateTime.now();
 
   final String role; // user | assistant | system
   String text;
@@ -21,6 +21,19 @@ class ConfirmRequest {
   final String prompt;
 }
 
+enum AgentActivityPhase {
+  idle,
+  submitting,
+  processing,
+  writing,
+  tool,
+  approval,
+  stopping,
+  complete,
+  failed,
+  cancelled,
+}
+
 class ChatController extends ChangeNotifier {
   ChatController(this.repo, {this.sessionKey = 'flutter:default'});
 
@@ -29,6 +42,7 @@ class ChatController extends ChangeNotifier {
 
   final messages = <Map<String, String>>[];
   bool busy = false;
+  AgentActivityPhase activityPhase = AgentActivityPhase.idle;
   bool online = false;
   String? statusLabel;
   ConfirmRequest? pendingConfirm;
@@ -54,6 +68,7 @@ class ChatController extends ChangeNotifier {
   Future<void> stop() async {
     if (!busy || stopRequested) return;
     stopRequested = true;
+    activityPhase = AgentActivityPhase.stopping;
     notifyListeners();
     try {
       await repo.cancelTurn(sessionKey);
@@ -88,6 +103,7 @@ class ChatController extends ChangeNotifier {
     final t = text.trim();
     if (t.isEmpty || busy) return;
     busy = true;
+    activityPhase = AgentActivityPhase.submitting;
     // C2 Chat-UX: lampiran ditampilkan jujur sebagai ringkasan di gelembung
     // user (isi file nyata diekspansi runtime menjadi konteks `[lampiran:]`).
     final label = attachments.isEmpty
@@ -106,22 +122,27 @@ class ChatController extends ChangeNotifier {
 
     try {
       if (useStreaming) {
-        await for (
-          final ev in repo.streamChat(t, sessionKey: sk, attachments: attachments)
-        ) {
+        await for (final ev in repo.streamChat(
+          t,
+          sessionKey: sk,
+          attachments: attachments,
+        )) {
           final type = ev['type'] as String? ?? '';
           if (type == 'typing') {
+            activityPhase = AgentActivityPhase.writing;
             messages[aiIndex]['text'] = 'Menulis…';
             notifyListeners();
           } else if (type == 'chat.status') {
             final state = ev['state'] as String? ?? '';
             if (state == 'running') {
+              activityPhase = AgentActivityPhase.processing;
               messages[aiIndex]['text'] = 'Menyusun…';
               notifyListeners();
             }
           } else if (type == 'chat.delta') {
             final d = ev['text'] as String? ?? '';
             if (d.isNotEmpty) {
+              activityPhase = AgentActivityPhase.writing;
               final cur = messages[aiIndex]['text'] ?? '';
               final placeholder =
                   cur == '…' || cur == 'Menulis…' || cur == 'Menyusun…';
@@ -130,23 +151,45 @@ class ChatController extends ChangeNotifier {
             }
           } else if (type == 'chat.toolStart') {
             activeTool = ev['name'] as String? ?? '';
+            activityPhase = AgentActivityPhase.tool;
+            lastTurnTrace.add({
+              'name': activeTool,
+              'is_error': false,
+              'duration_ms': 0,
+              'status': 'running',
+            });
             notifyListeners();
           } else if (type == 'chat.tool') {
+            final toolName = ev['name'] as String? ?? '';
+            final runningIndex = lastTurnTrace.lastIndexWhere(
+              (tool) => tool['status'] == 'running' && tool['name'] == toolName,
+            );
             activeTool = null;
-            lastTurnTrace.add({
-              'name': ev['name'] as String? ?? '',
+            activityPhase = AgentActivityPhase.processing;
+            final result = <String, dynamic>{
+              'name': toolName,
               'is_error': ev['is_error'] == true,
               'duration_ms': (ev['duration_ms'] as num?)?.toInt() ?? 0,
               'path': ev['path'] as String?,
-            });
+              'status': ev['is_error'] == true ? 'failed' : 'complete',
+            };
+            if (runningIndex >= 0) {
+              lastTurnTrace[runningIndex] = result;
+            } else {
+              lastTurnTrace.add(result);
+            }
             notifyListeners();
           } else if (type == 'text') {
             final t = ev['text'] as String? ?? '';
-            if (t.isNotEmpty) messages[aiIndex]['text'] = t;
+            if (t.isNotEmpty) {
+              activityPhase = AgentActivityPhase.writing;
+              messages[aiIndex]['text'] = t;
+            }
             notifyListeners();
           } else if (type == 'confirm') {
             final id = ev['id'] as String? ?? '';
             if (id.isNotEmpty) {
+              activityPhase = AgentActivityPhase.approval;
               pendingConfirm = ConfirmRequest(
                 id: id,
                 prompt: ev['prompt'] as String? ?? 'Izinkan tool?',
@@ -162,6 +205,7 @@ class ChatController extends ChangeNotifier {
                   pendingConfirm?.id == eventId) {
                 final state = event['state'] as String? ?? 'decided';
                 pendingConfirm = null;
+                activityPhase = AgentActivityPhase.processing;
                 if (state != 'approved') {
                   messages.add({
                     'role': 'system',
@@ -173,15 +217,22 @@ class ChatController extends ChangeNotifier {
             }
           } else if (type == 'error') {
             failed = true;
+            activityPhase = AgentActivityPhase.failed;
             retryText = t;
             retryAttachments = List.of(attachments);
             messages[aiIndex]['text'] = 'Gagal: ${ev['message']}';
             notifyListeners();
           } else if (type == 'done') {
+            activityPhase = failed
+                ? AgentActivityPhase.failed
+                : stopRequested
+                ? AgentActivityPhase.cancelled
+                : AgentActivityPhase.complete;
             final cur = messages[aiIndex]['text'];
             if (cur == '…' || cur == 'Menulis…' || cur == 'Menyusun…') {
-              messages[aiIndex]['text'] =
-                  stopRequested ? '(turn dihentikan)' : '(selesai)';
+              messages[aiIndex]['text'] = stopRequested
+                  ? '(turn dihentikan)'
+                  : '(selesai)';
             }
             _applyTurnFiles(aiIndex);
             activeTool = null;
@@ -190,9 +241,15 @@ class ChatController extends ChangeNotifier {
           }
         }
       } else {
-        final reply =
-            await repo.sendMessage(t, sessionKey: sk, attachments: attachments);
+        activityPhase = AgentActivityPhase.processing;
+        notifyListeners();
+        final reply = await repo.sendMessage(
+          t,
+          sessionKey: sk,
+          attachments: attachments,
+        );
         messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
+        activityPhase = AgentActivityPhase.complete;
         notifyListeners();
       }
     } catch (e) {
@@ -200,10 +257,28 @@ class ChatController extends ChangeNotifier {
       // the server may already have accepted it and started side effects.
       // The user can explicitly retry after checking the session state.
       messages[aiIndex]['text'] = 'Gagal: $e';
+      activityPhase = AgentActivityPhase.failed;
       retryText = t;
       retryAttachments = List.of(attachments);
       notifyListeners();
     } finally {
+      for (final step in lastTurnTrace) {
+        if (step['status'] == 'running') {
+          step['status'] = 'interrupted';
+        }
+      }
+      if (activityPhase == AgentActivityPhase.submitting ||
+          activityPhase == AgentActivityPhase.processing ||
+          activityPhase == AgentActivityPhase.writing ||
+          activityPhase == AgentActivityPhase.tool ||
+          activityPhase == AgentActivityPhase.approval ||
+          activityPhase == AgentActivityPhase.stopping) {
+        activityPhase = stopRequested
+            ? AgentActivityPhase.cancelled
+            : failed
+            ? AgentActivityPhase.failed
+            : AgentActivityPhase.complete;
+      }
       busy = false;
       activeTool = null;
       notifyListeners();
@@ -238,10 +313,7 @@ class ChatController extends ChangeNotifier {
     for (final t in lastTurnTrace) {
       final path = t['path'] as String?;
       if (path == null || path.isEmpty || !seen.add(path)) continue;
-      files.add({
-        'path': path,
-        'changed': writeTools.contains(t['name']),
-      });
+      files.add({'path': path, 'changed': writeTools.contains(t['name'])});
     }
     if (files.isNotEmpty) {
       messages[aiIndex]['files'] = jsonEncode(files);
@@ -258,13 +330,17 @@ class ChatController extends ChangeNotifier {
       if (!decided) {
         messages.add({
           'role': 'system',
-          'text': 'Persetujuan ${request.id} tidak lagi pending atau sudah kedaluwarsa.',
+          'text':
+              'Persetujuan ${request.id} tidak lagi pending atau sudah kedaluwarsa.',
         });
       }
     } catch (error) {
       // Keep the same request visible so the user can retry. A network error
       // does not prove whether the daemon received the decision.
-      messages.add({'role': 'system', 'text': 'Gagal mengirim keputusan: $error'});
+      messages.add({
+        'role': 'system',
+        'text': 'Gagal mengirim keputusan: $error',
+      });
     } finally {
       if (settled && pendingConfirm?.id == request.id) pendingConfirm = null;
       notifyListeners();
@@ -275,6 +351,7 @@ class ChatController extends ChangeNotifier {
     messages.clear();
     lastTurnTrace.clear();
     activeTool = null;
+    activityPhase = AgentActivityPhase.idle;
     retryText = null;
     retryAttachments = const [];
     notifyListeners();
@@ -294,6 +371,7 @@ class ChatController extends ChangeNotifier {
     if (busy) return;
     final echo = values.isEmpty ? actionId : '$actionId ${jsonEncode(values)}';
     busy = true;
+    activityPhase = AgentActivityPhase.submitting;
     messages.add({
       'role': 'user',
       'text': echo,
@@ -303,12 +381,18 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     final aiIndex = messages.length - 1;
     try {
-      final reply =
-          await repo.submitUiAction(sk, actionId, values, surfaceId: surfaceId);
+      final reply = await repo.submitUiAction(
+        sk,
+        actionId,
+        values,
+        surfaceId: surfaceId,
+      );
       messages[aiIndex]['text'] = reply.isEmpty ? '(kosong)' : reply;
+      activityPhase = AgentActivityPhase.complete;
     } catch (e) {
       messages.removeRange(messages.length - 2, messages.length);
       busy = false;
+      activityPhase = AgentActivityPhase.failed;
       notifyListeners();
       if (e is ApiError && e.statusCode == 501) {
         await send('/ui $echo', sessionKey: sk);
@@ -319,6 +403,7 @@ class ChatController extends ChangeNotifier {
       return;
     }
     busy = false;
+    activityPhase = AgentActivityPhase.complete;
     notifyListeners();
   }
 
@@ -331,16 +416,12 @@ class ChatController extends ChangeNotifier {
       messages
         ..clear()
         ..addAll([
-          for (final m in list)
-            {'role': m.role, 'text': m.content},
+          for (final m in list) {'role': m.role, 'text': m.content},
         ]);
     } catch (e) {
       messages
         ..clear()
-        ..add({
-          'role': 'system',
-          'text': 'Gagal memuat transcript sesi: $e',
-        });
+        ..add({'role': 'system', 'text': 'Gagal memuat transcript sesi: $e'});
     }
     notifyListeners();
   }
