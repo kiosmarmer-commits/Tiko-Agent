@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/app_routes.dart';
 import '../ui/theme.dart';
+import '../ui/tiko_mark.dart';
 
 /// Wide-layout shell (desktop / wide browser): flat navigation rail on the
 /// left, workspace content on the right. Destinations come from the shared
@@ -106,11 +107,7 @@ class _SidebarState extends State<_Sidebar> {
                     color: context.simpulAccent,
                     borderRadius: BorderRadius.circular(SimpulTheme.radius),
                   ),
-                  child: const Icon(
-                    Icons.hub_outlined,
-                    color: Colors.white,
-                    size: 19,
-                  ),
+                  child: const Center(child: TikoMark(size: 23)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -155,20 +152,22 @@ class _SidebarState extends State<_Sidebar> {
                   const Divider(height: 24),
                   ListTile(
                     dense: true,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        SimpulTheme.radiusSmall,
+                    minTileHeight: 44,
+                    title: Text(
+                      'Explore',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: context.simpulMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
                       ),
                     ),
-                    leading: Icon(
-                      toolsExpanded
-                          ? Icons.keyboard_arrow_down
-                          : Icons.keyboard_arrow_right,
-                      size: 20,
+                    trailing: Icon(
+                      toolsExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: context.simpulMuted,
                     ),
-                    title: const Text('Explore'),
-                    subtitle: Text('${tools.length} more destinations'),
-                    onTap: () => setState(() => toolsExpanded = !toolsExpanded),
+                    onTap: () => setState(
+                      () => toolsExpanded = !toolsExpanded,
+                    ),
                   ),
                   if (toolsExpanded) ...[
                     _section(

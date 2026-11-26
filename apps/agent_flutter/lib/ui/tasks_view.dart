@@ -42,19 +42,21 @@ class TaskBoardPage extends StatelessWidget {
           title: 'Tasks',
           subtitle: '${tasks.length} tugas · read-only',
           online: online,
-          trailing:
-              onRefresh == null ? null : IconButton(
+          trailing: onRefresh == null
+              ? null
+              : IconButton(
                   tooltip: 'Muat ulang',
-                  onPressed: onRefresh, icon: const Icon(Icons.refresh)),
+                  onPressed: onRefresh,
+                  icon: const Icon(Icons.refresh),
+                ),
         ),
         if (surfaceSection != null) surfaceSection!,
         if (loading) StatusViews.loadingBanner(context),
-        if (error != null)
-            StatusViews.errorBanner(context, error!),
+        if (error != null) StatusViews.errorBanner(context, error!),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 720;
+              final wide = constraints.maxWidth >= TikoTheme.wideGridBreakpoint;
               final columns = GridView.count(
                 crossAxisCount: wide ? 4 : 2,
                 childAspectRatio: 0.9,
@@ -100,8 +102,10 @@ class _KanbanColumn extends StatelessWidget {
           const SizedBox(height: 8),
           Expanded(
             child: tasks.isEmpty
-                ? Text('(kosong)',
-                    style: TextStyle(color: context.simpulMuted, fontSize: 12))
+                ? Text(
+                    '(kosong)',
+                    style: TextStyle(color: context.simpulMuted, fontSize: 12),
+                  )
                 : ListView.builder(
                     itemCount: tasks.length,
                     itemBuilder: (context, i) {
@@ -111,8 +115,9 @@ class _KanbanColumn extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: context.simpulPanel,
-                          borderRadius:
-                              BorderRadius.circular(SimpulTheme.radiusSmall),
+                          borderRadius: BorderRadius.circular(
+                            SimpulTheme.radiusSmall,
+                          ),
                           border: Border.all(color: context.simpulBorder),
                         ),
                         child: Column(
@@ -123,7 +128,9 @@ class _KanbanColumn extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w600, fontSize: 13),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -136,7 +143,9 @@ class _KanbanColumn extends StatelessWidget {
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                  color: context.simpulMuted, fontSize: 11),
+                                color: context.simpulMuted,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
