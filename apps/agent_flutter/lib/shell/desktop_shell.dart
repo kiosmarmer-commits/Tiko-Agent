@@ -72,7 +72,7 @@ class _SidebarState extends State<_Sidebar> {
     super.didUpdateWidget(oldWidget);
     if (widget.selected != oldWidget.selected &&
         widget.entries.any((entry) => entry.route == widget.selected) &&
-        !const {'Workspace', 'Build', 'Agents'}.contains(
+        !const {'Workspace', 'Agents'}.contains(
           widget.entries
               .firstWhere((entry) => entry.route == widget.selected)
               .section,
@@ -83,17 +83,12 @@ class _SidebarState extends State<_Sidebar> {
 
   @override
   Widget build(BuildContext context) {
+    const primarySections = {'Workspace', 'Agents'};
     final primary = widget.entries
-        .where(
-          (entry) =>
-              const {'Workspace', 'Build', 'Agents'}.contains(entry.section),
-        )
+        .where((entry) => primarySections.contains(entry.section))
         .toList();
     final tools = widget.entries
-        .where(
-          (entry) =>
-              !const {'Workspace', 'Build', 'Agents'}.contains(entry.section),
-        )
+        .where((entry) => !primarySections.contains(entry.section))
         .toList();
     return Material(
       color: context.simpulPanel,
@@ -112,41 +107,33 @@ class _SidebarState extends State<_Sidebar> {
                     borderRadius: BorderRadius.circular(SimpulTheme.radius),
                   ),
                   child: const Icon(
-                    Icons.smart_toy_outlined,
+                    Icons.hub_outlined,
                     color: Colors.white,
                     size: 19,
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text('Tiko', style: Theme.of(context).textTheme.titleMedium),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tiko Agent',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Agent workspace',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.simpulMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: context.simpulSurfaceRaised,
-                borderRadius: BorderRadius.circular(SimpulTheme.radiusSmall),
-                border: Border.all(color: context.simpulBorder),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.folder_outlined, size: 17),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Workspace lokal',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Icon(Icons.keyboard_arrow_down, size: 17),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
@@ -158,12 +145,6 @@ class _SidebarState extends State<_Sidebar> {
                     'Workspace',
                     primary,
                     filter: (e) => e.section == 'Workspace',
-                  ),
-                  _section(
-                    context,
-                    'Build',
-                    primary,
-                    filter: (e) => e.section == 'Build',
                   ),
                   _section(
                     context,
@@ -185,17 +166,11 @@ class _SidebarState extends State<_Sidebar> {
                           : Icons.keyboard_arrow_right,
                       size: 20,
                     ),
-                    title: const Text('More tools'),
-                    subtitle: Text('${tools.length} menu teknis'),
+                    title: const Text('Explore'),
+                    subtitle: Text('${tools.length} more destinations'),
                     onTap: () => setState(() => toolsExpanded = !toolsExpanded),
                   ),
                   if (toolsExpanded) ...[
-                    _section(
-                      context,
-                      'Integrations',
-                      tools,
-                      filter: (e) => e.section == 'Integrations',
-                    ),
                     _section(
                       context,
                       'Knowledge',
@@ -204,9 +179,15 @@ class _SidebarState extends State<_Sidebar> {
                     ),
                     _section(
                       context,
-                      'Operations',
+                      'Connections',
                       tools,
-                      filter: (e) => e.section == 'Operations',
+                      filter: (e) => e.section == 'Connections',
+                    ),
+                    _section(
+                      context,
+                      'Control',
+                      tools,
+                      filter: (e) => e.section == 'Control',
                     ),
                     _section(
                       context,

@@ -166,6 +166,7 @@ class _AgentAppState extends State<AgentApp> {
   List<MemoryFact> memories = [];
   final VoiceService voice = VoiceService();
   bool loadingAdmin = false;
+  bool approvalsLoaded = false;
   bool adminRefreshInFlight = false;
   int adminRefreshGeneration = 0;
   String? adminError;
@@ -241,6 +242,7 @@ class _AgentAppState extends State<AgentApp> {
         doctor = results[2] as List<Map<String, dynamic>>;
         sessions = results[3] as List<SessionSummary>;
         approvals = results[4] as List<ApprovalSummary>;
+        approvalsLoaded = true;
         events = results[5] as List<RuntimeEvent>;
         tasks = results[6] as List<TaskItem>;
         logFiles = results[7] as List<LogFileInfo>;
@@ -886,6 +888,8 @@ class _AgentAppState extends State<AgentApp> {
                       : null,
                   onSelect: _selectMobileRoute,
                   pendingApprovals: _pendingApprovals,
+                  approvalStatusUnavailable: adminError != null ||
+                      (!approvalsLoaded && !loadingAdmin),
                   entries: routes,
                   child: AnimatedBuilder(
                     animation: chat,
@@ -946,7 +950,10 @@ class _AgentAppState extends State<AgentApp> {
   }
 
   Widget _body({required bool wide}) {
-    if (!wide && !route.primaryOnMobile) {
+    if (!wide &&
+        !route.primaryOnMobile &&
+        route != AppRoute.approvals &&
+        route != AppRoute.mission) {
       return _MorePage(
         repo: repo,
         baseUrl: baseUrl,
@@ -983,6 +990,12 @@ class _AgentAppState extends State<AgentApp> {
         daemonStatus: status,
         availableSessions: [for (final s in sessions) s.id],
         online: chat.online,
+        pendingApprovals: _pendingApprovals,
+        approvalsLoaded: approvalsLoaded,
+        approvalStatusUnavailable: adminError != null ||
+            (!approvalsLoaded && !loadingAdmin),
+        onOpenApprovals: () => _selectRoute(AppRoute.approvals),
+        onOpenRoute: _selectRoute,
         onRefresh: refreshAdmin,
         onConnect: updateConnection,
         settings: settings,
@@ -3198,6 +3211,11 @@ class _MorePage extends StatelessWidget {
     required this.daemonStatus,
     required this.availableSessions,
     required this.online,
+    required this.pendingApprovals,
+    required this.approvalsLoaded,
+    required this.approvalStatusUnavailable,
+    required this.onOpenApprovals,
+    required this.onOpenRoute,
     required this.onRefresh,
     required this.onConnect,
     required this.settings,
@@ -3242,6 +3260,11 @@ class _MorePage extends StatelessWidget {
   final Map<String, dynamic>? daemonStatus;
   final List<String> availableSessions;
   final bool online;
+  final int pendingApprovals;
+  final bool approvalsLoaded;
+  final bool approvalStatusUnavailable;
+  final VoidCallback onOpenApprovals;
+  final ValueChanged<AppRoute> onOpenRoute;
   final Future<void> Function() onRefresh;
   final void Function({required String base, required String tok}) onConnect;
   final AppSettings settings;
@@ -3254,12 +3277,36 @@ class _MorePage extends StatelessWidget {
       children: [
         PageHeader(
           title: 'More',
-          subtitle: 'Tasks, Memory, Tools',
+          subtitle: 'Knowledge, connections, and controls',
           online: online,
         ),
         ListTile(
+          leading: Badge(
+            isLabelVisible: approvalStatusUnavailable || pendingApprovals > 0,
+            label: Text(approvalStatusUnavailable ? '!' : '$pendingApprovals'),
+            child: Icon(
+              approvalStatusUnavailable
+                  ? Icons.warning_amber_rounded
+                  : Icons.verified_user_outlined,
+            ),
+          ),
+          title: Text(AppRoute.approvals.label),
+          subtitle: Text(
+            approvalStatusUnavailable
+                ? approvalsLoaded
+                    ? 'Could not refresh · $pendingApprovals last known'
+                    : 'Approval status unavailable'
+                : !approvalsLoaded
+                    ? 'Loading approval status…'
+                    : pendingApprovals == 0
+                        ? 'No actions waiting for review'
+                        : '$pendingApprovals actions waiting for review',
+          ),
+          onTap: onOpenApprovals,
+        ),
+        ListTile(
           leading: const Icon(Icons.view_kanban_outlined),
-          title: Text('Tasks (${tasks.length})'),
+          title: Text('${AppRoute.tasks.label} (${tasks.length})'),
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -3280,7 +3327,7 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.bolt_outlined),
-            title: Text('Events (${events.length})'),
+            title: Text('${AppRoute.events.label} (${events.length})'),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3300,7 +3347,7 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.article_outlined),
-            title: Text('Logs (${logFiles.length})'),
+            title: Text('${AppRoute.logs.label} (${logFiles.length})'),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3321,7 +3368,7 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.auto_awesome_outlined),
-            title: Text('Skills (${skills.length})'),
+            title: Text('${AppRoute.skills.label} (${skills.length})'),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3351,7 +3398,7 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.smart_toy_outlined),
-            title: Text('Bots (${bots.length})'),
+            title: Text('${AppRoute.bots.label} (${bots.length})'),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3385,7 +3432,9 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.route_outlined),
-            title: Text('Providers (${providers?.providers.length ?? 0})'),
+            title: Text(
+              '${AppRoute.providers.label} (${providers?.providers.length ?? 0})',
+            ),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3414,7 +3463,9 @@ class _MorePage extends StatelessWidget {
         if (showAdvanced)
           ListTile(
             leading: const Icon(Icons.extension_outlined),
-            title: Text('Plugins (${pluginSnapshot?.plugins.length ?? 0})'),
+            title: Text(
+              '${AppRoute.plugins.label} (${pluginSnapshot?.plugins.length ?? 0})',
+            ),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -3443,7 +3494,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.hub_outlined),
             title: Text(
-              'Channels ('
+              '${AppRoute.channels.label} ('
               '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})',
             ),
             onTap: () {
@@ -3466,7 +3517,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.schedule_outlined),
             title: Text(
-              'Automation ('
+              '${AppRoute.automations.label} ('
               '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)',
             ),
             onTap: () {
@@ -3508,7 +3559,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.security_outlined),
             title: Text(
-              'Security (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
+              '${AppRoute.security.label} (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
             ),
             onTap: () {
               Navigator.of(context).push(
@@ -3531,7 +3582,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.receipt_long_outlined),
             title: Text(
-              'Audit'
+              '${AppRoute.audit.label}'
               '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}',
             ),
             onTap: () {
@@ -3554,7 +3605,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.folder_copy_outlined),
             title: Text(
-              'Artifacts'
+              '${AppRoute.artifacts.label}'
               '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}',
             ),
             onTap: () {
@@ -3584,7 +3635,7 @@ class _MorePage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.play_circle_outline),
             title: Text(
-              'Runs'
+              '${AppRoute.runs.label}'
               '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}',
             ),
             onTap: () {
@@ -3606,6 +3657,12 @@ class _MorePage extends StatelessWidget {
                 ),
               );
             },
+          ),
+        if (showAdvanced)
+          ListTile(
+            leading: Icon(AppRoute.mission.icon),
+            title: Text(AppRoute.mission.label),
+            onTap: () => onOpenRoute(AppRoute.mission),
           ),
         ListTile(
           leading: const Icon(Icons.memory_outlined),
@@ -3674,7 +3731,7 @@ class _MorePage extends StatelessWidget {
           ),
         ListTile(
           leading: const Icon(Icons.settings_outlined),
-          title: const Text('Settings'),
+            title: Text(AppRoute.settings.label),
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(

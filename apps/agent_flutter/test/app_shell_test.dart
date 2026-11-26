@@ -20,10 +20,9 @@ void main() {
 
     test('label domain sama lintas platform: route admin dikelompokkan di More', () {
       final primary = kMobilePrimaryRoutes;
-      expect(primary.length, 5);
+      expect(primary.length, 3);
       expect(primary.map((e) => e.route),
-          [AppRoute.chat, AppRoute.dashboard, AppRoute.approvals, AppRoute.runs,
-              AppRoute.mission]);
+          [AppRoute.chat, AppRoute.dashboard, AppRoute.runs]);
       final grouped = kAppRoutes
           .where((e) => !e.primaryOnMobile)
           .map((e) => e.route)
@@ -35,7 +34,7 @@ void main() {
               AppRoute.security, AppRoute.audit, AppRoute.artifacts,
               AppRoute.surfaces, AppRoute.sessions, AppRoute.memory,
               AppRoute.events, AppRoute.logs, AppRoute.hooks,
-              AppRoute.settings});
+              AppRoute.settings, AppRoute.approvals, AppRoute.mission});
     });
   });
 
@@ -54,13 +53,13 @@ void main() {
       await tester.pump();
 
       expect(find.byType(NavigationRail), findsNothing);
-      expect(find.text('More tools'), findsOneWidget);
+      expect(find.text('Explore'), findsOneWidget);
       for (final entry in kAppRoutes.where(
-          (entry) => const {'Workspace', 'Build', 'Agents'}.contains(entry.section))) {
+          (entry) => const {'Workspace', 'Agents'}.contains(entry.section))) {
         expect(find.text(entry.navigationLabel), findsOneWidget);
       }
-      await tester.ensureVisible(find.text('More tools'));
-      await tester.tap(find.text('More tools'));
+      await tester.ensureVisible(find.text('Explore'));
+      await tester.tap(find.text('Explore'));
       await tester.pump();
       expect(find.text('Settings'), findsOneWidget);
     });
@@ -139,6 +138,8 @@ void main() {
         expect(find.text(entry.navigationLabel), findsOneWidget);
       }
       expect(find.text(kMobileMoreLabel), findsOneWidget);
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
+      expect(find.text('Approvals'), findsNothing);
       expect(find.text('Memory'), findsNothing);
       expect(find.text('Settings'), findsNothing);
     });
@@ -166,7 +167,7 @@ void main() {
       expect(picked, AppRoute.chat);
     });
 
-    testWidgets('GUI-P0-06: badge approval pending tampil di bottom bar',
+    testWidgets('GUI-P0-06: badge approval pending tampil pada More',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -180,11 +181,42 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.byType(Badge), findsOneWidget);
-      expect(find.descendant(
-        of: find.byType(Badge),
-        matching: find.text('2'),
-      ), findsOneWidget);
+      final moreDestination = find.ancestor(
+        of: find.text(kMobileMoreLabel),
+        matching: find.byType(NavigationDestination),
+      );
+      expect(moreDestination, findsOneWidget);
+      expect(
+        find.descendant(of: moreDestination, matching: find.byType(Badge)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: moreDestination, matching: find.text('2')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('More signals unavailable approval status', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MobileShell(
+            selected: AppRoute.chat,
+            onSelect: (_) {},
+            approvalStatusUnavailable: true,
+            child: const SizedBox(),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final moreDestination = find.ancestor(
+        of: find.text(kMobileMoreLabel),
+        matching: find.byType(NavigationDestination),
+      );
+      expect(
+        find.descendant(of: moreDestination, matching: find.text('!')),
+        findsOneWidget,
+      );
     });
   });
 

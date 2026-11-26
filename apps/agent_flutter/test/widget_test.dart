@@ -20,15 +20,15 @@ void main() {
     // Layout sempit default (800x600) memakai NavigationBar bawah.
     // Label domain sama dengan desktop (GUI-P0-01): satu route map.
     expect(find.text('Chat'), findsWidgets);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Approvals'), findsOneWidget);
-    expect(find.text('Runs'), findsOneWidget);
-    expect(find.text('Sessions'), findsNothing);
+    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Approvals'), findsNothing);
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.text('Chat history'), findsNothing);
     expect(find.text('More'), findsOneWidget);
     expect(find.text('Pesan ke Tiko…'), findsOneWidget);
   });
 
-  testWidgets('Agent app uses NavigationRail on wide screens', (
+  testWidgets('Agent app uses the desktop sidebar on wide screens', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 900);
@@ -46,9 +46,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(NavigationRail), findsNothing);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('More tools'), findsOneWidget);
-    await tester.tap(find.text('More tools'));
+    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Explore'), findsOneWidget);
+    await tester.tap(find.text('Explore'));
     await tester.pump();
     expect(find.text('Settings'), findsOneWidget);
   });

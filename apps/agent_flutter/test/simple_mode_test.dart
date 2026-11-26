@@ -55,11 +55,11 @@ void main() {
         ),
       );
 
-      for (final label in ['Chat', 'Home', 'Approvals', 'More tools']) {
+      for (final label in ['Chat', 'Workspace', 'Approvals', 'Explore']) {
         expect(find.text(label), findsOneWidget);
       }
       expect(find.text('Settings'), findsNothing);
-      await tester.tap(find.text('More tools'));
+      await tester.tap(find.text('Explore'));
       await tester.pump();
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Providers'), findsNothing);
@@ -87,6 +87,7 @@ void main() {
 
       expect(find.text('More'), findsOneWidget);
       expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
     },
   );
 }
