@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'cancellation.dart';
+import 'empty_response_guard.dart';
+import 'repetition_guard.dart';
 import 'error_classifier.dart';
 import 'interfaces.dart';
 import 'models.dart';
@@ -217,6 +219,10 @@ class AgentLoop {
   /// 'cancelled', 'budget_exhausted', 'tool_call_limit', 'provider_error',
   /// 'loop_detected', 'iteration_limit', 'critical_risk', 'no_healthy_provider'.
   String? _lastTurnEndReason;
+
+  /// Hermes empty-response guard: deteksi jawaban kosong deterministik dan
+  /// budget retry sadar-biaya, direset tiap jawaban non-kosong.
+  final EmptyResponseGuard _emptyGuard = EmptyResponseGuard();
   String? get lastTurnEndReason => _lastTurnEndReason;
 
   /// Penjelasan bahasa manusia untuk [lastTurnEndReason] — dipakai host
@@ -445,9 +451,33 @@ class AgentLoop {
         _budget.tickIteration();
 
         if (resp.toolCalls.isEmpty) {
-          var ans = resp.text.isEmpty ? '(tidak ada jawaban)' : resp.text;
-          _lastTurnEndReason = resp.text.isEmpty ? 'no_answer' : 'completed';
-          if (ans == '(tidak ada jawaban)') success = false;
+          // Hermes empty-response guard: jawaban kosong tanpa penanda
+          // (refusal yang diproxy) di-retry terbatas di provider yang sama
+          // sebelum menyerah; dua kosong deterministik → langsung menyerah
+          // (fallback chain tinggal satu langkah di turn berikutnya).
+          if (resp.text.trim().isEmpty) {
+            _recordEmptyAttempt(resp, activeProviderId);
+            final budget = _emptyGuard.retryBudget();
+            while (!_emptyGuard.deterministicEmpty &&
+                _emptyGuard.attempts <= budget) {
+              resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+              if (resp.toolCalls.isNotEmpty || resp.text.trim().isNotEmpty) {
+                break;
+              }
+              _recordEmptyAttempt(resp, activeProviderId);
+            }
+          } else {
+            _emptyGuard.reset();
+          }
+          var ans = resp.text.trim().isEmpty
+              ? '(tidak ada jawaban)'
+              : resp.text;
+          _lastTurnEndReason =
+              resp.text.trim().isEmpty ? 'no_answer' : 'completed';
+          if (ans == '(tidak ada jawaban)') {
+            success = false;
+            _emptyGuard.reset();
+          }
           ans = sanitizer?.output(ans) ?? ans;
           // Hermes turn-explainer (footer verifikasi mutasi): beri tahu model
           // dan user ketika mutasi file yang diklaim tidak benar-benar terjadi
@@ -464,6 +494,14 @@ class AgentLoop {
             } catch (_) {} // best-effort
           }
           ans = sanitizer?.output(ans) ?? ans;
+          // Hermes repetition guard: jawaban final yang degenerate menjadi
+          // loop repetisi runaway tidak dikirim apa adanya — user menerima
+          // penjelasan potongan yang jelas, bukan 60k karakter echo.
+          if (ans.length >= stopPathMinChars && isRunawayRepetition(ans)) {
+            ans = repetitionLoopInterrupted;
+            success = false;
+            _lastTurnEndReason = 'repetition_loop';
+          }
           _lastAnswer = ans;
           await reply(m, ans);
           break;
@@ -867,6 +905,20 @@ class AgentLoop {
     ).hasMatch(lower);
     if (!explicit && !identityOrPreference) return null;
     return text;
+  }
+
+  /// Catat satu jawaban kosong ke guard: bukti usage (nol output) atau
+  /// konten teream. Harga tak dikenal → budget tetap default.
+  void _recordEmptyAttempt(LlmResponse resp, String providerId) {
+    final usagePresent = resp.usage.prompt > 0 || resp.usage.total > 0;
+    _emptyGuard.recordAttempt(
+      model: '',
+      provider: providerId,
+      finishReason: resp.finishReason,
+      usagePresent: usagePresent,
+      zeroOutput: usagePresent && resp.usage.completion == 0,
+      observedGeneration: false,
+    );
   }
 
   Future<LlmResponse> _safeCollect(
