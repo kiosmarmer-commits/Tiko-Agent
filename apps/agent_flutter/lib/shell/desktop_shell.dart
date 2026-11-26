@@ -66,7 +66,7 @@ class _Sidebar extends StatefulWidget {
 }
 
 class _SidebarState extends State<_Sidebar> {
-  bool toolsExpanded = true;
+  bool toolsExpanded = false;
 
   @override
   void didUpdateWidget(covariant _Sidebar oldWidget) {
@@ -150,18 +150,26 @@ class _SidebarState extends State<_Sidebar> {
                     filter: (e) => e.section == 'Agents',
                   ),
                   const Divider(height: 24),
-                  if (toolsExpanded) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-                      child: Text(
-                        'Explore',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: context.simpulMuted,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1,
-                        ),
+                  ListTile(
+                    dense: true,
+                    minTileHeight: 44,
+                    title: Text(
+                      'Explore',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: context.simpulMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
                       ),
                     ),
+                    trailing: Icon(
+                      toolsExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: context.simpulMuted,
+                    ),
+                    onTap: () => setState(
+                      () => toolsExpanded = !toolsExpanded,
+                    ),
+                  ),
+                  if (toolsExpanded) ...[
                     _section(
                       context,
                       'Knowledge',
