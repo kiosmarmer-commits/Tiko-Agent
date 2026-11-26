@@ -44,11 +44,10 @@ import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
 import 'ui/theme.dart';
+import 'ui/tiko_mark.dart';
 import 'ui/tasks_view.dart';
 import 'ui/events_view.dart';
 import 'ui/voice_service.dart';
-import 'ui/graph_view.dart';
-import 'ui/note_editor.dart';
 import 'package:tiko_widgets/tiko_widgets.dart';
 
 Future<void> main() async {
@@ -115,6 +114,7 @@ class _AgentAppState extends State<AgentApp> {
   AdminEventFeed? eventFeed;
   bool _eventFeedStarted = false;
   AppRoute route = AppRoute.chat;
+  bool mobileMoreOpen = false;
   String sessionKey = 'flutter:default';
   bool inspectorVisible = true;
 
@@ -353,9 +353,9 @@ class _AgentAppState extends State<AgentApp> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengunduh file: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mengunduh file: $error')));
     }
   }
 
@@ -363,10 +363,7 @@ class _AgentAppState extends State<AgentApp> {
   /// `.tiko/published/` milik runtime, pesan share bisa disalin.
   Future<void> _publishArtifact(String path) async {
     try {
-      final published = await repo.artifactPublish(
-        path,
-        sessionId: sessionKey,
-      );
+      final published = await repo.artifactPublish(path, sessionId: sessionKey);
       final shareText =
           '${published['share_text'] ?? published['published_path'] ?? path}';
       if (!mounted) return;
@@ -403,9 +400,9 @@ class _AgentAppState extends State<AgentApp> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mempublikasikan: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mempublikasikan: $error')));
     }
   }
 
@@ -557,8 +554,10 @@ class _AgentAppState extends State<AgentApp> {
   }
 
   void _startMissionPolling() {
-    _missionPoll ??=
-        Timer.periodic(const Duration(seconds: 4), (_) => _loadMissionRuns());
+    _missionPoll ??= Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _loadMissionRuns(),
+    );
   }
 
   void _stopMissionPolling() {
@@ -597,21 +596,21 @@ class _AgentAppState extends State<AgentApp> {
   /// Hermes S8: seksi surface dinamis untuk halaman statik `target`.
   /// Konvensi surfaceId `page.<target>.` (agent_core, system prompt addon).
   Widget _a2uiSection(String target) => A2uiPageSurfaceSection(
-        target: target,
-        surfaces: surfacesSnapshot,
-        online: chat.online,
-        onRefresh: _loadSurfaces,
-        onOpenManager: () => _selectRoute(AppRoute.surfaces),
-        onLoadSurface: repo.surface,
-        onAction: (surfaceId, actionName, payload, sessionKey) => unawaited(
-          _submitPageSurfaceAction(surfaceId, actionName, payload, sessionKey),
-        ),
-        onDelete: (surfaceId) async {
-          final deleted = await repo.deleteSurface(surfaceId);
-          await _loadSurfaces();
-          return deleted;
-        },
-      );
+    target: target,
+    surfaces: surfacesSnapshot,
+    online: chat.online,
+    onRefresh: _loadSurfaces,
+    onOpenManager: () => _selectRoute(AppRoute.surfaces),
+    onLoadSurface: repo.surface,
+    onAction: (surfaceId, actionName, payload, sessionKey) => unawaited(
+      _submitPageSurfaceAction(surfaceId, actionName, payload, sessionKey),
+    ),
+    onDelete: (surfaceId) async {
+      final deleted = await repo.deleteSurface(surfaceId);
+      await _loadSurfaces();
+      return deleted;
+    },
+  );
 
   /// Hermes S8: aksi surface dari halaman GUI tetap melalui pipeline
   /// anti-replay host (`POST /v1/ui/actions`), sama seperti di chat.
@@ -644,7 +643,10 @@ class _AgentAppState extends State<AgentApp> {
     }
   }
 
-  Future<void> updateConnection({required String base, required String tok}) async {
+  Future<void> updateConnection({
+    required String base,
+    required String tok,
+  }) async {
     setState(() {
       baseUrl = base;
       token = tok;
@@ -719,7 +721,8 @@ class _AgentAppState extends State<AgentApp> {
   /// Sesi chat baru (GUI-P3): sesi dibuat implisit saat pesan pertama
   /// dikirim dengan id baru, meniru pola "New chat" pada agen AI umum.
   void _newChatSession() {
-    final id = 'flutter:chat-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+    final id =
+        'flutter:chat-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
     setState(() {
       sessionKey = id;
       adminError = null;
@@ -781,18 +784,14 @@ class _AgentAppState extends State<AgentApp> {
         model: model,
       );
       if (!ok && mounted) {
-        setState(
-          () => adminError = 'Provider "$providerId" tidak ditemukan.',
-        );
+        setState(() => adminError = 'Provider "$providerId" tidak ditemukan.');
         return;
       }
       if (mounted) setState(() => adminError = null);
       await refreshAdmin(force: true);
     } catch (error) {
       if (mounted) {
-        setState(
-          () => adminError = 'Gagal mengganti provider: $error',
-        );
+        setState(() => adminError = 'Gagal mengganti provider: $error');
       }
     }
   }
@@ -853,13 +852,14 @@ class _AgentAppState extends State<AgentApp> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final wide =
+        MediaQuery.sizeOf(context).width >= TikoTheme.desktopBreakpoint;
     final routes = visibleRoutes(advanced: settings.advancedMode);
     return MaterialApp(
       title: 'Tiko',
       debugShowCheckedModeBanner: false,
-      theme: SimpulTheme.theme(Brightness.light, settings.accent),
-      darkTheme: SimpulTheme.theme(Brightness.dark, settings.accent),
+      theme: TikoTheme.theme(Brightness.light, settings.accent),
+      darkTheme: TikoTheme.theme(Brightness.dark, settings.accent),
       themeMode: settings.themeMode,
       home: GlobalShortcuts(
         onPalette: _openCommandPalette,
@@ -882,14 +882,15 @@ class _AgentAppState extends State<AgentApp> {
                 )
               : MobileShell(
                   selected:
-                      routes.any((entry) => entry.route == route) &&
+                      !mobileMoreOpen &&
+                          routes.any((entry) => entry.route == route) &&
                           route.primaryOnMobile
                       ? route
                       : null,
                   onSelect: _selectMobileRoute,
                   pendingApprovals: _pendingApprovals,
-                  approvalStatusUnavailable: adminError != null ||
-                      (!approvalsLoaded && !loadingAdmin),
+                  approvalStatusUnavailable:
+                      adminError != null || (!approvalsLoaded && !loadingAdmin),
                   entries: routes,
                   child: AnimatedBuilder(
                     animation: chat,
@@ -905,7 +906,10 @@ class _AgentAppState extends State<AgentApp> {
       approvals.where((approval) => approval.isPending).length;
 
   void _selectRoute(AppRoute next) {
-    setState(() => route = next);
+    setState(() {
+      route = next;
+      mobileMoreOpen = false;
+    });
     if (next == AppRoute.artifacts && artifactsListing == null) {
       unawaited(_loadArtifacts());
     }
@@ -942,7 +946,7 @@ class _AgentAppState extends State<AgentApp> {
 
   void _selectMobileRoute(AppRoute? next) {
     if (next == null) {
-      setState(() => route = AppRoute.memory);
+      setState(() => mobileMoreOpen = true);
       unawaited(refreshAdmin());
       return;
     }
@@ -950,56 +954,15 @@ class _AgentAppState extends State<AgentApp> {
   }
 
   Widget _body({required bool wide}) {
-    if (!wide &&
-        !route.primaryOnMobile &&
-        route != AppRoute.approvals &&
-        route != AppRoute.mission) {
+    if (!wide && mobileMoreOpen) {
       return _MorePage(
-        repo: repo,
-        baseUrl: baseUrl,
-        token: token,
-        surfaceSectionFor: _a2uiSection,
-        memories: memories,
-        tasks: tasks,
-        logFiles: logFiles,
-        events: events,
-        skills: skills,
-        bots: bots,
-        bindings: botBindings,
-        providers: providerSnapshot,
-        pluginSnapshot: pluginSnapshot,
-        channelSnapshot: channelSnapshot,
-        jobsSnapshot: jobsSnapshot,
-        securitySnapshot: securitySnapshot,
-        auditResult: auditResult,
-        onQueryAudit: _queryAudit,
-        artifactsListing: artifactsListing,
-        artifactsDir: artifactsDir,
-        artifactContent: artifactContent,
-        artifactDiff: artifactDiff,
-        loadingArtifacts: loadingArtifacts,
-        artifactsError: artifactsError,
-        sessionOptions: sessions,
-        onOpenArtifactsDir: (dir) => unawaited(_loadArtifacts(dir: dir)),
-        onOpenArtifactFile: (path) => unawaited(_openArtifact(path)),
-        onCloseArtifactPreview: () => _openArtifact(''),
-        runsSnapshot: runsSnapshot,
-        runsLoading: runsLoading,
-        runsError: runsError,
-        onLoadRuns: _loadRuns,
-        daemonStatus: status,
-        availableSessions: [for (final s in sessions) s.id],
+        entries: visibleRoutes(advanced: settings.advancedMode),
+        onOpenRoute: _selectRoute,
         online: chat.online,
         pendingApprovals: _pendingApprovals,
         approvalsLoaded: approvalsLoaded,
-        approvalStatusUnavailable: adminError != null ||
-            (!approvalsLoaded && !loadingAdmin),
-        onOpenApprovals: () => _selectRoute(AppRoute.approvals),
-        onOpenRoute: _selectRoute,
-        onRefresh: refreshAdmin,
-        onConnect: updateConnection,
-        settings: settings,
-        onSettingsChanged: _applySettings,
+        approvalStatusUnavailable:
+            adminError != null || (!approvalsLoaded && !loadingAdmin),
       );
     }
     switch (route) {
@@ -1009,7 +972,9 @@ class _AgentAppState extends State<AgentApp> {
           sessionKey: sessionKey,
           voice: voice,
           voiceReply: settings.voiceReply,
-          multiPane: settings.multiPane,
+          multiPane:
+              settings.multiPane &&
+              MediaQuery.sizeOf(context).width >= TikoTheme.multiPaneBreakpoint,
           inspectorVisible: inspectorVisible,
           onToggleInspector: _toggleInspector,
           providerSnapshot: providerSnapshot,
@@ -1029,16 +994,20 @@ class _AgentAppState extends State<AgentApp> {
           onOpenArtifactDiff: (path) => unawaited(_openArtifactDiff(path)),
           onCloseArtifactFile: () => _openArtifact(''),
           onListWorkspace: (dir) async => [
-                for (final f in (await repo.artifacts(dir: dir)).files) f.path,
-              ],
-          sessionStartedAt: _currentSession?.createdAt ?? _currentSession?.updatedAt ?? '',
+            for (final f in (await repo.artifacts(dir: dir)).files) f.path,
+          ],
+          sessionStartedAt:
+              _currentSession?.createdAt ?? _currentSession?.updatedAt ?? '',
           sessionLabel: _currentSession?.displayTitle,
           onLoadArtifactImage: _loadArtifactImage,
           onDownloadArtifact: (path) => unawaited(_downloadArtifact(path)),
           onPublishArtifact: (path) => unawaited(_publishArtifact(path)),
         );
         // GUI-P2-03: multi-pane di layar lebar — sesi kiri, inspector kanan.
-        if (!settings.multiPane) return chatPage;
+        if (!settings.multiPane ||
+            MediaQuery.sizeOf(context).width < TikoTheme.multiPaneBreakpoint) {
+          return chatPage;
+        }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1159,8 +1128,7 @@ class _AgentAppState extends State<AgentApp> {
             } catch (error) {
               if (mounted) {
                 setState(
-                  () => adminError =
-                      'Gagal mengubah sematan sesi: $error',
+                  () => adminError = 'Gagal mengubah sematan sesi: $error',
                 );
               }
             }
@@ -1171,7 +1139,9 @@ class _AgentAppState extends State<AgentApp> {
               await refreshAdmin(force: true);
             } catch (error) {
               if (mounted) {
-                setState(() => adminError = 'Gagal mengubah arsip sesi: $error');
+                setState(
+                  () => adminError = 'Gagal mengubah arsip sesi: $error',
+                );
               }
             }
           },
@@ -1216,9 +1186,8 @@ class _AgentAppState extends State<AgentApp> {
                   actions: [
                     TextButton.icon(
                       key: const Key('btn-session-export-copy'),
-                      onPressed: () => Clipboard.setData(
-                        ClipboardData(text: content),
-                      ),
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: content)),
                       icon: const Icon(Icons.copy, size: 16),
                       label: const Text('Salin ke clipboard'),
                     ),
@@ -1244,11 +1213,10 @@ class _AgentAppState extends State<AgentApp> {
               }
               if (mounted) {
                 setState(
-                  () => adminError =
-                      deleted == ids.length
-                          ? null
-                          : 'Sebagian sesi gagal dihapus '
-                              '($deleted/${ids.length}).',
+                  () => adminError = deleted == ids.length
+                      ? null
+                      : 'Sebagian sesi gagal dihapus '
+                            '($deleted/${ids.length}).',
                 );
               }
               await refreshAdmin(force: true);
@@ -1606,6 +1574,7 @@ class _ChatPageState extends State<_ChatPage> {
     setState(() => _filesOpen = opening);
     if (opening) widget.onLoadArtifacts?.call();
   }
+
   @override
   void initState() {
     super.initState();
@@ -1632,7 +1601,10 @@ class _ChatPageState extends State<_ChatPage> {
 
   /// Voice UI: setelah turn selesai, bacakan balasan assistant terakhir
   /// bila preferensi "balasan suara" aktif.
-  Future<void> _onSend(String text, List<ChatAttachmentPayload> attachments) async {
+  Future<void> _onSend(
+    String text,
+    List<ChatAttachmentPayload> attachments,
+  ) async {
     await widget.chat.send(
       text,
       sessionKey: widget.sessionKey,
@@ -1668,9 +1640,7 @@ class _ChatPageState extends State<_ChatPage> {
           autofocus: true,
           minLines: 2,
           maxLines: 6,
-          decoration: const InputDecoration(
-            hintText: 'Tulis ulang prompt…',
-          ),
+          decoration: const InputDecoration(hintText: 'Tulis ulang prompt…'),
           onSubmitted: (value) => Navigator.pop(dialogContext, value),
         ),
         actions: [
@@ -1759,7 +1729,8 @@ class _ChatPageState extends State<_ChatPage> {
   String _chatProviderLabel() {
     final snapshot = widget.providerSnapshot;
     if (snapshot == null) return 'default';
-    final id = snapshot.sessionOverrides[widget.sessionKey] ??
+    final id =
+        snapshot.sessionOverrides[widget.sessionKey] ??
         snapshot.defaultId ??
         'default';
     final model = snapshot.sessionModelChoices[widget.sessionKey];
@@ -1788,12 +1759,12 @@ class _ChatPageState extends State<_ChatPage> {
                 selected: current == defaultId,
               ),
             ),
-        for (final p in snapshot?.providers ?? const [])
-          if (p.id != snapshot?.defaultId)
-            PopupMenuItem<String>(
-              value: p.id,
-              child: _providerMenuRow(p.id, selected: current == p.id),
-            ),
+          for (final p in snapshot?.providers ?? const [])
+            if (p.id != snapshot?.defaultId)
+              PopupMenuItem<String>(
+                value: p.id,
+                child: _providerMenuRow(p.id, selected: current == p.id),
+              ),
         ];
       },
       child: Container(
@@ -1848,189 +1819,174 @@ class _ChatPageState extends State<_ChatPage> {
   /// overlay penuh (layar sempit). Panel read-only dari data nama yang sama.
   Widget _layoutWithPanel(BuildContext context, ChatController chat) {
     final chatColumn = Column(
-          children: [
-            PageHeader(
-              title: 'Chat',
-              subtitle: widget.sessionKey,
-              online: chat.online,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.onNewChat != null)
-                    IconButton(
-                      key: const Key('btn-chat-new-session'),
-                      tooltip: 'Chat baru',
-                      icon: const Icon(Icons.add_comment_outlined),
-                      onPressed: widget.onNewChat,
-                    ),
-                  if (widget.onOpenArtifactFile != null)
-                    IconButton(
-                      key: const Key('btn-chat-files'),
-                      tooltip: _filesOpen
-                          ? 'Tutup panel file workspace'
-                          : 'Buka panel file workspace',
-                      icon: Icon(
-                        _filesOpen
-                            ? Icons.close
-                            : Icons.folder_open_outlined,
+      children: [
+        PageHeader(
+          title: 'Chat',
+          subtitle: widget.sessionKey,
+          online: chat.online,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.onNewChat != null)
+                IconButton(
+                  key: const Key('btn-chat-new-session'),
+                  tooltip: 'Chat baru',
+                  icon: const Icon(Icons.add_comment_outlined),
+                  onPressed: widget.onNewChat,
+                ),
+              if (widget.onOpenArtifactFile != null)
+                IconButton(
+                  key: const Key('btn-chat-files'),
+                  tooltip: _filesOpen
+                      ? 'Tutup panel file workspace'
+                      : 'Buka panel file workspace',
+                  icon: Icon(
+                    _filesOpen ? Icons.close : Icons.folder_open_outlined,
+                  ),
+                  onPressed: _toggleFilesPane,
+                ),
+              if (widget.onSelectProvider != null &&
+                  (widget.providerSnapshot?.providers.isNotEmpty ?? false))
+                _chatModelChip(context),
+              if (widget.multiPane)
+                IconButton(
+                  tooltip: widget.inspectorVisible
+                      ? 'Tutup inspector'
+                      : 'Buka inspector (GUI-P2-03)',
+                  icon: Icon(
+                    widget.inspectorVisible
+                        ? Icons.chevron_right
+                        : Icons.view_column_outlined,
+                  ),
+                  onPressed: widget.onToggleInspector,
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: chat.messages.isEmpty
+              ? LayoutBuilder(
+                  builder: (context, emptyConstraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: emptyConstraints.maxHeight,
                       ),
-                      onPressed: _toggleFilesPane,
-                    ),
-                  if (widget.onSelectProvider != null &&
-                      (widget.providerSnapshot?.providers.isNotEmpty ?? false))
-                    _chatModelChip(context),
-                  if (widget.multiPane)
-                    IconButton(
-                      tooltip: widget.inspectorVisible
-                          ? 'Tutup inspector'
-                          : 'Buka inspector (GUI-P2-03)',
-                      icon: Icon(
-                        widget.inspectorVisible
-                            ? Icons.chevron_right
-                            : Icons.view_column_outlined,
-                      ),
-                      onPressed: widget.onToggleInspector,
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: chat.messages.isEmpty
-                  ? LayoutBuilder(
-                      builder: (context, emptyConstraints) =>
-                          SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: emptyConstraints.maxHeight,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: context.simpulAccent,
+                              borderRadius: BorderRadius.circular(
+                                SimpulTheme.radiusLarge,
+                              ),
+                            ),
+                            child: const Center(child: TikoMark(size: 34)),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          const SizedBox(height: 16),
+                          Text(
+                            'Mulai percakapan dengan Tiko',
+                            style: TextStyle(color: context.simpulMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tool berisiko akan meminta approval Anda',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.simpulMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Coba mulai dari sini',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.simpulMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: context.simpulAccent,
-                            borderRadius:
-                                BorderRadius.circular(SimpulTheme.radiusLarge),
+                              _starterPrompt(context, 'Ringkas workspace saya'),
+                              _starterPrompt(
+                                context,
+                                'Bantu saya memahami project ini',
+                              ),
+                              _starterPrompt(context, 'Tampilkan status agent'),
+                            ],
                           ),
-                          child: const Icon(
-                            Icons.smart_toy_outlined,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Mulai percakapan dengan Tiko',
-                          style: TextStyle(color: context.simpulMuted),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tool berisiko akan meminta approval Anda',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.simpulMuted,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Coba mulai dari sini',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: context.simpulMuted,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _starterPrompt(
-                              context,
-                              'Ringkas workspace saya',
-                            ),
-                            _starterPrompt(
-                              context,
-                              'Bantu saya memahami project ini',
-                            ),
-                            _starterPrompt(
-                              context,
-                              'Tampilkan status agent',
-                            ),
-                          ],
-                        ),
-                      ],
-                          ),
-                        ),
+                        ],
                       ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: chat.messages.length,
-                      itemBuilder: (context, i) {
-                        final message = chat.messages[i];
-                        final user = message['role'] == 'user';
-                        final speakable = user
-                            ? null
-                            : VoiceService.speakableReply([message]);
-                        final messageText =
-                            (message['text'] ?? '').toString();
-                        final fileRefs =
-                            widget.onOpenArtifactFile == null
-                                ? const <String>[]
-                                : _collectFileRefs(messageText);
-                        return Align(
-                          alignment: user
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Column(
-                            crossAxisAlignment: user
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(14),
-                                constraints: const BoxConstraints(
-                                  maxWidth: 760,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: chat.messages.length,
+                  itemBuilder: (context, i) {
+                    final message = chat.messages[i];
+                    final user = message['role'] == 'user';
+                    final speakable = user
+                        ? null
+                        : VoiceService.speakableReply([message]);
+                    final messageText = (message['text'] ?? '').toString();
+                    final fileRefs = widget.onOpenArtifactFile == null
+                        ? const <String>[]
+                        : _collectFileRefs(messageText);
+                    return Align(
+                      alignment: user
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: user
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(14),
+                            constraints: const BoxConstraints(maxWidth: 760),
+                            decoration: BoxDecoration(
+                              color: user
+                                  ? context.simpulUserBubble
+                                  : context.simpulBotBubble,
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(
+                                  SimpulTheme.radiusLarge,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: user
-                                      ? context.simpulUserBubble
-                                      : context.simpulBotBubble,
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: const Radius.circular(
-                                      SimpulTheme.radiusLarge,
-                                    ),
-                                    topRight: const Radius.circular(
-                                      SimpulTheme.radiusLarge,
-                                    ),
-                                    bottomLeft:
-                                        Radius.circular(user ? SimpulTheme.radiusLarge : 4),
-                                    bottomRight:
-                                        Radius.circular(user ? 4 : SimpulTheme.radiusLarge),
-                                  ),
+                                topRight: const Radius.circular(
+                                  SimpulTheme.radiusLarge,
                                 ),
-                                child: message['role'] == 'assistant'
-                                    ? TikoSurfaceOrMessageView(
-                                        text: (message['text'] ?? '')
-                                            .toString(),
-                                        onAction: (actionId, values) {
-                                          unawaited(
-                                            chat.sendUiAction(
-                                              actionId,
-                                              values,
-                                              sessionKey: widget.sessionKey,
-                                            ),
-                                          );
-                                        },
-                                        onSurfaceAction:
-                                            (surfaceId, actionName, payload) {
+                                bottomLeft: Radius.circular(
+                                  user ? SimpulTheme.radiusLarge : 4,
+                                ),
+                                bottomRight: Radius.circular(
+                                  user ? 4 : SimpulTheme.radiusLarge,
+                                ),
+                              ),
+                            ),
+                            child: message['role'] == 'assistant'
+                                ? TikoSurfaceOrMessageView(
+                                    text: (message['text'] ?? '').toString(),
+                                    onAction: (actionId, values) {
+                                      unawaited(
+                                        chat.sendUiAction(
+                                          actionId,
+                                          values,
+                                          sessionKey: widget.sessionKey,
+                                        ),
+                                      );
+                                    },
+                                    onSurfaceAction:
+                                        (surfaceId, actionName, payload) {
                                           unawaited(
                                             chat.sendUiAction(
                                               actionName,
@@ -2040,150 +1996,147 @@ class _ChatPageState extends State<_ChatPage> {
                                             ),
                                           );
                                         },
-                                      )
-                                    : SelectableText(
-                                        (message['text'] ?? '').toString(),
-                                        style: SimpulTheme.body,
-                                      ),
-                              ),
-                              ..._fileCards(message, i),
-                              for (var j = 0; j < fileRefs.length; j++)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: ActionChip(
-                                    key: Key('chip-file-ref-$i-$j'),
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(
-                                      '@file:${fileRefs[j]}',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                    onPressed: () =>
-                                        widget.onOpenArtifactFile!(fileRefs[j]),
+                                  )
+                                : SelectableText(
+                                    (message['text'] ?? '').toString(),
+                                    style: SimpulTheme.body,
                                   ),
-                                ),
-                              if (speakable != null && speakable.isNotEmpty)
-                                TextButton.icon(
-                                  key: Key('btn-speak-msg-$i'),
-                                  onPressed: () => _speakOrStop(speakable),
-                                  icon: Icon(
-                                    widget.voice.speaking
-                                        ? Icons.stop
-                                        : Icons.volume_up_outlined,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    'Dengarkan',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: context.simpulMuted,
-                                    ),
-                                  ),
-                                ),
-                              if (user && messageText.trim().isNotEmpty)
-                                TextButton.icon(
-                                  key: Key('btn-edit-msg-$i'),
-                                  onPressed: () => _editAndResend(messageText),
-                                  icon: const Icon(Icons.edit_outlined, size: 16),
-                                  label: Text(
-                                    'Edit',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: context.simpulMuted,
-                                    ),
-                                  ),
-                                ),
-                              if (!user && messageText.startsWith('Gagal:'))
-                                TextButton.icon(
-                                  key: Key('btn-retry-msg-$i'),
-                                  onPressed: chat.retryText == null
-                                      ? null
-                                      : () => unawaited(
-                                            chat.retryLast(
-                                              sessionKey: widget.sessionKey,
-                                            ),
-                                          ),
-                                  icon: const Icon(Icons.refresh, size: 16),
-                                  label: Text(
-                                    'Coba lagi',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: context.simpulMuted,
-                                    ),
-                                  ),
-                                ),
-                              if (!user && messageText.isNotEmpty)
-                                TextButton.icon(
-                                  key: Key('btn-copy-msg-$i'),
-                                  onPressed: () => _copyMessage(messageText),
-                                  icon: const Icon(
-                                    Icons.copy_rounded,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    'Salin',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: context.simpulMuted,
-                                    ),
-                                  ),
-                                ),
-                            ],
                           ),
-                        );
-                      },
-                    ),
-            ),
-            if (chat.pendingConfirm != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: context.simpulPanel,
-                  border: Border(top: BorderSide(color: context.simpulBorder)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.shield_outlined,
-                      size: 20,
-                      color: context.simpulWarn,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Konfirmasi: ${chat.pendingConfirm!.prompt}',
-                        style: TextStyle(color: context.simpulWarn),
+                          ..._fileCards(message, i),
+                          for (var j = 0; j < fileRefs.length; j++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: ActionChip(
+                                key: Key('chip-file-ref-$i-$j'),
+                                visualDensity: VisualDensity.compact,
+                                label: Text(
+                                  '@file:${fileRefs[j]}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                                onPressed: () =>
+                                    widget.onOpenArtifactFile!(fileRefs[j]),
+                              ),
+                            ),
+                          if (speakable != null && speakable.isNotEmpty)
+                            TextButton.icon(
+                              key: Key('btn-speak-msg-$i'),
+                              onPressed: () => _speakOrStop(speakable),
+                              icon: Icon(
+                                widget.voice.speaking
+                                    ? Icons.stop
+                                    : Icons.volume_up_outlined,
+                                size: 16,
+                              ),
+                              label: Text(
+                                'Dengarkan',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                          if (user && messageText.trim().isNotEmpty)
+                            TextButton.icon(
+                              key: Key('btn-edit-msg-$i'),
+                              onPressed: () => _editAndResend(messageText),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: Text(
+                                'Edit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                          if (!user && messageText.startsWith('Gagal:'))
+                            TextButton.icon(
+                              key: Key('btn-retry-msg-$i'),
+                              onPressed: chat.retryText == null
+                                  ? null
+                                  : () => unawaited(
+                                      chat.retryLast(
+                                        sessionKey: widget.sessionKey,
+                                      ),
+                                    ),
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: Text(
+                                'Coba lagi',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                          if (!user && messageText.isNotEmpty)
+                            TextButton.icon(
+                              key: Key('btn-copy-msg-$i'),
+                              onPressed: () => _copyMessage(messageText),
+                              icon: const Icon(Icons.copy_rounded, size: 16),
+                              label: Text(
+                                'Salin',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () => chat.respondConfirm(true),
-                      child: const Text('Izinkan'),
-                    ),
-                    TextButton(
-                      onPressed: () => chat.respondConfirm(false),
-                      child: const Text('Tolak'),
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            AnimatedBuilder(
-              animation: chat,
-              builder: (context, _) => _TurnProgressStrip(chat: chat),
+        ),
+        if (chat.pendingConfirm != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.simpulPanel,
+              border: Border(top: BorderSide(color: context.simpulBorder)),
             ),
-            _Composer(
-              onSend: _onSend,
-              voice: widget.voice,
-              onListWorkspace: widget.onListWorkspace,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  size: 20,
+                  color: context.simpulWarn,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Konfirmasi: ${chat.pendingConfirm!.prompt}',
+                    style: TextStyle(color: context.simpulWarn),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => chat.respondConfirm(true),
+                  child: const Text('Izinkan'),
+                ),
+                TextButton(
+                  onPressed: () => chat.respondConfirm(false),
+                  child: const Text('Tolak'),
+                ),
+              ],
             ),
-          ],
-        );
+          ),
+        AnimatedBuilder(
+          animation: chat,
+          builder: (context, _) => _TurnProgressStrip(chat: chat),
+        ),
+        _Composer(
+          onSend: _onSend,
+          voice: widget.voice,
+          onListWorkspace: widget.onListWorkspace,
+        ),
+      ],
+    );
     if (!_filesOpen || widget.onOpenArtifactFile == null) return chatColumn;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 1100;
+        final wide = constraints.maxWidth >= TikoTheme.desktopBreakpoint;
         final panel = ChatArtifactPanel(
           online: chat.online,
           listing: widget.artifactsListing,
@@ -2394,11 +2347,11 @@ class _ComposerState extends State<_Composer> {
   }
 
   IconData _refIcon(String kind) => switch (kind) {
-        'file' => Icons.insert_drive_file_outlined,
-        'dir' => Icons.folder_outlined,
-        'url' => Icons.link,
-        _ => Icons.merge,
-      };
+    'file' => Icons.insert_drive_file_outlined,
+    'dir' => Icons.folder_outlined,
+    'url' => Icons.link,
+    _ => Icons.merge,
+  };
 
   Widget? _buildSuggestionRow(BuildContext context) {
     if (busy) return null;
@@ -2456,15 +2409,15 @@ class _ComposerState extends State<_Composer> {
       );
     } on AttachmentPickerException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } on UnsupportedError catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${e.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${e.message}')));
       }
     }
   }
@@ -2543,10 +2496,7 @@ class _ComposerState extends State<_Composer> {
                   borderRadius: BorderRadius.circular(SimpulTheme.radiusPill),
                   border: Border.all(color: context.simpulBorder),
                 ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2593,7 +2543,8 @@ class _ComposerState extends State<_Composer> {
                                 tooltip:
                                     'Context reference ${_contextRefs[i].kind}'
                                     ': ${_contextRefs[i].target}',
-                                onDeleted: () => _removeContextRef(_contextRefs[i]),
+                                onDeleted: () =>
+                                    _removeContextRef(_contextRefs[i]),
                               ),
                           ],
                         ),
@@ -2619,39 +2570,44 @@ class _ComposerState extends State<_Composer> {
                           onPressed: _toggleMic,
                           icon: Icon(
                             voice.listening ? Icons.mic : Icons.mic_none,
-                            color:
-                                voice.listening ? context.simpulDanger : null,
+                            color: voice.listening
+                                ? context.simpulDanger
+                                : null,
                           ),
                         ),
                         Expanded(
                           child: CallbackShortcuts(
                             bindings: {
-                              SingleActivator(LogicalKeyboardKey.enter,
-                                      control: true):
-                                  () => _submit(c.text),
-                              SingleActivator(LogicalKeyboardKey.enter,
-                                      meta: true):
-                                  () => _submit(c.text),
+                              SingleActivator(
+                                LogicalKeyboardKey.enter,
+                                control: true,
+                              ): () =>
+                                  _submit(c.text),
+                              SingleActivator(
+                                LogicalKeyboardKey.enter,
+                                meta: true,
+                              ): () =>
+                                  _submit(c.text),
                             },
                             child: TextField(
-                            controller: c,
-                        minLines: 1,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: voice.listening
-                              ? 'Mendengarkan… (bicara sekarang)'
-                              : 'Pesan ke Tiko…',
-                          helperText:
-                              voice.listening && voice.partial.isNotEmpty
-                                  ? voice.partial
-                                  : null,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          isDense: true,
-                        ),
-                        onSubmitted: (value) => _submit(value),
+                              controller: c,
+                              minLines: 1,
+                              maxLines: 4,
+                              decoration: InputDecoration(
+                                hintText: voice.listening
+                                    ? 'Mendengarkan… (bicara sekarang)'
+                                    : 'Pesan ke Tiko…',
+                                helperText:
+                                    voice.listening && voice.partial.isNotEmpty
+                                    ? voice.partial
+                                    : null,
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onSubmitted: (value) => _submit(value),
                             ),
                           ),
                         ),
@@ -2723,8 +2679,7 @@ class _DashboardPage extends StatelessWidget {
           ),
         ),
         if (loading) StatusViews.loadingBanner(context),
-        if (error != null)
-            StatusViews.errorBanner(context, error!),
+        if (error != null) StatusViews.errorBanner(context, error!),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -3033,95 +2988,6 @@ class _SessionsPage extends StatelessWidget {
   }
 }
 
-// ——— Memory ———
-class _MemoryPage extends StatelessWidget {
-  const _MemoryPage({
-    required this.memories,
-    required this.online,
-    required this.loading,
-    required this.error,
-    required this.onRefresh,
-    required this.onDelete,
-  });
-  final List<MemoryFact> memories;
-  final bool online;
-  final bool loading;
-  final String? error;
-  final Future<void> Function() onRefresh;
-  final Future<void> Function(String id) onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        PageHeader(
-          title: 'Memory',
-          subtitle: '${memories.length} fakta',
-          online: online,
-          trailing: IconButton(
-            tooltip: 'Muat ulang',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        ),
-        if (loading) StatusViews.loadingBanner(context),
-        if (error != null)
-            StatusViews.errorBanner(context, error!),
-        Expanded(
-          child: memories.isEmpty
-              ? StatusViews.empty(context, message: 'Kosong')
-              : ListView.builder(
-                  itemCount: memories.length,
-                  itemBuilder: (context, i) {
-                    final memory = memories[i];
-                    return ListTile(
-                      title: Text(
-                        memory.text,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${memory.id} · ${memory.kind}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        tooltip: 'Hapus memori',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              title: const Text('Hapus memori?'),
-                              content: const Text(
-                                'Fakta ini akan dihapus dari penyimpanan Tiko.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(dialogContext, false),
-                                  child: const Text('Batal'),
-                                ),
-                                FilledButton(
-                                  onPressed: () =>
-                                      Navigator.pop(dialogContext, true),
-                                  child: const Text('Hapus'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirmed == true) await onDelete(memory.id);
-                        },
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-}
-
 // ——— Settings ———
 /// Shows the self-contained desktop daemon bootstrap state (Hermes-parity):
 /// which daemon the app is using, its home directory and log location.
@@ -3175,581 +3041,179 @@ class _DaemonStatusCard extends StatelessWidget {
   }
 }
 
-class _MorePage extends StatelessWidget {
+class _MorePage extends StatefulWidget {
   const _MorePage({
-    required this.repo,
-    required this.baseUrl,
-    required this.token,
-    required this.memories,
-    required this.tasks,
-    required this.logFiles,
-    required this.events,
-    required this.skills,
-    required this.bots,
-    required this.bindings,
-    required this.providers,
-    required this.pluginSnapshot,
-    required this.channelSnapshot,
-    required this.jobsSnapshot,
-    required this.securitySnapshot,
-    required this.auditResult,
-    required this.onQueryAudit,
-    required this.artifactsListing,
-    required this.artifactsDir,
-    required this.artifactContent,
-    required this.artifactDiff,
-    required this.loadingArtifacts,
-    required this.artifactsError,
-    required this.sessionOptions,
-    required this.onOpenArtifactsDir,
-    required this.onOpenArtifactFile,
-    required this.onCloseArtifactPreview,
-    required this.runsSnapshot,
-    required this.runsLoading,
-    required this.runsError,
-    required this.onLoadRuns,
-    required this.daemonStatus,
-    required this.availableSessions,
-    required this.online,
+    required this.entries,
+    required this.onOpenRoute,
     required this.pendingApprovals,
     required this.approvalsLoaded,
     required this.approvalStatusUnavailable,
-    required this.onOpenApprovals,
-    required this.onOpenRoute,
-    required this.onRefresh,
-    required this.onConnect,
-    required this.settings,
-    required this.onSettingsChanged,
-    required this.surfaceSectionFor,
+    required this.online,
   });
 
-  /// Hermes S8: builder seksi surface A2UI dinamis untuk halaman yang
-  /// dibuka sebagai push route dari menu More.
-  final Widget? Function(String target)? surfaceSectionFor;
-  final AgentRepository repo;
-  final String baseUrl;
-  final String token;
-  final List<MemoryFact> memories;
-  final List<TaskItem> tasks;
-  final List<LogFileInfo> logFiles;
-  final List<RuntimeEvent> events;
-  final List<SkillItem> skills;
-  final List<BotProfileItem> bots;
-  final Map<String, String> bindings;
-  final ProvidersSnapshot? providers;
-  final PluginsToolsSnapshot? pluginSnapshot;
-  final ChannelsSnapshot? channelSnapshot;
-  final JobsSnapshot? jobsSnapshot;
-  final SecuritySnapshot? securitySnapshot;
-  final AuditQueryResult? auditResult;
-  final Future<void> Function(Map<String, String> filters) onQueryAudit;
-  final ArtifactsListing? artifactsListing;
-  final String artifactsDir;
-  final ArtifactContent? artifactContent;
-  final ArtifactDiff? artifactDiff;
-  final bool loadingArtifacts;
-  final String? artifactsError;
-  final List<SessionSummary> sessionOptions;
-  final void Function(String dir) onOpenArtifactsDir;
-  final void Function(String path) onOpenArtifactFile;
-  final VoidCallback onCloseArtifactPreview;
-  final RunsSnapshot? runsSnapshot;
-  final bool runsLoading;
-  final String? runsError;
-  final Future<void> Function() onLoadRuns;
-  final Map<String, dynamic>? daemonStatus;
-  final List<String> availableSessions;
-  final bool online;
+  final List<AppRouteInfo> entries;
+  final ValueChanged<AppRoute> onOpenRoute;
   final int pendingApprovals;
   final bool approvalsLoaded;
   final bool approvalStatusUnavailable;
-  final VoidCallback onOpenApprovals;
-  final ValueChanged<AppRoute> onOpenRoute;
-  final Future<void> Function() onRefresh;
-  final void Function({required String base, required String tok}) onConnect;
-  final AppSettings settings;
-  final void Function(AppSettings) onSettingsChanged;
+  final bool online;
+
+  @override
+  State<_MorePage> createState() => _MorePageState();
+}
+
+class _MorePageState extends State<_MorePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  static const _sectionOrder = [
+    'Workspace',
+    'Agents',
+    'Knowledge',
+    'Connections',
+    'Control',
+    'Settings',
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final showAdvanced = settings.advancedMode;
-    return ListView(
+    final menuEntries = widget.entries
+        .where((entry) => !entry.primaryOnMobile)
+        .where(
+          (entry) =>
+              _query.isEmpty || entry.label.toLowerCase().contains(_query),
+        )
+        .toList();
+    return Column(
       children: [
         PageHeader(
           title: 'More',
           subtitle: 'Knowledge, connections, and controls',
-          online: online,
+          online: widget.online,
         ),
-        ListTile(
-          leading: Badge(
-            isLabelVisible: approvalStatusUnavailable || pendingApprovals > 0,
-            label: Text(approvalStatusUnavailable ? '!' : '$pendingApprovals'),
-            child: Icon(
-              approvalStatusUnavailable
-                  ? Icons.warning_amber_rounded
-                  : Icons.verified_user_outlined,
-            ),
-          ),
-          title: Text(AppRoute.approvals.label),
-          subtitle: Text(
-            approvalStatusUnavailable
-                ? approvalsLoaded
-                    ? 'Could not refresh · $pendingApprovals last known'
-                    : 'Approval status unavailable'
-                : !approvalsLoaded
-                    ? 'Loading approval status…'
-                    : pendingApprovals == 0
-                        ? 'No actions waiting for review'
-                        : '$pendingApprovals actions waiting for review',
-          ),
-          onTap: onOpenApprovals,
-        ),
-        ListTile(
-          leading: const Icon(Icons.view_kanban_outlined),
-          title: Text('${AppRoute.tasks.label} (${tasks.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: TaskBoardPage(
-                    tasks: tasks,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    surfaceSection: surfaceSectionFor?.call('tasks'),
+        if (widget.approvalStatusUnavailable || widget.pendingApprovals > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Card(
+              child: ListTile(
+                leading: Badge(
+                  label: Text(
+                    widget.approvalStatusUnavailable
+                        ? '!'
+                        : '${widget.pendingApprovals}',
+                  ),
+                  child: Icon(
+                    widget.approvalStatusUnavailable
+                        ? Icons.warning_amber_rounded
+                        : Icons.verified_user_outlined,
                   ),
                 ),
+                title: Text(
+                  widget.approvalStatusUnavailable
+                      ? 'Approval perlu diperiksa'
+                      : '${widget.pendingApprovals} approval menunggu',
+                ),
+                subtitle: Text(
+                  widget.approvalStatusUnavailable
+                      ? widget.approvalsLoaded
+                            ? 'Gagal diperbarui · menampilkan jumlah terakhir yang diketahui'
+                            : 'Status approval belum tersedia'
+                      : 'Tinjau tindakan yang meminta izin',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => widget.onOpenRoute(AppRoute.approvals),
               ),
-            );
-          },
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) =>
+                setState(() => _query = value.trim().toLowerCase()),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Cari menu',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Hapus pencarian',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
+          ),
         ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.bolt_outlined),
-            title: Text('${AppRoute.events.label} (${events.length})'),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: EventsPage(
-                      events: events,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.article_outlined),
-            title: Text('${AppRoute.logs.label} (${logFiles.length})'),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: LogsPage(
-                      logs: logFiles,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onLoadContent: repo.logContent,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.auto_awesome_outlined),
-            title: Text('${AppRoute.skills.label} (${skills.length})'),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: SkillsPage(
-                      skills: skills,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onFeedback: (slug, positive) async {
-                        final ok = await repo.skillFeedback(slug, positive);
-                        if (ok) await onRefresh();
-                        return ok;
-                      },
-                      onEvaluate: repo.evaluateSkill,
-                      onApprove: repo.approveSkill,
-                      onRollback: repo.rollbackSkill,
-                      onLoadHistory: repo.skillHistory,
-                      surfaceSection: surfaceSectionFor?.call('skills'),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.smart_toy_outlined),
-            title: Text('${AppRoute.bots.label} (${bots.length})'),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: BotsPage(
-                      bots: bots,
-                      bindings: bindings,
-                      availableSessions: const [],
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onCreate: (body) async {
-                        await repo.createBot(body);
-                        await onRefresh();
-                      },
-                      onUpdate: (id, body) async {
-                        await repo.updateBot(id, body);
-                        await onRefresh();
-                      },
-                      onDelete: repo.deleteBot,
-                      onBind: repo.bindBot,
-                      onUnbind: repo.unbindBot,
-                      surfaceSection: surfaceSectionFor?.call('bots'),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.route_outlined),
-            title: Text(
-              '${AppRoute.providers.label} (${providers?.providers.length ?? 0})',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: ProviderManagerPage(
-                      snapshot: providers,
-                      availableSessions: availableSessions,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onSetSessionProvider: (sessionId, providerArg) async {
-                        final ok = await repo.setSessionProvider(
-                          sessionId,
-                          providerArg,
-                        );
-                        if (ok) await onRefresh();
-                        return ok;
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.extension_outlined),
-            title: Text(
-              '${AppRoute.plugins.label} (${pluginSnapshot?.plugins.length ?? 0})',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: PluginManagerPage(
-                      snapshot: pluginSnapshot,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onConsent: (plugin, action) async {
-                        final message = await repo.setPluginConsent(
-                          plugin,
-                          action,
-                        );
-                        await onRefresh();
-                        return message;
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.hub_outlined),
-            title: Text(
-              '${AppRoute.channels.label} ('
-              '${channelSnapshot?.channels.where((c) => c.active).length ?? 0})',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: ChannelsPage(
-                      snapshot: channelSnapshot,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.schedule_outlined),
-            title: Text(
-              '${AppRoute.automations.label} ('
-              '${jobsSnapshot?.jobs.where((j) => j.enabled).length ?? 0} job aktif)',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: AutomationPage(
-                      snapshot: jobsSnapshot,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      onCreate: (body) async {
-                        await repo.createJob(body);
-                        await onRefresh();
-                      },
-                      onUpdate: (id, body) async {
-                        await repo.updateJob(id, body);
-                        await onRefresh();
-                      },
-                      onDelete: (id) async {
-                        final ok = await repo.deleteJob(id);
-                        await onRefresh();
-                        return ok;
-                      },
-                      onRunNow: (id) async {
-                        final job = await repo.runJobNow(id);
-                        await onRefresh();
-                        return job;
-                      },
-                      surfaceSection: surfaceSectionFor?.call('automation'),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.security_outlined),
-            title: Text(
-              '${AppRoute.security.label} (${securitySnapshot?.safeMode == true ? 'safe mode' : 'normal'}',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: SecurityPage(
-                      snapshot: securitySnapshot,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onRefresh: onRefresh,
-                      surfaceSection: surfaceSectionFor?.call('security'),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.receipt_long_outlined),
-            title: Text(
-              '${AppRoute.audit.label}'
-              '${auditResult == null ? '' : ' (${auditResult!.total} cocok)'}',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: AuditPage(
-                      result: auditResult,
-                      online: online,
-                      loading: false,
-                      error: null,
-                      onQuery: onQueryAudit,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.folder_copy_outlined),
-            title: Text(
-              '${AppRoute.artifacts.label}'
-              '${artifactsListing == null ? '' : ' (${artifactsListing!.files.length})'}',
-            ),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: ArtifactsPage(
-                      listing: artifactsListing,
-                      online: online,
-                      loading: loadingArtifacts,
-                      error: artifactsError,
-                      dir: artifactsDir,
-                      sessionOptions: sessionOptions,
-                      onOpenDir: onOpenArtifactsDir,
-                      onOpenFile: onOpenArtifactFile,
-                      onClosePreview: onCloseArtifactPreview,
-                      onRefresh: () async {
-                        onOpenArtifactsDir(artifactsDir);
-                      },
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.play_circle_outline),
-            title: Text(
-              '${AppRoute.runs.label}'
-              '${runsSnapshot == null ? '' : ' (${runsSnapshot!.active.length} aktif)'}',
-            ),
-            onTap: () {
-              onLoadRuns();
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    body: SafeArea(
-                      child: RunsPage(
-                        snapshot: runsSnapshot,
-                        online: online,
-                        loading: runsLoading,
-                        error: runsError,
-                        onRefresh: onLoadRuns,
-                        surfaceSection: surfaceSectionFor?.call('runs'),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+            children: [
+              for (final section in _sectionOrder)
+                if (menuEntries.any((entry) => entry.section == section)) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
+                    child: Text(
+                      section.toUpperCase(),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: context.simpulMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                  for (final entry in menuEntries.where(
+                    (e) => e.section == section,
+                  ))
+                    ListTile(
+                      selected: false,
+                      leading: entry.route == AppRoute.approvals
+                          ? Badge(
+                              isLabelVisible:
+                                  widget.approvalStatusUnavailable ||
+                                  widget.pendingApprovals > 0,
+                              label: Text(
+                                widget.approvalStatusUnavailable
+                                    ? '!'
+                                    : '${widget.pendingApprovals}',
+                              ),
+                              child: Icon(
+                                widget.approvalStatusUnavailable
+                                    ? Icons.warning_amber_rounded
+                                    : entry.icon,
+                              ),
+                            )
+                          : Icon(entry.icon),
+                      title: Text(entry.navigationLabel),
+                      subtitle: entry.route == AppRoute.approvals
+                          ? Text(
+                              widget.approvalStatusUnavailable
+                                  ? widget.approvalsLoaded
+                                        ? 'Tidak dapat diperbarui; jumlah terakhir ditampilkan'
+                                        : 'Status belum tersedia'
+                                  : !widget.approvalsLoaded
+                                  ? 'Memuat status approval…'
+                                  : widget.pendingApprovals == 0
+                                  ? 'Tidak ada tindakan menunggu'
+                                  : '${widget.pendingApprovals} tindakan menunggu',
+                            )
+                          : null,
+                      onTap: () => widget.onOpenRoute(entry.route),
+                    ),
+                ],
+              if (menuEntries.isEmpty)
+                StatusViews.empty(context, message: 'Menu tidak ditemukan.'),
+            ],
           ),
-        if (showAdvanced)
-          ListTile(
-            leading: Icon(AppRoute.mission.icon),
-            title: Text(AppRoute.mission.label),
-            onTap: () => onOpenRoute(AppRoute.mission),
-          ),
-        ListTile(
-          leading: const Icon(Icons.memory_outlined),
-          title: Text('Memory (${memories.length})'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: _MemoryPage(
-                    memories: memories,
-                    online: online,
-                    loading: false,
-                    error: null,
-                    onRefresh: onRefresh,
-                    onDelete: (id) async {
-                      try {
-                        final deleted = await repo.deleteMemory(id);
-                        if (!deleted) {
-                          throw StateError(
-                            'Memori tidak ditemukan atau gagal dihapus.',
-                          );
-                        }
-                        await onRefresh();
-                        if (context.mounted) Navigator.of(context).pop();
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Gagal menghapus memori: $error'),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.hub_outlined),
-            title: const Text('Graf Vault (Simpul)'),
-            onTap: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => SimpulGraphPage()));
-            },
-          ),
-        if (showAdvanced)
-          ListTile(
-            leading: const Icon(Icons.edit_note_outlined),
-            title: const Text('Editor Catatan (Simpul)'),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SimpulNoteEditorPage(
-                    vault: settings.vaultPath,
-                    powerSaverEnabled: settings.powerSaver,
-                    resourceStats: true,
-                  ),
-                ),
-              );
-            },
-          ),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-            title: Text(AppRoute.settings.label),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: SettingsView(
-                    settings: settings,
-                    baseUrl: baseUrl,
-                    token: token,
-                    online: online,
-                    onConnect: onConnect,
-                    onSettingsChanged: onSettingsChanged,
-                    daemonCard: _DaemonStatusCard(),
-                    daemonStatus: daemonStatus,
-                  ),
-                ),
-              ),
-            );
-          },
         ),
       ],
     );
@@ -3811,8 +3275,8 @@ class _TurnProgressStrip extends StatelessWidget {
       final label = chat.stopRequested
           ? 'Menghentikan…'
           : (tool == null || tool.isEmpty)
-              ? 'Menyusun…'
-              : 'Menjalankan ${_friendlyToolName(tool)}…';
+          ? 'Menyusun…'
+          : 'Menjalankan ${_friendlyToolName(tool)}…';
       return Semantics(
         liveRegion: true,
         label: 'Status agent: $label',
@@ -3961,7 +3425,9 @@ class _FileCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            changed ? Icons.difference_outlined : Icons.insert_drive_file_outlined,
+            changed
+                ? Icons.difference_outlined
+                : Icons.insert_drive_file_outlined,
             size: 16,
             color: changed ? context.simpulWarn : context.simpulMuted,
           ),
@@ -3972,10 +3438,7 @@ class _FileCard extends StatelessWidget {
               safePath,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontFamily: 'monospace',
-              ),
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
             ),
           ),
           if (changed)

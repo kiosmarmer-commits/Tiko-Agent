@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Central design tokens (UI-CON): every screen — desktop, web, Android —
-/// draws its colours, spacing and text styles from here so the app looks
-/// identical on all platforms.
-abstract final class SimpulTheme {
+/// Shared Tiko design tokens for web and responsive Flutter surfaces.
+abstract final class TikoTheme {
+  // Layout breakpoints shared by the app shell and feature panels.
+  static const desktopBreakpoint = 1100.0;
+  static const multiPaneBreakpoint = 1360.0;
+  static const wideGridBreakpoint = 720.0;
   // Dark palette (default).
   static const bg = Color(0xFF0F1115);
   static const panel = Color(0xFF171A21);
@@ -78,8 +80,8 @@ abstract final class SimpulTheme {
 
   static Color bubble(Brightness brightness, {required bool user}) =>
       brightness == Brightness.dark
-          ? (user ? userBubble : botBubble)
-          : (user ? userBubbleLight : botBubbleLight);
+      ? (user ? userBubble : botBubble)
+      : (user ? userBubbleLight : botBubbleLight);
 
   static Color warning(Brightness brightness) =>
       brightness == Brightness.dark ? warn : warnLight;
@@ -108,43 +110,36 @@ abstract final class SimpulTheme {
   static Color bodyText(Brightness brightness) =>
       brightness == Brightness.dark ? textHigh : textHighLight;
 
-  static TextTheme textTheme(Brightness brightness) =>
-      const TextTheme(
-        titleLarge: pageTitle,
-        titleMedium: sectionTitle,
-        bodyMedium: body,
-        bodySmall: caption,
-        labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ).apply(
-        bodyColor: bodyText(brightness),
-        displayColor: bodyText(brightness),
-      );
+  static TextTheme textTheme(Brightness brightness) => const TextTheme(
+    titleLarge: pageTitle,
+    titleMedium: sectionTitle,
+    bodyMedium: body,
+    bodySmall: caption,
+    labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+  ).apply(bodyColor: bodyText(brightness), displayColor: bodyText(brightness));
 
   static OutlineInputBorder _inputBorder(
     Brightness brightness, {
     Color? color,
     double width = 1,
-  }) =>
-      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(radius),
-        borderSide: BorderSide(
-          color: color ?? outline(brightness),
-          width: width,
-        ),
-      );
+  }) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(radius),
+    borderSide: BorderSide(color: color ?? outline(brightness), width: width),
+  );
 
   static ThemeData theme(Brightness brightness, Color accentColor) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: accentColor,
-      brightness: brightness,
-    ).copyWith(
-      primary: accentColor,
-      surface: surface(brightness),
-      outline: outline(brightness),
-      outlineVariant: outline(brightness),
-      onSurface: bodyText(brightness),
-      onSurfaceVariant: mutedText(brightness),
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: accentColor,
+          brightness: brightness,
+        ).copyWith(
+          primary: accentColor,
+          surface: surface(brightness),
+          outline: outline(brightness),
+          outlineVariant: outline(brightness),
+          onSurface: bodyText(brightness),
+          onSurfaceVariant: mutedText(brightness),
+        );
     final border = outline(brightness);
     final onSelect = selected(brightness);
     return ThemeData(
@@ -152,11 +147,7 @@ abstract final class SimpulTheme {
       scaffoldBackgroundColor: background(brightness),
       colorScheme: scheme,
       dividerColor: border,
-      dividerTheme: DividerThemeData(
-        color: border,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
       useMaterial3: true,
       splashFactory: InkSparkle.splashFactory,
       textTheme: textTheme(brightness),
@@ -167,6 +158,45 @@ abstract final class SimpulTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: pageTitle.copyWith(color: bodyText(brightness)),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 68,
+        backgroundColor: surface(brightness),
+        indicatorColor: selected(brightness),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? accentColor
+                : mutedText(brightness),
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? accentColor
+                : mutedText(brightness),
+          ),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        selectedColor: accentColor,
+        selectedTileColor: selected(brightness),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusSmall),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusSmall),
+          ),
+        ),
       ),
       cardTheme: CardThemeData(
         color: raised(brightness),
@@ -199,25 +229,16 @@ abstract final class SimpulTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor:
-            brightness == Brightness.dark ? surfaceHover : surfaceHoverLight,
+        fillColor: brightness == Brightness.dark
+            ? surfaceHover
+            : surfaceHoverLight,
         hintStyle: TextStyle(color: mutedText(brightness)),
         helperStyle: TextStyle(color: mutedText(brightness)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: xl,
-          vertical: l,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: xl, vertical: l),
         border: _inputBorder(brightness),
         enabledBorder: _inputBorder(brightness),
-        focusedBorder: _inputBorder(
-          brightness,
-          color: accentColor,
-          width: 1.5,
-        ),
-        errorBorder: _inputBorder(
-          brightness,
-          color: dangerColor(brightness),
-        ),
+        focusedBorder: _inputBorder(brightness, color: accentColor, width: 1.5),
+        errorBorder: _inputBorder(brightness, color: dangerColor(brightness)),
         focusedErrorBorder: _inputBorder(
           brightness,
           color: dangerColor(brightness),
@@ -265,30 +286,6 @@ abstract final class SimpulTheme {
           ),
         ),
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surface(brightness),
-        elevation: 0,
-        height: 64,
-        indicatorColor: onSelect,
-        iconTheme: WidgetStateProperty.resolveWith(
-          (states) => IconThemeData(
-            color: states.contains(WidgetState.selected)
-                ? bodyText(brightness)
-                : mutedText(brightness),
-          ),
-        ),
-        labelTextStyle: WidgetStateProperty.resolveWith(
-          (states) => TextStyle(
-            fontSize: 11,
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w600
-                : FontWeight.w500,
-            color: states.contains(WidgetState.selected)
-                ? bodyText(brightness)
-                : mutedText(brightness),
-          ),
-        ),
-      ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -300,8 +297,10 @@ abstract final class SimpulTheme {
           fontWeight: FontWeight.w600,
           color: bodyText(brightness),
         ),
-        unselectedLabelTextStyle:
-            TextStyle(color: mutedText(brightness), fontSize: 12),
+        unselectedLabelTextStyle: TextStyle(
+          color: mutedText(brightness),
+          fontSize: 12,
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: raised(brightness),
@@ -309,12 +308,6 @@ abstract final class SimpulTheme {
         shape: const StadiumBorder(),
         labelStyle: TextStyle(color: bodyText(brightness), fontSize: 12),
         padding: const EdgeInsets.symmetric(horizontal: l, vertical: 2),
-      ),
-      listTileTheme: ListTileThemeData(
-        iconColor: mutedText(brightness),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusSmall),
-        ),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: raised(brightness),
@@ -333,10 +326,7 @@ abstract final class SimpulTheme {
           borderRadius: BorderRadius.circular(radiusSmall),
           border: Border.all(color: border),
         ),
-        textStyle: TextStyle(
-          color: bodyText(brightness),
-          fontSize: 12,
-        ),
+        textStyle: TextStyle(color: bodyText(brightness), fontSize: 12),
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: accentColor,
@@ -362,10 +352,10 @@ abstract final class SimpulTheme {
   }
 
   static BoxDecoration panelBox(Brightness brightness) => BoxDecoration(
-        color: surface(brightness),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: outline(brightness)),
-      );
+    color: surface(brightness),
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: outline(brightness)),
+  );
 
   // Typography scale (GUI-P0-01): colour inherits from the ambient
   // DefaultTextStyle so light/dark stay consistent.
@@ -388,6 +378,10 @@ abstract final class SimpulTheme {
   static const TextStyle caption = TextStyle(fontSize: 12, height: 1.3);
 }
 
+/// Compatibility alias for feature widgets that still use the historical
+/// theme name. New code should use [TikoTheme].
+typedef SimpulTheme = TikoTheme;
+
 /// Brightness-aware colour access for widgets: `context.panel` etc. resolve
 /// against the current [ThemeData] so light and dark modes stay consistent.
 extension SimpulThemeContext on BuildContext {
@@ -404,8 +398,7 @@ extension SimpulThemeContext on BuildContext {
   Color get simpulDanger => SimpulTheme.dangerColor(Theme.of(this).brightness);
   Color get simpulSurfaceRaised =>
       SimpulTheme.raised(Theme.of(this).brightness);
-  Color get simpulSurfaceHover =>
-      SimpulTheme.hover(Theme.of(this).brightness);
+  Color get simpulSurfaceHover => SimpulTheme.hover(Theme.of(this).brightness);
   Color get simpulSurfaceSelected =>
       SimpulTheme.selected(Theme.of(this).brightness);
   Color get simpulSurfaceOverlay =>
