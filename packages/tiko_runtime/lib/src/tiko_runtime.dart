@@ -2109,6 +2109,7 @@ class TikoRuntime {
     void Function(String delta)? onTextDelta,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String toolName)? onToolStart,
+    void Function(ToolCall call)? onToolCallStart,
     List<Attachment> attachments = const [],
   }) async => (await chatWithStatus(
         text,
@@ -2119,6 +2120,7 @@ class TikoRuntime {
         onTextDelta: onTextDelta,
         onToolTrace: onToolTrace,
         onToolStart: onToolStart,
+        onToolCallStart: onToolCallStart,
         attachments: attachments,
       )).text;
 
@@ -2145,6 +2147,9 @@ class TikoRuntime {
   /// C4 Chat-UX: nama tool tepat sebelum dieksekusi (start). Eksekusi
   /// paralel berarti beberapa start bisa aktif bersamaan.
     void Function(String toolName)? onToolStart,
+    /// Callback rinci mempertahankan call id untuk mengorelasikan eksekusi
+    /// paralel dengan frame trace masing-masing tool.
+    void Function(ToolCall call)? onToolCallStart,
     bool internalCommand = false,
     String? interruptNote,
     String? personaPrompt,
@@ -2221,6 +2226,7 @@ class TikoRuntime {
         onTextDelta: onTextDelta,
         onToolTrace: onToolTrace,
         onToolStart: onToolStart,
+        onToolCallStart: onToolCallStart,
         internalCommand: internalCommand,
         interruptNote: interruptNote,
         personaPrompt: personaPrompt,
@@ -2311,6 +2317,7 @@ class TikoRuntime {
     InspectedRun? turnEntry,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String toolName)? onToolStart,
+    void Function(ToolCall call)? onToolCallStart,
   }) async {
     // Turn internal (/learn authoring) berjalan di bawah lock panggilan
     // luarnya — SessionLock tidak re-entrant.
@@ -2341,6 +2348,9 @@ class TikoRuntime {
             configOverride: configOverride,
             toolFilter: toolFilter,
             onTextDelta: onTextDelta,
+            onToolTrace: onToolTrace,
+            onToolStart: onToolStart,
+            onToolCallStart: onToolCallStart,
             internalCommand: internalCommand,
             interruptNote: hadLiveTurn
                 ? 'Turn sebelumnya diinterupsi oleh pesan baru dari '
@@ -2516,8 +2526,12 @@ class TikoRuntime {
         // the final reply is additionally guarded below as usual.
         onTextDelta:
             onTextDelta == null ? null : (d) => onTextDelta(_sanitizer.output(d)),
-        onToolCallStart:
-            onToolStart == null ? null : (call) => onToolStart(call.name),
+        onToolCallStart: onToolStart == null && onToolCallStart == null
+            ? null
+            : (call) {
+                onToolStart?.call(call.name);
+                onToolCallStart?.call(call);
+              },
         onToolTrace: onToolTrace,
         audit: (call, verdict, result) {
           final entry = turnEntry;

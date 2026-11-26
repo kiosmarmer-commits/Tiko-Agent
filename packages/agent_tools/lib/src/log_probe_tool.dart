@@ -99,8 +99,11 @@ class LogProbeTool implements Tool {
           .whereType<File>()
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
-      for (final f in files) {
+      for (final f in files.take(100)) {
         entries.add('${p.basename(f.path)} (${f.lengthSync()} bytes)');
+      }
+      if (files.length > 100) {
+        entries.add('… ${files.length - 100} berkas lain tidak ditampilkan');
       }
     } on FileSystemException {
       return const ToolResult(callId: '', content: 'gagal membaca logsDir', isError: true);
@@ -176,6 +179,7 @@ class LogProbeTool implements Tool {
           newestTime = t;
         }
       }
+      if (newest == null || newest.lengthSync() > maxFileBytes) return null;
       return newest;
     }
     final resolved = PathSafety.resolveInRoot(logsDir.path, rel);

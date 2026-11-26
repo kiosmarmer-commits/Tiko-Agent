@@ -44,18 +44,21 @@ class AgentConfig {
 /// already sanitized by the loop's [ContentSanitizer] when one is wired.
 class ToolCallTrace {
   const ToolCallTrace({
+    this.callId = '',
     required this.name,
     required this.args,
     required this.isError,
     required this.durationMs,
   });
 
+  final String callId;
   final String name;
   final Map<String, dynamic> args;
   final bool isError;
   final int durationMs;
 
   Map<String, dynamic> toJson() => {
+        if (callId.isNotEmpty) 'call_id': callId,
         'name': name,
         'args': args,
         'is_error': isError,
@@ -487,6 +490,7 @@ class AgentLoop {
           _lastToolNames.add(call.name);
           executedToolNames.add(call.name);
           final trace = ToolCallTrace(
+            callId: call.id,
             name: call.name,
             args: sanitizer?.sanitizeArgs(call.args) ??
                 Map<String, dynamic>.of(call.args),
