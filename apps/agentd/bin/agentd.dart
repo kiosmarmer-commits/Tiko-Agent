@@ -533,6 +533,7 @@ Future<void> main(List<String> args) async {
     InboundMessage m, {
     Gateway? replyVia,
     void Function(String toolName)? onToolStart,
+    void Function(ToolCall call)? onToolCallStart,
     void Function(ToolCallTrace trace)? onToolTrace,
     void Function(String delta)? onTextDelta,
     void Function({
@@ -655,6 +656,7 @@ Future<void> main(List<String> args) async {
       confirm: confirm,
       onTextDelta: onTextDelta ?? streamer?.add,
       onToolStart: onToolStart,
+      onToolCallStart: onToolCallStart,
       onToolTrace: onToolTrace,
       attachments: m.attachments,
     );
@@ -796,17 +798,21 @@ Future<void> main(List<String> args) async {
       await handleMessage(
         m,
         replyVia: _CollectGateway(c),
-        onToolStart: (name) =>
-            progress({'type': 'chat.toolStart', 'name': name}),
+        onToolCallStart: (call) => progress({
+          'type': 'chat.toolStart',
+          'call_id': call.id,
+          'name': call.name,
+        }),
         onTextDelta: (d) =>
             progress(<String, dynamic>{'type': 'chat.delta', 'text': d}),
         onToolTrace: (t) => progress({
-              'type': 'chat.tool',
-              'name': t.name,
-              'is_error': t.isError,
-              'duration_ms': t.durationMs,
-              if (t.args['path'] is String) 'path': t.args['path'],
-            }),
+          'type': 'chat.tool',
+          'call_id': t.callId,
+          'name': t.name,
+          'is_error': t.isError,
+          'duration_ms': t.durationMs,
+          if (t.args['path'] is String) 'path': t.args['path'],
+        }),
         onTurnUsage: ({required int tokensUsed, required int promptTokens, required int completionTokens}) =>
             progress({
               'type': 'chat.usage',

@@ -338,7 +338,9 @@ class TeamOrchestrator {
       results.addAll(waveResults);
       waveIndex++;
     }
-    final synthesis = await _synthesize(goal, results);
+    final synthesis = cancelToken?.isCancelled == true
+        ? 'Sintesis dilewati karena run dibatalkan.'
+        : await _synthesize(goal, results);
     return TeamRunResult(
       results: results,
       synthesis: synthesis,

@@ -51,6 +51,9 @@ class ChatController extends ChangeNotifier {
   /// C4 Chat-UX: status strip turn aktif — nama tool yang sedang dieksekusi
   /// (dari frame `chat.toolStart`) dan sinyal stop yang sudah dikirim.
   String? activeTool;
+  final Map<String, String> _activeToolCalls = {};
+  int _legacyToolCallId = 0;
+  int get activeToolCount => _activeToolCalls.length;
   bool stopRequested = false;
   String? _activeSessionKey;
 
@@ -84,7 +87,12 @@ class ChatController extends ChangeNotifier {
   void _reportStopNotAccepted() {
     stopRequested = false;
     if (activityPhase == AgentActivityPhase.stopping) {
-      activityPhase = AgentActivityPhase.processing;
+      activityPhase = _activeToolCalls.isEmpty
+          ? AgentActivityPhase.processing
+          : AgentActivityPhase.tool;
+      activeTool = _activeToolCalls.isEmpty
+          ? null
+          : _activeToolCalls.values.last;
     }
     messages.add({
       'role': 'system',
@@ -130,6 +138,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     final aiIndex = messages.length - 1;
     activeTool = null;
+    _activeToolCalls.clear();
     stopRequested = false;
     lastTurnTrace.clear();
     retryText = null;
@@ -167,9 +176,16 @@ class ChatController extends ChangeNotifier {
               notifyListeners();
             }
           } else if (type == 'chat.toolStart') {
-            activeTool = ev['name'] as String? ?? '';
+            final toolName = ev['name'] as String? ?? '';
+            final eventCallId = ev['call_id'] as String?;
+            final callId = eventCallId == null || eventCallId.isEmpty
+                ? 'legacy:${_legacyToolCallId++}'
+                : eventCallId;
+            _activeToolCalls[callId] = toolName;
+            activeTool = toolName;
             activityPhase = AgentActivityPhase.tool;
             lastTurnTrace.add({
+              'call_id': callId,
               'name': activeTool,
               'is_error': false,
               'duration_ms': 0,
@@ -178,12 +194,30 @@ class ChatController extends ChangeNotifier {
             notifyListeners();
           } else if (type == 'chat.tool') {
             final toolName = ev['name'] as String? ?? '';
-            final runningIndex = lastTurnTrace.lastIndexWhere(
-              (tool) => tool['status'] == 'running' && tool['name'] == toolName,
-            );
-            activeTool = null;
-            activityPhase = AgentActivityPhase.processing;
+            final callId = ev['call_id'] as String?;
+            final runningIndex = callId != null && callId.isNotEmpty
+                ? lastTurnTrace.lastIndexWhere(
+                    (tool) =>
+                        tool['status'] == 'running' &&
+                        tool['call_id'] == callId,
+                  )
+                : lastTurnTrace.lastIndexWhere(
+                    (tool) =>
+                        tool['status'] == 'running' &&
+                        tool['name'] == toolName,
+                  );
+            final activeCallId = runningIndex < 0
+                ? callId
+                : lastTurnTrace[runningIndex]['call_id'] as String?;
+            if (activeCallId != null) _activeToolCalls.remove(activeCallId);
+            activeTool = _activeToolCalls.isEmpty
+                ? null
+                : _activeToolCalls.values.last;
+            activityPhase = _activeToolCalls.isEmpty
+                ? AgentActivityPhase.processing
+                : AgentActivityPhase.tool;
             final result = <String, dynamic>{
+              if (callId != null && callId.isNotEmpty) 'call_id': callId,
               'name': toolName,
               'is_error': ev['is_error'] == true,
               'duration_ms': (ev['duration_ms'] as num?)?.toInt() ?? 0,
@@ -254,6 +288,7 @@ class ChatController extends ChangeNotifier {
                   : '(selesai)';
             }
             _applyTurnFiles(aiIndex);
+            _activeToolCalls.clear();
             activeTool = null;
             if (!failed) retryText = null;
             notifyListeners();
@@ -309,6 +344,7 @@ class ChatController extends ChangeNotifier {
       }
       busy = false;
       _activeSessionKey = null;
+      _activeToolCalls.clear();
       activeTool = null;
       notifyListeners();
     }
@@ -379,6 +415,7 @@ class ChatController extends ChangeNotifier {
   void clearChat() {
     messages.clear();
     lastTurnTrace.clear();
+    _activeToolCalls.clear();
     activeTool = null;
     activityPhase = AgentActivityPhase.idle;
     retryText = null;

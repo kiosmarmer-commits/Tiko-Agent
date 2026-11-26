@@ -3320,8 +3320,9 @@ class _TurnProgressStrip extends StatelessWidget {
         AgentActivityPhase.submitting => 'Mengirim permintaan…',
         AgentActivityPhase.processing => 'Memproses permintaan…',
         AgentActivityPhase.writing => 'Menulis jawaban…',
-        AgentActivityPhase.tool =>
-          'Menjalankan ${_friendlyToolName(tool ?? '')}…',
+        AgentActivityPhase.tool => chat.activeToolCount > 1
+            ? 'Menjalankan ${chat.activeToolCount} tool secara paralel…'
+            : 'Menjalankan ${_friendlyToolName(tool ?? '')}…',
         AgentActivityPhase.approval => 'Menunggu persetujuan…',
         AgentActivityPhase.stopping => 'Menghentikan…',
         _ => 'Memproses permintaan…',
