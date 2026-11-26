@@ -211,6 +211,48 @@ class AgentLoop {
   bool _lastTurnSucceeded = false;
   bool get lastTurnSucceeded => _lastTurnSucceeded;
 
+  /// Mesin sebab turn berakhir (Hermes `turn_explainers.py`): diisi pada
+  /// setiap jalur keluar [handle] — 'completed', 'no_answer', 'stop_requested',
+  /// 'cancelled', 'budget_exhausted', 'tool_call_limit', 'provider_error',
+  /// 'loop_detected', 'iteration_limit', 'critical_risk', 'no_healthy_provider'.
+  String? _lastTurnEndReason;
+  String? get lastTurnEndReason => _lastTurnEndReason;
+
+  /// Penjelasan bahasa manusia untuk [lastTurnEndReason] — dipakai host
+  /// untuk menjelaskan mengapa sebuah turn berakhir tanpa jawaban final.
+  String? get lastTurnEndExplanation {
+    switch (_lastTurnEndReason) {
+      case 'completed':
+        return 'Turn selesai dengan jawaban final.';
+      case 'no_answer':
+        return 'Model tidak menghasilkan jawaban; coba ulangi permintaan.';
+      case 'stop_requested':
+        return 'Turn dihentikan oleh sinyal stop host.';
+      case 'cancelled':
+        return 'Turn dibatalkan atas permintaan.';
+      case 'budget_exhausted':
+      case 'tool_call_limit':
+      case 'iteration_limit':
+        return 'Turn berakhir karena batas eksekusi tercapai '
+            '($_lastTurnEndReason) sebelum jawaban final terbentuk.';
+      case 'provider_error':
+        return 'Semua provider gagal merespons; periksa konfigurasi/koneksi.';
+      case 'loop_detected':
+        return 'Turn dihentikan karena pola tool call berulang terdeteksi.';
+      case 'critical_risk':
+        return 'Permintaan ditolak guardrail (risiko critical).';
+      case 'no_healthy_provider':
+        return 'Tidak ada provider sehat (circuit breaker terbuka).';
+      default:
+        return null;
+    }
+  }
+
+  /// Path file yang berhasil ditulis turn ini (write_file/patch_file sukses).
+  final Set<String> _fileMutationsOk = {};
+  /// Path file yang seluruh percobaan penulisannya gagal pada turn ini.
+  final Set<String> _fileMutationsFailed = {};
+
   /// Final answer text of the most recent handle() call, after output
   /// sanitization. Null when the turn failed or produced no answer.
   String? get lastAnswer => _lastAnswer;
@@ -240,6 +282,9 @@ class AgentLoop {
     _lastSkillsUsed = const [];
     _lastAnswer = null;
     _lastTurnSucceeded = false;
+    _lastTurnEndReason = null;
+    _fileMutationsOk.clear();
+    _fileMutationsFailed.clear();
     _editGuard.reset();
     final cancel = _turnCancel = cancelToken ?? CancellationToken();
     final trace = TraceContext();
@@ -254,6 +299,7 @@ class AgentLoop {
         preferredProviderId: preferredProviderId,
       );
     } on NoHealthyProviderException {
+      _lastTurnEndReason = 'no_healthy_provider';
       await reply(
         m,
         'Semua provider AI sedang tidak tersedia (circuit breaker terbuka). '
@@ -263,6 +309,7 @@ class AgentLoop {
     }
     _lastRouteExplain = route.toJson();
     if (route.risk == 'critical') {
+      _lastTurnEndReason = 'critical_risk';
       router.releaseProbe(route.providerId);
       await reply(m, 'Permintaan ditolak oleh guardrail (risiko critical).');
       return;
@@ -294,11 +341,13 @@ class AgentLoop {
       agentLoop:
       for (var i = 0; i < config.maxIterations; i++) {
         if (shouldStop?.call() == true) {
+          _lastTurnEndReason = 'stop_requested';
           await reply(m, 'Tugas dihentikan (stop).');
           success = false;
           break;
         }
         if (cancel.isCancelled) {
+          _lastTurnEndReason = 'cancelled';
           success = false;
           try {
             await reply(m, 'Turn dibatalkan atas permintaan.');
@@ -306,6 +355,7 @@ class AgentLoop {
           break agentLoop;
         }
         if (_budget.exceeded) {
+          _lastTurnEndReason = 'budget_exhausted';
           await reply(m, 'Budget habis (${_budget.reason}). Berhenti.');
           success = false;
           break;
@@ -349,6 +399,7 @@ class AgentLoop {
           );
         }
         if (isErr) {
+          _lastTurnEndReason = 'provider_error';
           success = false;
           await reply(m, 'Provider gagal merespons dan tidak ada fallback yang berhasil. Periksa konfigurasi atau koneksi provider.');
           break agentLoop;
@@ -358,8 +409,13 @@ class AgentLoop {
 
         if (resp.toolCalls.isEmpty) {
           var ans = resp.text.isEmpty ? '(tidak ada jawaban)' : resp.text;
+          _lastTurnEndReason = resp.text.isEmpty ? 'no_answer' : 'completed';
           if (ans == '(tidak ada jawaban)') success = false;
           ans = sanitizer?.output(ans) ?? ans;
+          // Hermes turn-explainer (footer verifikasi mutasi): beri tahu model
+          // dan user ketika mutasi file yang diklaim tidak benar-benar terjadi
+          // di disk. Best-effort — footer tidak pernah menggagalkan jawaban.
+          ans = _withMutationFooter(ans);
           if (enableSelfConsistency) {
             try {
               final sc = SelfConsistency(
@@ -390,6 +446,7 @@ class AgentLoop {
             args: Map<String, dynamic>.from(received.args),
           );
           if (_budget.toolCallsExceeded) {
+            _lastTurnEndReason = 'tool_call_limit';
             await reply(m, 'Batas tool call tercapai. Berhenti.');
             success = false;
             break agentLoop;
@@ -512,7 +569,9 @@ class AgentLoop {
                   durationMs: result.durationMs,
                 );
           ctx = ctx.withToolResult(call, safeResult);
+          _recordFileMutation(call, result);
           if (_loopDetector.isLooping(ctx.recentToolCalls)) {
+            _lastTurnEndReason = 'loop_detected';
             await reply(m, 'Loop terdeteksi (tool+args sama ≥3×). Berhenti.');
             success = false;
             break agentLoop;
@@ -523,11 +582,20 @@ class AgentLoop {
         // (fallback heuristic naive bila call gagal) sehingga sesi panjang
         // tidak pernah membawa transkrip penuh ke provider berikutnya.
         ctx = await compactor.maybeCompact(ctx, llmOverride: activeLlm);
+        // Proactive tool-result prune (Hermes): hasil tool lama yang besar
+        // diganti stub tanpa LLM — jauh lebih murah daripada kompresi penuh.
+        ctx = compactor.pruneToolResults(ctx);
+      }
+
+      // Loop for selesai tanpa jawaban final (iterasi habis).
+      if (_lastAnswer == null && _lastTurnEndReason == null) {
+        _lastTurnEndReason = 'iteration_limit';
       }
 
     } on OperationCancelledException {
       success = false;
       _lastAnswer = null;
+      _lastTurnEndReason ??= 'cancelled';
       try {
         await reply(m, 'Turn dibatalkan atas permintaan.');
       } catch (_) {} // best-effort
@@ -678,6 +746,69 @@ class AgentLoop {
       latencyMs: sw.elapsedMilliseconds,
       success: success,
     );
+  }
+
+  /// Tools yang menulis/mengubah file di workspace (mutation tools).
+  static const _mutationToolNames = {'write_file', 'patch_file'};
+
+  void _recordFileMutation(ToolCall call, ToolResult result) {
+    if (!_mutationToolNames.contains(call.name)) return;
+    final path = call.args['path'];
+    if (path is! String || path.trim().isEmpty) return;
+    if (result.isError) {
+      _fileMutationsFailed.add(path);
+    } else {
+      _fileMutationsOk.add(path);
+      _fileMutationsFailed.remove(path);
+    }
+  }
+
+  /// Footer verifikasi mutasi (Hermes `turn_explainers.py`): peringatkan
+  /// bila jawaban mengklaim perubahan pada path yang seluruh percobaan
+  /// penulisannya gagal, atau path yang diklaim tersimpan tidak ada di disk.
+  /// Deterministik: hanya path yang benar-benar dicoba tool mutasi turn ini.
+  String _withMutationFooter(String answer) {
+    if (_fileMutationsOk.isEmpty && _fileMutationsFailed.isEmpty) {
+      return answer;
+    }
+    final warnings = <String>[];
+    for (final path in _fileMutationsFailed) {
+      if (answer.contains(path)) {
+        warnings.add(
+          '- `$path` diklaim berubah tetapi seluruh percobaan penulisan '
+          'pada turn ini gagal.',
+        );
+      }
+    }
+    for (final path in _fileMutationsOk) {
+      if (!answer.contains(path)) continue;
+      if (!_fileExistsInWorkspace(path)) {
+        warnings.add(
+          '- `$path` diklaim tersimpan tetapi tidak ditemukan di disk.',
+        );
+      }
+    }
+    if (warnings.isEmpty) return answer;
+    var shown = warnings;
+    var extra = 0;
+    if (shown.length > 5) {
+      extra = shown.length - 5;
+      shown = shown.sublist(0, 5);
+    }
+    final suffix = extra > 0 ? '\n- ... dan $extra peringatan lainnya.' : '';
+    return '$answer\n\n[verifikasi mutasi]\n'
+        '${shown.join('\n')}$suffix';
+  }
+
+  bool _fileExistsInWorkspace(String relPath) {
+    try {
+      final p = relPath.trim();
+      final f = File(p.startsWith('/') ? p : '$workspacePath/$p');
+      return f.existsSync();
+    } catch (_) {
+      // Tidak bisa memverifikasi (mis. izin) — jangan false-positive.
+      return true;
+    }
   }
 
   String? _modelFor(RouteDecision route, LlmProvider llm) {

@@ -29,6 +29,59 @@ class PromptCacheConfig {
   final int maxEntries;
 }
 
+/// Prompt-cache clock (Hermes `prompt_cache_clock.py`): sampai kapan prefix
+/// prompt sesi ini tetap hangat, per tier TTL yang dibuktikan response.
+///
+/// Satu record per attempt sukses yang membaca/menulis cache: tier yang
+/// diminta (dari payload) dan tier yang dibuktikan response (Anthropic
+/// `ephemeral_5m/1h_input_tokens`, OpenAI Responses `ttl_30m/12h_tokens`).
+/// Setiap konsumen (indikator `/context`, keep-alive, cold-cache pruning,
+/// idle compaction) membaca [cacheWindow] alih-alih menurunkan TTL sendiri.
+class PromptCacheClock {
+  /// TTL per tier cache. Tier mengikuti spesifikasi API, bukan vendor.
+  static const Map<String, Duration> tierTtl = {
+    '5m': Duration(minutes: 5),
+    '30m': Duration(minutes: 30),
+    '1h': Duration(hours: 1),
+    '12h': Duration(hours: 12),
+  };
+
+  final Map<String, Map<String, DateTime>> _deadline = {};
+
+  /// Mencatat satu attempt yang membaca/menulis cache: untuk [key], tier
+  /// pada [provenTiers] dianggap hangat sampai [at] + TTL tier.
+  void record(String key, DateTime at, Iterable<String> provenTiers) {
+    if (key.isEmpty) return;
+    final utc = at.toUtc();
+    for (final tier in provenTiers) {
+      final ttl = tierTtl[tier];
+      if (ttl == null) continue;
+      _deadline.putIfAbsent(key, () => {})[tier] = utc.add(ttl);
+    }
+  }
+
+  /// Sisa waktu cache hangat terpanjang untuk [key] pada [now], atau null
+  /// bila tidak ada tier yang masih valid. Entri kedaluwarsa dibuang.
+  Duration? cacheWindow(String key, DateTime now) {
+    final tiers = _deadline[key];
+    if (tiers == null || tiers.isEmpty) return null;
+    final utc = now.toUtc();
+    Duration? best;
+    tiers.removeWhere((_, deadline) => !utc.isBefore(deadline));
+    for (final deadline in tiers.values) {
+      final remaining = deadline.difference(utc);
+      if (best == null || remaining > best) best = remaining;
+    }
+    if (tiers.isEmpty) _deadline.remove(key);
+    return best;
+  }
+
+  /// True bila ada tier yang masih hangat untuk [key] pada [now].
+  bool isWarm(String key, DateTime now) => cacheWindow(key, now) != null;
+
+  void reset() => _deadline.clear();
+}
+
 /// Hit/miss counters for observability.
 class PromptCacheStats {
   int hits = 0;
@@ -55,6 +108,11 @@ class PromptCacheManager {
   final PromptCacheConfig config;
   final PromptCacheStats stats = PromptCacheStats();
   final Map<String, DateTime> _cachedAt = {};
+
+  /// Clock TTL per tier (Hermes prompt-cache clock): sumber kebenaran
+  /// "sampai kapan hangat" bila tier dibuktikan response; fallback ke
+  /// [PromptCacheConfig.ttl] bila tidak ada tier tercatat.
+  final PromptCacheClock clock = PromptCacheClock();
 
   /// Stable cache key for a request prefix. Only the stable parts are
   /// hashed (model, system prompt, toolset) — not the volatile
@@ -87,9 +145,16 @@ class PromptCacheManager {
 
   /// Marks [key] as cached at [now] if the prefix is long enough to be
   /// worth caching. Applies LRU-style eviction beyond [config.maxEntries].
-  void markCached(String key, DateTime now) {
+  /// [provenTiers] (mis. `['5m', '1h']`) memperbarui clock per tier bila
+  /// response provider membuktikan tier tersebut.
+  void markCached(
+    String key,
+    DateTime now, {
+    Iterable<String> provenTiers = const [],
+  }) {
     if (key.isEmpty) return;
     _cachedAt[key] = now.toUtc();
+    if (provenTiers.isNotEmpty) clock.record(key, now, provenTiers);
     while (_cachedAt.length > config.maxEntries) {
       final oldest = _cachedAt.entries
           .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
@@ -105,6 +170,7 @@ class PromptCacheManager {
     required String systemPrompt,
     String toolsetHash = '',
     DateTime? now,
+    Iterable<String> provenTiers = const [],
   }) {
     if (systemPrompt.length < config.minPrefixChars) {
       stats.misses++;
@@ -114,12 +180,26 @@ class PromptCacheManager {
     final key = cacheKey(
         model: model, systemPrompt: systemPrompt, toolsetHash: toolsetHash);
     final wasCached = isCached(key, at);
-    markCached(key, at);
+    markCached(key, at, provenTiers: provenTiers);
     return wasCached;
+  }
+
+  /// Sisa waktu hangat untuk prefix [key] pada [now]: dari clock per tier
+  /// bila ada tier terbukti, otherwise dari [config.ttl] sejak mark.
+  Duration? cacheWindow(String key, DateTime? now) {
+    if (key.isEmpty) return null;
+    final at = (now ?? DateTime.now()).toUtc();
+    final proven = clock.cacheWindow(key, at);
+    if (proven != null) return proven;
+    final marked = _cachedAt[key];
+    if (marked == null) return null;
+    final remaining = marked.add(config.ttl).difference(at);
+    return remaining <= Duration.zero ? null : remaining;
   }
 
   void reset() {
     _cachedAt.clear();
+    clock.reset();
   }
 }
 
