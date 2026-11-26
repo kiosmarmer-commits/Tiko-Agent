@@ -72,7 +72,11 @@ class _ProviderManagerPageState extends State<ProviderManagerPage> {
         ),
         if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         Expanded(
           child: snapshot == null
               ? StatusViews.empty(context, message: 'Belum ada data provider.')

@@ -46,7 +46,7 @@ class SurfacesPage extends StatelessWidget {
         ),
         if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-            StatusViews.errorBanner(context, error!),
+            StatusViews.errorBanner(context, error!, onRetry: onRefresh),
         Expanded(
           child: list == null
               ? StatusViews.empty(context, message: 'Belum ada snapshot — tekan refresh.')

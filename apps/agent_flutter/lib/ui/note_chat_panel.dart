@@ -315,7 +315,8 @@ class _SimpulNoteChatPanelState extends State<SimpulNoteChatPanel> {
                     label: const Text('Tanya AI lokal'),
                   ),
           ),
-          if (error != null) StatusViews.errorBanner(context, error!),
+          if (error != null)
+            StatusViews.errorBanner(context, error!, onRetry: () => _send()),
           Expanded(child: _answerView()),
         ],
       ),

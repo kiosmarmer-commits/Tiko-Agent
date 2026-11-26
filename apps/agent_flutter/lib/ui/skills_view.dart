@@ -76,7 +76,11 @@ class _SkillsPageState extends State<SkillsPage> {
         if (widget.surfaceSection != null) widget.surfaceSection!,
         if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(

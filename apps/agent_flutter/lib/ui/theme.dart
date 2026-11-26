@@ -1,5 +1,49 @@
 import 'package:flutter/material.dart';
 
+/// Shared motion preference for Flutter surfaces. Covers Android/web's
+/// disableAnimations and platform Reduce Motion (including iOS/macOS).
+bool prefersReducedMotion(BuildContext context) {
+  final media = MediaQuery.of(context);
+  return media.disableAnimations ||
+      WidgetsBinding
+          .instance
+          .platformDispatcher
+          .accessibilityFeatures
+          .reduceMotion;
+}
+
+double _contrastRatio(Color first, Color second) {
+  final firstLuminance = first.computeLuminance();
+  final secondLuminance = second.computeLuminance();
+  final lighter = firstLuminance > secondLuminance
+      ? firstLuminance
+      : secondLuminance;
+  final darker = firstLuminance > secondLuminance
+      ? secondLuminance
+      : firstLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+Color _accessibleAccentForeground(Brightness brightness, Color accent) {
+  final background = TikoTheme.surface(brightness);
+  if (_contrastRatio(accent, background) >= 4.5) return accent;
+  final source = HSLColor.fromColor(accent);
+  for (var step = 1; step <= 50; step++) {
+    final amount = step * 0.015;
+    final lightness = brightness == Brightness.light
+        ? (source.lightness - amount).clamp(0.0, 1.0).toDouble()
+        : (source.lightness + amount).clamp(0.0, 1.0).toDouble();
+    final candidate = source.withLightness(lightness).toColor();
+    if (_contrastRatio(candidate, background) >= 4.5) return candidate;
+  }
+  return brightness == Brightness.light ? Colors.black : Colors.white;
+}
+
+Color _onAccent(Color accent) =>
+    _contrastRatio(Colors.black, accent) >= _contrastRatio(Colors.white, accent)
+    ? Colors.black
+    : Colors.white;
+
 /// Shared Tiko design tokens for web and responsive Flutter surfaces.
 abstract final class TikoTheme {
   // Layout breakpoints shared by the app shell and feature panels.
@@ -128,12 +172,18 @@ abstract final class TikoTheme {
   );
 
   static ThemeData theme(Brightness brightness, Color accentColor) {
+    final accentForeground = _accessibleAccentForeground(
+      brightness,
+      accentColor,
+    );
+    final onAccent = _onAccent(accentColor);
     final scheme =
         ColorScheme.fromSeed(
           seedColor: accentColor,
           brightness: brightness,
         ).copyWith(
           primary: accentColor,
+          onPrimary: onAccent,
           surface: surface(brightness),
           outline: outline(brightness),
           outlineVariant: outline(brightness),
@@ -167,7 +217,7 @@ abstract final class TikoTheme {
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             color: states.contains(WidgetState.selected)
-                ? accentColor
+                ? bodyText(brightness)
                 : mutedText(brightness),
             fontSize: 12,
             fontWeight: states.contains(WidgetState.selected)
@@ -178,13 +228,13 @@ abstract final class TikoTheme {
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? accentColor
+                ? bodyText(brightness)
                 : mutedText(brightness),
           ),
         ),
       ),
       listTileTheme: ListTileThemeData(
-        selectedColor: accentColor,
+        selectedColor: bodyText(brightness),
         selectedTileColor: selected(brightness),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusSmall),
@@ -237,7 +287,7 @@ abstract final class TikoTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: xl, vertical: l),
         border: _inputBorder(brightness),
         enabledBorder: _inputBorder(brightness),
-        focusedBorder: _inputBorder(brightness, color: accentColor, width: 1.5),
+        focusedBorder: _inputBorder(brightness, color: accentForeground, width: 1.5),
         errorBorder: _inputBorder(brightness, color: dangerColor(brightness)),
         focusedErrorBorder: _inputBorder(
           brightness,
@@ -248,7 +298,7 @@ abstract final class TikoTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: accentColor,
-          foregroundColor: Colors.white,
+          foregroundColor: onAccent,
           elevation: 0,
           minimumSize: const Size(0, 40),
           shape: RoundedRectangleBorder(
@@ -280,7 +330,7 @@ abstract final class TikoTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: accentColor,
+          foregroundColor: accentForeground,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSmall),
           ),
@@ -329,13 +379,13 @@ abstract final class TikoTheme {
         textStyle: TextStyle(color: bodyText(brightness), fontSize: 12),
       ),
       tabBarTheme: TabBarThemeData(
-        labelColor: accentColor,
+        labelColor: accentForeground,
         unselectedLabelColor: mutedText(brightness),
-        indicatorColor: accentColor,
+        indicatorColor: accentForeground,
         dividerColor: border,
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: accentColor,
+        color: accentForeground,
         linearTrackColor: hover(brightness),
         circularTrackColor: hover(brightness),
       ),

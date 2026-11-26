@@ -1,8 +1,8 @@
 # 09 — Rancangan Desain GUI Tiko Agent (Flat Modern)
 
-> **Catatan status:** dokumen ini adalah rancangan/desain sistem token UI untuk seluruh platform (Android, Web, Desktop). Source (`apps/agent_flutter/lib/ui/theme.dart`) adalah kontrak implementasi token; halaman dapat dianggap terpusat hanya bila warna/spacing/typography diambil dari token, bukan literal.
+> **Status:** rancangan ini adalah referensi historis untuk arah visual dan token, bukan bukti bahwa semua layar identik atau telah diverifikasi pada semua platform. Snapshot dan beberapa klaim implementasinya sudah usang. Untuk status GUI/accessibility terkini lihat [audit 26 November 2026](17-AUDIT-GUI-CLI-UX-2026-11-26.md); source `apps/agent_flutter/lib/ui/theme.dart` tetap menjadi kontrak theme aktif.
 
-**Snapshot:** `293c82c` (branch `main`).
+**Snapshot rancangan lama:** `293c82c` (bukan snapshot status implementasi terkini).
 
 ## 1. Referensi desain
 

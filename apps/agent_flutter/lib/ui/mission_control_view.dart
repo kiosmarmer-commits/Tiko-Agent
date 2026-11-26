@@ -133,7 +133,12 @@ class _MissionControlViewState extends State<MissionControlView> {
                 ),
         ),
         if (widget.loading) StatusViews.loadingBanner(context),
-        if (widget.error != null) StatusViews.errorBanner(context, widget.error!),
+        if (widget.error != null)
+          StatusViews.errorBanner(
+            context,
+            widget.error!,
+            onRetry: widget.onRefresh,
+          ),
         Expanded(
           child: !widget._hasContent
               ? StatusViews.empty(

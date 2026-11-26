@@ -1,6 +1,8 @@
 # 16. Audit Responsive & Accessibility GUI
 
-Status: audit statis kode + komponen yang sudah diterapkan (Hermes S11).
+> **Historical snapshot — superseded for current implementation.** Audit ini merekam kondisi sebelumnya. Klaim warna status, semantics, serta cakupan retry bisa tidak berlaku lagi setelah PR #199. Gunakan [catatan audit GUI/CLI terbaru](17-AUDIT-GUI-CLI-UX-2026-11-26.md) untuk status source terkini. Checklist perangkat nyata di §2 tetap merupakan pekerjaan verifikasi yang belum dibuktikan.
+
+Status saat dibuat: audit statis kode + komponen yang sudah diterapkan (Hermes S11).
 Pengujian visual nyata di perangkat fisik masih perlu verifikasi manual — daftar
 periksa tersedia di §2.
 
@@ -27,7 +29,7 @@ binding. Esc ditangani global (bukan per-pane) agar aman terhadap dialog: fokus
 di dalam dialog berada di luar subtree `GlobalShortcuts` sehingga Esc dialog
 tetap bekerja normal.
 
-### 1.2 Error/loading/empty state seragam (Codex item 13)
+### 1.2 Error/loading/empty state seragam (snapshot lama; lihat status terbaru di dokumen 17)
 
 Komponen bersama `StatusViews`
 (`apps/tiko_widgets/lib/src/status_views.dart`) dipakai di seluruh halaman:
@@ -46,7 +48,7 @@ Diadopsi di `main.dart` dan 20+ view (`tasks`, `automation`, `runs`, `skills`,
 `memory*`, `multi_pane`, `note_chat_panel`). Penggantian bersifat mekanis; teks
 pesan dipertahankan sehingga temuan test berbasis finder tetap valid.
 
-### 1.3 Hover/focus/screen-reader aksi
+### 1.3 Hover/focus/screen-reader aksi (snapshot lama; detail terbaru di dokumen 17)
 
 - Seluruh `IconButton` aksi (refresh, close, search, delete) kini memiliki
   `tooltip:` eksplisit (label Bahasa Indonesia) — tooltip sekaligus menjadi

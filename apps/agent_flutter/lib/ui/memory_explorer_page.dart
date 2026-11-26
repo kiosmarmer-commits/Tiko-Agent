@@ -248,12 +248,10 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
           ),
           if (widget.loading) StatusViews.loadingBanner(context),
           if (widget.error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                widget.error!,
-                style: TextStyle(color: context.simpulDanger),
-              ),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
             ),
           TabBar(
             isScrollable: true,
@@ -279,6 +277,7 @@ class _MemoryExplorerPageState extends State<MemoryExplorerPage> {
                   loading: widget.loading,
                   truncated: layers?.truncated ?? false,
                   total: layers?.total ?? 0,
+                  onRefresh: widget.onRefresh,
                   onDelete: widget.onDeleteLayer == null
                       ? null
                       : (id) => _deleteLayer(id),

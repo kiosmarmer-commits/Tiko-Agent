@@ -52,7 +52,8 @@ class TaskBoardPage extends StatelessWidget {
         ),
         if (surfaceSection != null) surfaceSection!,
         if (loading) StatusViews.loadingBanner(context),
-        if (error != null) StatusViews.errorBanner(context, error!),
+        if (error != null)
+          StatusViews.errorBanner(context, error!, onRetry: onRefresh),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {

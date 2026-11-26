@@ -120,7 +120,11 @@ class _LogsPageState extends State<LogsPage> {
         ),
         if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: TextField(

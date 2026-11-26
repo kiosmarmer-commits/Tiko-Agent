@@ -91,7 +91,11 @@ class _AuditPageState extends State<AuditPage> {
         ),
         if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         _FilterBar(
           tool: _tool,
           session: _session,

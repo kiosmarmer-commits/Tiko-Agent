@@ -105,7 +105,11 @@ class _ArtifactsPageState extends State<ArtifactsPage> {
         if (widget.loading || widget.contentLoading)
           StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         Expanded(
           child: listing == null
               ? StatusViews.empty(context, message: 'Belum ada data artifacts.')

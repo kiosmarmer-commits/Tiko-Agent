@@ -356,9 +356,9 @@ Future<void> main(List<String> argv) async {
         apiPort: rt.config.apiPort,
         lock: ownLock,
       );
-      if (jsonOut) {
+      if (jsonOut && !fix) {
         emit({'checks': checks.map((c) => c.toJson()).toList()}, '');
-      } else {
+      } else if (!jsonOut) {
         for (final c in checks) {
           final mark = c.status == CheckStatus.ok
               ? 'OK'
@@ -393,27 +393,37 @@ Future<void> main(List<String> argv) async {
             selected = filterToolchainPlan(basePlan, preset: 'core');
           }
         } on ArgumentError catch (e) {
-          stderr.writeln('[tiko doctor --fix] ${e.message}');
+          if (jsonOut) {
+            emit({'ok': false, 'error': e.message}, '');
+          } else {
+            stderr.writeln('[tiko doctor --fix] ${e.message}');
+          }
           exitCode = 1;
           return;
         }
         if (selected.unknown.isNotEmpty) {
-          stderr.writeln('[tiko doctor --fix] peringatan: seleksi tidak '
-              'dikenal di katalog: ${selected.unknown.join(", ")}');
+          if (!jsonOut) {
+            stderr.writeln('[tiko doctor --fix] peringatan: seleksi tidak '
+                'dikenal di katalog: ${selected.unknown.join(", ")}');
+          }
         }
         final plan = selected.plan;
         if (jsonOut) {
           emit({
+            'ok': !checks.any((c) => c.status == CheckStatus.fail),
+            'checks': checks.map((c) => c.toJson()).toList(),
             'fix_plan': {
               'apt': plan.aptInstallable.map((r) => r.bin).toList(),
               'manual': plan.manual.map((r) => r.bin).toList(),
             },
-          }, const JsonEncoder.withIndent('  ').convert({
-            'fix_plan': {
-              'apt': plan.aptInstallable.map((r) => r.bin).toList(),
-              'manual': plan.manual.map((r) => r.bin).toList(),
-            },
-          }));
+            'unknown_selection': selected.unknown,
+            'dry_run': true,
+            'message': plan.empty
+                ? 'tidak ada toolchain tersisa di seleksi ini'
+                : 'Rencana saja; jalankan tanpa --json untuk konfirmasi pemasangan.',
+          }, '');
+          if (checks.any((c) => c.status == CheckStatus.fail)) exitCode = 1;
+          return;
         } else {
           stdout.writeln('\n[tiko doctor --fix] rencana provisioning:');
           stdout.writeln(plan.describe());
@@ -749,7 +759,14 @@ Future<void> main(List<String> argv) async {
         }
       } else if (args.first == 'delete' && args.length > 1) {
         await rt.sessions.delete(args[1]);
-        stdout.writeln('deleted ${args[1]}');
+        if (jsonOut) {
+          emit({'ok': true, 'session_id': args[1]}, '');
+        } else {
+          stdout.writeln('deleted ${args[1]}');
+        }
+      } else {
+        stderr.writeln('session list | session delete <id>');
+        exitCode = 2;
       }
       return;
 
@@ -1179,7 +1196,11 @@ Future<void> main(List<String> argv) async {
             final built = await ciIndexer.refresh(
                 deadline: const Duration(seconds: 120));
             if ((built['chunks'] as int? ?? 0) == 0) {
-              stdout.writeln('tidak ada file kode untuk diindeks');
+              emit({
+                'query': query,
+                'embedder': ciIndexer.embedderLabel,
+                'results': const [],
+              }, 'tidak ada file kode untuk diindeks');
               return;
             }
           }
@@ -1189,27 +1210,35 @@ Future<void> main(List<String> argv) async {
             limit: limit,
           );
           if (hits.isEmpty) {
-            stdout.writeln('tidak ada hasil untuk "$query"');
+            emit({
+              'query': query,
+              'embedder': ciIndexer.embedderLabel,
+              'results': const [],
+            }, 'tidak ada hasil untuk "$query"');
             return;
           }
+          final results = hits.map((h) => <String, dynamic>{
+            'path': h.chunk.relPath,
+            'start': h.chunk.start,
+            'end': h.chunk.end,
+            'mode': h.hybrid ? 'hybrid' : 'bm25',
+            'rrf': double.parse((h.score).toStringAsFixed(4)),
+            'cosine': double.parse((h.cosineSim).toStringAsFixed(4)),
+            'snippet': h.chunk.snippet.take(3).toList(),
+          }).toList();
           emit({
             'query': query,
             'embedder': ciIndexer.embedderLabel,
-            'results': hits.map((h) => <String, dynamic>{
-                  'path': h.chunk.relPath,
-                  'start': h.chunk.start,
-                  'end': h.chunk.end,
-                  'mode': h.hybrid ? 'hybrid' : 'bm25',
-                  'rrf': double.parse((h.score).toStringAsFixed(4)),
-                  'cosine': double.parse((h.cosineSim).toStringAsFixed(4)),
-                }).toList(),
+            'results': results,
           }, 'code-index: ${hits.length} hasil');
-          for (final h in hits) {
-            stdout.writeln(
-                '${h.chunk.relPath}:${h.chunk.start}-${h.chunk.end} '
-                '(${h.hybrid ? 'hybrid' : 'bm25'})');
-            for (final line in h.chunk.snippet.take(3)) {
-              stdout.writeln('  $line');
+          if (!jsonOut) {
+            for (final h in hits) {
+              stdout.writeln(
+                  '${h.chunk.relPath}:${h.chunk.start}-${h.chunk.end} '
+                  '(${h.hybrid ? 'hybrid' : 'bm25'})');
+              for (final line in h.chunk.snippet.take(3)) {
+                stdout.writeln('  $line');
+              }
             }
           }
         default:
@@ -2010,8 +2039,22 @@ Future<void> _configCmd(
       if (issues.isEmpty) {
         emit({'ok': true}, 'config OK provider=${cfg.defaultProvider}');
       } else {
-        for (final i in issues) {
-          stdout.writeln(i);
+        if (jsonOut) {
+          emit({
+            'ok': !issues.any((issue) => issue.fatal),
+            'issues': [
+              for (final issue in issues)
+                {
+                  'path': issue.path,
+                  'message': issue.message,
+                  'fatal': issue.fatal,
+                },
+            ],
+          }, '');
+        } else {
+          for (final issue in issues) {
+            stdout.writeln(issue);
+          }
         }
         exitCode = issues.any((x) => x.fatal) ? 1 : 0;
       }

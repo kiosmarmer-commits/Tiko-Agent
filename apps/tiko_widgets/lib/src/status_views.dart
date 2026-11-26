@@ -19,18 +19,22 @@ abstract final class StatusViews {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            const ExcludeSemantics(
+              child: SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).hintColor,
+              child: ExcludeSemantics(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -52,6 +56,7 @@ abstract final class StatusViews {
     return Semantics(
       liveRegion: true,
       container: true,
+      label: 'Error: $message',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -62,10 +67,17 @@ abstract final class StatusViews {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.error_outline, size: 16, color: colorScheme.error),
+            ExcludeSemantics(
+              child: Icon(Icons.error_outline, size: 16, color: colorScheme.error),
+            ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(message, style: TextStyle(color: colorScheme.error)),
+              child: ExcludeSemantics(
+                child: Text(
+                  message,
+                  style: TextStyle(color: colorScheme.error),
+                ),
+              ),
             ),
             if (onRetry != null)
               TextButton(
@@ -87,15 +99,14 @@ abstract final class StatusViews {
     IconData icon = Icons.inbox_outlined,
     Widget? action,
   }) {
-    final hintColor = Theme.of(context).hintColor;
+    final hintColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Semantics(
-              container: true,
+            ExcludeSemantics(
               child: Icon(icon, size: 36, color: hintColor),
             ),
             const SizedBox(height: 8),

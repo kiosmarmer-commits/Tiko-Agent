@@ -54,7 +54,7 @@ class RunsPage extends StatelessWidget {
         if (surfaceSection != null) surfaceSection!,
         if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-            StatusViews.errorBanner(context, error!),
+            StatusViews.errorBanner(context, error!, onRetry: onRefresh),
         Expanded(
           child: !hasContent(snap, teamRuns)
               ? StatusViews.empty(
