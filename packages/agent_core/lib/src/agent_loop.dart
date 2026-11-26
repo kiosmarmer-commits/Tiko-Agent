@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'cancellation.dart';
+import 'error_classifier.dart';
 import 'interfaces.dart';
 import 'models.dart';
 import 'context_builder.dart';
@@ -243,6 +244,8 @@ class AgentLoop {
         return 'Permintaan ditolak guardrail (risiko critical).';
       case 'no_healthy_provider':
         return 'Tidak ada provider sehat (circuit breaker terbuka).';
+      case 'billing_error':
+        return 'Turn dihentikan: provider menolak karena billing/kuota.';
       default:
         return null;
     }
@@ -366,6 +369,40 @@ class AgentLoop {
         var resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
         var isErr = resp.finishReason == 'error';
         final attemptedProviders = <String>{activeProviderId};
+        if (isErr) {
+          // Klasifikasi + recovery chain satu kali di provider yang sama
+          // (Hermes turn_recovery/turn_overflow): overflow → kompres konteks
+          // lalu retry; rate limit → backoff lalu retry; billing → terminal.
+          final err = ApiErrorClassifier.classify(
+            code: resp.errorCode,
+            message: resp.errorMessage ?? resp.text,
+          );
+          if (err.terminal) {
+            _lastTurnEndReason = 'billing_error';
+            success = false;
+            await reply(
+              m,
+              'Permintaan ditolak provider (billing/kuota). '
+              'Periksa langganan atau kuota akun, lalu coba lagi.',
+            );
+            break agentLoop;
+          }
+          if (err.retrySameProvider) {
+            if (err.kind == ApiErrorKind.overflow) {
+              try {
+                ctx = await compactor.maybeCompact(
+                  ctx,
+                  llmOverride: activeLlm,
+                );
+                ctx = compactor.pruneToolResults(ctx);
+              } catch (_) {} // recovery best-effort
+            } else {
+              await Future<void>.delayed(_rateLimitBackoff);
+            }
+            resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+            isErr = resp.finishReason == 'error';
+          }
+        }
         if (isErr) {
           router.recordFailure(activeProviderId, resp.text);
           // Walk the configured fallback chain, trying every eligible provider
@@ -748,6 +785,9 @@ class AgentLoop {
     );
   }
 
+  /// Jeda tunggu sebelum retry provider yang sama setelah rate limit.
+  static const _rateLimitBackoff = Duration(milliseconds: 800);
+
   /// Tools yang menulis/mengubah file di workspace (mutation tools).
   static const _mutationToolNames = {'write_file', 'patch_file'};
 
@@ -862,8 +902,10 @@ class AgentLoop {
           resp.usage = usage;
         case LlmDone(:final finishReason):
           resp.finishReason = finishReason;
-        case LlmError(:final message):
+        case LlmError(:final message, :final code):
           hasError = true;
+          resp.errorCode = code;
+          resp.errorMessage = message;
           buf.write('\n[error] $message');
       }
     }

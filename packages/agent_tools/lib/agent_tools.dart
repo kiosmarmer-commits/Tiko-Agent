@@ -2,6 +2,7 @@ library;
 
 export 'src/registry.dart';
 export 'src/builtin.dart';
+export 'src/process_registry.dart';
 export 'src/grep.dart';
 export 'src/probe.dart';
 export 'src/error_memory.dart';
