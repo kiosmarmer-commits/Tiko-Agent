@@ -69,15 +69,21 @@ class _SidebarState extends State<_Sidebar> {
   bool toolsExpanded = false;
 
   @override
+  void initState() {
+    super.initState();
+    toolsExpanded = _isExploreRoute(widget.entries, widget.selected);
+  }
+
+  @override
   void didUpdateWidget(covariant _Sidebar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selected != oldWidget.selected &&
-        widget.entries.any((entry) => entry.route == widget.selected) &&
-        !const {'Workspace', 'Agents'}.contains(
-          widget.entries
-              .firstWhere((entry) => entry.route == widget.selected)
-              .section,
-        )) {
+    final selectedIsExplore = _isExploreRoute(widget.entries, widget.selected);
+    final wasSelectedExplore = _isExploreRoute(
+      oldWidget.entries,
+      oldWidget.selected,
+    );
+    if (selectedIsExplore &&
+        (widget.selected != oldWidget.selected || !wasSelectedExplore)) {
       toolsExpanded = true;
     }
   }
@@ -150,23 +156,25 @@ class _SidebarState extends State<_Sidebar> {
                     filter: (e) => e.section == 'Agents',
                   ),
                   const Divider(height: 24),
-                  ListTile(
-                    dense: true,
-                    minTileHeight: 44,
-                    title: Text(
-                      'Explore',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: context.simpulMuted,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1,
+                  Semantics(
+                    expanded: toolsExpanded,
+                    child: ListTile(
+                      dense: true,
+                      minTileHeight: 44,
+                      title: Text(
+                        'Explore',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: context.simpulMuted,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
                       ),
-                    ),
-                    trailing: Icon(
-                      toolsExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: context.simpulMuted,
-                    ),
-                    onTap: () => setState(
-                      () => toolsExpanded = !toolsExpanded,
+                      trailing: Icon(
+                        toolsExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: context.simpulMuted,
+                      ),
+                      onTap: () =>
+                          setState(() => toolsExpanded = !toolsExpanded),
                     ),
                   ),
                   if (toolsExpanded) ...[
@@ -221,7 +229,7 @@ class _SidebarState extends State<_Sidebar> {
             title.toUpperCase(),
             style: TextStyle(
               color: context.simpulMuted,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
             ),
@@ -249,4 +257,11 @@ class _SidebarState extends State<_Sidebar> {
     }
     return icon;
   }
+
+  bool _isExploreRoute(List<AppRouteInfo> entries, AppRoute route) =>
+      entries.any(
+        (entry) =>
+            entry.route == route &&
+            !const {'Workspace', 'Agents'}.contains(entry.section),
+      );
 }
