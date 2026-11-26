@@ -43,12 +43,25 @@ import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
+
 import 'ui/theme.dart';
 import 'ui/tiko_mark.dart';
 import 'ui/tasks_view.dart';
 import 'ui/events_view.dart';
 import 'ui/voice_service.dart';
 import 'package:tiko_widgets/tiko_widgets.dart';
+
+bool _prefersReducedMotion(BuildContext context) {
+  // Reading MediaQuery subscribes to accessibility feature updates. This
+  // Flutter SDK exposes iOS Reduce Motion through dart:ui's dispatcher.
+  final media = MediaQuery.of(context);
+  return media.disableAnimations ||
+      WidgetsBinding
+          .instance
+          .platformDispatcher
+          .accessibilityFeatures
+          .reduceMotion;
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -2089,42 +2102,67 @@ class _ChatPageState extends State<_ChatPage> {
                   },
                 ),
         ),
-        if (chat.pendingConfirm != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.simpulPanel,
-              border: Border(top: BorderSide(color: context.simpulBorder)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.shield_outlined,
-                  size: 20,
-                  color: context.simpulWarn,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Konfirmasi: ${chat.pendingConfirm!.prompt}',
-                    style: TextStyle(color: context.simpulWarn),
+        AnimatedSize(
+          duration: _prefersReducedMotion(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: chat.pendingConfirm == null
+              ? const SizedBox(width: double.infinity, height: 0)
+              : Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.simpulPanel,
+                    border: Border(
+                      top: BorderSide(color: context.simpulBorder),
+                    ),
+                  ),
+                  child: Semantics(
+                    liveRegion: true,
+                    label:
+                        'Menunggu persetujuan: ${chat.pendingConfirm!.prompt}',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 20,
+                          color: context.simpulWarn,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Konfirmasi: ${chat.pendingConfirm!.prompt}',
+                            style: TextStyle(color: context.simpulWarn),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => chat.respondConfirm(true),
+                          child: const Text('Izinkan'),
+                        ),
+                        TextButton(
+                          onPressed: () => chat.respondConfirm(false),
+                          child: const Text('Tolak'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => chat.respondConfirm(true),
-                  child: const Text('Izinkan'),
-                ),
-                TextButton(
-                  onPressed: () => chat.respondConfirm(false),
-                  child: const Text('Tolak'),
-                ),
-              ],
-            ),
-          ),
+        ),
         AnimatedBuilder(
           animation: chat,
-          builder: (context, _) => _TurnProgressStrip(chat: chat),
+          builder: (context, _) => AnimatedSwitcher(
+            duration: _prefersReducedMotion(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: _TurnProgressStrip(
+              key: ValueKey('${chat.busy}:${chat.lastTurnTrace.isNotEmpty}'),
+              chat: chat,
+            ),
+          ),
         ),
         _Composer(
           onSend: _onSend,
@@ -3264,63 +3302,163 @@ class _Card extends StatelessWidget {
 /// via cancel token runtime — tidak ada jaminan langsung). Setelah turn,
 /// jadi ringkasan collapsible: jumlah tool + durasi total + status error.
 class _TurnProgressStrip extends StatelessWidget {
-  const _TurnProgressStrip({required this.chat});
+  const _TurnProgressStrip({super.key, required this.chat});
 
   final ChatController chat;
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = _prefersReducedMotion(context);
     if (chat.busy) {
       final tool = chat.activeTool;
-      final label = chat.stopRequested
-          ? 'Menghentikan…'
-          : (tool == null || tool.isEmpty)
-          ? 'Menyusun…'
-          : 'Menjalankan ${_friendlyToolName(tool)}…';
+      final label = switch (chat.activityPhase) {
+        AgentActivityPhase.submitting => 'Mengirim permintaan…',
+        AgentActivityPhase.processing => 'Memproses permintaan…',
+        AgentActivityPhase.writing => 'Menulis jawaban…',
+        AgentActivityPhase.tool =>
+          'Menjalankan ${_friendlyToolName(tool ?? '')}…',
+        AgentActivityPhase.approval => 'Menunggu persetujuan…',
+        AgentActivityPhase.stopping => 'Menghentikan…',
+        _ => 'Memproses permintaan…',
+      };
+      final icon = switch (chat.activityPhase) {
+        AgentActivityPhase.submitting => Icons.outbound_rounded,
+        AgentActivityPhase.processing => Icons.psychology_alt_outlined,
+        AgentActivityPhase.writing => Icons.edit_note_rounded,
+        AgentActivityPhase.tool => Icons.build_outlined,
+        AgentActivityPhase.approval => Icons.shield_outlined,
+        AgentActivityPhase.stopping => Icons.hourglass_top,
+        _ => Icons.auto_awesome_outlined,
+      };
       return Semantics(
         liveRegion: true,
         label: 'Status agent: $label',
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-          decoration: BoxDecoration(
-            color: context.simpulSurfaceHover,
-            border: Border(top: BorderSide(color: context.simpulBorder)),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: chat.stopRequested
-                    ? Icon(
-                        Icons.hourglass_top,
-                        size: 14,
-                        color: context.simpulWarn,
-                      )
-                    : const CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: context.simpulMuted),
+        child: AnimatedSize(
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            decoration: BoxDecoration(
+              color: context.simpulSurfaceHover,
+              border: Border(top: BorderSide(color: context.simpulBorder)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    if (!reduceMotion && !chat.stopRequested)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    AnimatedSwitcher(
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 160),
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(scale: animation, child: child),
+                      ),
+                      child: Icon(
+                        icon,
+                        key: ValueKey(chat.activityPhase),
+                        size: 18,
+                        color: chat.activityPhase == AgentActivityPhase.stopping
+                            ? context.simpulWarn
+                            : context.simpulAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 160),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        layoutBuilder: (current, previous) => Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [...previous, if (current != null) current],
+                        ),
+                        child: Text(
+                          label,
+                          key: ValueKey(label),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.simpulMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('btn-chat-stop'),
+                      tooltip: chat.stopRequested
+                          ? 'Menunggu agent berhenti'
+                          : 'Hentikan proses agent',
+                      icon: Icon(
+                        Icons.stop_circle_outlined,
+                        size: 20,
+                        color: context.simpulDanger,
+                      ),
+                      onPressed: chat.stopRequested ? null : chat.stop,
+                    ),
+                  ],
                 ),
-              ),
-              IconButton(
-                key: const Key('btn-chat-stop'),
-                tooltip: chat.stopRequested
-                    ? 'Menunggu agent berhenti'
-                    : 'Hentikan proses agent',
-                icon: Icon(
-                  Icons.stop_circle_outlined,
-                  size: 20,
-                  color: context.simpulDanger,
-                ),
-                onPressed: chat.stopRequested ? null : chat.stop,
-              ),
-            ],
+                if (chat.lastTurnTrace.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 26,
+                      right: 8,
+                      bottom: 4,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          for (final step in chat.lastTurnTrace.reversed.take(
+                            4,
+                          ))
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  step['status'] == 'running'
+                                      ? Icons.more_horiz_rounded
+                                      : step['is_error'] == true
+                                      ? Icons.error_outline
+                                      : Icons.check_circle_outline,
+                                  size: 13,
+                                  color: step['status'] == 'running'
+                                      ? context.simpulAccent
+                                      : step['is_error'] == true
+                                      ? context.simpulDanger
+                                      : context.simpulMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _friendlyToolName('${step['name']}'),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: context.simpulMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );
@@ -3341,7 +3479,7 @@ class _TurnProgressStrip extends StatelessWidget {
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         dense: true,
         title: Text(
-          '${chat.lastTurnTrace.length} langkah agent selesai '
+          '${chat.lastTurnTrace.where((t) => t['status'] == 'complete' || t['status'] == 'failed').length} langkah agent selesai '
           '(total ${(totalMs / 1000).toStringAsFixed(1)}s)'
           '${errCount > 0 ? ' · $errCount error' : ''}',
           style: TextStyle(fontSize: 12, color: context.simpulMuted),
@@ -3355,10 +3493,14 @@ class _TurnProgressStrip extends StatelessWidget {
                   Icon(
                     t['is_error'] == true
                         ? Icons.error_outline
+                        : t['status'] == 'interrupted'
+                        ? Icons.pause_circle_outline
                         : Icons.check_circle_outline,
                     size: 14,
                     color: t['is_error'] == true
                         ? context.simpulDanger
+                        : t['status'] == 'interrupted'
+                        ? context.simpulWarn
                         : context.simpulMuted,
                   ),
                   const SizedBox(width: 8),
