@@ -43,6 +43,30 @@ class CompactionStats {
   };
 }
 
+/// Statistik satu kali proactive tool-result prune (Hermes-style,
+/// `turn_proactive_prune.py`). [pruned] true berarti minimal satu hasil
+/// tool besar diganti stub; konten aslinya diarsipkan agar bisa di-recall.
+class ToolResultPruneStats {
+  const ToolResultPruneStats({
+    required this.pruned,
+    required this.pruneCount,
+    required this.charsBefore,
+    required this.charsAfter,
+  });
+
+  final bool pruned;
+  final int pruneCount;
+  final int charsBefore;
+  final int charsAfter;
+
+  Map<String, dynamic> toJson() => {
+        'pruned': pruned,
+        'prune_count': pruneCount,
+        'chars_before': charsBefore,
+        'chars_after': charsAfter,
+      };
+}
+
 /// Compacts conversation history when approaching context limit (ALG-05).
 class Compactor {
   Compactor({
@@ -53,6 +77,10 @@ class Compactor {
     this.llm,
     this.onCompaction,
     this.preserve,
+    this.pruneToolResultsEnabled = true,
+    this.maxToolResultChars = 8000,
+    this.keepLastToolResults = 2,
+    this.maxArchivedToolResults = 32,
   });
 
   /// False menonaktifkan kompresi penuh: ctx selalu dilewati tanpa diubah.
@@ -74,6 +102,103 @@ class Compactor {
   /// Pesan aturan bawaan (role system non-ringkasan, atau teks dengan penanda
   /// aturan) sudah dilindungi otomatis oleh [isRuleMessage].
   final bool Function(ChatMessage message)? preserve;
+
+  /// Proactive tool-result prune (Hermes `turn_proactive_prune`): hasil tool
+  /// yang besar diganti stub tanpa LLM, jauh lebih murah daripada kompresi
+  /// penuh. False untuk menonaktifkan.
+  final bool pruneToolResultsEnabled;
+
+  /// Hasil tool dengan konten lebih panjang dari ini menjadi kandidat prune.
+  final int maxToolResultChars;
+
+  /// N hasil tool terakhir selalu tetap panas (belum di-prune) karena model
+  /// paling mungkin masih membutuhkannya di iterasi berikutnya.
+  final int keepLastToolResults;
+
+  /// Batas arsip in-memory hasil tool yang di-prune (LRU) agar memori
+  /// tidak tumbuh tanpa batas sepanjang sesi.
+  final int maxArchivedToolResults;
+
+  /// Arsip in-memory konten asli hasil tool yang di-prune, dikunci dengan
+  /// key stub. Baca lewat [recallToolResult]. LRU: entri terlama dibuang.
+  final Map<String, String> _pruneArchive = {};
+  int _pruneSeq = 0;
+
+  /// Statistik prune terakhir (null bila belum ada yang dipangkas).
+  ToolResultPruneStats? lastPrune;
+
+  /// Konten asli hasil tool yang sudah di-prune, bila key masih berada di
+  /// dalam arsip LRU. Null bila key tidak dikenal.
+  String? recallToolResult(String key) => _pruneArchive[key];
+
+  /// Key-key konten hasil tool yang masih berada di dalam arsip LRU.
+  List<String> get archivedToolResultKeys =>
+      List.unmodifiable(_pruneArchive.keys);
+
+  /// Proactive tool-result prune (Hermes `turn_proactive_prune.py`, versi
+  /// tanpa I/O): hasil tool berukuran besar — kecuali [keepLastToolResults]
+  /// hasil terakhir yang masih panas — diganti stub pendek dan konten
+  /// aslinya diarsipkan in-memory untuk recall. Deterministik, sinkron,
+  /// dan tanpa jaringan; kontrak commit Hermes (hitung perubahan, jangan
+  /// pernah membuang iterasi terakhir) dijaga lewat keep-last.
+  AgentContext pruneToolResults(AgentContext ctx) {
+    if (!enabled || !pruneToolResultsEnabled) return ctx;
+    final messages = ctx.messages;
+    final toolIndexes = <int>[
+      for (var i = 0; i < messages.length; i++)
+        if (messages[i].role == 'tool') i,
+    ];
+    // Hasil tool paling akhir tetap panas.
+    final cold = toolIndexes.length <= keepLastToolResults
+        ? const <int>[]
+        : toolIndexes.sublist(0, toolIndexes.length - keepLastToolResults);
+    if (cold.isEmpty) return ctx;
+
+    var prunedCount = 0;
+    final charsBefore = messages.fold<int>(0, (s, m) => s + m.content.length);
+    final next = List<ChatMessage>.from(messages);
+    for (final i in cold) {
+      final m = next[i];
+      if (m.content.length <= maxToolResultChars) continue;
+      if (m.content.startsWith(_pruneStubPrefix)) continue;
+      final key = 'prune-${_pruneSeq++}';
+      _archivePruned(key, m.content);
+      prunedCount++;
+      next[i] = ChatMessage(
+        role: 'tool',
+        content:
+            '$_pruneStubPrefix${m.name ?? 'tool'} ($key, '
+            '${m.content.length} chars). Konten asli diarsipkan; '
+            'minta recall bila diperlukan.',
+        toolCallId: m.toolCallId,
+        name: m.name,
+      );
+    }
+    if (prunedCount == 0) return ctx;
+    final charsAfter = next.fold<int>(0, (s, m) => s + m.content.length);
+    final stats = ToolResultPruneStats(
+      pruned: true,
+      pruneCount: prunedCount,
+      charsBefore: charsBefore,
+      charsAfter: charsAfter,
+    );
+    lastPrune = stats;
+    return AgentContext(
+      messages: next,
+      tools: ctx.tools,
+      session: ctx.session,
+      systemPrompt: ctx.systemPrompt,
+    )..recentToolCalls.addAll(ctx.recentToolCalls);
+  }
+
+  static const _pruneStubPrefix = '[pruned] tool_result ';
+
+  void _archivePruned(String key, String content) {
+    _pruneArchive[key] = content;
+    while (_pruneArchive.length > maxArchivedToolResults) {
+      _pruneArchive.remove(_pruneArchive.keys.first);
+    }
+  }
 
   /// Pesan yang berasal dari kompresi ini tidak boleh dianggap aturan agar
   /// tidak menumpuk tak terhingga lintas putaran kompresi.

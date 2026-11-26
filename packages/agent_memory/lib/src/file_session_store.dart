@@ -27,6 +27,10 @@ class FileSessionStore implements SessionStore {
   Future<void> _chain = Future<void>.value();
   final SecretRedactor _redactor = SecretRedactor();
 
+  /// True setelah state dimuat dari store utama yang valid; rescue hanya
+  /// menimpa state in-memory bila store utama tidak menyediakan sesi itu.
+  bool _loadedFromMain = false;
+
   /// Serializes operations inside this process: the next operation only
   /// starts after the previous one (even a failed one) has finished.
   Future<T> _transaction<T>(Future<T> Function() action) {
@@ -62,42 +66,26 @@ class FileSessionStore implements SessionStore {
     _sessions.clear();
     _messages.clear();
     _turns.clear();
+    _loadedFromMain = false;
     await _loadFromDisk();
   }
 
   Future<void> _loadFromDisk() async {
     final f = File(path);
-    if (!await f.exists()) return;
+    if (!await f.exists()) {
+      // Store utama hilang (mis. diganti proses lain/migrasi): pulihkan
+      // sesi dari file rescue bila ada (Hermes `session_rescue.py`).
+      await _absorbRescueFile();
+      return;
+    }
     try {
       final raw = jsonDecode(await f.readAsString());
       final sessions = (raw is Map ? raw['sessions'] : null) as Map?;
       if (sessions == null) return;
       for (final e in sessions.entries) {
-        final id = e.key as String;
-        final v = Map<String, dynamic>.from(e.value as Map);
-        _sessions[id] = Session(
-          id: id,
-          channel: v['channel'] as String? ?? 'unknown',
-          userKey: v['user'] as String? ?? '',
-          title: v['title'] is String ? _redactor.redact(v['title'] as String) : null,
-          summary: v['summary'] is String ? _redactor.redact(v['summary'] as String) : null,
-          provider: v['provider'] as String?,
-          model: v['model'] as String?,
-          pinned: v['pinned'] == true,
-          archived: v['archived'] == true,
-          lastFailed: v['last_failed'] == true,
-          createdAt: DateTime.tryParse(v['created_at'] as String? ?? ''),
-          updatedAt: DateTime.tryParse(v['updated_at'] as String? ?? ''),
-        );
-        _turns[id] = (v['turns'] as num?)?.toInt() ?? 0;
-        _messages[id] = [
-          for (final m in (v['messages'] as List? ?? const []))
-            {
-              'role': (m as Map)['role'] as String,
-              'content': _redactor.redact(m['content'] as String),
-            },
-        ];
+        _applySessionEntry(e.key as String, e.value as Map);
       }
+      _loadedFromMain = true;
     } catch (_) {
       // Corrupt file: keep a copy for forensics and start clean.
       try {
@@ -107,6 +95,37 @@ class FileSessionStore implements SessionStore {
       _messages.clear();
       _turns.clear();
     }
+    // Sesi yang tertinggal di file rescue (persist gagal sebelumnya) tetap
+    // di-merge bila belum ada di store utama yang lebih segar.
+    await _absorbRescueFile();
+  }
+
+  /// Konstruksi satu entri sesi dari snapshot JSON (dipakai load utama dan
+  /// absorb rescue; konten tetap diredaksi karena berasal dari disk).
+  void _applySessionEntry(String id, Map<dynamic, dynamic> rawMap) {
+    final v = Map<String, dynamic>.from(rawMap);
+    _sessions[id] = Session(
+      id: id,
+      channel: v['channel'] as String? ?? 'unknown',
+      userKey: v['user'] as String? ?? '',
+      title: v['title'] is String ? _redactor.redact(v['title'] as String) : null,
+      summary: v['summary'] is String ? _redactor.redact(v['summary'] as String) : null,
+      provider: v['provider'] as String?,
+      model: v['model'] as String?,
+      pinned: v['pinned'] == true,
+      archived: v['archived'] == true,
+      lastFailed: v['last_failed'] == true,
+      createdAt: DateTime.tryParse(v['created_at'] as String? ?? ''),
+      updatedAt: DateTime.tryParse(v['updated_at'] as String? ?? ''),
+    );
+    _turns[id] = (v['turns'] as num?)?.toInt() ?? 0;
+    _messages[id] = [
+      for (final m in (v['messages'] as List? ?? const []))
+        {
+          'role': (m as Map)['role'] as String,
+          'content': _redactor.redact(m['content'] as String),
+        },
+    ];
   }
 
   Future<void> _persist() async {
@@ -137,8 +156,76 @@ class FileSessionStore implements SessionStore {
     await target.parent.create(recursive: true);
     final nonce = '$pid-${DateTime.now().microsecondsSinceEpoch}';
     final tmp = File('$path.$nonce.tmp');
-    await tmp.writeAsString(snapshot, flush: true);
-    await tmp.rename(path);
+    try {
+      await tmp.writeAsString(snapshot, flush: true);
+      await tmp.rename(path);
+    } catch (_) {
+      // Atomic write gagal (store diganti/di-migrate di bawah proses hidup,
+      // izin berubah): tuangkan snapshot ke file rescue JSONL alih-alih
+      // kehilangan data (Hermes `session_rescue.py`). Rescue bersifat
+      // best-effort: bila ini juga gagal, error asli tetap dilempar.
+      try {
+        await _spillRescue(snapshot);
+      } catch (_) {
+        rethrow;
+      }
+      return;
+    }
+    // Persist sukses: state sudah aman di store utama, file rescue lama
+    // tidak diperlukan lagi.
+    try {
+      final rescue = File('$path.rescue.jsonl');
+      if (await rescue.exists()) await rescue.delete();
+    } catch (_) {} // best-effort
+  }
+
+  /// Batas ukuran file rescue sebelum dirotasi (mulai file baru).
+  static const _maxRescueBytes = 5 * 1024 * 1024;
+
+  /// Append satu snapshot penuh sebagai satu baris JSONL ke rescue file.
+  Future<void> _spillRescue(String snapshot) async {
+    final rescue = File('$path.rescue.jsonl');
+    await rescue.parent.create(recursive: true);
+    if (await rescue.exists() && await rescue.length() > _maxRescueBytes) {
+      await rescue.delete();
+    }
+    final line = jsonEncode({
+      'at': DateTime.now().toUtc().toIso8601String(),
+      'pid': pid,
+      'snapshot': snapshot,
+    });
+    await rescue.writeAsString('$line\n', mode: FileMode.append, flush: true);
+  }
+
+  /// Menggabungkan sesi-sesi dari file rescue ke state in-memory. Baris
+  /// diproses kronologis: snapshot rescue yang lebih baru menimpa snapshot
+  /// rescue sebelumnya untuk id yang sama. Sesi yang sudah disediakan store
+  /// utama tidak ditimpa (state utama lebih segar).
+  Future<void> _absorbRescueFile() async {
+    final rescue = File('$path.rescue.jsonl');
+    if (!await rescue.exists()) return;
+    try {
+      final lines = await rescue.readAsLines();
+      for (final line in lines) {
+        if (line.trim().isEmpty) continue;
+        try {
+          final entry = jsonDecode(line);
+          final raw = entry is Map ? entry['snapshot'] : null;
+          if (raw is! String) continue;
+          final snap = jsonDecode(raw);
+          final sessions = (snap is Map ? snap['sessions'] : null) as Map?;
+          if (sessions == null) continue;
+          for (final e in sessions.entries) {
+            final id = e.key as String;
+            if (_loadedFromMain && _sessions.containsKey(id)) continue;
+            _applySessionEntry(id, e.value as Map);
+          }
+        } catch (_) {
+          // Baris rescue korup: lewati, jangan gagalkan pemulihan lain.
+          continue;
+        }
+      }
+    } catch (_) {} // best-effort
   }
 
   @override

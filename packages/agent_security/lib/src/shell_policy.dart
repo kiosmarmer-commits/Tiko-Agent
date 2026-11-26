@@ -1,3 +1,5 @@
+import 'smuggling_scan.dart';
+
 /// Structured shell policy: match full argv tokens, reject metacharacters.
 ///
 /// Also provides the command risk index `R_cmd` (FR-02 dispatcher) used by
@@ -24,6 +26,14 @@ class ShellPolicy {
   String? check(String command) {
     final cmd = command.trim();
     if (cmd.isEmpty) return 'empty command';
+    // Terminal-smuggling gate (Hermes approval_*): escape sequence, newline
+    // dalam quoted string, dan unicode tak terlihat ditolak sebelum
+    // allowlist — perintah berasal dari LLM yang bisa ter-prompt-inject.
+    final smuggling = SmugglingScan.scan(cmd);
+    if (smuggling.isNotEmpty) {
+      return 'terminal-smuggling pattern: '
+          '${smuggling.map((h) => h.kind).toSet().join(', ')}';
+    }
     if (_meta.hasMatch(cmd)) {
       return 'metacharacter / expansion not allowed';
     }
