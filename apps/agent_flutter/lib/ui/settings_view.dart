@@ -460,19 +460,34 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _accentDot(Color current, Color accent) {
     final selected = current.toARGB32() == accent.toARGB32();
-    return GestureDetector(
-      onTap: () => _update(widget.settings.copyWith(accent: accent)),
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: accent,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: selected
-                ? Theme.of(context).colorScheme.onSurface
-                : Colors.transparent,
-            width: 3,
+    final hex = accent.toARGB32().toRadixString(16).padLeft(8, '0').substring(2);
+    return Tooltip(
+      excludeFromSemantics: true,
+      message: selected ? 'Warna aksen #$hex dipilih' : 'Pilih warna aksen #$hex',
+      child: Semantics(
+        selected: selected,
+        label: 'Warna aksen #$hex',
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _update(widget.settings.copyWith(accent: accent)),
+          child: SizedBox.square(
+            dimension: 44,
+            child: Center(
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Colors.transparent,
+                    width: 3,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

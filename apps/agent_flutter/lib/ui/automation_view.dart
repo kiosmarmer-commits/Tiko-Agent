@@ -101,7 +101,11 @@ class _AutomationPageState extends State<AutomationPage> {
         if (widget.surfaceSection != null) widget.surfaceSection!,
         if (widget.loading) StatusViews.loadingBanner(context),
         if (widget.error != null)
-            StatusViews.errorBanner(context, widget.error!),
+            StatusViews.errorBanner(
+              context,
+              widget.error!,
+              onRetry: widget.onRefresh,
+            ),
         Expanded(
           child: snapshot == null
               ? StatusViews.empty(context, message: 'Belum ada data job.')

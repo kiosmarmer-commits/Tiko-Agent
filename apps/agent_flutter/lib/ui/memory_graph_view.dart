@@ -18,6 +18,7 @@ class MemoryGraphTimeline extends StatelessWidget {
     this.truncated = false,
     this.total = 0,
     this.onDelete,
+    this.onRefresh,
   });
 
   final List<LayerEntry> entries;
@@ -27,6 +28,7 @@ class MemoryGraphTimeline extends StatelessWidget {
   final bool truncated;
   final int total;
   final Future<void> Function(String id)? onDelete;
+  final Future<void> Function()? onRefresh;
 
   String _dateKeyOf(LayerEntry entry) {
     final raw = entry.createdAt.trim();
@@ -47,7 +49,11 @@ class MemoryGraphTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (error != null) {
-        return StatusViews.errorBanner(context, error!);
+        return StatusViews.errorBanner(
+          context,
+          error!,
+          onRetry: onRefresh,
+        );
     }
     if (entries.isEmpty) {
       return StatusViews.empty(context, message: 'Belum ada memori berlapis untuk digambarkan \u2014 tambah lewat tab Lapisan.');

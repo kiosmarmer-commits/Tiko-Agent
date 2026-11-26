@@ -51,18 +51,6 @@ import 'ui/events_view.dart';
 import 'ui/voice_service.dart';
 import 'package:tiko_widgets/tiko_widgets.dart';
 
-bool _prefersReducedMotion(BuildContext context) {
-  // Reading MediaQuery subscribes to accessibility feature updates. This
-  // Flutter SDK exposes iOS Reduce Motion through dart:ui's dispatcher.
-  final media = MediaQuery.of(context);
-  return media.disableAnimations ||
-      WidgetsBinding
-          .instance
-          .platformDispatcher
-          .accessibilityFeatures
-          .reduceMotion;
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   var token = const String.fromEnvironment('API_TOKEN', defaultValue: '');
@@ -1605,7 +1593,7 @@ class _ChatPageState extends State<_ChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
       final target = _scrollController.position.maxScrollExtent;
-      if (_prefersReducedMotion(context)) {
+      if (prefersReducedMotion(context)) {
         _scrollController.jumpTo(target);
         return;
       }
@@ -2108,7 +2096,7 @@ class _ChatPageState extends State<_ChatPage> {
                 ),
         ),
         AnimatedSize(
-          duration: _prefersReducedMotion(context)
+          duration: prefersReducedMotion(context)
               ? Duration.zero
               : const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
@@ -2158,7 +2146,7 @@ class _ChatPageState extends State<_ChatPage> {
         AnimatedBuilder(
           animation: chat,
           builder: (context, _) => AnimatedSwitcher(
-            duration: _prefersReducedMotion(context)
+            duration: prefersReducedMotion(context)
                 ? Duration.zero
                 : const Duration(milliseconds: 200),
             switchInCurve: Curves.easeOutCubic,
@@ -2722,7 +2710,8 @@ class _DashboardPage extends StatelessWidget {
           ),
         ),
         if (loading) StatusViews.loadingBanner(context),
-        if (error != null) StatusViews.errorBanner(context, error!),
+        if (error != null)
+          StatusViews.errorBanner(context, error!, onRetry: onRefresh),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -3313,7 +3302,7 @@ class _TurnProgressStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = _prefersReducedMotion(context);
+    final reduceMotion = prefersReducedMotion(context);
     if (chat.busy) {
       final tool = chat.activeTool;
       final label = switch (chat.activityPhase) {

@@ -759,7 +759,14 @@ Future<void> main(List<String> argv) async {
         }
       } else if (args.first == 'delete' && args.length > 1) {
         await rt.sessions.delete(args[1]);
-        stdout.writeln('deleted ${args[1]}');
+        if (jsonOut) {
+          emit({'ok': true, 'session_id': args[1]}, '');
+        } else {
+          stdout.writeln('deleted ${args[1]}');
+        }
+      } else {
+        stderr.writeln('session list | session delete <id>');
+        exitCode = 2;
       }
       return;
 
@@ -2032,8 +2039,22 @@ Future<void> _configCmd(
       if (issues.isEmpty) {
         emit({'ok': true}, 'config OK provider=${cfg.defaultProvider}');
       } else {
-        for (final i in issues) {
-          stdout.writeln(i);
+        if (jsonOut) {
+          emit({
+            'ok': !issues.any((issue) => issue.fatal),
+            'issues': [
+              for (final issue in issues)
+                {
+                  'path': issue.path,
+                  'message': issue.message,
+                  'fatal': issue.fatal,
+                },
+            ],
+          }, '');
+        } else {
+          for (final issue in issues) {
+            stdout.writeln(issue);
+          }
         }
         exitCode = issues.any((x) => x.fatal) ? 1 : 0;
       }

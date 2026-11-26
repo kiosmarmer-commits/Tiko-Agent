@@ -12,6 +12,7 @@ import 'package:simpul_core/simpul_core.dart';
 import 'command_palette.dart';
 import 'jank_monitor.dart';
 import 'note_editor.dart';
+import 'theme.dart';
 
 /// Level of detail for the graph canvas (GRA-R03): far zoom draws community
 /// aggregates, mid zoom draws individual nodes and edges, close zoom adds
@@ -331,13 +332,13 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
 
   void _onControllerChanged() {
     if (!mounted) return;
-    _consumeCameraRequest();
+    _consumeCameraRequest(prefersReducedMotion(context));
     setState(() {});
   }
 
   /// Animated camera move (GRA-I01/I03): centers the requested world point
   /// with an ease-out zoom instead of an instant jump.
-  void _consumeCameraRequest() {
+  void _consumeCameraRequest(bool reduceMotion) {
     final request = widget.controller.cameraRequest;
     if (request == null || _viewportSize == Size.zero) return;
     widget.controller.cameraRequest = null;
@@ -345,7 +346,13 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
       ..translateByDouble(_viewportSize.width / 2, _viewportSize.height / 2, 0, 1)
       ..scaleByDouble(request.scale, request.scale, 1, 1)
       ..translateByDouble(-request.x, -request.y, 0, 1);
+    _cameraController?.stop();
     _cameraController?.dispose();
+    _cameraController = null;
+    if (reduceMotion) {
+      transformation.value = target;
+      return;
+    }
     final animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -386,7 +393,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin {
     return LayoutBuilder(
       builder: (context, constraints) {
         _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
-        _consumeCameraRequest();
+        _consumeCameraRequest(prefersReducedMotion(context));
         return InteractiveViewer(
           transformationController: transformation,
           constrained: false,

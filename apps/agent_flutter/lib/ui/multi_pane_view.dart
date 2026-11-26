@@ -250,7 +250,11 @@ class _InspectorPaneState extends State<InspectorPane> {
   Widget _artifactsBody(BuildContext context) {
     final listing = widget.artifactsListing;
     if (widget.artifactsError != null) {
-      return StatusViews.errorBanner(context, widget.artifactsError!);
+      return StatusViews.errorBanner(
+        context,
+        widget.artifactsError!,
+        onRetry: widget.onLoadArtifacts,
+      );
     }
     if (listing == null || listing.files.isEmpty) {
       return StatusViews.empty(

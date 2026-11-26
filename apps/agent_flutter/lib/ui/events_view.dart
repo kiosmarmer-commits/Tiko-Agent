@@ -39,7 +39,7 @@ class EventsPage extends StatelessWidget {
         ),
         if (loading) StatusViews.loadingBanner(context),
         if (error != null)
-            StatusViews.errorBanner(context, error!),
+            StatusViews.errorBanner(context, error!, onRetry: onRefresh),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
