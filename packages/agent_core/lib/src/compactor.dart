@@ -244,11 +244,14 @@ class Compactor {
   Future<AgentContext> maybeCompact(
     AgentContext ctx, {
     LlmProvider? llmOverride,
+    bool force = false,
   }) async {
     if (!enabled) return ctx;
     final chars = ctx.messages.fold<int>(0, (s, m) => s + m.content.length);
     final estTokensBefore = chars ~/ 4;
-    if (estTokensBefore < maxSoftTokens * thresholdRatio) return ctx;
+    // `force` (Hermes `conversation_compression_manual.py`): kompresi manual
+    // /compact melewati ambang otomatis — user meminta, kompaksi jalan.
+    if (!force && estTokensBefore < maxSoftTokens * thresholdRatio) return ctx;
 
     final messagesBefore = ctx.messages.length;
 

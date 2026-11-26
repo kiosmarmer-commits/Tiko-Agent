@@ -471,6 +471,38 @@ class FileSessionStore implements SessionStore {
     }));
   }
 
+  @override
+  Future<bool> compactSession(
+    String sessionId, {
+    required String summary,
+    int keepLastMessages = 6,
+  }) {
+    return _transaction(() => _withFileLock(() async {
+      await _refreshFromDisk();
+      final s = _sessions[sessionId];
+      final list = _messages[sessionId];
+      final sum = summary.trim();
+      if (s == null || list == null || sum.isEmpty) return false;
+      if (keepLastMessages < 0) keepLastMessages = 0;
+      final kept = list.length > keepLastMessages
+          ? list.sublist(list.length - keepLastMessages)
+          : List<Map<String, String>>.of(list);
+      _messages[sessionId] = [
+        {
+          'role': 'system',
+          'content': _redactor.redact(
+            'Ringkasan percakapan sebelumnya:\n$sum',
+          ),
+        },
+        ...kept,
+      ];
+      s.summary = _redactor.redact(sum);
+      s.updatedAt = DateTime.now().toUtc();
+      await _persist();
+      return true;
+    }));
+  }
+
   /// Synchronous cross-conversation search over the in-memory snapshot.
   /// Ranking: term frequency per message, with a recency bonus so newer
   /// conversations surface first on ties. Snippets are already redacted

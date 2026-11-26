@@ -21,6 +21,7 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
     super.tokenProvider,
     super.requestTimeout,
     super.modelTimeouts,
+    super.rateLimitTracker,
     super.capabilities,
   });
 
@@ -141,6 +142,7 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
     final response = await client
         .send(request)
         .timeout(requestTimeout ?? const Duration(hours: 1));
+    captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       final err = await response.stream.bytesToString();
       yield LlmError(
@@ -228,6 +230,7 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
     final response = await client
         .post(_responsesUri, headers: headers, body: jsonEncode(body))
         .timeout(requestTimeout ?? const Duration(hours: 1));
+    captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       yield LlmError(
         'HTTP ${response.statusCode}: ${response.body}',

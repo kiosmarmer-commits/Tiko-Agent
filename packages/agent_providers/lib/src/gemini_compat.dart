@@ -9,11 +9,28 @@ class GeminiProvider implements LlmProvider {
     required this.apiKey,
     this.model = 'gemini-2.0-flash',
     this.httpClient,
+    this.rateLimitTracker,
   });
 
   final String apiKey;
   final String model;
   final http.Client? httpClient;
+
+  /// Hermes `rate_limit_tracker`: header `x-ratelimit-*` dari setiap respons
+  /// dicatat ke tracker bersama untuk /usage. Null = tidak dilacak.
+  final RateLimitTracker? rateLimitTracker;
+
+  void _captureRateLimit(Map<String, String> headers) {
+    final tracker = rateLimitTracker;
+    if (tracker == null) return;
+    try {
+      tracker.update(parseRateLimitHeaders(
+        headers,
+        provider: id,
+        clock: () => DateTime.now().microsecondsSinceEpoch / 1e6,
+      ));
+    } catch (_) {}
+  }
 
   @override
   String get id => 'gemini';
@@ -64,6 +81,7 @@ class GeminiProvider implements LlmProvider {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'contents': contents}),
       );
+      _captureRateLimit(res.headers);
       if (res.statusCode >= 400) {
         yield LlmError(
           'Gemini HTTP ${res.statusCode}: ${res.body}',

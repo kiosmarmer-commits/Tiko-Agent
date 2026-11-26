@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:agent_core/agent_core.dart';
 import 'package:agent_memory/agent_memory.dart';
 import 'package:agent_providers/agent_providers.dart';
-import 'package:agent_security/agent_security.dart';
+import 'package:agent_security/agent_security.dart' hide RateLimitTracker;
 import 'package:agent_scheduler/agent_scheduler.dart';
 import 'package:agent_tools/agent_tools.dart';
 import 'package:path/path.dart' as p;
@@ -388,6 +388,7 @@ class TikoRuntime {
     required this.registry,
     required this.sessions,
     required this.memory,
+    required this.rateLimitTracker,
     this.semanticCodeIndex,
     required this.memoryBackend,
     required this.safety,
@@ -493,6 +494,14 @@ class TikoRuntime {
   final SessionStore sessions;
   final MemoryStore memory;
   final String memoryBackend;
+
+  /// Hermes `rate_limit_tracker`: state header `x-ratelimit-*` terakhir per
+  /// provider, dibagi bersama semua provider hasil [ProviderFactory].
+  final RateLimitTracker rateLimitTracker;
+
+  /// Hermes `side_question_lease`: satu `/btw` aktif per sesi (di luar
+  /// SessionLock utama); TTL mencegah lease yatim mengunci selamanya.
+  final SideQuestionLease _sideQuestionLeases = SideQuestionLease();
   final SafetyState safety;
   final SandboxKind sandboxKind;
 
@@ -1241,6 +1250,7 @@ class TikoRuntime {
       semanticCodeIndex: codeIndexer,
       sessions: sessionStore,
       memory: memory,
+      rateLimitTracker: factory.rateLimitTracker,
       memoryBackend: backend,
       safety: safety,
       sandboxKind: sandboxKind,
@@ -2155,6 +2165,18 @@ class TikoRuntime {
     String? personaPrompt,
     List<Attachment> attachments = const [],
   }) async {
+    // Hermes `/btw` (side question): berjalan TANPA lock sesi supaya bisa
+    // dijawab sementara turn utama masih aktif — konkurensi dijaga lease
+    // terpisah, bukan SessionLock yang tidak re-entrant.
+    final btwCmd = _parseBtwCommand(text);
+    if (btwCmd != null) {
+      return _sideQuestionCommand(
+        btwCmd,
+        sessionId: sessionId,
+        channel: channel,
+        userKey: userKey,
+      );
+    }
     final inputPreview = _sanitizer.output(
       text.length > 240 ? '${text.substring(0, 240)}…' : text,
     );
@@ -2387,6 +2409,16 @@ class TikoRuntime {
         }
         if (text.trim() == '/tools') {
           return _toolsCommand();
+        }
+        if (text.trim() == '/compact') {
+          return await _compactCommand(
+            sessionId,
+            channel: channel,
+            userKey: userKey,
+          );
+        }
+        if (text.trim() == '/usage') {
+          return _usageCommand(sessionId);
         }
         final botCmd = _parseBotCommand(text);
         if (botCmd != null) {
@@ -4260,6 +4292,222 @@ class TikoRuntime {
     return ChatRunResult(text: buf.toString(), success: true);
   }
 
+  /// Parse perintah `/btw <pertanyaan>`; null bila bukan /btw.
+  _BtwCommand? _parseBtwCommand(String text) {
+    final trimmed = text.trim();
+    if (!RegExp(r'^/btw(?:\s|$)', caseSensitive: false).hasMatch(trimmed)) {
+      return null;
+    }
+    return _BtwCommand(question: trimmed.substring('/btw'.length).trim());
+  }
+
+  /// `/btw <pertanyaan>` (Hermes `side_question.py`): jawab pertanyaan
+  /// TENTANG percakapan tanpa menyentuh riwayat — tanpa synthetic turn,
+  /// tanpa risiko role-alternation, tanpa meng-invalidate prompt cache.
+  /// Tool DILARANG; berjalan di luar lock sesi dengan lease sendiri.
+  Future<ChatRunResult> _sideQuestionCommand(
+    _BtwCommand cmd, {
+    required String sessionId,
+    required String channel,
+    required String userKey,
+  }) async {
+    if (cmd.question.isEmpty) {
+      return const ChatRunResult(
+        text: 'Pakai: /btw <pertanyaan tentang percakapan ini>',
+        success: false,
+      );
+    }
+    final clock = () => DateTime.now().microsecondsSinceEpoch / 1e6;
+    final owner = 'btw-${DateTime.now().microsecondsSinceEpoch}';
+    if (!_sideQuestionLeases.tryAcquire(sessionId, owner: owner, clock: clock)) {
+      return const ChatRunResult(
+        text: 'Side question lain masih berjalan untuk sesi ini.',
+        success: false,
+        retryable: true,
+      );
+    }
+    events.emit('side_question.started', {
+      'session': sessionId,
+      'channel': channel,
+    });
+    try {
+      final history = await sessions.recent(sessionId, limit: 200);
+      final transcript = renderHistoryForSideQuestion(
+        trimSnapshotForFork([for (final m in history) m.toJson()]),
+      );
+      final prompt = buildSideQuestionPrompt(
+        transcript: transcript,
+        question: cmd.question,
+      );
+      final aux = auxiliaryLlm();
+      if (aux == null) {
+        return const ChatRunResult(
+          text: 'Tidak ada provider aktif untuk side question.',
+          success: false,
+        );
+      }
+      final buf = StringBuffer();
+      var tokens = 0;
+      String? deniedTool;
+      var hasError = false;
+      await for (final e in aux.chat(
+        ChatRequest(
+          messages: [ChatMessage(role: 'user', content: prompt)],
+          stream: false,
+        ),
+      )) {
+        switch (e) {
+          case LlmTextDelta(:final delta):
+            buf.write(delta);
+          case LlmToolCall(:final call):
+            deniedTool ??= call.name;
+          case LlmUsage(:final usage):
+            tokens = usage.total;
+          case LlmDone():
+            break;
+          case LlmError(:final message):
+            hasError = true;
+            buf.write('\n[error] $message');
+        }
+      }
+      var answer = buf.toString().trim();
+      if (deniedTool != null && answer.isEmpty) {
+        answer = sideQuestionDeniedToolMessage.replaceFirst(
+          '{tool_name}',
+          deniedTool,
+        );
+      }
+      if (answer.isEmpty) {
+        events.emit('side_question.failed', {
+          'session': sessionId,
+          'error': hasError ? 'provider error' : 'empty answer',
+        });
+        return const ChatRunResult(
+          text: 'Side question tidak mendapat jawaban dari provider.',
+          success: false,
+          retryable: true,
+        );
+      }
+      answer = _sanitizer.output(answer);
+      events.emit('side_question.answered', {
+        'session': sessionId,
+        'channel': channel,
+        'user': userKey,
+        'chars': answer.length,
+        'tokens': tokens,
+        'tool_denied': deniedTool != null,
+      });
+      return ChatRunResult(
+        text: answer,
+        success: true,
+        tokensUsed: tokens,
+      );
+    } finally {
+      _sideQuestionLeases.release(sessionId, owner: owner);
+    }
+  }
+
+  /// `/compact` (Hermes `conversation_compression_manual.py`): kompresi
+  /// manual sesi aktif — lewati ambang otomatis (force), ringkas dengan
+  /// LLM auxiliar bila ada, lalu persist ringkasan + N pesan terakhir.
+  Future<ChatRunResult> _compactCommand(
+    String sessionId, {
+    required String channel,
+    required String userKey,
+  }) async {
+    final history = await sessions.recent(sessionId, limit: 400);
+    if (history.length <= 4) {
+      return const ChatRunResult(
+        text: 'Riwayat terlalu pendek untuk dikompres.',
+        success: false,
+      );
+    }
+    final session = await sessions.getOrCreate(
+      sessionId,
+      channel: channel,
+      userKey: userKey,
+    );
+    final compactor = config.contextCompaction
+        ? Compactor(
+            thresholdRatio: config.compactorThresholdRatio,
+            keepLastN: config.compactorKeepLastN,
+            maxSoftTokens: config.compactorMaxSoftTokens,
+            llm: auxiliaryLlm(),
+            onCompaction: (stats) => events.emit('context.compacted', {
+              'session': sessionId,
+              ...stats.toJson(),
+            }),
+          )
+        : Compactor(enabled: false);
+    final compacted = await compactor.maybeCompact(
+      AgentContext(messages: history, tools: const [], session: session),
+      force: true,
+    );
+    final stats = compactor.lastCompaction;
+    final messagesAfter = compacted.messages.length;
+    final summary = (session.summary ?? stats?.summary ?? '').trim();
+    if (summary.isEmpty) {
+      return const ChatRunResult(
+        text: 'Kompresi menghasilkan ringkasan kosong — riwayat dibiarkan.',
+        success: false,
+      );
+    }
+    final persisted = await sessions.compactSession(
+      sessionId,
+      summary: summary,
+      keepLastMessages: config.compactorKeepLastN.clamp(2, 50),
+    );
+    if (!persisted) {
+      return const ChatRunResult(
+        text: 'Store sesi tidak mendukung kompresi persist — riwayat utuh.',
+        success: false,
+      );
+    }
+    return ChatRunResult(
+      text: 'Kompresi selesai: ${stats?.messagesBefore ?? history.length} → '
+          '$messagesAfter pesan, '
+          'est. token ${stats?.estTokensBefore ?? 0} → '
+          '${stats?.estTokensAfter ?? 0}. '
+          'Ringkasan dipersist; ${config.compactorKeepLastN.clamp(2, 50)} '
+          'pesan terakhir tetap utuh.',
+      success: true,
+    );
+  }
+
+  /// `/usage` — pemakaian token 7 hari terakhir + rate-limit provider
+  /// (header `x-ratelimit-*` yang berhasil ditangkap).
+  ChatRunResult _usageCommand(String sessionId) {
+    final buf = StringBuffer('Pemakaian (7 hari terakhir):\n');
+    try {
+      final s = costLedger.summary(days: 7);
+      final total = s['total'] as Map<String, dynamic>? ?? const {};
+      buf.writeln(
+        '- turn: ${total['turns'] ?? 0}, token: ${total['tokens_used'] ?? 0}, '
+        'tool calls: ${total['tool_calls'] ?? 0}',
+      );
+    } catch (_) {
+      buf.writeln('- ledger biaya tidak tersedia');
+    }
+    buf.writeln(
+      'Anggaran per turn: max_iter=${config.maxIterations}, '
+      'max_tokens=${config.maxTokensPerTask}, '
+      'max_tool_calls=${config.maxToolCalls}, '
+      'max_wall_clock=${config.maxWallClockSec}s',
+    );
+    final rl = rateLimitTracker.formatUsage(
+      clock: () => DateTime.now().microsecondsSinceEpoch / 1e6,
+    );
+    if (rl.isEmpty) {
+      buf.writeln('Rate limit: belum ada header x-ratelimit tertangkap.');
+    } else {
+      buf.writeln('Rate limit provider:');
+      for (final line in rl) {
+        buf.writeln('- $line');
+      }
+    }
+    return ChatRunResult(text: buf.toString(), success: true);
+  }
+
   /// `/memory` — tampilkan isi memori terkurasi + pemakaian anggaran.
   ChatRunResult _curatedMemoryStatus() {
     final block = curatedMemory.snapshotPromptBlock();
@@ -5070,6 +5318,11 @@ Map<String, String> _parseOtelHeaders(String raw) {
 class _ModelCommand {
   const _ModelCommand({required this.arg});
   final String arg;
+}
+
+class _BtwCommand {
+  const _BtwCommand({required this.question});
+  final String question;
 }
 
 class _BotToolGate implements PermissionGate {

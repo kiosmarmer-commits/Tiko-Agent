@@ -44,6 +44,10 @@ class ProviderFactory {
   /// and OpenAI-compatible adapters to attach cache markers/hints.
   final PromptCacheManager promptCache = PromptCacheManager();
 
+  /// Hermes `rate_limit_tracker`: tracker bersama lintas provider — header
+  /// `x-ratelimit-*` dari setiap respons HTTP dicatat di sini untuk /usage.
+  final RateLimitTracker rateLimitTracker = RateLimitTracker();
+
   String? _secret(String? ref) => TikoConfig.resolveSecretRef(ref, env: _env);
 
   CredentialPool? _pool(ProviderConfig c) {
@@ -115,6 +119,7 @@ class ProviderFactory {
           model: model ?? 'qwen2.5:3b',
           apiKey: _secret(c.apiKeyRef),
           promptCache: promptCache,
+          rateLimitTracker: rateLimitTracker,
           credentialPool: pool,
           tokenProvider: oauth?.getAccessToken,
           requestTimeout: timeout,
@@ -128,6 +133,7 @@ class ProviderFactory {
           model: model ?? 'gpt-5-codex',
           apiKey: _secret(c.apiKeyRef),
           promptCache: promptCache,
+          rateLimitTracker: rateLimitTracker,
           credentialPool: pool,
           tokenProvider: oauth?.getAccessToken,
           requestTimeout: timeout,
@@ -190,6 +196,7 @@ class ProviderFactory {
           model: model ?? 'claude-sonnet-4-20250514',
           baseUrl: baseUrl ?? 'https://api.anthropic.com',
           promptCache: promptCache,
+          rateLimitTracker: rateLimitTracker,
         );
       case 'gemini':
         final key = _secret(c.apiKeyRef);
@@ -201,6 +208,7 @@ class ProviderFactory {
         return GeminiProvider(
           apiKey: key,
           model: model ?? 'gemini-2.0-flash',
+          rateLimitTracker: rateLimitTracker,
         );
       case 'mistral':
         final key = _secret(c.apiKeyRef);
@@ -240,6 +248,7 @@ class ProviderFactory {
           model: model ?? 'openai/gpt-4o-mini',
           baseUrl: baseUrl ?? 'https://openrouter.ai/api/v1',
           requestTimeout: timeout ?? const Duration(seconds: 120),
+          rateLimitTracker: rateLimitTracker,
         );
       case 'deepseek':
         final key = _secret(c.apiKeyRef);

@@ -14,6 +14,7 @@ class AnthropicProvider implements LlmProvider {
     this.baseUrl = 'https://api.anthropic.com',
     this.httpClient,
     this.promptCache,
+    this.rateLimitTracker,
   });
 
   final String apiKey;
@@ -24,6 +25,22 @@ class AnthropicProvider implements LlmProvider {
   /// When set, stable system prefixes get Anthropic `cache_control`
   /// breakpoints so Claude reuses the cross-session prefix cache.
   final PromptCacheManager? promptCache;
+
+  /// Hermes `rate_limit_tracker`: header `x-ratelimit-*` dari setiap respons
+  /// dicatat ke tracker bersama untuk /usage. Null = tidak dilacak.
+  final RateLimitTracker? rateLimitTracker;
+
+  void _captureRateLimit(Map<String, String> headers) {
+    final tracker = rateLimitTracker;
+    if (tracker == null) return;
+    try {
+      tracker.update(parseRateLimitHeaders(
+        headers,
+        provider: id,
+        clock: () => DateTime.now().microsecondsSinceEpoch / 1e6,
+      ));
+    } catch (_) {}
+  }
 
   @override
   String get id => 'anthropic';
@@ -96,6 +113,7 @@ class AnthropicProvider implements LlmProvider {
         },
         body: jsonEncode(body),
       );
+      _captureRateLimit(res.headers);
       if (res.statusCode >= 400) {
         yield LlmError(
           'Anthropic HTTP ${res.statusCode}: ${res.body}',

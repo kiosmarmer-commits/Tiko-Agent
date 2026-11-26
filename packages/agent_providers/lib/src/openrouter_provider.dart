@@ -17,6 +17,7 @@ class OpenRouterProvider implements LlmProvider {
     this.requestTimeout = const Duration(seconds: 120),
     this.siteUrl,
     this.siteName,
+    this.rateLimitTracker,
   });
 
   final String apiKey;
@@ -26,6 +27,22 @@ class OpenRouterProvider implements LlmProvider {
   final Duration requestTimeout;
   final String? siteUrl;
   final String? siteName;
+
+  /// Hermes `rate_limit_tracker`: header `x-ratelimit-*` OpenRouter
+  /// dicatat ke tracker bersama untuk /usage. Null = tidak dilacak.
+  final RateLimitTracker? rateLimitTracker;
+
+  void _captureRateLimit(Map<String, String> headers) {
+    final tracker = rateLimitTracker;
+    if (tracker == null) return;
+    try {
+      tracker.update(parseRateLimitHeaders(
+        headers,
+        provider: id,
+        clock: () => DateTime.now().microsecondsSinceEpoch / 1e6,
+      ));
+    } catch (_) {}
+  }
 
   @override
   String get id => 'openrouter';
@@ -96,6 +113,7 @@ class OpenRouterProvider implements LlmProvider {
             body: jsonEncode(body),
           )
           .timeout(requestTimeout);
+      _captureRateLimit(res.headers);
 
       if (res.statusCode >= 400) {
         yield LlmError(
