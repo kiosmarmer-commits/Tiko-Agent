@@ -26,6 +26,7 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
     this.tokenProvider,
     this.requestTimeout,
     this.modelTimeouts = const {},
+    this.rateLimitTracker,
     Capabilities? capabilities,
   }) : capabilities =
            capabilities ??
@@ -53,6 +54,27 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
 
   /// Per-model timeout override (seconds), checked with `req.model ?? model`.
   final Map<String, int> modelTimeouts;
+
+  /// Hermes `rate_limit_tracker`: header `x-ratelimit-*` dari setiap respons
+  /// dicatat ke tracker bersama untuk /usage. Null = tidak dilacak.
+  final RateLimitTracker? rateLimitTracker;
+
+  double get _clock => DateTime.now().microsecondsSinceEpoch / 1e6;
+
+  /// Catat header rate-limit dari respons terakhir (fail-open: kegagalan
+  /// parse atau tracker null tidak pernah memengaruhi turn).
+  /// Lihat [OpenAiCompatProvider.captureRateLimit].
+  void captureRateLimit(Map<String, String> headers) {
+    final tracker = rateLimitTracker;
+    if (tracker == null) return;
+    try {
+      tracker.update(parseRateLimitHeaders(
+        headers,
+        provider: id,
+        clock: () => _clock,
+      ));
+    } catch (_) {}
+  }
 
   /// When set, stable system prefixes are tracked cross-session and the
   /// OpenAI-style `prompt_cache_key` hint is attached so compatible backends
@@ -210,6 +232,7 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
     final response = await client
         .send(request)
         .timeout(timeout ?? const Duration(hours: 1));
+    captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       final err = await response.stream.bytesToString();
       yield LlmError(
@@ -320,6 +343,7 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
     final response = await client
         .post(chatUri, headers: headers, body: jsonEncode(body))
         .timeout(timeout ?? const Duration(hours: 1));
+    captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       yield LlmError(
         'HTTP ${response.statusCode}: ${response.body}',

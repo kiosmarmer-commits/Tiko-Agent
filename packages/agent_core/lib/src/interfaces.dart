@@ -418,6 +418,16 @@ abstract class SessionStore {
     String query, {
     int limit = 8,
   }) async => const <SessionSearchHit>[];
+
+  /// Hermes `conversation_compression_manual`: ganti riwayat lama sesi
+  /// dengan ringkasan [summary] dan pertahankan [keepLastMessages] pesan
+  /// terakhir. Ringkasan juga disimpan di metadata sesi. Return false bila
+  /// sesi tidak ada atau store tidak mendukung (fail-open: riwayat utuh).
+  Future<bool> compactSession(
+    String sessionId, {
+    required String summary,
+    int keepLastMessages = 6,
+  }) async => false;
 }
 
 /// One cross-conversation search hit: the session it came from, the matching

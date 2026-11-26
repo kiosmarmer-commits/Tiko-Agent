@@ -496,8 +496,11 @@ class AgentLoop {
           ans = sanitizer?.output(ans) ?? ans;
           // Hermes repetition guard: jawaban final yang degenerate menjadi
           // loop repetisi runaway tidak dikirim apa adanya — user menerima
-          // penjelasan potongan yang jelas, bukan 60k karakter echo.
-          if (ans.length >= stopPathMinChars && isRunawayRepetition(ans)) {
+          // penjelasan potongan yang jelas, bukan 60k karakter echo. Watch
+          // stream juga menandai finishReason 'repetition_loop' saat loop
+          // terdeteksi selesai streaming.
+          if (resp.finishReason == 'repetition_loop' ||
+              (ans.length >= stopPathMinChars && isRunawayRepetition(ans))) {
             ans = repetitionLoopInterrupted;
             success = false;
             _lastTurnEndReason = 'repetition_loop';
@@ -943,9 +946,20 @@ class AgentLoop {
     final resp = LlmResponse();
     final buf = StringBuffer();
     var hasError = false;
+    // Hermes stream watchdog (RunawayStreamWatch): kanal teks yang menjadi
+    // loop repetisi runaway dihentikan sejak 16k char — delta berikutnya
+    // tidak dikonsumsi lagi (stream di-cancel), output diganti pesan
+    // interupsi yang jelas alih-alih 60k karakter echo.
+    final watch = RunawayStreamWatch();
+    var streamRunaway = false;
     await for (final e in events) {
+      if (streamRunaway) break;
       switch (e) {
         case LlmTextDelta(:final delta):
+          if (watch.feed(delta)) {
+            streamRunaway = true;
+            continue;
+          }
           buf.write(delta);
           onTextDelta?.call(delta);
         case LlmToolCall(:final call):
@@ -960,6 +974,12 @@ class AgentLoop {
           resp.errorMessage = message;
           buf.write('\n[error] $message');
       }
+    }
+    if (streamRunaway) {
+      hasError = false;
+      resp.finishReason = 'repetition_loop';
+      resp.text = repetitionLoopInterrupted;
+      return resp;
     }
     if (hasError) resp.finishReason = 'error';
     resp.text = buf.toString();
