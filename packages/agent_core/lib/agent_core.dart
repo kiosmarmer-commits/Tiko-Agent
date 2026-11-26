@@ -3,6 +3,7 @@ library;
 
 export 'src/interfaces.dart';
 export 'src/models.dart';
+export 'src/error_classifier.dart';
 export 'src/memory_reranker.dart';
 export 'src/memory_rank_eval.dart';
 export 'src/agent_loop.dart';

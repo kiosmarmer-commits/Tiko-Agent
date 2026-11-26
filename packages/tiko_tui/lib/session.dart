@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'history_store.dart';
@@ -163,6 +164,12 @@ class TuiSession {
 
   bool _raw = false;
   bool _color;
+
+  /// E1 — interupsi-dan-redirect: byte yang diketik pengguna selama turn
+  /// (selain Ctrl-C/Esc) ditampung dan di-prefill ke editor prompt
+  /// berikutnya, sehingga ketikan saat turn berjalan tidak hilang.
+  String _pendingRedirect = '';
+
   final List<String> history;
   final MultilineBuffer _multiline = MultilineBuffer();
 
@@ -195,6 +202,11 @@ class TuiSession {
 
     try {
       while (true) {
+        if (_raw && _pendingRedirect.isNotEmpty) {
+          editor.buffer = _pendingRedirect;
+          editor.cursor = _pendingRedirect.length;
+          _pendingRedirect = '';
+        }
         final line = _raw
             ? await _readLineRaw(
                 editor,
@@ -251,6 +263,7 @@ class TuiSession {
     unawaited(outcomeFuture.whenComplete(done.complete));
 
     var interrupted = false;
+    final redirect = StringBuffer();
     // Setelah EOF, sumber input tidak akan pernah berisi data lagi — pakai
     // future yang tidak pernah selesai agar loop spin murni oleh tick timer.
     final pendingIdle = Completer<List<int>?>().future;
@@ -274,6 +287,10 @@ class TuiSession {
           if (chunk.contains(0x03) || chunk.contains(0x1B)) {
             interrupted = true;
             progress.cancelled();
+          } else {
+            // E1: ketikan saat turn diarahkan ke prompt berikutnya.
+            redirect.write(utf8.decode(chunk, allowMalformed: true)
+                .replaceAll(RegExp('[\x00-\x1F\x7F]'), ''));
           }
         } else {
           _out.write('\x1B[2K\r${_paint(frames[frame % frames.length], '36')}'
@@ -286,6 +303,9 @@ class TuiSession {
       }
     } finally {
       _out.write('\x1B[2K\r');
+    }
+    if (interrupted && redirect.isNotEmpty) {
+      _pendingRedirect = redirect.toString();
     }
     return outcomeFuture;
   }
@@ -322,6 +342,7 @@ class TuiSession {
 
   Future<String?> _readLineRaw(LineEditor editor, String label) async {
     _out.write(label);
+    if (editor.buffer.isNotEmpty) _rerender(editor, label);
     final chunks = _inputBuffer;
     while (true) {
       final chunk = await chunks.next();

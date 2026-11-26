@@ -34,3 +34,4 @@ export 'src/context_file.dart';
 export 'src/doc_extract.dart';
 export 'src/event_hooks.dart';
 export 'src/smart_home_tool.dart';
+export 'src/sdd_checkpoint.dart';

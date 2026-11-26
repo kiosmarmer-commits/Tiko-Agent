@@ -463,4 +463,9 @@ class LlmResponse {
   List<ToolCall> toolCalls;
   TokenUsage usage;
   String finishReason;
+
+  /// Kode status HTTP dan pesan error terakhir dari provider (dari
+  /// [LlmError]) — input untuk klasifikasi recovery (error_classifier).
+  String? errorCode;
+  String? errorMessage;
 }
