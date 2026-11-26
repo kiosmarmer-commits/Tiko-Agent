@@ -167,8 +167,11 @@ void main() {
     final ok = l.all.single;
     expect(ok.state, DeliveryState.delivered);
 
-    fake.failNext = 1;
-    expect(await g.sendMessage('c1', 'hai lagi'), isFalse);
+    final failing = LedgeredGateway(
+      inner: _FakeGateway('telegram', failNext: 1),
+      ledger: l,
+    );
+    expect(await failing.sendMessage('c1', 'hai lagi'), isFalse);
     final bad = l.all.last;
     expect(bad.state, DeliveryState.failed);
     expect(bad.attempts, 1);
