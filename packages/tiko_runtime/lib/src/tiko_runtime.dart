@@ -388,6 +388,7 @@ class TikoRuntime {
     required this.registry,
     required this.sessions,
     required this.memory,
+    this.semanticCodeIndex,
     required this.memoryBackend,
     required this.safety,
     required this.sandboxKind,
@@ -485,6 +486,10 @@ class TikoRuntime {
   final List<ConfigIssue> issues;
   final Map<String, LlmProvider> providers;
   final ToolRegistry registry;
+
+  /// S22 — indeks kode semantik; null ketika `code.index.enabled: false`.
+  /// Dipakai tool `code_semantic` dan CLI `tiko code-index`.
+  final SemanticCodeIndexer? semanticCodeIndex;
   final SessionStore sessions;
   final MemoryStore memory;
   final String memoryBackend;
@@ -952,6 +957,17 @@ class TikoRuntime {
       embedder: embedder,
     );
 
+    // S22 — indeks kode semantik persisten (default enabled): memakai
+    // embedder memory.embed bila aktif, selain itu fallback hashing offline.
+    final codeIndexer = cfg.codeIndex.enabled
+        ? SemanticCodeIndexer(
+            workspaceRoot: workspace,
+            dataDir: dataDir,
+            embedder: embedder,
+            maxChunks: cfg.codeIndex.maxChunks,
+          )
+        : null;
+
     // Content-plane guard, rate anomaly detection and the plugin registry.
     final promptGuard = const PromptGuard();
     final anomalyDetector = AnomalyDetector(
@@ -1088,6 +1104,11 @@ class TikoRuntime {
       ..register(GitDiffTool(runner: gitRunner))
       ..register(GitLogTool(runner: gitRunner))
       ..register(GitCommitTool(runner: gitRunner));
+    // S22 — tool `code_semantic` terdaftar bila `code.index.enabled` (default
+    // true). Read-only; satu-satunya tulisan adalah file indeks sendiri.
+    if (codeIndexer != null) {
+      registry.register(SemanticCodeSearchTool(indexer: codeIndexer));
+    }
     // F2 (docs/15 §3): wiring IdeIntegrationTool dengan registry nyata —
     // opt-in via config (default false); daftar tool ACP dibaca live.
     if (cfg.agentIdeIntegration) {
@@ -1217,6 +1238,7 @@ class TikoRuntime {
       approvalRules: approvalRules,
       providers: providers,
       registry: registry,
+      semanticCodeIndex: codeIndexer,
       sessions: sessionStore,
       memory: memory,
       memoryBackend: backend,

@@ -36,6 +36,11 @@ class CodeSearchTool implements Tool {
     '__pycache__',
     'ephemeral',
   };
+
+  /// S22 — diekspos agar SemanticCodeIndexer memakai definisi sama
+  /// (junk dir + ekstensi kode + regex definisi) sebagai BM25 dasarnya.
+  static const Set<String> junkDirs = _junkDirs;
+  static const Set<String> codeExts = _codeExts;
   static const _codeExts = {
     '.dart',
     '.py',
@@ -54,7 +59,7 @@ class CodeSearchTool implements Tool {
     '.php',
   };
 
-  static final _definitionPat = RegExp(
+  static final RegExp definitionPattern = RegExp(
     r'^\s*(?:abstract\s+)?(?:class|mixin|enum|extension)\s+[a-zA-Z]|^\s*def\s+[a-zA-Z]|^\s*(?:async\s+)?function\s+[a-zA-Z]',
   );
 
@@ -122,7 +127,7 @@ class CodeSearchTool implements Tool {
       );
     }
 
-    final queryTerms = _termsOf(query);
+    final queryTerms = termsOf(query);
     if (queryTerms.isEmpty) {
       return ToolResult(
         callId: '',
@@ -193,19 +198,19 @@ class CodeSearchTool implements Tool {
       buffer.writeln(
           '${c.relPath}:${c.start}-${c.end} (skor ${(score * 100).round() / 100})');
       for (final line in c.snippet.take(3)) {
-        buffer.writeln('  ${_cap(line, 160)}');
+        buffer.writeln('  ${cap(line, 160)}');
       }
       buffer.writeln('  ---');
     }
     return ToolResult(callId: '', content: buffer.toString().trim());
   }
 
-  static String _cap(String s, int max) =>
+  static String cap(String s, int max) =>
       s.length <= max ? s : '${s.substring(0, max)}…';
 
   /// camelCase/snake_case split + lowercase; token asli ( konkatenasi)
   /// tetap dimasukkan agar "PaymentGateway" cocok dengan "paymentgateway".
-  static Set<String> _termsOf(String input) {
+  static Set<String> termsOf(String input) {
     final out = <String>{};
     final raw = input
         .split(RegExp(r'[^a-zA-Z0-9_]+'))
@@ -246,8 +251,8 @@ class CodeSearchTool implements Tool {
         final terms = <String>{};
         var hasDefinitionHit = false;
         for (final line in slice) {
-          terms.addAll(_termsOf(line));
-          if (!hasDefinitionHit && _definitionPat.hasMatch(line)) {
+          terms.addAll(termsOf(line));
+          if (!hasDefinitionHit && definitionPattern.hasMatch(line)) {
             hasDefinitionHit = true;
           }
         }

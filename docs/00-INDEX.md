@@ -63,6 +63,7 @@
 | Flutter client/widgets | Implemented/conditional | Memerlukan Flutter SDK dan daemon/API |
 | Web dashboard agentd (Jalur A) | Implemented/conditional | Flutter Web sebagai satu-satunya webRoot + cookie sesi same-origin + auto-open browser; butuh `flutter build web` sebelum daemon dapat menyajikan UI |
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
+| Semantic code index + embeddings (S22) | Implemented | `code_semantic` + `tiko code-index` — hybrid BM25+cosine RRF atas indeks persisten `data/index/code-semantic.jsonl`; embedder provider `memory.embed` bila aktif, tanpa itu fallback hashing offline (dilabel jujur bukan model semantik); refresh inkremental hash sha256 per file; `code.index.enabled` default true |
 
 ## Kontrak dokumentasi
 

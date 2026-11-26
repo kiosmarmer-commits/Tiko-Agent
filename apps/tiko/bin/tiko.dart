@@ -36,6 +36,9 @@ Config:
                              keamanan, port; search/preview/dirty-state) —
                              bisa juga `/settings` di chat
   context                    tampilkan project context file aktif
+  code-index status|build|search "query"
+                             indeks kode semantik persisten (BM25 + cosine
+                             embedding; S22). Opsi search: --path P --limit N
                              (TIKO.md | AGENTS.md | CLAUDE.md | GEMINI.md)
   fix "<tugas>" --verify "<cmd>" [--iter 1-8]
   research "<pertanyaan>" [--concurrency N]
@@ -1127,6 +1130,93 @@ Future<void> main(List<String> argv) async {
         '${proj.content.length} karakter${proj.truncated ? ', dipotong ke 12.000' : ''})',
       );
       stdout.writeln(proj.content);
+      return;
+
+    case 'code-index':
+      // S22 — indeks kode semantik persisten untuk pencarian hybrid
+      // BM25 + cosine embedding. Read-only terhadap workspace.
+      final ciArgs = args.toList();
+      final ciSub = ciArgs.isEmpty ? 'status' : ciArgs.first.toLowerCase();
+      final ciIndexer = rt.semanticCodeIndex;
+      if (ciIndexer == null) {
+        stderr.writeln(
+            'code-index dinonaktifkan via `code.index.enabled: false`');
+        exitCode = 2;
+        return;
+      }
+      String? ciOpt(String key) => optValue(ciArgs, key);
+      switch (ciSub) {
+        case 'status':
+          final st = await ciIndexer.status(deep: ciArgs.contains('--deep'));
+          emit(st, 'code-index: ${st['files']} file / ${st['chunks']} chunk '
+              '(${st['embedder'] ?? 'belum dibangun'})');
+        case 'build':
+          final st = await ciIndexer.refresh(
+            deadline:
+                Duration(seconds: int.tryParse(ciOpt('--deadline') ?? '') ?? 120),
+          );
+          emit(st, 'code-index build: ${st['chunks']} chunk dari '
+              '${st['files']} file (partial: ${st['partial']})');
+          exitCode = 0;
+        case 'search':
+          final positional =
+              ciArgs.skip(1).where((a) => !a.startsWith('--')).toList();
+          final query = (ciOpt('--query') ??
+                  (positional.isEmpty
+                      ? ''
+                      : positional.length == 1
+                          ? positional.first
+                          : positional.join(' ')))
+              .trim();
+          if (query.isEmpty || query.length > 256) {
+            stderr.writeln('code-index search membutuhkan query (1..256 kar.)');
+            exitCode = 2;
+            return;
+          }
+          final limit =
+              (int.tryParse(ciOpt('--limit') ?? '') ?? 10).clamp(1, 30);
+          if (!ciIndexer.built) {
+            final built = await ciIndexer.refresh(
+                deadline: const Duration(seconds: 120));
+            if ((built['chunks'] as int? ?? 0) == 0) {
+              stdout.writeln('tidak ada file kode untuk diindeks');
+              return;
+            }
+          }
+          final hits = await ciIndexer.search(
+            query,
+            pathPrefix: ciOpt('--path') ?? '.',
+            limit: limit,
+          );
+          if (hits.isEmpty) {
+            stdout.writeln('tidak ada hasil untuk "$query"');
+            return;
+          }
+          emit({
+            'query': query,
+            'embedder': ciIndexer.embedderLabel,
+            'results': hits.map((h) => <String, dynamic>{
+                  'path': h.chunk.relPath,
+                  'start': h.chunk.start,
+                  'end': h.chunk.end,
+                  'mode': h.hybrid ? 'hybrid' : 'bm25',
+                  'rrf': double.parse((h.score).toStringAsFixed(4)),
+                  'cosine': double.parse((h.cosineSim).toStringAsFixed(4)),
+                }).toList(),
+          }, 'code-index: ${hits.length} hasil');
+          for (final h in hits) {
+            stdout.writeln(
+                '${h.chunk.relPath}:${h.chunk.start}-${h.chunk.end} '
+                '(${h.hybrid ? 'hybrid' : 'bm25'})');
+            for (final line in h.chunk.snippet.take(3)) {
+              stdout.writeln('  $line');
+            }
+          }
+        default:
+          stderr.writeln(
+              'code-index status|build|search "query" [--path P] [--limit N] [--deep] [--deadline D]');
+          exitCode = 2;
+      }
       return;
 
     case 'fix':

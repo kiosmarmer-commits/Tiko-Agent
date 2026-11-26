@@ -171,6 +171,20 @@ class MemoryEmbedConfig {
   final String model;
 }
 
+/// S22 — konfigurasi indeks kode semantik (`code.index`). Indexer membaca
+/// workspace lokal, menyimpan chunk+embedding persisten (aditif, read-only
+/// terhadap kode). Default enabled dengan fallback hashing offline; bila
+/// `memory.embed.enabled`, provider embedding dipakai untuk vektor penuh.
+class CodeIndexConfig {
+  const CodeIndexConfig({
+    this.enabled = true,
+    this.maxChunks = 6000,
+  });
+
+  final bool enabled;
+  final int maxChunks;
+}
+
 /// Administrator-declared external memory provider (Hermes-style memory
 /// providers). Credentials are references to env vars; raw secrets are
 /// never accepted in the YAML configuration.
@@ -488,6 +502,7 @@ class TikoConfig {
     this.mcpAnswerServerRequests = false,
     this.decision = const DecisionConfig(),
     this.memoryEmbed = const MemoryEmbedConfig(),
+    this.codeIndex = const CodeIndexConfig(),
     this.memoryProviders = const [],
     this.processPlugins = const [],
     this.hooks = const [],
@@ -601,6 +616,9 @@ class TikoConfig {
   final IdleConsolidationCfg idleConsolidation;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
+
+  /// S22 — indeks kode semantik (`code.index`, default enabled).
+  final CodeIndexConfig codeIndex;
 
   /// Nudge memori terkurasi: jarak giliran antar refleksi (0/0 turn =
   /// dinonaktifkan lewat features atau interval 0).
@@ -815,6 +833,9 @@ class TikoConfig {
 
     // ---- memory.embed ----
     final memoryEmbedCfg = _parseMemoryEmbed(memorySec, issues);
+
+    // ---- code.index (S22) ----
+    final codeIndexCfg = _parseCodeIndex(sec('code'), issues);
 
     // ---- memory.external_providers ----
     final memoryProvidersCfg = _parseMemoryProviders(memorySec, issues);
@@ -1574,6 +1595,7 @@ class TikoConfig {
       idleConsolidation: idleConsolidationCfg,
       decision: decisionCfg,
       memoryEmbed: memoryEmbedCfg,
+      codeIndex: codeIndexCfg,
       memoryProviders: memoryProvidersCfg,
       processPlugins: processPluginsCfg,
       hooks: hooksCfg,
@@ -1856,6 +1878,34 @@ class TikoConfig {
       model: modelValue is String && modelValue.trim().isNotEmpty
           ? modelValue
           : 'nomic-embed-text',
+    );
+  }
+
+  /// S22 — parse blok `code.index` (default enabled=true, max_chunks=6000).
+  /// Nilai tidak valid -> ConfigIssue + fallback default (fail-closed).
+  static CodeIndexConfig _parseCodeIndex(YamlMap sec, List<ConfigIssue> issues) {
+    final idx = sec['index'];
+    if (idx != null && idx is! YamlMap) {
+      issues.add(const ConfigIssue('code.index', 'harus berupa mapping'));
+      return const CodeIndexConfig();
+    }
+    final m = idx is YamlMap ? idx : YamlMap();
+    final enabledValue = m['enabled'];
+    if (enabledValue != null && enabledValue is! bool) {
+      issues.add(
+          const ConfigIssue('code.index.enabled', 'harus berupa boolean'));
+    }
+    final maxChunksValue = m['max_chunks'];
+    if (maxChunksValue != null &&
+        (maxChunksValue is! int || maxChunksValue < 200)) {
+      issues.add(const ConfigIssue(
+          'code.index.max_chunks', 'harus integer >= 200'));
+    }
+    return CodeIndexConfig(
+      enabled: enabledValue is bool ? enabledValue : true,
+      maxChunks: maxChunksValue is int && maxChunksValue >= 200
+          ? maxChunksValue.clamp(200, 50000)
+          : 6000,
     );
   }
 
