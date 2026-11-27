@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('readStreamedErrorBody', () {
-    http.StreamedResponse _response(
+    http.StreamedResponse buildResponse(
       Stream<List<int>> body, {
       int statusCode = 500,
     }) =>
@@ -22,7 +22,7 @@ void main() {
         );
 
     test('body kecil → teks penuh', () async {
-      final resp = _response(
+      final resp = buildResponse(
         Stream.value(utf8.encode('{"error": {"message": "quota exceeded"}}')),
       );
       final text = await readStreamedErrorBody(resp);
@@ -31,7 +31,7 @@ void main() {
 
     test('body raksasa → terpotong pada maxBytes, never-raises', () async {
       final big = List.filled(200 * 1024, 0x61); // 200 KB 'a'
-      final resp = _response(Stream.value(big));
+      final resp = buildResponse(Stream.value(big));
       final text = await readStreamedErrorBody(resp, maxBytes: 64 * 1024);
       expect(text.length, lessThanOrEqualTo(64 * 1024));
       expect(text, isNotEmpty);
@@ -39,7 +39,7 @@ void main() {
 
     test('body stall → hard deadline mengembalikan byte parsial', () async {
       final ctrl = StreamController<List<int>>();
-      final resp = _response(ctrl.stream);
+      final resp = buildResponse(ctrl.stream);
       unawaited(() async {
         await Future<void>.delayed(const Duration(milliseconds: 5));
         ctrl.add(utf8.encode('partial-before-stall'));
@@ -56,7 +56,7 @@ void main() {
     test('stream error di tengah → parsial dipertahankan, tidak melempar',
         () async {
       final ctrl = StreamController<List<int>>();
-      final resp = _response(ctrl.stream);
+      final resp = buildResponse(ctrl.stream);
       unawaited(() async {
         await Future<void>.delayed(const Duration(milliseconds: 5));
         ctrl.add(utf8.encode('awal-diagnostik '));
@@ -82,8 +82,8 @@ void main() {
         ),
       );
       final events = await provider
-          .chat(ChatRequest(
-            messages: const [ChatMessage(role: 'user', content: 'hai')],
+          .chat(const ChatRequest(
+            messages: [ChatMessage(role: 'user', content: 'hai')],
             stream: true,
           ))
           .toList();

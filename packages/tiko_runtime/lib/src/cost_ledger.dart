@@ -15,6 +15,8 @@ class CostEntry {
     required this.toolCalls,
     required this.success,
     required this.durationMs,
+    this.model = '',
+    this.costUsd = 0,
   });
 
   factory CostEntry.fromJson(Map<String, dynamic> m) {
@@ -34,6 +36,8 @@ class CostEntry {
       toolCalls: calls,
       success: m['success'] == true,
       durationMs: duration is int && duration >= 0 ? duration : 0,
+      model: m['model']?.toString() ?? '',
+      costUsd: m['cost_usd'] is num ? (m['cost_usd'] as num).toDouble() : 0,
     );
   }
 
@@ -46,6 +50,11 @@ class CostEntry {
   final bool success;
   final int durationMs;
 
+  /// Hermes fase-7: model terpakai turn ini (kosong bila tak diketahui) dan
+  /// estimasi biaya USD dari usage token (0 bila tak dapat diestimasi).
+  final String model;
+  final double costUsd;
+
   Map<String, dynamic> toJson() => {
         'ts': ts.toIso8601String(),
         'session': session,
@@ -55,6 +64,8 @@ class CostEntry {
         'tool_calls': toolCalls,
         'success': success,
         'duration_ms': durationMs,
+        'model': model,
+        'cost_usd': costUsd,
       };
 }
 
@@ -153,6 +164,8 @@ class CostLedger {
 
     int tokensOf(List<CostEntry> list) =>
         list.fold(0, (sum, e) => sum + e.tokensUsed);
+    double costOf(List<CostEntry> list) =>
+        list.fold(0.0, (sum, e) => sum + e.costUsd);
 
     final bucketList = [
       for (final b in buckets.entries)
@@ -165,6 +178,7 @@ class CostLedger {
             for (final e in b.value)
               if (e.success) 1,
           ].length,
+          'cost_usd': costOf(b.value),
         }
     ]..sort((a, b) =>
         (b['tokens_used'] as int).compareTo(a['tokens_used'] as int));
@@ -181,6 +195,7 @@ class CostLedger {
           for (final e in scoped)
             if (e.success) 1,
         ].length,
+        'cost_usd': costOf(scoped),
       },
       'buckets': bucketList,
     };

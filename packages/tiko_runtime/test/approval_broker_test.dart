@@ -5,7 +5,11 @@ import 'package:test/test.dart';
 import 'package:tiko_runtime/tiko_runtime.dart';
 
 void main() {
-  group('ApprovalBroker', () {
+  // Polling + cross-process file lock bisa lambat di CI berbeban tinggi;
+  // beri ruang di luar timeout default 30s untuk menghindari flake.
+  group(
+    'ApprovalBroker',
+    () {
     late Directory temp;
     late ApprovalBroker broker;
 

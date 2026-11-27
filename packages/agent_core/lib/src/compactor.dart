@@ -1,3 +1,4 @@
+import 'compaction_events.dart';
 import 'interfaces.dart';
 import 'context_builder.dart';
 import 'models.dart';
@@ -76,6 +77,7 @@ class Compactor {
     this.maxSoftTokens = 6000,
     this.llm,
     this.onCompaction,
+    this.onCompactionEvent,
     this.preserve,
     this.pruneToolResultsEnabled = true,
     this.maxToolResultChars = 8000,
@@ -96,6 +98,10 @@ class Compactor {
   /// Callback observability: dipanggil pada setiap kandidat kompresi yang
   /// benar-benar dipangkas. Kegagalan callback tidak dipropagasi.
   final void Function(CompactionStats stats)? onCompaction;
+
+  /// Hermes compaction events: record v1 bebas-konten per attempt kompresi
+  /// (committed/skipped/failed). Publishing tidak pernah melempar.
+  final void Function(CompactionEvent event)? onCompactionEvent;
 
   /// Type-aware retention (R2): predicate tambahan untuk menandai pesan yang
   /// harus dipertahankan verbatim (mis. aturan keamanan kustom dari caller).
@@ -183,6 +189,20 @@ class Compactor {
       charsAfter: charsAfter,
     );
     lastPrune = stats;
+    try {
+      onCompactionEvent?.call(CompactionEvent(
+        kind: 'prune_tool_results',
+        trigger: 'turn_start_threshold',
+        method: 'deterministic_prune',
+        outcome: 'committed',
+        tokensBefore: charsBefore ~/ 4,
+        tokensAfter: charsAfter ~/ 4,
+        messagesBefore: messages.length,
+        messagesAfter: next.length,
+        durationMs: 0,
+        ts: DateTime.now().toUtc(),
+      ));
+    } catch (_) {}
     return AgentContext(
       messages: next,
       tools: ctx.tools,
@@ -245,6 +265,7 @@ class Compactor {
     AgentContext ctx, {
     LlmProvider? llmOverride,
     bool force = false,
+    String trigger = 'turn_start_threshold',
   }) async {
     if (!enabled) return ctx;
     final chars = ctx.messages.fold<int>(0, (s, m) => s + m.content.length);
@@ -252,6 +273,24 @@ class Compactor {
     // `force` (Hermes `conversation_compression_manual.py`): kompresi manual
     // /compact melewati ambang otomatis — user meminta, kompaksi jalan.
     if (!force && estTokensBefore < maxSoftTokens * thresholdRatio) return ctx;
+
+    // Attempt /compact yang tidak menghasilkan rewrite → record `skipped`.
+    void emitSkipped() {
+      try {
+        onCompactionEvent?.call(CompactionEvent(
+          kind: 'summarize',
+          trigger: force ? 'manual' : trigger,
+          method: 'none',
+          outcome: 'skipped',
+          tokensBefore: estTokensBefore,
+          tokensAfter: estTokensBefore,
+          messagesBefore: ctx.messages.length,
+          messagesAfter: ctx.messages.length,
+          durationMs: 0,
+          ts: DateTime.now().toUtc(),
+        ));
+      } catch (_) {}
+    }
 
     final messagesBefore = ctx.messages.length;
 
@@ -274,6 +313,10 @@ class Compactor {
     final dropped = trimmable.length <= keepLastN
         ? <ChatMessage>[]
         : trimmable.sublist(0, trimmable.length - keepLastN);
+    if (dropped.isEmpty && !force) {
+      emitSkipped();
+      return ctx;
+    }
 
     final summarizer = llmOverride ?? llm;
     // Sumber ringkasan hanya pesan yang benar-benar dibuang; pesan aturan
@@ -306,6 +349,20 @@ class Compactor {
     lastCompaction = stats;
     try {
       onCompaction?.call(stats);
+    } catch (_) {}
+    try {
+      onCompactionEvent?.call(CompactionEvent(
+        kind: 'summarize',
+        trigger: force ? 'manual' : trigger,
+        method: summarizer != null ? 'llm_summary' : 'deterministic_fallback',
+        outcome: 'committed',
+        tokensBefore: estTokensBefore,
+        tokensAfter: estTokensAfter,
+        messagesBefore: messagesBefore,
+        messagesAfter: compacted.length,
+        durationMs: 0,
+        ts: DateTime.now().toUtc(),
+      ));
     } catch (_) {}
 
     return AgentContext(
