@@ -518,12 +518,12 @@ void main() {
 }
 
 class _EchoLlm implements LlmProvider {
-  _EchoLlm(this.id, [this.text = 'mock']);
+  _EchoLlm(this.id);
 
   @override
   final String id;
 
-  final String text;
+  final String text = 'mock';
 
   @override
   Capabilities get capabilities => const Capabilities(toolCalling: false);
