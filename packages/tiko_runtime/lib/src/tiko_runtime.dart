@@ -753,6 +753,28 @@ class TikoRuntime {
   /// sesi, evict key pertama (FIFO) saat penuh.
   final Map<String, ContextBreakdownResult> _contextBreakdowns = {};
 
+  /// Hermes fase-11 fast mode: state fast per sesi (tier + jendela bounded
+  /// + model tanpa kapasitas fast). Cap 500 sesi, evict key pertama.
+  final Map<String, FastModeState> _fastModes = {};
+
+  /// State fast mode sesi [sessionId]; sesi baru mewarisi default config
+  /// (`agent.service_tier` + `agent.fast_auto_seconds`).
+  FastModeState _fastModeFor(String sessionId) {
+    if (_fastModes.length >= 500 && !_fastModes.containsKey(sessionId)) {
+      _fastModes.remove(_fastModes.keys.first);
+    }
+    return _fastModes.putIfAbsent(sessionId, () {
+      final st = FastModeState();
+      st.tier = config.agentServiceTier;
+      st.window = Duration(
+        seconds: config.agentFastAutoSeconds > 0
+            ? config.agentFastAutoSeconds
+            : 60,
+      );
+      return st;
+    });
+  }
+
   /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
   /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
   /// identik tanpa menghilangkan gate.
@@ -2533,6 +2555,9 @@ class TikoRuntime {
         if (text.trim() == '/undo') {
           return _undoCommand(sessionId);
         }
+        if (text.trim() == '/fast' || text.trim().startsWith('/fast ')) {
+          return _fastCommand(text.trim(), sessionId);
+        }
         if (text.trim() == '/context') {
           return _contextCommand(sessionId);
         }
@@ -2707,6 +2732,7 @@ class TikoRuntime {
         usageAnchorStore: usageAnchorStore,
         imageTokenCosts: imageTokenCosts,
         checkpointStore: checkpointStore,
+        fastMode: _fastModeFor(session.id),
         config: configOverride ?? defaultConfig,
         editLoopVerify: config.agentEditLoopVerify,
         // P1-4: sanitize each delta before it reaches a live chat message;
@@ -4712,6 +4738,64 @@ class TikoRuntime {
       text: engaged
           ? '▶️ ESTOP dilepas — pekerjaan baru diterima kembali.'
           : 'ESTOP tidak sedang engaged.',
+      success: true,
+    );
+  }
+
+  /// Hermes fase-11 `fast_mode.py`: `/fast` — status; `/fast <tier>` —
+  /// set tier sesi (fast|priority|ultrafast|ultra|auto|cold|normal|off).
+  /// Tier static dikirim di setiap request; `auto` membuka jendela per
+  /// user turn, `cold` hanya turn pertama tanpa riwayat.
+  ChatRunResult _fastCommand(String trimmed, String sessionId) {
+    final fm = _fastModeFor(sessionId);
+    final argRaw = trimmed == '/fast'
+        ? ''
+        : trimmed.substring('/fast '.length).trim().toLowerCase();
+    if (argRaw.isEmpty) {
+      final buf = StringBuffer(
+        'Fast mode: ${serviceTierWord(fm.tier)}',
+      );
+      if (boundedFastModes.contains(fm.tier)) {
+        buf.write(
+          ' (jendela ${fm.window.inSeconds}s, '
+          '${fm.windowOpen() ? 'TERBUKA' : 'tertutup'})',
+        );
+      }
+      if (fm.unavailableModels.isNotEmpty) {
+        buf.writeln();
+        buf.write(
+          'Model tanpa kapasitas fast: '
+          '${fm.unavailableModels.join(', ')}',
+        );
+      }
+      return ChatRunResult(text: buf.toString(), success: true);
+    }
+    final arg = fastArgAliases[argRaw] ?? argRaw;
+    final String? tier;
+    try {
+      tier = parseExactServiceTier(arg);
+    } on ArgumentError {
+      return ChatRunResult(
+        text: 'Tier tidak dikenal: "$arg". Gunakan salah satu: '
+            'fast, ultrafast, auto, cold, normal (off).',
+        success: false,
+      );
+    }
+    fm.tier = tier;
+    events.emit('fast.tier_changed', {
+      'session': sessionId,
+      'tier': tier ?? 'normal',
+    });
+    return ChatRunResult(
+      text: switch (tier) {
+        null => 'Fast mode: normal — semua request kembali standar.',
+        fastTierAuto =>
+          'Fast mode: auto — jendela ${fm.window.inSeconds}s dibuka '
+              'di setiap user turn.',
+        fastTierCold =>
+          'Fast mode: cold — hanya turn pertama sesi tanpa riwayat.',
+        _ => 'Fast mode: ${serviceTierWord(tier)} — dikirim di semua request.',
+      },
       success: true,
     );
   }

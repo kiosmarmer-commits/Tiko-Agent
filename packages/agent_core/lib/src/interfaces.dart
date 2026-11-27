@@ -62,6 +62,7 @@ class ChatRequest {
     this.temperature,
     this.stream = true,
     this.model,
+    this.serviceTier,
   });
 
   final List<ChatMessage> messages;
@@ -71,6 +72,12 @@ class ChatRequest {
   final double? temperature;
   final bool stream;
   final String? model;
+
+  /// Hermes fast mode (`agent/fast_mode.py`): tier wire opsional per request
+  /// (`service_tier` OpenAI-compat) — hanya terisi saat jendela fast
+  /// terbuka/tier static; null = normal (byte-identical dengan request
+  /// biasa, prompt cache tidak terganggu).
+  final String? serviceTier;
 }
 
 /// Abstract LLM chat provider (provider-agnostic, P-01).

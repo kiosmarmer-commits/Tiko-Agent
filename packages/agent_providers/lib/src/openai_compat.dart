@@ -204,6 +204,10 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
             )
             .toList(),
       if (req.toolChoice != null) 'tool_choice': req.toolChoice,
+      // Hermes fast mode: tier wire hanya saat jendela terbuka / tier
+      // static — request normal tidak pernah berubah bentuk.
+      if (req.serviceTier != null && req.serviceTier!.isNotEmpty)
+        'service_tier': req.serviceTier,
     };
 
     final client = httpClient ?? http.Client();

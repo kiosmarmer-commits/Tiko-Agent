@@ -14,6 +14,7 @@ import 'context_builder.dart';
 import 'compactor.dart';
 import 'checkpoints.dart';
 import 'context_breakdown.dart';
+import 'fast_mode.dart';
 import 'image_token_cost.dart';
 import 'loop_detector.dart';
 import 'usage_anchor.dart';
@@ -47,6 +48,8 @@ class AgentConfig {
     this.preflightCompaction = true,
     this.retryWaitCapSec = 90,
     this.iterationWarnRatio,
+    this.serviceTier,
+    this.fastWindowSec = 60,
   });
 
   final int maxIterations;
@@ -84,6 +87,15 @@ class AgentConfig {
   /// Hermes `iteration_budget.py`: rasio (0,1) peringatan sisa iterasi;
   /// null = peringatan off.
   final double? iterationWarnRatio;
+
+  /// Hermes fast mode (`agent/fast_mode.py`): tier default (`agent.
+  /// service_tier`) — null = normal. Bounded window (`auto`/`cold`)
+  /// diatur [fastWindowSec].
+  final String? serviceTier;
+
+  /// Panjang jendela fast bounded (`agent.fast_auto_seconds`, default 60).
+  final int fastWindowSec;
+
 
   /// When non-null, overrides the router-computed tier for this turn so
   /// callers (team runner, subagent) can pin a per-role model tier instead
@@ -151,6 +163,7 @@ class AgentLoop {
     this.usageAnchorStore,
     this.imageTokenCosts,
     this.checkpointStore,
+    this.fastMode,
     this.synthLlm,
     this.onCompactionEvent,
     this.skillEval = const SkillEvalConfig(),
@@ -198,6 +211,11 @@ class AgentLoop {
   /// patch_file) sehingga host bisa menyediakan `/undo`. Null = tanpa
   /// checkpoint (mutasi tetap berjalan, tanpa kemampuan undo).
   final CheckpointStore? checkpointStore;
+
+  /// Hermes fast mode (fase-11, `agent/fast_mode.py`): state per sesi —
+  /// tier + jendela bounded + model tanpa kapasitas fast. Null = fast mode
+  /// off (request normal, tanpa service_tier).
+  final FastModeState? fastMode;
 
   final AgentConfig config;
   final String workspacePath;
@@ -391,6 +409,12 @@ class AgentLoop {
   /// Hermes checkpoints (fase-10): snapshot file pre-mutasi turn berjalan
   /// (batch berurutan); host mendorongnya ke ledger per sesi untuk `/undo`.
   List<FileCheckpoint> _turnCheckpoints = const [];
+
+  /// Hermes fase-11 fast mode: tier wire yang terlampir pada request
+  /// terakhir + model tujuannya — dipakai untuk menandai model tanpa
+  /// kapasitas fast saat rate limit menghantam request ber-tier.
+  String? _fastTierAttached;
+  String? _fastTierModel;
   List<FileCheckpoint> get lastTurnCheckpoints => _turnCheckpoints;
 
   /// Hermes context breakdown (fase-10): breakdown kategori konteks turn
@@ -504,6 +528,23 @@ class AgentLoop {
       _imageCostOverride = null;
       _lastAnchoredPressure = null;
       _turnCheckpoints = const [];
+      // Hermes fase-11 (fast_mode): buka (atau tolak) jendela fast di batas
+      // user turn — `cold` hanya turn pertama tanpa riwayat pra-turn.
+      _fastTierAttached = null;
+      _fastTierModel = null;
+      final fm = fastMode;
+      if (fm != null) {
+        fm.window = Duration(
+          seconds: config.fastWindowSec > 0
+              ? config.fastWindowSec
+              : defaultFastWindowSec,
+        );
+        final msgs = initialContext.messages;
+        final prior = (msgs.isNotEmpty && msgs.last.role == 'user')
+            ? msgs.sublist(0, msgs.length - 1)
+            : msgs;
+        fm.beginTurn(prior);
+      }
 
       agentLoop:
       for (var i = 0; i < config.maxIterations; i++) {
@@ -611,6 +652,14 @@ class AgentLoop {
                     : Duration(
                         milliseconds: _rateLimitBackoff.inMilliseconds),
               );
+            }
+            // Hermes fase-11 (mark_fast_mode_unavailable): 429 pada request
+            // ber-tier fast → model ditandai tanpa kapasitas fast, retry
+            // sekali di tier normal (deviasi: deteksi header limit=0 tidak
+            // bisa di-port — provider Tiko tidak mengekspos header error).
+            if (err.kind == ApiErrorKind.rateLimit &&
+                _fastTierAttached != null) {
+              fastMode?.markUnavailable(_fastTierModel);
             }
             resp = await _requestLlm(ctx, activeLlm);
             isErr = resp.finishReason == 'error';
@@ -1180,7 +1229,10 @@ class AgentLoop {
         _lastAnchoredPressure = verdict.anchored ? verdict.pressure : null;
       } catch (_) {} // gerbang pra-API tidak boleh menggagalkan turn
     }
-    final request = useCtx.toRequest();
+    final request = _withServiceTier(
+      useCtx.toRequest(),
+      _fastTierFor(llm.id),
+    );
     final repaired = repairTranscript(request.messages);
     final LlmResponse resp;
     if (repaired.length == request.messages.length) {
@@ -1196,6 +1248,7 @@ class AgentLoop {
             temperature: request.temperature,
             stream: request.stream,
             model: request.model,
+            serviceTier: request.serviceTier,
           ),
         ),
       );
@@ -1219,6 +1272,33 @@ class AgentLoop {
       store.save(sessionId, null);
     } catch (_) {}
     return null;
+  }
+
+  /// Hermes fase-11 fast mode: tier wire efektif untuk [model] (null =
+  /// normal), dan tempelkan ke request bila non-null.
+  String? _fastTierFor(String? model) {
+    final fm = fastMode;
+    if (fm == null) return null;
+    final tier = fm.effectiveServiceTier(model);
+    if (tier != null) {
+      _fastTierAttached = tier;
+      _fastTierModel = model;
+    }
+    return tier;
+  }
+
+  ChatRequest _withServiceTier(ChatRequest r, String? tier) {
+    if (tier == null || tier.isEmpty) return r;
+    return ChatRequest(
+      messages: r.messages,
+      tools: r.tools,
+      toolChoice: r.toolChoice,
+      maxTokens: r.maxTokens,
+      temperature: r.temperature,
+      stream: r.stream,
+      model: r.model,
+      serviceTier: tier,
+    );
   }
 
   /// Harga token per-gambar efektif turn ini (C7): hasil kalibrasi runtime

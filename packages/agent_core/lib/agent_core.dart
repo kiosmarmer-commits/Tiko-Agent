@@ -23,6 +23,7 @@ export 'src/usage_anchor.dart';
 export 'src/image_token_cost.dart';
 export 'src/account_usage.dart';
 export 'src/checkpoints.dart';
+export 'src/fast_mode.dart';
 export 'src/context_breakdown.dart';
 export 'src/output_budget_timeout.dart';
 export 'src/stream_max_lifetime.dart';

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_core/agent_core.dart' show parseServiceTier;
 import 'package:agent_providers/agent_providers.dart' show findProviderPreset;
 import 'package:yaml/yaml.dart';
 
@@ -535,6 +536,8 @@ class TikoConfig {
     this.dailyCreditLimitUsd = 0.0,
     this.agentTurnLivenessTimeoutSec = 600,
     this.agentRetryWaitCapSec = 90,
+    this.agentServiceTier,
+    this.agentFastAutoSeconds = 60,
     this.agentPreflightCompaction = true,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
@@ -724,6 +727,14 @@ class TikoConfig {
   /// Hermes `retry_utils.LIVE_RETRY_WAIT_CAP_S` (default 90s): cooldown
   /// Retry-After di atas cap ini mengakhiri turn dengan pesan jelas.
   final int agentRetryWaitCapSec;
+
+  /// Hermes fast mode (`agent.service_tier`, `agent/fast_mode.py`): tier
+  /// default sesi — null = normal. Kata dinormalisasi `parseServiceTier`.
+  final String? agentServiceTier;
+
+  /// Hermes `agent.fast_auto_seconds` (default 60): panjang jendela fast
+  /// bounded (`/fast auto`) per user turn.
+  final int agentFastAutoSeconds;
 
   /// Hermes preflight gate (`agent.turn_preflight_gate.py`): kompresi
   /// pra-API tiap iterasi saat tekanan request di atas ambang. Default on
@@ -1703,6 +1714,15 @@ class TikoConfig {
               90,
             )
           : 90,
+      agentServiceTier: root['agent'] is YamlMap
+          ? parseServiceTier((root['agent'] as YamlMap)['service_tier'])
+          : null,
+      agentFastAutoSeconds: root['agent'] is YamlMap
+          ? _positiveIntSec(
+              (root['agent'] as YamlMap)['fast_auto_seconds'],
+              60,
+            )
+          : 60,
       agentPreflightCompaction: root['agent'] is YamlMap
           ? (root['agent'] as YamlMap)['preflight_compaction'] != false
           : true,
