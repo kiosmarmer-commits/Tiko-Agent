@@ -27,7 +27,7 @@
 | 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F10 selesai; prinsip additive, status per fase) |
 | 16 | [16-AUDIT-RESPONSIVE-ACCESSIBILITY.md](16-AUDIT-RESPONSIVE-ACCESSIBILITY.md) | Snapshot audit responsive/accessibility historis; checklist perangkat yang belum diverifikasi tetap berguna |
 | 17 | [17-AUDIT-GUI-CLI-UX-2026-11-26.md](17-AUDIT-GUI-CLI-UX-2026-11-26.md) | Catatan terbaru perbaikan GUI/CLI PR #199, kontrak JSON, status verifikasi, dan klaim lama yang usang |
-| 18 | [18-AUDIT-PAPER-2026-11-28.md](18-AUDIT-PAPER-2026-11-28.md) | Implementasi audit riset paper 2026-11-28 (RAG-01 rehidrasi, Self-RAG gate) dan daftar item yang di-defer |
+| 18 | [18-AUDIT-PAPER-2026-11-28.md](18-AUDIT-PAPER-2026-11-28.md) | Implementasi audit riset paper 2026-11-28 (RAG-01 rehidrasi, Self-RAG gate, RAG-02 cache vektor, EVAL-01 benchmark, LEARN-01 feedback loop, ToT/LATS `deep_solve`) dan daftar item yang di-defer |
 
 ## Status implementasi
 
@@ -69,6 +69,7 @@
 | Web dashboard agentd (Jalur A) | Implemented/conditional | Flutter Web sebagai satu-satunya webRoot + cookie sesi same-origin + auto-open browser; butuh `flutter build web` sebelum daemon dapat menyajikan UI |
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
 | Semantic code index + embeddings (S22) | Implemented | `code_semantic` + `tiko code-index` — hybrid BM25+cosine RRF atas indeks persisten `data/index/code-semantic.jsonl`; embedder provider `memory.embed` bila aktif, tanpa itu fallback hashing offline (dilabel jujur bukan model semantik); refresh inkremental hash sha256 per file; `code.index.enabled` default true |
+| ToT/LATS bounded deep-solve — tool `deep_solve` (Fase 30) | Implemented (opt-in) | `DeepSolveEngine` (tiko_runtime): expand → LLM judge `SCORE:/REASON:` → refine per level; budget keras `max_llm_calls`/`max_wall_clock_sec`/`max_tokens_per_call`, never-raises (degenerate ke kandidat terbaik); konfigurasi `deep_solve:` default **off** karena berbiaya LLM; event telemetry `deep_solve.done` bebas-konten; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 

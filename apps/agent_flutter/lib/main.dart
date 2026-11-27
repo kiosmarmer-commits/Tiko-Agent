@@ -1624,6 +1624,26 @@ class _ChatPageState extends State<_ChatPage> {
 
   /// C1 UX: tombol "Salin" per pesan assistant — salin teks mentah
   /// (termasuk markdown) ke clipboard, feedback lewat SnackBar.
+  /// LEARN-01: feedback 👍/👎 turn aktif — skill yang dipakai turn terakhir
+  /// dinilai (registry sink durabel) + ledger self-evolution.
+  Future<void> _sendTurnFeedback(bool positive) async {
+    try {
+      await widget.chat.repo.sendSessionFeedback(
+        widget.chat.activeSessionKey,
+        positive,
+      );
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(positive ? 'Feedback terkirim: bagus' : 'Feedback terkirim: kurang'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
   Future<void> _copyMessage(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
@@ -2089,6 +2109,32 @@ class _ChatPageState extends State<_ChatPage> {
                                 ),
                               ),
                             ),
+                          if (!user && messageText.isNotEmpty) ...[
+                            TextButton.icon(
+                              key: Key('btn-feedback-up-$i'),
+                              onPressed: () => _sendTurnFeedback(true),
+                              icon: const Icon(Icons.thumb_up_outlined, size: 16),
+                              label: Text(
+                                'Bagus',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              key: Key('btn-feedback-down-$i'),
+                              onPressed: () => _sendTurnFeedback(false),
+                              icon: const Icon(Icons.thumb_down_outlined, size: 16),
+                              label: Text(
+                                'Kurang',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.simpulMuted,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );

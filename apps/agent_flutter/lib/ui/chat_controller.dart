@@ -57,6 +57,10 @@ class ChatController extends ChangeNotifier {
   bool stopRequested = false;
   String? _activeSessionKey;
 
+  /// LEARN-01: key sesi turn aktif (fallback ke [sessionKey]) — dipakai
+  /// UI untuk feedback 👍/👎 tingkat turn.
+  String get activeSessionKey => _activeSessionKey ?? sessionKey;
+
   /// C4 Chat-UX: trace tool turn terakhir (`chat.tool`) untuk ringkasan
   /// collapsible + kartu file otomatis; nama + durasi + status error.
   final List<Map<String, dynamic>> lastTurnTrace = [];

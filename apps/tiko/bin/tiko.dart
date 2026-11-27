@@ -83,12 +83,15 @@ Direct (tanpa LLM):
   tools list
 
 Skills:
-  skills list|scan|evaluate|approve|rollback
+  skills list|scan|evaluate|approve|rollback|feedback
   offline status|enqueue|drain
 
 Session:
   session list
   session delete <id>
+  feedback <session-id> --up|--down
+                             LEARN-01: feedback 👍/👎 turn terakhir sesi
+                             (skill metrics durabel + ledger self-evolution)
 
 Migration:
   migrate <claude-code|chatgpt|json> <path> [--owner KEY]
@@ -694,11 +697,31 @@ Future<void> main(List<String> argv) async {
           stderr.writeln(error.message);
           exitCode = 1;
         }
+      } else if (args.first == 'feedback' && args.length > 2) {
+        // LEARN-01: feedback thumbs per skill dari CLI - sink metrik durabel.
+        final slug = args[1];
+        final up = args.contains('--up');
+        final down = args.contains('--down');
+        if (up == down) {
+          stderr.writeln(
+              'skills feedback membutuhkan tepat satu dari --up atau --down');
+          exitCode = 2;
+          return;
+        }
+        if (rt.skills.get(slug) == null) {
+          stderr.writeln('skill tidak ditemukan: $slug');
+          exitCode = 1;
+          return;
+        }
+        rt.skills.applyFeedback(slug, positive: up);
+        await rt.skills.flushPendingSinks();
+        emit({'ok': true, 'slug': slug, 'positive': up},
+            'feedback skill dicatat: $slug (${up ? 'up' : 'down'})');
       } else {
         stderr.writeln(
           'skills list|scan <dir>|evaluate <slug> [--promote]|'
           'approve <slug> [--actor nama]|rollback <slug> [--to draft]|'
-          'install <path> [--sha256 <hex>]',
+          'install <path> [--sha256 <hex>]|feedback <slug> --up|--down',
         );
         exitCode = 2;
       }
@@ -768,6 +791,37 @@ Future<void> main(List<String> argv) async {
         stderr.writeln('session list | session delete <id>');
         exitCode = 2;
       }
+      return;
+
+    case 'feedback':
+      // LEARN-01: feedback 👍/👎 tingkat turn dari CLI — mengarahkan ke
+      // skill yang dipakai turn terakhir sesi + ledger self-evolution.
+      if (args.isEmpty) {
+        stderr.writeln('feedback <session-id> --up|--down');
+        exitCode = 2;
+        return;
+      }
+      final positive = args.contains('--up');
+      final negative = args.contains('--down');
+      if (positive == negative) {
+        stderr.writeln('feedback membutuhkan tepat satu dari --up atau --down');
+        exitCode = 2;
+        return;
+      }
+      final sessionId = args.first;
+      final rated = await rt.applyTurnFeedback(
+        sessionId: sessionId,
+        positive: positive,
+        actor: 'cli',
+      );
+      emit({
+        'ok': true,
+        'session_id': sessionId,
+        'positive': positive,
+        'skills': rated,
+      }, rated.isEmpty
+          ? 'feedback dicatat (tanpa skill pada turn terakhir sesi ini)'
+          : 'feedback dicatat untuk skill: ${rated.join(', ')}');
       return;
 
     case 'migrate':

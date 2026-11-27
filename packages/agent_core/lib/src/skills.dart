@@ -252,7 +252,13 @@ class SkillRegistry {
     }
     final sink = onUseRecorded;
     if (sink != null) {
-      _pendingSinkWrites.add(sink(slug, success: success).catchError((Object _) {}));
+      _pendingSinkWrites.add(
+        sink(slug, success: success).catchError((Object e) {
+          // Sink failure must never break the turn, but it must not be
+          // silent either (LEARN-01): operator perlu tahu metrik hilang.
+          stderr.writeln('skills: sink recordUse gagal untuk $slug: $e');
+        }),
+      );
     }
   }
 
@@ -277,7 +283,11 @@ class SkillRegistry {
     final sink = onFeedbackRecorded;
     if (sink != null) {
       _pendingSinkWrites.add(
-        sink(slug, positive: positive).catchError((Object _) {}),
+        sink(slug, positive: positive).catchError((Object e) {
+          // Sink failure must never break the turn, but it must not be
+          // silent either (LEARN-01): operator perlu tahu feedback hilang.
+          stderr.writeln('skills: sink recordFeedback gagal untuk $slug: $e');
+        }),
       );
     }
   }

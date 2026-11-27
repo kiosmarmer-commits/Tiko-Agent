@@ -246,6 +246,23 @@ class AgentApiClient {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// LEARN-01: feedback 👍/👎 tingkat turn (session) — mengarahkan ke skill
+  /// yang dipakai turn terakhir sesi + ledger self-evolution.
+  Future<Map<String, dynamic>> sendSessionFeedback(
+    String sessionId,
+    bool positive,
+  ) async {
+    final safeId = Uri.encodeComponent(sessionId);
+    final res = await _http
+        .post(_u('/v1/sessions/$safeId/feedback'),
+            headers: _headers, body: jsonEncode({'positive': positive}))
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'session feedback');
+    final json = jsonDecode(res.body) as Map<String, dynamic>;
+    _throwPayloadError(json, 'session feedback');
+    return json;
+  }
+
   Future<Map<String, dynamic>> sendSkillFeedback(String slug, bool positive) async {
     final safeSlug = Uri.encodeComponent(slug);
     final res = await _http
