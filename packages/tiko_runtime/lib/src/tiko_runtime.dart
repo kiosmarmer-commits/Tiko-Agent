@@ -57,6 +57,7 @@ part 'approval_rules.dart';
 part 'toolchain_recipe.dart';
 part 'webhooks.dart';
 part 'background_review.dart';
+part 'idle_compaction.dart';
 part 'activity_tracker.dart';
 
 const tikoVersion = '0.2.0';
@@ -450,6 +451,7 @@ class TikoRuntime {
     SelfLearningEngine? selfLearningEngine,
     SelfEvolutionEngine? selfEvolution,
     BackgroundReviewEngine? backgroundReview,
+    IdleCompactionEngine? idleCompaction,
     this.smartHomeTool,
     SandboxRunner? sandbox,
     this.configFilePath,
@@ -510,6 +512,16 @@ class TikoRuntime {
                 events: events,
                 auxiliaryLlm: auxiliaryLlm,
                 transcriptOf: (sid) async => sessions.recent(sid, limit: 12),
+              ));
+    this.idleCompaction = idleCompaction ??
+        (providers.isEmpty || !config.idleCompaction.enabled
+            ? null
+            : IdleCompactionEngine(
+                config: config.idleCompaction,
+                events: events,
+                sessions: sessions,
+                busyOf: _lock.isBusy,
+                compactOf: _idleCompactRun,
               ));
   }
 
@@ -647,6 +659,10 @@ class TikoRuntime {
   /// Hermes background review (`agent/background_review.py`): engine review
   /// latar setelah turn kasar; null bila tanpa provider aktif.
   late final BackgroundReviewEngine? backgroundReview;
+
+  /// Hermes `170d9637` (gateway idle compaction): engine kompaksi latar
+  /// untuk sesi idle per channel; null bila config matikan / tanpa provider.
+  late final IdleCompactionEngine? idleCompaction;
 
   /// Content-plane guard (prompt injection + secret/PII output redaction).
   final PromptGuard promptGuard;
@@ -1667,6 +1683,7 @@ class TikoRuntime {
     // Start the self-learning engine for autonomous skill creation and improvement
     await rt.selfLearningEngine?.start();
     rt.selfEvolution?.start();
+    rt.idleCompaction?.start();
     
     return rt;
   }
@@ -4718,17 +4735,30 @@ class TikoRuntime {
   /// `/compact` (Hermes `conversation_compression_manual.py`): kompresi
   /// manual sesi aktif — lewati ambang otomatis (force), ringkas dengan
   /// LLM auxiliar bila ada, lalu persist ringkasan + N pesan terakhir.
-  Future<ChatRunResult> _compactCommand(
+  /// Inti pipeline kompaksi persist satu sesi — dipakai `/compact` (manual,
+  /// Hermes `conversation_compression_manual.py`) dan kompaksi idle latar
+  /// (Hermes `170d9637`) agar tidak ada jalur duplikat. Return `(ok, message)`
+  /// dengan pesan user-facing untuk kedua arah hasil.
+  Future<({bool ok, String message})> _compactSessionCore(
     String sessionId, {
     required String channel,
     required String userKey,
+    int minMessages = 5,
+    int minTokens = 0,
   }) async {
     final history = await sessions.recent(sessionId, limit: 400);
-    if (history.length <= 4) {
-      return const ChatRunResult(
-        text: 'Riwayat terlalu pendek untuk dikompres.',
-        success: false,
-      );
+    if (history.length < minMessages) {
+      return (ok: false, message: 'Riwayat terlalu pendek untuk dikompres.');
+    }
+    if (minTokens > 0) {
+      final estTokens =
+          history.fold<int>(0, (s, m) => s + m.content.length) ~/ 4;
+      if (estTokens < minTokens) {
+        return (
+          ok: false,
+          message: 'Riwayat di bawah ambang token — dikompaksi dilewati.',
+        );
+      }
     }
     final session = await sessions.getOrCreate(
       sessionId,
@@ -4755,9 +4785,9 @@ class TikoRuntime {
     final messagesAfter = compacted.messages.length;
     final summary = (session.summary ?? stats?.summary ?? '').trim();
     if (summary.isEmpty) {
-      return const ChatRunResult(
-        text: 'Kompresi menghasilkan ringkasan kosong — riwayat dibiarkan.',
-        success: false,
+      return (
+        ok: false,
+        message: 'Kompresi menghasilkan ringkasan kosong — riwayat dibiarkan.',
       );
     }
     final persisted = await sessions.compactSession(
@@ -4766,20 +4796,52 @@ class TikoRuntime {
       keepLastMessages: config.compactorKeepLastN.clamp(2, 50),
     );
     if (!persisted) {
-      return const ChatRunResult(
-        text: 'Store sesi tidak mendukung kompresi persist — riwayat utuh.',
-        success: false,
+      return (
+        ok: false,
+        message: 'Store sesi tidak mendukung kompresi persist — riwayat utuh.',
       );
     }
-    return ChatRunResult(
-      text: 'Kompresi selesai: ${stats?.messagesBefore ?? history.length} → '
+    return (
+      ok: true,
+      message: 'Kompresi selesai: ${stats?.messagesBefore ?? history.length} → '
           '$messagesAfter pesan, '
           'est. token ${stats?.estTokensBefore ?? 0} → '
           '${stats?.estTokensAfter ?? 0}. '
           'Ringkasan dipersist; ${config.compactorKeepLastN.clamp(2, 50)} '
           'pesan terakhir tetap utuh.',
-      success: true,
     );
+  }
+
+  Future<ChatRunResult> _compactCommand(
+    String sessionId, {
+    required String channel,
+    required String userKey,
+  }) async {
+    final r = await _compactSessionCore(
+      sessionId,
+      channel: channel,
+      userKey: userKey,
+    );
+    return ChatRunResult(text: r.message, success: r.ok);
+  }
+
+  /// Fase 25: runner kompaksi idle latar untuk [IdleCompactionEngine] —
+  /// pipeline sama dengan `/compact` (via [_compactSessionCore]) dengan
+  /// gate admission idle (min pesan + min estimasi token) dari config.
+  Future<bool> _idleCompactRun(
+    String sessionId, {
+    required String channel,
+    required String userKey,
+  }) async {
+    final cfg = config.idleCompaction;
+    final r = await _compactSessionCore(
+      sessionId,
+      channel: channel,
+      userKey: userKey,
+      minMessages: cfg.minMessages,
+      minTokens: cfg.minTokens,
+    );
+    return r.ok;
   }
 
   /// `/usage` — pemakaian token 7 hari terakhir + rate-limit provider
@@ -5869,6 +5931,9 @@ class TikoRuntime {
     } catch (_) {} // best-effort
     try {
       await backgroundReview?.close();
+    } catch (_) {} // best-effort
+    try {
+      await idleCompaction?.close();
     } catch (_) {} // best-effort
     try {
       await _sandbox?.dispose();
