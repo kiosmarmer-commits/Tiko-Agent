@@ -27,6 +27,7 @@ export 'src/bot_mode.dart';
 export 'src/character_card.dart';
 export 'src/script_repair_advisor.dart';
 export 'src/deep_solve.dart';
+export 'src/task_classifier.dart';
 export 'src/idle_consolidation.dart';
 export 'src/context_refs.dart';
 export 'src/attachments.dart';
