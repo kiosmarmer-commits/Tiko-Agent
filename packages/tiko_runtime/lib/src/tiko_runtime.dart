@@ -16,7 +16,10 @@ import 'provider_factory.dart';
 import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'deep_solve.dart';
+import 'graph_rag_tool.dart';
 import 'idle_consolidation.dart';
+import 'raptor_tool.dart';
+import 'skill_benchmark.dart';
 import 'task_classifier.dart';
 import 'context_refs.dart';
 import 'attachment_ingest.dart';
@@ -1494,11 +1497,41 @@ class TikoRuntime {
       logsDir: abs(cfg.logsDir),
       recentRuns: () => rt.turnInspector.summary(),
     ));
+    // Fase 34 (GraphRAG-lite): tool `graph_query` hanya bila config
+    // enabled + vault_dir tersedia (khusus pengguna vault simpul).
+    if (cfg.graphRag.enabled && cfg.graphRag.vaultDir.isNotEmpty) {
+      rt.registry.register(GraphRagQueryTool(
+        vaultDir: cfg.graphRag.vaultDir,
+        maxHops: cfg.graphRag.maxHops,
+        maxNotes: cfg.graphRag.maxNotes,
+        onEvent: rt.events.emit,
+      ));
+    }
+    // Fase 33 (RAPTOR-lite): pohon ringkasan hierarkis korpus RAG —
+    // build/query/status via tool `raptor`; persist ke data/raptor/.
+    rt.registry.register(RaptorTool(
+      chunksProvider: () => [
+        for (final c in rt.ragPipeline.chunks) (id: c.id, text: c.text),
+      ],
+      treePath: p.join(dataDir, 'raptor', 'tree.json'),
+      onEvent: rt.events.emit,
+    ));
     // Fase D — riset otomatis butuh runtime yang sudah jadi (starter
     // menyusun turn di atas chatWithStatus), jadi didaftarkan di sini.
+    // Fase 32 (EVAL-02): benchmark skill lintas task — kasus dimuat dari
+    // file JSON/JSONL (default data/benchmarks/skill_cases.json) atau
+    // inline; laporan dipersist + event `eval.skill_benchmark`.
     rt.registry
       ..register(DeepResearchTool(
         (question) => rt.runResearch(question: question),
+      ))
+      ..register(SkillBenchmarkTool(
+        runner: (cases, previous) => rt.runSkillBenchmark(
+          cases,
+          previous: previous,
+        ),
+        defaultCasesPath: p.join(dataDir, 'benchmarks', 'skill_cases.json'),
+        reportPath: p.join(dataDir, 'benchmarks', 'skill_benchmark.json'),
       ))
       ..register(ScheduleResearchTool(
         (
@@ -2286,6 +2319,39 @@ class TikoRuntime {
         format: format,
         ownerKey: ownerKey,
       );
+
+  /// Fase 32 (EVAL-02): jalankan skill benchmark lintas task — setiap kasus
+  /// dieksekusi sebagai turn `chatWithStatus` biasa (tanpa hak istimewa),
+  /// dinilai terhadap expectation kasus. Laporan tersedia sebagai return
+  /// value; persist + event ditangani pemanggil/tool.
+  Future<SkillBenchmarkReport> runSkillBenchmark(
+    List<SkillBenchmarkCase> cases, {
+    String sessionIdPrefix = 'bench:skill',
+    SkillBenchmarkReport? previous,
+  }) async {
+    var i = 0;
+    return const SkillBenchmark().run(
+      cases,
+      (c, _) async {
+        i++;
+        final started = DateTime.now();
+        final result = await chatWithStatus(
+          c.prompt,
+          sessionId: '$sessionIdPrefix:${c.id.isEmpty ? i : c.id}',
+        );
+        return SkillBenchmarkTurn(
+          text: result.text,
+          success: result.success,
+          tokensUsed: result.tokensUsed,
+          latencyMs:
+              DateTime.now().difference(started).inMilliseconds,
+          toolNames: [
+            for (final t in result.toolCallTraces) t.name,
+          ],
+        );
+      },
+    );
+  }
 
   Future<bool> deleteMemory(String id) async {
     if (id.isEmpty || id.length > 128 || id.contains('\u0000')) return false;

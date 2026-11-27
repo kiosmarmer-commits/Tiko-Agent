@@ -27,7 +27,7 @@
 | 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F10 selesai; prinsip additive, status per fase) |
 | 16 | [16-AUDIT-RESPONSIVE-ACCESSIBILITY.md](16-AUDIT-RESPONSIVE-ACCESSIBILITY.md) | Snapshot audit responsive/accessibility historis; checklist perangkat yang belum diverifikasi tetap berguna |
 | 17 | [17-AUDIT-GUI-CLI-UX-2026-11-26.md](17-AUDIT-GUI-CLI-UX-2026-11-26.md) | Catatan terbaru perbaikan GUI/CLI PR #199, kontrak JSON, status verifikasi, dan klaim lama yang usang |
-| 18 | [18-AUDIT-PAPER-2026-11-28.md](18-AUDIT-PAPER-2026-11-28.md) | Implementasi audit riset paper 2026-11-28 (RAG-01 rehidrasi, Self-RAG gate, RAG-02 cache vektor, EVAL-01 benchmark, LEARN-01 feedback loop, ToT/LATS `deep_solve`) dan daftar item yang di-defer |
+| 18 | [18-AUDIT-PAPER-2026-11-28.md](18-AUDIT-PAPER-2026-11-28.md) | Implementasi audit riset paper 2026-11-28 (RAG-01 rehidrasi, Self-RAG gate, RAG-02 cache vektor, EVAL-01 benchmark, LEARN-01 feedback loop, ToT/LATS `deep_solve`, API-Bank schema + EVAL-02 skill benchmark, RAPTOR-lite, GraphRAG-lite) dan daftar item yang di-defer |
 
 ## Status implementasi
 
@@ -71,6 +71,9 @@
 | Semantic code index + embeddings (S22) | Implemented | `code_semantic` + `tiko code-index` — hybrid BM25+cosine RRF atas indeks persisten `data/index/code-semantic.jsonl`; embedder provider `memory.embed` bila aktif, tanpa itu fallback hashing offline (dilabel jujur bukan model semantik); refresh inkremental hash sha256 per file; `code.index.enabled` default true |
 | ToT/LATS bounded deep-solve — tool `deep_solve` (Fase 30) | Implemented (opt-in) | `DeepSolveEngine` (tiko_runtime): expand → LLM judge `SCORE:/REASON:` → refine per level; budget keras `max_llm_calls`/`max_wall_clock_sec`/`max_tokens_per_call`, never-raises (degenerate ke kandidat terbaik); konfigurasi `deep_solve:` default **off** karena berbiaya LLM; event telemetry `deep_solve.done` bebas-konten; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | Task classifier + algorithm router — advisory `task.mode` (Fase 31) | Implemented | `TaskClassifier` heuristik deterministik (tanpa LLM): 7 mode §7.2 (fast/tool/plan/deepReasoning/research/coding/knowledge) + keyword custom via config `task_classifier:`; event `task.mode` bebas-konten + `ChatRunResult.taskMode`; advisory-only, jalur eksekusi ReAct tidak berubah; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| API-Bank task schema adapter + EVAL-02 skill benchmark (Fase 32) | Implemented | `ApiBankAdapter` (agent_core): JSONL fail-open → `EvalCase` kind `toolPrecision`; fixture mini self-authored; `SkillBenchmark` harness multi-turn + tool `skill_benchmark` dengan report persist + `regressionsVs` baseline; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| RAPTOR-lite — index hierarkis ringkasan (Fase 33) | Implemented (opt-in) | `RaptorTree` deterministik tanpa LLM (agent_memory): clustering greedy Jaccard ≥0.15 + summary ekstraktif TF, query lexical berbobot bonus level atas, save/load JSON; tool `raptor` (build/query/status) persist `data/raptor/tree.json`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| GraphRAG-lite — graf pengetahuan + komunitas (Fase 34) | Implemented (opt-in) | `GraphRagIndex` (simpul_core): CSR + Louvain, query BFS `max_hops` decay 0.6 + scoring komunitas global, konteks `[n] source`; tool `graph_query` scan vault + build otomatis; config `graph_rag:` default **off**, `vault_dir` wajib; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 
