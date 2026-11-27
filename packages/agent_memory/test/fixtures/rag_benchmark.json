@@ -1,0 +1,62 @@
+{
+  "documents": {
+    "wiki-vektor": "Pencarian vektor membandingkan embedding kueri dengan embedding dokumen. Cosine similarity mengukur kemiripan arah dua vektor. Reciprocal Rank Fusion menggabungkan peringkat dense dan lexical.",
+    "wiki-kucing": "Kucing adalah hewan mamalia yang suka tidur siang di sofa. Kucing domestik berburu tikus dan bermain bola benang.",
+    "wiki-anjing": "Anjing adalah hewan peliharaan setia yang bermain bola di taman. Anjing pelatih mengajari dengkul dan duduk.",
+    "wiki-rendang": "Rendang adalah masakan Minang dari daging sapi dimasak santan kelapa lama hingga kering. Rendang disajikan pada hari raya.",
+    "wiki-scheduler": "Scheduler cron menjadwalkan tugas berulang dengan zona waktu dan DST. Retry backoff eksponensial menahan pengiriman ulang job gagal.",
+    "wiki-memori": "Memory store menyimpan fakta dengan owner scope, provenance, dan TTL. Full-text search BM25 mengambil fakta relevan untuk prompt."
+  },
+  "cases": [
+    {
+      "query": "cosine similarity vektor",
+      "relevant_doc_ids": ["wiki-vektor"],
+      "description": "kata kunci persis"
+    },
+    {
+      "query": "hewan yang suka tidur siang",
+      "relevant_doc_ids": ["wiki-kucing"],
+      "description": "paraphrase tanpa kata kucing"
+    },
+    {
+      "query": "masakan daging santan kelapa",
+      "relevant_doc_ids": ["wiki-rendang"],
+      "description": "kata kunci masakan"
+    },
+    {
+      "query": "jadwal tugas ulang zona waktu",
+      "relevant_doc_ids": ["wiki-scheduler"],
+      "description": "kata kunci scheduler"
+    },
+    {
+      "query": "penyimpanan fakta full-text search",
+      "relevant_doc_ids": ["wiki-memori"],
+      "description": "kata kunci memori"
+    },
+    {
+      "query": "hewan peliharaan setia bermain bola",
+      "relevant_doc_ids": ["wiki-anjing"],
+      "description": "kata kunci anjing"
+    },
+    {
+      "query": "RRF menggabungkan peringkat dense dan lexical",
+      "relevant_doc_ids": ["wiki-vektor"],
+      "description": "istilah teknis hybrid retrieval"
+    },
+    {
+      "query": "kucing berburu tikus",
+      "relevant_doc_ids": ["wiki-kucing"],
+      "description": "perilaku kucing"
+    },
+    {
+      "query": "resep kue cokelat lembut",
+      "relevant_doc_ids": [],
+      "description": "distraktor: tidak ada di korpus"
+    },
+    {
+      "query": "harga tiket pesawat ke bali",
+      "relevant_doc_ids": [],
+      "description": "distraktor: tidak ada di korpus"
+    }
+  ]
+}

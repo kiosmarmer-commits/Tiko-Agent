@@ -109,4 +109,98 @@ void main() {
     final result = await second.retrieve('kucing sofa');
     expect(result.hits.map((h) => h.chunk.docId), isNot(contains('doc-a')));
   });
+
+  test(
+    'RAG-02: vector cache persist - semantic rerank tetap penuh pasca-restart',
+    () async {
+      List<double> embed(String text) {
+        final v = List<double>.filled(8, 0);
+        for (final t in text.toLowerCase().split(RegExp(r'\W+'))) {
+          if (t.isEmpty) continue;
+          v[t.hashCode.abs() % 8] += 1;
+        }
+        return v;
+      }
+
+      final ftsPath = '${tmp.path}/rag_fts.json';
+      final vecPath = '${tmp.path}/rag_vectors.json';
+      final first = RagPipeline(
+        dense: BruteForceVectorIndex(),
+        lexical: FtsIndex(ftsPath),
+        embedder: (text) async => embed(text),
+        vectorCache: ChunkVectorCache(vecPath),
+      );
+      await first.ingest(
+        'wiki-vektor',
+        'Pencarian vektor membandingkan embedding kueri dengan embedding dokumen.',
+      );
+      expect(first.vectorCache!.count, greaterThanOrEqualTo(1));
+
+      final reloadedCache = ChunkVectorCache(vecPath);
+      await reloadedCache.load();
+      expect(reloadedCache.count, greaterThanOrEqualTo(1));
+
+      final reloadedFts = FtsIndex(ftsPath);
+      await reloadedFts.load();
+      final second = RagPipeline(
+        dense: BruteForceVectorIndex(),
+        lexical: reloadedFts,
+        embedder: (text) async => embed(text),
+        vectorCache: reloadedCache,
+      );
+      second.restoreChunksFromLexicalIndex();
+      final restoredVectors = second.restoreVectorsFromCache();
+      expect(restoredVectors, greaterThanOrEqualTo(1));
+
+      final result = await second.retrieve('cosine similarity vektor');
+      expect(result.hits, isNotEmpty);
+    },
+  );
+
+  test('RAG-02: vector cache dimensi beda dianggap stale', () async {
+    final vecPath = '${tmp.path}/rag_vectors.json';
+    final cache = ChunkVectorCache(vecPath);
+    cache.upsert('a#0', [1, 2, 3]);
+    cache.upsert('b#0', [1, 2]);
+    expect(cache.count, 1);
+    await cache.save();
+
+    final reloaded = ChunkVectorCache(vecPath);
+    await reloaded.load();
+    expect(reloaded.get('a#0'), [1, 2, 3]);
+    expect(reloaded.get('b#0'), isNull);
+  });
+
+  test('RAG-02: re-embed on-demand mengisi vector yang hilang', () async {
+    final ftsPath = '${tmp.path}/rag_fts.json';
+    var embedCalls = 0;
+    Future<List<double>> embed(String text) async {
+      embedCalls++;
+      final v = List<double>.filled(8, 0);
+      v[text.hashCode.abs() % 8] = 1;
+      return v;
+    }
+
+    final first = RagPipeline(
+      dense: BruteForceVectorIndex(),
+      lexical: FtsIndex(ftsPath),
+      embedder: embed,
+    );
+    await first.ingest('doc', 'kucing tidur siang di sofa');
+
+    final fts = FtsIndex(ftsPath);
+    await fts.load();
+    final before = embedCalls;
+    final p2 = RagPipeline(
+      dense: BruteForceVectorIndex(),
+      lexical: fts,
+      embedder: embed,
+      vectorCache: ChunkVectorCache('${tmp.path}/rag_vectors.json'),
+    );
+    p2.restoreChunksFromLexicalIndex();
+    expect(p2.restoreVectorsFromCache(), 0);
+    final result = await p2.retrieve('kucing tidur');
+    expect(result.hits, isNotEmpty);
+    expect(embedCalls, greaterThan(before));
+  });
 }

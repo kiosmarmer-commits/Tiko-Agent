@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:agent_core/agent_core.dart';
 
+import 'chunk_vector_cache.dart';
 import 'fts_index.dart';
 
 import 'sqlite_vec_index.dart';
@@ -261,6 +262,7 @@ class RagPipeline {
     this.expander = const QueryExpander(),
     this.maxConcurrency = 4,
     this.onEmbedError,
+    this.vectorCache,
   }) : assert(maxConcurrency >= 1 && maxConcurrency <= 16);
 
   final VectorIndex dense;
@@ -278,6 +280,11 @@ class RagPipeline {
   /// Mutable karena host meng-wire-nya setelah pipeline dibangun (event bus
   /// runtime belum tersedia saat `TikoRuntime.create()` membangun pipeline).
   void Function(String meta, Object? error)? onEmbedError;
+
+  /// RAG-02 — persistensi cache embedding chunk; null = cache in-memory
+  /// saja (perilaku lama). Dimuat host saat startup, disimpan quietly
+  /// bersama indeks lexical pasca-ingest/remove.
+  final ChunkVectorCache? vectorCache;
 
   final Map<String, RagChunk> _chunks = {};
 
@@ -318,6 +325,24 @@ class RagPipeline {
     return restored;
   }
 
+  /// RAG-02 — rehidrasi cache embedding chunk dari [ChunkVectorCache] yang
+  /// dimuat disk. Non-destruktif; hanya id chunk yang dikenal pipeline yang
+  /// dipulihkan. Return jumlah vector yang dipulihkan.
+  int restoreVectorsFromCache() {
+    final cache = vectorCache;
+    if (cache == null) return 0;
+    var restored = 0;
+    for (final id in _chunks.keys) {
+      if (_chunkVectors.containsKey(id)) continue;
+      final vector = cache.get(id);
+      if (vector != null && vector.isNotEmpty) {
+        _chunkVectors[id] = vector;
+        restored++;
+      }
+    }
+    return restored;
+  }
+
   /// Chunks [text], indexes each chunk in both the vector index (when an
   /// embedder is available) and the lexical index. Returns the chunks.
   ///
@@ -343,6 +368,7 @@ class RagPipeline {
       final vector = vectors[i];
       if (vector != null && vector.isNotEmpty) {
         _chunkVectors[chunk.id] = vector;
+        vectorCache?.upsert(chunk.id, vector);
         await dense.upsert(chunk.id, vector, {
           'doc_id': chunk.docId,
           'index': chunk.index,
@@ -361,6 +387,7 @@ class RagPipeline {
     for (final id in ids) {
       _chunks.remove(id);
       _chunkVectors.remove(id);
+      vectorCache?.remove(id);
       lexical.remove(id);
       if (dense is BruteForceVectorIndex) {
         await (dense as BruteForceVectorIndex).remove(id);
@@ -371,15 +398,22 @@ class RagPipeline {
     await _saveLexicalQuietly();
   }
 
-  /// Persist indeks lexical pasca-ingest/remove (RAG-01) sehingga metadata
-  /// bisa direhidrasi setelah restart tanpa menunggu shutdown. Gagal I/O
-  /// tidak menggagalkan ingest (indeks in-memory tetap valid).
+  /// Persist indeks lexical + cache vector pasca-ingest/remove (RAG-01/
+  /// RAG-02) sehingga metadata bisa direhidrasi setelah restart tanpa
+  /// menunggu shutdown. Gagal I/O tidak menggagalkan ingest (indeks
+  /// in-memory tetap valid).
   Future<void> _saveLexicalQuietly() async {
     try {
       await lexical.save();
     } catch (e) {
       // ignore: avoid_print
       stderr.writeln('rag_pipeline: lexical.save gagal: $e');
+    }
+    try {
+      await vectorCache?.save();
+    } catch (e) {
+      // ignore: avoid_print
+      stderr.writeln('rag_pipeline: vectorCache.save gagal: $e');
     }
   }
 
@@ -429,6 +463,31 @@ class RagPipeline {
     ).toList();
     final reranked = <(String, double)>[];
     if (queryEmbedding.isNotEmpty) {
+      // RAG-02 — re-embed on-demand: candidate tanpa cached vector
+      // (pasca-restart tanpa cache disk) di-embed sekali lalu di-cache agar
+      // semantic rerank tetap penuh; bounded oleh [maxConcurrency].
+      final missing = <String>[
+        for (final entry in rerankPool)
+          if (_chunks.containsKey(entry.key) &&
+              !_chunkVectors.containsKey(entry.key))
+            entry.key,
+      ];
+      if (missing.isNotEmpty) {
+        final vectors = await _mapBounded<String, List<double>>(
+          missing,
+          (String id) async {
+            final embedded = await _safeEmbed(_chunks[id]!.text);
+            return embedded;
+          },
+        );
+        for (var i = 0; i < missing.length; i++) {
+          final v = vectors[i];
+          if (v.isNotEmpty) {
+            _chunkVectors[missing[i]] = v;
+            vectorCache?.upsert(missing[i], v);
+          }
+        }
+      }
       for (var pos = 0; pos < rerankPool.length; pos++) {
         final entry = rerankPool[pos];
         final chunk = _chunks[entry.key];

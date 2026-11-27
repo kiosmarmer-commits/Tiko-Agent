@@ -1090,14 +1090,20 @@ class TikoRuntime {
     // embedder degrades retrieval to lexical-only BM25.
     final ragFts = FtsIndex(p.join(dataDir, 'rag_fts.json'));
     await ragFts.load();
+    // RAG-02 (audit 2026-11-28 §5): cache embedding chunk persisten agar
+    // semantic rerank tidak turun kualitas pasca-restart.
+    final ragVectorCache = ChunkVectorCache(p.join(dataDir, 'rag_vectors.json'));
+    await ragVectorCache.load();
     final rag = RagPipeline(
       dense: vectorIndex,
       lexical: ragFts,
       embedder: embedder,
+      vectorCache: ragVectorCache,
     );
     // RAG-01 (audit 2026-11-28 §6.1): rehidrasi metadata chunk dari FTS yang
     // baru dimuat disk sehingga retrieve() tidak kosong pasca-restart.
     rag.restoreChunksFromLexicalIndex();
+    rag.restoreVectorsFromCache();
 
     // S22 — indeks kode semantik persisten (default enabled): memakai
     // embedder memory.embed bila aktif, selain itu fallback hashing offline.
@@ -5911,6 +5917,11 @@ class TikoRuntime {
       await layeredMemory.save(p.join(dataDir, 'layered_memory.json'));
     } catch (e) {
       stderr.writeln('runtime: shutdown layeredMemory.save gagal: $e');
+    }
+    try {
+      await ragPipeline.vectorCache?.save();
+    } catch (e) {
+      stderr.writeln('runtime: shutdown rag vectorCache.save gagal: $e');
     }
     try {
       await ragPipeline.lexical.save();
