@@ -9,6 +9,7 @@ import 'package:agent_providers/agent_providers.dart';
 import 'package:agent_security/agent_security.dart' hide RateLimitTracker;
 import 'package:agent_scheduler/agent_scheduler.dart';
 import 'package:agent_tools/agent_tools.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'provider_factory.dart';
@@ -54,6 +55,9 @@ part 'eval_gate.dart';
 part 'benchmark_replay.dart';
 part 'approval_rules.dart';
 part 'toolchain_recipe.dart';
+part 'webhooks.dart';
+part 'background_review.dart';
+part 'activity_tracker.dart';
 
 const tikoVersion = '0.2.0';
 
@@ -439,11 +443,13 @@ class TikoRuntime {
     required this.errorMemory,
     required this.jobOutputs,
     required this.costLedger,
+    required this.activityTracker,
     required this.approvalRules,
     this.reflectionEngine,
     this.personaPrompt,
     SelfLearningEngine? selfLearningEngine,
     SelfEvolutionEngine? selfEvolution,
+    BackgroundReviewEngine? backgroundReview,
     this.smartHomeTool,
     SandboxRunner? sandbox,
     this.configFilePath,
@@ -495,6 +501,15 @@ class TikoRuntime {
                 skills: skills,
                 reflectionEngine: reflectionEngine,
                 events: events,
+              ));
+    this.backgroundReview = backgroundReview ??
+        (providers.isEmpty
+            ? null
+            : BackgroundReviewEngine(
+                config: config.review,
+                events: events,
+                auxiliaryLlm: auxiliaryLlm,
+                transcriptOf: (sid) async => sessions.recent(sid, limit: 12),
               ));
   }
 
@@ -629,6 +644,10 @@ class TikoRuntime {
   /// LLM judge + UCB1 bandit + quarantine policy. Null when no provider exists.
   late final SelfEvolutionEngine? selfEvolution;
 
+  /// Hermes background review (`agent/background_review.py`): engine review
+  /// latar setelah turn kasar; null bila tanpa provider aktif.
+  late final BackgroundReviewEngine? backgroundReview;
+
   /// Content-plane guard (prompt injection + secret/PII output redaction).
   final PromptGuard promptGuard;
 
@@ -712,6 +731,10 @@ class TikoRuntime {
   /// F7 (docs/15 §8) — ledger biaya/token per turn (durabel, JSONL).
   final CostLedger costLedger;
 
+  /// Hermes `activity_tracker`: first/last turn + hitungan turn per sesi,
+  /// durabel antar restart (`/activity`).
+  final ActivityTracker activityTracker;
+
   /// Hermes fase-7 `credits_tracker`: akumulasi biaya USD harian + limit
   /// opsional (`agent.daily_credit_limit_usd`, 0 = off).
   late final CreditsTracker credits = CreditsTracker(
@@ -757,6 +780,10 @@ class TikoRuntime {
   /// Hermes fase-11 fast mode: state fast per sesi (tier + jendela bounded
   /// + model tanpa kapasitas fast). Cap 500 sesi, evict key pertama.
   final Map<String, FastModeState> _fastModes = {};
+
+  /// Hermes `reasoning_effort.py`: override effort reasoning per sesi
+  /// (`/reasoning <level>`). Cap 500 sesi, evict key pertama.
+  final Map<String, String> _reasoningEfforts = {};
 
   /// State fast mode sesi [sessionId]; sesi baru mewarisi default config
   /// (`agent.service_tier` + `agent.fast_auto_seconds`).
@@ -811,6 +838,10 @@ class TikoRuntime {
 
   /// Hook lifecycle Hermes-parity (P1); null bila tanpa aturan `hooks:`.
   HookExecutor? hookExecutor;
+
+  /// Hermes webhook outbound (`agent/webhook_outbound.py`): POST event ke
+  /// endpoint `webhooks.outbound`; null bila tanpa konfigurasi webhooks.
+  OutboundWebhookRegistry? webhookRegistry;
 
   /// Absolut path config aktif (dari [TikoRuntime.create]); dipakai CRUD
   /// hooks via [ConfigStore] agar perubahan dari GUI/GUI API tervalidasi,
@@ -931,6 +962,10 @@ class TikoRuntime {
     await jobOutputs.load();
 
     final costLedger = CostLedger(persistPath: p.join(dataDir, 'turn_costs.jsonl'));
+    final activityTracker = ActivityTracker(
+      persistPath: p.join(dataDir, 'session_activity.jsonl'),
+    );
+    await activityTracker.load();
     await costLedger.load();
     final approvalRules = ApprovalRules(persistPath: p.join(dataDir, 'approval_rules.json'));
     await approvalRules.load();
@@ -1323,6 +1358,7 @@ class TikoRuntime {
       errorMemory: errorMemory,
       jobOutputs: jobOutputs,
       costLedger: costLedger,
+      activityTracker: activityTracker,
       approvalRules: approvalRules,
       providers: providers,
       registry: registry,
@@ -1429,6 +1465,12 @@ class TikoRuntime {
         rules: cfg.hooks,
         workspace: workspace,
       )..start();
+    }
+    // Webhook outbound (Hermes-parity): POST event runtime ke endpoint
+    // `webhooks.outbound`; kegagalan jaringan tidak pernah menggagalkan turn.
+    if (cfg.webhookOutbound.isNotEmpty) {
+      rt.webhookRegistry = OutboundWebhookRegistry(cfg.webhookOutbound)
+        ..start(rt.events);
     }
     rt.skillLedger = SkillApprovalLedger(p.join(dataDir, 'skill_approvals.json'));
     await rt.skillLedger.load();
@@ -2408,6 +2450,7 @@ class TikoRuntime {
         costUsd: estimate.usd,
       );
       await costLedger.record(entry);
+      await activityTracker.recordTurn(session, channel, success: success);
       credits.recordCost(estimate.usd);
       if (credits.consumeWarnSignal()) {
         events.emit('credits.warn', {
@@ -2559,12 +2602,27 @@ class TikoRuntime {
         if (text.trim() == '/fast' || text.trim().startsWith('/fast ')) {
           return _fastCommand(text.trim(), sessionId);
         }
+        if (text.trim() == '/reasoning' ||
+            text.trim().startsWith('/reasoning ')) {
+          return _reasoningCommand(text.trim(), sessionId);
+        }
         if (text.trim() == '/context') {
           return _contextCommand(sessionId);
         }
         if (text.trim() == '/insights' ||
             text.trim().startsWith('/insights ')) {
           return await _insightsCommand(text.trim());
+        }
+        if (text.trim() == '/activity') {
+          try {
+            await activityTracker.load();
+          } catch (_) {
+            // Tracker gagal dimuat: tampilkan apa yang ada di memori.
+          }
+          return ChatRunResult(
+            text: activityFormatTerminal(activityTracker.records),
+            success: true,
+          );
         }
         final planTask = parsePlanCommand(text);
         if (planTask != null) {
@@ -2670,7 +2728,11 @@ class TikoRuntime {
           maxToolCalls: resourceProfile == 'eco' ? 12 : config.maxToolCalls,
           turnLivenessTimeoutSec: config.agentTurnLivenessTimeoutSec,
           preflightCompaction: config.agentPreflightCompaction,
+          imageEviction: config.agentImageEviction,
           retryWaitCapSec: config.agentRetryWaitCapSec,
+          serviceTier: config.agentServiceTier,
+          fastWindowSec: config.agentFastAutoSeconds,
+          reasoningEffort: config.agentReasoningEffort,
         );
       final projCtx = resolveProjectContextFile(workspaceRoot: workspace);
       final loop = AgentLoop(
@@ -2746,6 +2808,7 @@ class TikoRuntime {
         imageTokenCosts: imageTokenCosts,
         checkpointStore: checkpointStore,
         fastMode: _fastModeFor(session.id),
+        reasoningEffortOverride: _reasoningEfforts[session.id],
         config: configOverride ?? defaultConfig,
         editLoopVerify: config.agentEditLoopVerify,
         // P1-4: sanitize each delta before it reaches a live chat message;
@@ -3005,6 +3068,11 @@ class TikoRuntime {
         }
       }
       _rememberSessionSkills(session.id, result.skillsUsed);
+      backgroundReview?.noteTurnEnd(
+        session.id,
+        success: result.success,
+        toolCalls: result.toolCallCount,
+      );
       unawaited(_checkTokenAnomaly(session, result));
       unawaited(_runIdleConsolidation(session.id));
       unawaited(spans.recordTurn(
@@ -4813,6 +4881,55 @@ class TikoRuntime {
     );
   }
 
+  /// Hermes `reasoning_effort.py` — `/reasoning [level]`: status / set
+  /// effort reasoning per sesi. Fail-open: kata tak dikenal tetap diterima
+  /// (provider meng-clamp ke kosakata wire-nya); off = `none`.
+  ChatRunResult _reasoningCommand(String trimmed, String sessionId) {
+    final argRaw = trimmed == '/reasoning'
+        ? ''
+        : trimmed.substring('/reasoning '.length).trim().toLowerCase();
+    if (argRaw.isEmpty) {
+      final current = _reasoningEfforts[sessionId] ??
+          config.agentReasoningEffort ??
+          'off (field reasoning tidak dikirim ke wire)';
+      return ChatRunResult(
+        text: 'Reasoning effort: $current. '
+            'Level tangga: ${effortLadder.join(', ')}. '
+            'Gunakan `/reasoning <level>` untuk set (mis. /reasoning high).',
+        success: true,
+      );
+    }
+    if (argRaw == 'off') {
+      _reasoningEfforts.remove(sessionId);
+      events.emit('reasoning.level_changed', {
+        'session': sessionId,
+        'effort': null,
+      });
+      return const ChatRunResult(
+        text: 'Reasoning effort: off — field reasoning tidak dikirim ke '
+            'wire pada sesi ini.',
+        success: true,
+      );
+    }
+    if (!_reasoningEfforts.containsKey(sessionId) &&
+        _reasoningEfforts.length >= 500) {
+      _reasoningEfforts.remove(_reasoningEfforts.keys.first);
+    }
+    _reasoningEfforts[sessionId] = argRaw;
+    events.emit('reasoning.level_changed', {
+      'session': sessionId,
+      'effort': argRaw,
+    });
+    final hint = isKnownEffort(argRaw)
+        ? ''
+        : ' (bukan level tangga standar — diteruskan apa adanya, '
+            'provider meng-clamp bila tak didukung)';
+    return ChatRunResult(
+      text: 'Reasoning effort sesi ini: $argRaw$hint.',
+      success: true,
+    );
+  }
+
   ChatRunResult _usageCommand(String sessionId) {
     final buf = StringBuffer('Pemakaian (7 hari terakhir):\n');
     try {
@@ -5746,6 +5863,12 @@ class TikoRuntime {
     } catch (_) {} // best-effort
     try {
       await smartHomeTool?.close();
+    } catch (_) {} // best-effort
+    try {
+      await webhookRegistry?.close();
+    } catch (_) {} // best-effort
+    try {
+      await backgroundReview?.close();
     } catch (_) {} // best-effort
     try {
       await _sandbox?.dispose();

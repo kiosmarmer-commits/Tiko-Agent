@@ -63,6 +63,7 @@ class ChatRequest {
     this.stream = true,
     this.model,
     this.serviceTier,
+    this.reasoningEffort,
   });
 
   final List<ChatMessage> messages;
@@ -78,6 +79,13 @@ class ChatRequest {
   /// terbuka/tier static; null = normal (byte-identical dengan request
   /// biasa, prompt cache tidak terganggu).
   final String? serviceTier;
+
+  /// Hermes `agent/reasoning_effort.py`: effort reasoning opsional per
+  /// request (`none..ultra`; kosong/null = field TIDAK dikirim ke wire —
+  /// tidak pernah dikarang). Provider meng-clamp ke kosakata wire-nya via
+  /// [clampEffort]; bentuk wire (`reasoning_effort` / `reasoning.effort` /
+  /// `thinking.budget_tokens`) tetap lokal di provider.
+  final String? reasoningEffort;
 }
 
 /// Abstract LLM chat provider (provider-agnostic, P-01).

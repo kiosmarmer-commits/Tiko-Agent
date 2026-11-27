@@ -93,15 +93,29 @@ class AnthropicProvider implements LlmProvider {
       if (cache != null && system != null) {
         cache.observe(model: req.model ?? model, systemPrompt: system);
       }
+      // Hermes `anthropic_adapter._thinking_kwargs` (jalur budget manual):
+      // effort eksplisit → thinking enabled + budget_tokens + temperature 1
+      // (wajib saat thinking aktif) + max_tokens >= budget + 4096.
+      // Deviasi sadar: jalur adaptive (Claude 4.6+, output_config.effort)
+      // tidak di-port — tanpa katalog versi per-model, Tiko selalu memakai
+      // jalur budget manual; `none` → field off wire (bukan disable block).
+      final budget = anthropicThinkingBudgetFor(req.reasoningEffort);
+      final effectiveMaxTokens = () {
+        final base = req.maxTokens ?? 4096;
+        return budget == null ? base : (base > budget + 4096 ? base : budget + 4096);
+      }();
       final body = {
         'model': req.model ?? model,
-        'max_tokens': req.maxTokens ?? 4096,
+        'max_tokens': effectiveMaxTokens,
         'messages': messages,
         if (system != null)
           'system': cache != null
               ? const AnthropicCacheBreaker().buildBlocks(system)
               : system,
         'stream': false,
+        if (budget != null)
+          'thinking': {'type': 'enabled', 'budget_tokens': budget},
+        if (budget != null) 'temperature': 1,
       };
 
       final res = await client.post(

@@ -23,11 +23,13 @@ class SlashCommandRegistry {
   /// Perintah bawaan standar Tiko CLI.
   static const List<SlashCommand> builtin = [
     SlashCommand(name: 'help', description: 'Tampilkan bantuan perintah'),
+    SlashCommand(name: 'activity', description: 'Aktivitas sesi (first/last turn, hitungan)'),
     SlashCommand(name: 'btw', description: 'Side question tanpa menyentuh riwayat'),
     SlashCommand(name: 'clear', description: 'Bersihkan layar'),
     SlashCommand(name: 'compact', description: 'Kompres manual riwayat sesi'),
     SlashCommand(name: 'exit', description: 'Keluar dari sesi'),
     SlashCommand(name: 'history', description: 'Riwayat percakapan'),
+    SlashCommand(name: 'insights', description: 'Insight pemakaian (turn/model/channel)', usage: '[hari]'),
     SlashCommand(name: 'memory', description: 'Kelola memori jangka panjang'),
     SlashCommand(name: 'model', description: 'Ganti model/tier provider'),
     SlashCommand(name: 'pause', description: 'Jeda sistem (ESTOP) untuk pekerjaan baru', usage: '[alasan]'),

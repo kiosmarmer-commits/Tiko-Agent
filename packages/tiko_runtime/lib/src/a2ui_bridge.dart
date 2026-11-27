@@ -256,13 +256,33 @@ class A2uiToolBridge {
     return true;
   }
 
-  /// Validasi + konsumsi (anti-replay) aksi A2UI dari `POST /v1/ui/actions`.
-  bool consumeAction(
+  /// Pre-check aksi TANPA mengonsumsi (host dapat memvalidasi sebelum
+  /// mengeksekusi). Fail-closed: hanya aksi yang dideklarasikan komponen
+  /// surface yang valid — tidak ada fallback generik.
+  bool validateAction(
     String sessionKey,
     String surfaceId,
     String actionName,
   ) =>
-      sessionSet(sessionKey).consumeAction(surfaceId, actionName);
+      sessionSet(sessionKey).validateAction(surfaceId, actionName);
+
+  /// Validasi + konsumsi (anti-replay) aksi A2UI dari `POST /v1/ui/actions`.
+  /// Penolakan memancarkan event `surface.action_rejected` (observabilitas).
+  bool consumeAction(
+    String sessionKey,
+    String surfaceId,
+    String actionName,
+  ) {
+    final ok = sessionSet(sessionKey).consumeAction(surfaceId, actionName);
+    if (!ok) {
+      onEvent?.call('surface.action_rejected', {
+        'surfaceId': surfaceId,
+        'sessionKey': sessionKey,
+        'action': actionName,
+      });
+    }
+    return ok;
+  }
 
   /// Update input form (Fase E6): tulis nilai [value] ke data model bila
   /// properti `value` komponen terikat `@path`, simpan snapshot, dan
