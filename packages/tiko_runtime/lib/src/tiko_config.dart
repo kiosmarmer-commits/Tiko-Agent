@@ -476,6 +476,48 @@ class HookRuleConfig {
   }
 }
 
+/// Hermes background review (`agent/background_review.py` +
+/// `agent/review_idle_queue.py`): konfigurasi review latar otomatis.
+/// `enabled` default true (fail-open seperti Hermes).
+class ReviewConfig {
+  const ReviewConfig({
+    this.enabled = true,
+    this.idleDelaySec = 5,
+    this.cooldownSec = 300,
+    this.minMessages = 4,
+    this.maxTranscriptChars = 12000,
+  });
+
+  final bool enabled;
+
+  /// Jeda idle sebelum review dijalankan setelah turn kasar berakhir
+  /// (review_idle_queue: debounce agar review tak mengalahkan turn berikut).
+  final int idleDelaySec;
+
+  /// Jarak minimum antar review untuk sesi yang sama.
+  final int cooldownSec;
+
+  /// Transcript lebih pendek dari ini tidak di-review.
+  final int minMessages;
+
+  final int maxTranscriptChars;
+}
+
+/// Hermes webhook outbound (`agent/webhook_outbound.py`): satu endpoint
+/// tujuan event runtime. `events` kosong = semua event; non-kosong = filter
+/// prefix tipe event. Secret kosong/null = POST tanpa header tanda tangan.
+class OutboundWebhookConfig {
+  const OutboundWebhookConfig({
+    required this.url,
+    this.secret,
+    this.events = const [],
+  });
+
+  final String url;
+  final String? secret;
+  final List<String> events;
+}
+
 class TikoConfig {
   TikoConfig({
     this.profile = 'default',
@@ -538,7 +580,9 @@ class TikoConfig {
     this.agentRetryWaitCapSec = 90,
     this.agentServiceTier,
     this.agentFastAutoSeconds = 60,
+    this.agentReasoningEffort,
     this.agentPreflightCompaction = true,
+    this.agentImageEviction = false,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -546,6 +590,8 @@ class TikoConfig {
     this.scriptSelfRepair = false,
     this.tokenAnomaly = const TokenAnomalyConfig(),
     this.idleConsolidation = const IdleConsolidationCfg(),
+    this.webhookOutbound = const [],
+    this.review = const ReviewConfig(),
   });
 
   final String profile;
@@ -623,6 +669,14 @@ class TikoConfig {
 
   /// Opt-in (E2): konsolidasi memori idle via LLM auxiliar. Default false.
   final IdleConsolidationCfg idleConsolidation;
+
+  /// Hermes webhook outbound (`agent/webhook_outbound.py`): daftar endpoint
+  /// `webhooks.outbound` — POST JSON setiap event yang cocok (fail-open).
+  final List<OutboundWebhookConfig> webhookOutbound;
+
+  /// Hermes background review (`auxiliary.background_review`): engine review
+  /// latar setelah turn kasar — lihat [ReviewConfig].
+  final ReviewConfig review;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -736,10 +790,19 @@ class TikoConfig {
   /// bounded (`/fast auto`) per user turn.
   final int agentFastAutoSeconds;
 
+  /// Hermes `agent.reasoning_effort` (`agent/reasoning_effort.py`): effort
+  /// reasoning default — null = field off wire. Nilai tak dikenal diteruskan
+  /// apa adanya (fail-open; provider meng-clamp ke kosakata wire-nya).
+  final String? agentReasoningEffort;
+
   /// Hermes preflight gate (`agent.turn_preflight_gate.py`): kompresi
   /// pra-API tiap iterasi saat tekanan request di atas ambang. Default on
   /// seperti Hermes; matikan via `agent.preflight_compaction: false`.
   final bool agentPreflightCompaction;
+
+  /// Hermes fase-20 (`image_eviction_policy.py`): eviksi gambar tool-result
+  /// lama di send-path saat mendekati limit provider. Default off.
+  final bool agentImageEviction;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1644,6 +1707,8 @@ class TikoConfig {
       memoryProviders: memoryProvidersCfg,
       processPlugins: processPluginsCfg,
       hooks: hooksCfg,
+      webhookOutbound: _parseWebhooks(issues, root: root),
+      review: _parseReview(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -1723,9 +1788,15 @@ class TikoConfig {
               60,
             )
           : 60,
+      agentReasoningEffort: root['agent'] is YamlMap
+          ? _effortFromYaml((root['agent'] as YamlMap)['reasoning_effort'])
+          : null,
       agentPreflightCompaction: root['agent'] is YamlMap
           ? (root['agent'] as YamlMap)['preflight_compaction'] != false
           : true,
+      agentImageEviction: root['agent'] is YamlMap
+          ? (root['agent'] as YamlMap)['image_eviction'] == true
+          : false,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue
@@ -1878,6 +1949,13 @@ class TikoConfig {
   static int _positiveIntSec(Object? v, int defaultSec) {
     if (v is num && v >= 0 && v.isFinite) return v.toInt();
     return defaultSec;
+  }
+
+  /// Hermes `agent.reasoning_effort`: kata (string) diteruskan apa adanya
+  /// (fail-open); non-string → null (off) tanpa issue — unset tetap unset.
+  static String? _effortFromYaml(Object? v) {
+    if (v is String && v.trim().isNotEmpty) return v.trim().toLowerCase();
+    return null;
   }
 
   static DecisionConfig _parseDecision(YamlMap sec, List<ConfigIssue> issues) {
@@ -2179,6 +2257,108 @@ class TikoConfig {
       ));
     }
     return out;
+  }
+
+  /// Hermes webhook outbound (`agent/webhook_outbound.py`): parser config
+  /// `webhooks.outbound` (daftar mapping `url`/`secret`/`events`). Fail-open:
+  /// entri invalid dilompati dengan issue eksplisit, tanpa menggagalkan start.
+  static List<OutboundWebhookConfig> _parseWebhooks(
+    List<ConfigIssue> issues, {
+    required YamlMap root,
+  }) {
+    final sec = root['webhooks'];
+    if (sec == null) return const [];
+    if (sec is! YamlMap) {
+      issues.add(const ConfigIssue(fatal: false, 'webhooks', 'harus berupa mapping'));
+      return const [];
+    }
+    final raw = sec['outbound'];
+    if (raw == null) return const [];
+    if (raw is! YamlList) {
+      issues.add(const ConfigIssue(
+        fatal: false,
+        'webhooks.outbound',
+        'harus berupa daftar mapping',
+      ));
+      return const [];
+    }
+    final out = <OutboundWebhookConfig>[];
+    for (var i = 0; i < raw.length; i++) {
+      final entry = raw[i];
+      if (entry is! YamlMap) {
+        issues.add(ConfigIssue(
+          fatal: false,
+          'webhooks.outbound[$i]',
+          'harus berupa mapping',
+        ));
+        continue;
+      }
+      final url = entry['url'];
+      if (url is! String ||
+          !(url.trim().startsWith('http://') ||
+              url.trim().startsWith('https://'))) {
+        issues.add(ConfigIssue(
+          fatal: false,
+          'webhooks.outbound[$i].url',
+          'harus URL http:// atau https://',
+        ));
+        continue;
+      }
+      final secret = entry['secret'];
+      if (secret != null && secret is! String) {
+        issues.add(ConfigIssue(
+          fatal: false,
+          'webhooks.outbound[$i].secret',
+          'harus berupa string',
+        ));
+        continue;
+      }
+      final rawEvents = entry['events'];
+      final events = <String>[];
+      if (rawEvents is YamlList) {
+        for (final e in rawEvents) {
+          if (e is String && e.trim().isNotEmpty) events.add(e.trim());
+        }
+      } else if (rawEvents != null) {
+        issues.add(ConfigIssue(
+          fatal: false,
+          'webhooks.outbound[$i].events',
+          'harus berupa daftar string',
+        ));
+        continue;
+      }
+      out.add(OutboundWebhookConfig(
+        url: url.trim(),
+        secret: secret is String && secret.trim().isNotEmpty
+            ? secret.trim()
+            : null,
+        events: List.unmodifiable(events),
+      ));
+    }
+    return out;
+  }
+
+  /// Hermes background review: parser config `review` (mapping opsional).
+  /// Fail-open: nilai invalid dipakai default tanpa menggagalkan start.
+  static ReviewConfig _parseReview(YamlMap root) {
+    final sec = root['review'];
+    if (sec is! YamlMap) return const ReviewConfig();
+    bool boolVal(Object? v, bool def) => v is bool ? v : def;
+    int intVal(Object? v, int def, {int? min}) {
+      if (v is int && (min == null || v >= min)) return v;
+      return def;
+    }
+    return ReviewConfig(
+      enabled: boolVal(sec['enabled'], true),
+      idleDelaySec:
+          intVal(sec['idle_delay_sec'], 5, min: 0),
+      cooldownSec:
+          intVal(sec['cooldown_sec'], 300, min: 0),
+      minMessages:
+          intVal(sec['min_messages'], 4, min: 0),
+      maxTranscriptChars:
+          intVal(sec['max_transcript_chars'], 12000, min: 200),
+    );
   }
 
   static List<ExternalMemoryProviderConfig> _parseMemoryProviders(

@@ -112,6 +112,13 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
       if (req.toolChoice != null) 'tool_choice': req.toolChoice,
       if (req.serviceTier != null && req.serviceTier!.isNotEmpty)
         'service_tier': req.serviceTier,
+      // Hermes `reasoning_effort.py`: Responses wire memakai objek
+      // `reasoning` — effort di-clamp ke kosakata wire sebelum dikirim.
+      if (req.reasoningEffort != null &&
+          req.reasoningEffort!.trim().isNotEmpty)
+        'reasoning': {
+          'effort': clampEffort(req.reasoningEffort, openAiCompatWireEfforts),
+        },
     };
   }
 

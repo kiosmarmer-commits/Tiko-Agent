@@ -146,3 +146,175 @@ class ApiErrorClassifier {
     return m == null ? null : int.tryParse(m.group(1)!);
   }
 }
+
+/// Hermes parity: `agent/error_classifier.py` — taksonomi granular
+/// mengapa panggilan API gagal (menentukan strategi recovery).
+enum FailoverReason {
+  /// Auth transien (401/403) — refresh/rotasi kredensial lalu fallback.
+  auth,
+
+  /// 402 atau kehabisan kredit terkonfirmasi — terminal, rotasi langsung.
+  billing,
+
+  /// 429 / throttling kuota — backoff lalu rotasi.
+  rateLimit,
+
+  /// Konteks melebihi kapasitas — kompres lalu coba provider yang sama.
+  contextLength,
+
+  /// 5xx — fallback.
+  serverError,
+
+  /// Timeout/jaringan/DNS — fallback.
+  network,
+
+  /// Tidak terklasifikasi — tidak ada aksi otomatis.
+  unknown,
+}
+
+/// Kode sintetis Hermes `PROVIDER_STREAM_NON_JSON_ERROR_CODE`: provider
+/// mengirim frame SSE `data:` yang ditolak sebagai non-JSON sebelum chunk
+/// pertama — distinkt dari JSON parse error generik (saran: non-streaming).
+const String providerStreamNonJsonErrorCode = 'provider_stream_non_json_data';
+
+/// Kode sintetis Hermes `PROVIDER_STREAM_EMPTY_FRAME_ERROR_CODE`: frame SSE
+/// kosong (`data:` / `event: ping`) — legal per spesifikasi SSE, bukan
+/// payload rusak; gateway terdegradasi menjawab semua request stream
+/// dengannya → pindah ke non-streaming, bukan re-streaming.
+const String providerStreamEmptyFrameErrorCode =
+    'provider_stream_empty_frame';
+
+/// Hasil klasifikasi granular + recovery hints ala Hermes: loop retry
+/// mengkonsultasi hints ini alih-alih mencocokkan string sendiri.
+class ClassifiedError {
+  const ClassifiedError({
+    required this.reason,
+    this.retrySameProvider = false,
+    this.compressFirst = false,
+    this.rotateCredential = false,
+    this.fallback = false,
+    this.abort = false,
+    this.retryAfterSec,
+    this.suggestNonStreaming = false,
+    this.syntheticCode,
+  });
+
+  final FailoverReason reason;
+
+  /// Coba provider yang sama (setelah aksi [compressFirst] bila berlaku).
+  final bool retrySameProvider;
+
+  /// Kompres konteks dulu sebelum retry (overflow).
+  final bool compressFirst;
+
+  /// Rotasi kredensial dianjurkan (auth transien).
+  final bool rotateCredential;
+
+  /// Jalan ke fallback chain.
+  final bool fallback;
+
+  /// Hentikan turn dengan pesan terketik (billing terminal).
+  final bool abort;
+
+  final int? retryAfterSec;
+
+  /// Gateway terdegradasi (frame SSE kosong / non-JSON) — saran: jalur
+  /// non-streaming, bukan re-streaming ke window yang sama.
+  final bool suggestNonStreaming;
+
+  /// Kode sintetis (`provider_stream_*`) bila terdeteksi.
+  final String? syntheticCode;
+
+  Map<String, dynamic> toJson() => {
+        'reason': reason.name,
+        'retry_same_provider': retrySameProvider,
+        'compress_first': compressFirst,
+        'rotate_credential': rotateCredential,
+        'fallback': fallback,
+        'abort': abort,
+        if (retryAfterSec != null) 'retry_after_sec': retryAfterSec,
+        if (suggestNonStreaming) 'suggest_non_streaming': true,
+        if (syntheticCode != null) 'synthetic_code': syntheticCode,
+      };
+}
+
+final _streamNonJsonBody = RegExp(
+  r'(provider_stream_non_json|unexpected token.*(data|sse)|'
+  r'invalid.*sse.*(payload|data)|not valid json)',
+  caseSensitive: false,
+);
+
+final _streamEmptyFrameBody = RegExp(
+  r'(provider_stream_empty_frame|event:\s*ping|^\s*data:\s*$)',
+  caseSensitive: false,
+);
+
+extension ApiErrorClassifierFailureTaxonomy on ApiErrorClassifier {
+  /// Klasifikasi granular ala Hermes `error_classifier.py`: [ApiError]
+  /// dasar (atau kode+pesan mentah) → [ClassifiedError] dengan recovery
+  /// hints. Murni deterministik, never-raises.
+  static ClassifiedError classifyFailure({
+    String? code,
+    String? message = '',
+  }) {
+    final base = ApiErrorClassifier.classify(code: code, message: message);
+    final msg = message ?? '';
+    final retryAfter = ApiErrorClassifier.retryAfterSecondsFrom(
+      code: code,
+      message: msg,
+    );
+    if (_streamEmptyFrameBody.hasMatch(msg)) {
+      return ClassifiedError(
+        reason: FailoverReason.serverError,
+        fallback: true,
+        suggestNonStreaming: true,
+        syntheticCode: providerStreamEmptyFrameErrorCode,
+      );
+    }
+    if (_streamNonJsonBody.hasMatch(msg)) {
+      return ClassifiedError(
+        reason: FailoverReason.serverError,
+        fallback: true,
+        suggestNonStreaming: true,
+        syntheticCode: providerStreamNonJsonErrorCode,
+      );
+    }
+    switch (base.kind) {
+      case ApiErrorKind.auth:
+        return ClassifiedError(
+          reason: FailoverReason.auth,
+          rotateCredential: true,
+          fallback: true,
+        );
+      case ApiErrorKind.billing:
+        return const ClassifiedError(
+          reason: FailoverReason.billing,
+          abort: true,
+        );
+      case ApiErrorKind.rateLimit:
+        return ClassifiedError(
+          reason: FailoverReason.rateLimit,
+          retrySameProvider: true,
+          retryAfterSec: retryAfter,
+        );
+      case ApiErrorKind.overflow:
+        return const ClassifiedError(
+          reason: FailoverReason.contextLength,
+          retrySameProvider: true,
+          compressFirst: true,
+        );
+      case ApiErrorKind.server:
+        return const ClassifiedError(
+          reason: FailoverReason.serverError,
+          fallback: true,
+        );
+      case ApiErrorKind.network:
+        return const ClassifiedError(
+          reason: FailoverReason.network,
+          fallback: true,
+        );
+      case ApiErrorKind.unknown:
+        return ClassifiedError(reason: FailoverReason.unknown);
+    }
+  }
+}

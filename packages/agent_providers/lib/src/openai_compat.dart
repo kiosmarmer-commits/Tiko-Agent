@@ -208,6 +208,14 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
       // static — request normal tidak pernah berubah bentuk.
       if (req.serviceTier != null && req.serviceTier!.isNotEmpty)
         'service_tier': req.serviceTier,
+      // Hermes `reasoning_effort.py`: dikirim hanya bila eksplisit; di-
+      // clamp ke kosakata wire OpenAI-compat (never escalate, never none).
+      if (req.reasoningEffort != null &&
+          req.reasoningEffort!.trim().isNotEmpty)
+        'reasoning_effort': clampEffort(
+          req.reasoningEffort,
+          openAiCompatWireEfforts,
+        ),
     };
 
     final client = httpClient ?? http.Client();

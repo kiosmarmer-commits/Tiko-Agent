@@ -1006,6 +1006,14 @@ class A2uiSurfaceSet {
   Set<String> actionsOf(String surfaceId) =>
       _surfaceActions[surfaceId] ?? const {};
 
+  /// Validasi aksi TANPA mengonsumsi (pre-check host): true hanya bila
+  /// [actionName] dideklarasikan oleh komponen surface — tidak ada fallback
+  /// generik. Aksi repeatable selalu valid.
+  bool validateAction(String surfaceId, String actionName) {
+    final bucket = _surfaceActions[surfaceId];
+    return bucket != null && bucket.contains(actionName);
+  }
+
   /// Anti-replay: memakai satu kali hak eksekusi [actionName] pada surface.
   /// Render ulang surface yang memuat aksi tersebut mengaktifkannya kembali.
   /// Aksi input (Fase E6) repeatable: cukup terdaftar, tidak dihabiskan.

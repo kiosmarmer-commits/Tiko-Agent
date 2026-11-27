@@ -16,6 +16,9 @@ import 'checkpoints.dart';
 import 'context_breakdown.dart';
 import 'fast_mode.dart';
 import 'image_token_cost.dart';
+import 'image_eviction_policy.dart';
+import 'message_sanitization.dart';
+import 'turn_deadline.dart';
 import 'loop_detector.dart';
 import 'usage_anchor.dart';
 import 'edit_loop_guard.dart';
@@ -46,10 +49,12 @@ class AgentConfig {
     this.streamMaxLifetimeSec = 0,
     this.turnLivenessTimeoutSec = 600,
     this.preflightCompaction = true,
+    this.imageEviction = false,
     this.retryWaitCapSec = 90,
     this.iterationWarnRatio,
     this.serviceTier,
     this.fastWindowSec = 60,
+    this.reasoningEffort,
   });
 
   final int maxIterations;
@@ -80,6 +85,11 @@ class AgentConfig {
   /// preflight saat di atas ambang, blocker progres-tidak-cukup.
   final bool preflightCompaction;
 
+  /// Hermes `evict_stale_outbound_tool_images` (send-path): eviksi gambar
+  /// tool-result lama dari SALINAN request saat mendekati limit provider.
+  /// Default off — gambar dipertahankan apa adanya bila tak perlu.
+  final bool imageEviction;
+
   /// Hermes `free_tier_cooldown_ends_turn`: cooldown Retry-After (detik)
   /// di atas cap ini mengakhiri turn dengan pesan jelas alih-alih menunggu.
   final int retryWaitCapSec;
@@ -95,6 +105,13 @@ class AgentConfig {
 
   /// Panjang jendela fast bounded (`agent.fast_auto_seconds`, default 60).
   final int fastWindowSec;
+
+  /// Hermes `reasoning_effort.py`: effort default (`agent.reasoning_effort`)
+  /// — null = field reasoning TIDAK dikirim ke wire (deviasi sadar: Hermes
+  /// menyuntik default medium pada sebagian profil; Tiko fail-open, unset
+  /// tetap unset supaya prompt cache dan provider tak-sadari-reasoning
+  /// tidak tersentuh).
+  final String? reasoningEffort;
 
 
   /// When non-null, overrides the router-computed tier for this turn so
@@ -164,6 +181,7 @@ class AgentLoop {
     this.imageTokenCosts,
     this.checkpointStore,
     this.fastMode,
+    this.reasoningEffortOverride,
     this.synthLlm,
     this.onCompactionEvent,
     this.skillEval = const SkillEvalConfig(),
@@ -216,6 +234,10 @@ class AgentLoop {
   /// tier + jendela bounded + model tanpa kapasitas fast. Null = fast mode
   /// off (request normal, tanpa service_tier).
   final FastModeState? fastMode;
+
+  /// Hermes `reasoning_effort.py`: override effort per sesi (dari
+  /// `/reasoning <level>`). Null → fallback [AgentConfig.reasoningEffort].
+  final String? reasoningEffortOverride;
 
   final AgentConfig config;
   final String workspacePath;
@@ -320,6 +342,14 @@ class AgentLoop {
   /// 'loop_detected', 'iteration_limit', 'critical_risk', 'no_healthy_provider'.
   String? _lastTurnEndReason;
 
+  /// Hermes error_classifier.py: klasifikasi granular kegagalan API
+  /// terakhir turn ini (observability; null bila tidak ada kegagalan).
+  ClassifiedError? _lastFailover;
+
+  /// Alasan failover terakhir turn ini (null bila tidak ada error API).
+  ClassifiedError? get lastFailover => _lastFailover;
+
+
   /// Hermes empty-response guard: deteksi jawaban kosong deterministik dan
   /// budget retry sadar-biaya, direset tiap jawaban non-kosong.
   final EmptyResponseGuard _emptyGuard = EmptyResponseGuard();
@@ -381,6 +411,9 @@ class AgentLoop {
 
   final _loopDetector = LoopDetector();
   final _budget = BudgetGuard();
+
+  /// Hermes fase-23: deadline monotonik turn aktif (off bila budget 0).
+  TurnDeadline _deadline = TurnDeadline.off();
 
   /// Hermes preflight gate: state per-turn, di-reset pada handle().
   PreflightGate? _preflight;
@@ -523,6 +556,11 @@ class AgentLoop {
         maxToolCalls: config.maxToolCalls,
       );
       _budget.warnRatio = config.iterationWarnRatio;
+      // Hermes fase-23 (turn deadline monotonik): sisa-waktu turn dihitung
+      // Stopwatch (bebas lompatan jam) dan dicek sebelum ronde tool baru.
+      _deadline = config.maxWallClockSec > 0
+          ? TurnDeadline(Duration(seconds: config.maxWallClockSec))
+          : TurnDeadline.off();
       _preflight = PreflightGate(enabled: config.preflightCompaction);
       _currentSessionId = session.id;
       _imageCostOverride = null;
@@ -593,6 +631,13 @@ class AgentLoop {
           // (Hermes turn_recovery/turn_overflow): overflow → kompres konteks
           // lalu retry; rate limit → backoff lalu retry; billing → terminal.
           final err = ApiErrorClassifier.classify(
+            code: resp.errorCode,
+            message: resp.errorMessage ?? resp.text,
+          );
+          // Hermes error_classifier.py: taksonomi granular + recovery hints
+          // untuk observability (additive — perilaku recovery existing
+          // tidak berubah).
+          _lastFailover = ApiErrorClassifierFailureTaxonomy.classifyFailure(
             code: resp.errorCode,
             message: resp.errorMessage ?? resp.text,
           );
@@ -779,6 +824,12 @@ class AgentLoop {
             name: received.name,
             args: Map<String, dynamic>.from(received.args),
           );
+          if (_deadline.isExpired) {
+            _lastTurnEndReason = 'deadline';
+            await reply(m, 'Batas waktu turn tercapai. Berhenti.');
+            success = false;
+            break agentLoop;
+          }
           if (_budget.toolCallsExceeded) {
             _lastTurnEndReason = 'tool_call_limit';
             await reply(m, 'Batas tool call tercapai. Berhenti.');
@@ -1229,11 +1280,16 @@ class AgentLoop {
         _lastAnchoredPressure = verdict.anchored ? verdict.pressure : null;
       } catch (_) {} // gerbang pra-API tidak boleh menggagalkan turn
     }
-    final request = _withServiceTier(
-      useCtx.toRequest(),
-      _fastTierFor(llm.id),
+    if (config.imageEviction) {
+      useCtx = _withImageEviction(useCtx);
+    }
+    final request = _withReasoningEffort(
+      _withServiceTier(
+        useCtx.toRequest(),
+        _fastTierFor(llm.id),
+      ),
     );
-    final repaired = repairTranscript(request.messages);
+    final repaired = repairTranscript(sanitizeChatMessages(request.messages));
     final LlmResponse resp;
     if (repaired.length == request.messages.length) {
       resp = await _safeCollect(() => llm.chat(request));
@@ -1249,6 +1305,7 @@ class AgentLoop {
             stream: request.stream,
             model: request.model,
             serviceTier: request.serviceTier,
+            reasoningEffort: request.reasoningEffort,
           ),
         ),
       );
@@ -1287,6 +1344,25 @@ class AgentLoop {
     return tier;
   }
 
+  /// Hermes fase-20 (`evict_stale_outbound_tool_images`): eviksi gambar
+  /// tool-result lama dari salinan konteks per-request. Never-raises:
+  /// kegagalan klasifikasi (header gambar tak terbaca) dihitung "tidak aman"
+  /// oleh kebijakan, bukan error turn.
+  AgentContext _withImageEviction(AgentContext ctx) {
+    try {
+      final r = evictStaleOutboundImages(ctx.messages);
+      if (r.pruned == 0) return ctx;
+      return AgentContext(
+        messages: r.messages,
+        tools: ctx.tools,
+        session: ctx.session,
+        systemPrompt: ctx.systemPrompt,
+      )..recentToolCalls.addAll(ctx.recentToolCalls);
+    } catch (_) {
+      return ctx;
+    }
+  }
+
   ChatRequest _withServiceTier(ChatRequest r, String? tier) {
     if (tier == null || tier.isEmpty) return r;
     return ChatRequest(
@@ -1298,6 +1374,27 @@ class AgentLoop {
       stream: r.stream,
       model: r.model,
       serviceTier: tier,
+      reasoningEffort: r.reasoningEffort,
+    );
+  }
+
+  /// Hermes `reasoning_effort.py`: effort efektif = override per-sesi
+  /// (`/reasoning`) else default config; null/empty → request tak berubah
+  /// (byte-identical, prompt cache aman).
+  ChatRequest _withReasoningEffort(ChatRequest r) {
+    final effort =
+        (reasoningEffortOverride ?? config.reasoningEffort)?.trim() ?? '';
+    if (effort.isEmpty) return r;
+    return ChatRequest(
+      messages: r.messages,
+      tools: r.tools,
+      toolChoice: r.toolChoice,
+      maxTokens: r.maxTokens,
+      temperature: r.temperature,
+      stream: r.stream,
+      model: r.model,
+      serviceTier: r.serviceTier,
+      reasoningEffort: effort,
     );
   }
 
