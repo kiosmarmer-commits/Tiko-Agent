@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import 'provider_factory.dart';
 import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
+import 'deep_solve.dart';
 import 'idle_consolidation.dart';
 import 'context_refs.dart';
 import 'attachment_ingest.dart';
@@ -852,6 +853,10 @@ class TikoRuntime {
   /// validasi aksi anti-replay untuk POST /v1/ui/actions.
   late final A2uiToolBridge a2ui;
 
+  /// ToT/LATS bounded deep-solve (Fase 30): null bila `deep_solve.enabled`
+  /// false atau tak ada provider auxiliar.
+  DeepSolveEngine? deepSolveEngine;
+
   /// Hook lifecycle Hermes-parity (P1); null bila tanpa aturan `hooks:`.
   HookExecutor? hookExecutor;
 
@@ -1433,6 +1438,21 @@ class TikoRuntime {
     // Fase E — A2UI surface bridge: kaitkan event bus runtime setelah rt
     // tersedia (pola sama dengan approvals/DeepResearchTool).
     rt.a2ui = A2uiToolBridge(dataDir: dataDir, onEvent: rt.events.emit);
+    // Fase 30 — ToT/LATS bounded deep-solve (audit 2026-11-28 §6.5):
+    // engine + tool `deep_solve` hanya bila config enabled dan ada provider
+    // auxiliar; default off agar chat normal tak berbiaya tambahan.
+    if (cfg.deepSolve.enabled) {
+      final aux = rt.auxiliaryLlm();
+      if (aux != null) {
+        final engine = DeepSolveEngine(
+          llmProvider: aux,
+          config: cfg.deepSolve,
+          events: rt.events,
+        );
+        rt.deepSolveEngine = engine;
+        rt.registry.register(DeepSolveTool(engine));
+      }
+    }
     // RAG-03 (audit 2026-11-28 §6.3): telemetry kegagalan embedding —
     // event bebas-konten (hanya meta panjang char), never-raises.
     rt.ragPipeline.onEmbedError = (meta, error) {

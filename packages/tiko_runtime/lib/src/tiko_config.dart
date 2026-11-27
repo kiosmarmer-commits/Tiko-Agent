@@ -524,6 +524,41 @@ class RagConfig {
   final int evidenceGateMaxQueryChars;
 }
 
+/// Fase 30 — ToT/LATS bounded deep-solve (audit 2026-11-28 §6.5, "adopt
+/// selectively"): planner eksplorasi bounded untuk task berat. Default off
+/// (panggilan LLM berbiaya) — aktifkan eksplisit via `enabled`.
+class DeepSolveCfg {
+  const DeepSolveCfg({
+    this.enabled = false,
+    this.branching = 2,
+    this.depth = 2,
+    this.maxLlmCalls = 8,
+    this.maxTokensPerCall = 800,
+    this.maxWallClockSec = 120,
+  })  : assert(branching >= 1 && branching <= 4),
+        assert(depth >= 1 && depth <= 3),
+        assert(maxLlmCalls >= 1 && maxLlmCalls <= 64),
+        assert(maxWallClockSec >= 5);
+
+  /// Default off — panggilan LLM berbiaya; aktifkan eksplisit.
+  final bool enabled;
+
+  /// Kandidat pendekatan per level (ToT branching factor).
+  final int branching;
+
+  /// Kedalaman refine (LATS-style depth); 1 = expand + judge saja.
+  final int depth;
+
+  /// Cap keras total panggilan LLM per solve.
+  final int maxLlmCalls;
+
+  /// Cap max_tokens per panggilan LLM.
+  final int maxTokensPerCall;
+
+  /// Cap wall-clock per solve.
+  final int maxWallClockSec;
+}
+
 /// Hermes gateway idle compaction (`170d9637`): sesi yang menganggur
 /// melewati ambang idle dikompaksi di latar per channel sehingga pesan
 /// pertama setelah idle panjang tidak menunggu ringkasan. Default off
@@ -648,6 +683,7 @@ class TikoConfig {
     this.review = const ReviewConfig(),
     this.idleCompaction = const IdleCompactionConfig(),
     this.rag = const RagConfig(),
+    this.deepSolve = const DeepSolveCfg(),
   });
 
   final String profile;
@@ -740,6 +776,9 @@ class TikoConfig {
 
   /// Hermes Self-RAG evidence gate (audit 2026-11-28 §8.2).
   final RagConfig rag;
+
+  /// Fase 30 — ToT/LATS bounded deep-solve (default off).
+  final DeepSolveCfg deepSolve;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1774,6 +1813,7 @@ class TikoConfig {
       review: _parseReview(root),
       idleCompaction: _parseIdleCompaction(root, issues),
       rag: _parseRag(root),
+      deepSolve: _parseDeepSolve(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2401,6 +2441,28 @@ class TikoConfig {
       ));
     }
     return out;
+  }
+
+  /// Parser `deep_solve:` (fase 30, ToT/LATS bounded). Fail-open: scalar
+  /// invalid memakai default tanpa menggagalkan start.
+  static DeepSolveCfg _parseDeepSolve(YamlMap root) {
+    final sec = root['deep_solve'];
+    if (sec is! YamlMap) return const DeepSolveCfg();
+    bool boolVal(Object? v, bool def) => v is bool ? v : def;
+    int intVal(Object? v, int def, {int? min, int? max}) {
+      if (v is int && (min == null || v >= min) && (max == null || v <= max)) {
+        return v;
+      }
+      return def;
+    }
+    return DeepSolveCfg(
+      enabled: boolVal(sec['enabled'], false),
+      branching: intVal(sec['branching'], 2, min: 1, max: 4),
+      depth: intVal(sec['depth'], 2, min: 1, max: 3),
+      maxLlmCalls: intVal(sec['max_llm_calls'], 8, min: 1, max: 64),
+      maxTokensPerCall: intVal(sec['max_tokens_per_call'], 800, min: 64),
+      maxWallClockSec: intVal(sec['max_wall_clock_sec'], 120, min: 5),
+    );
   }
 
   /// Parser config `rag` (audit 2026-11-28 §8.2). Fail-open: nilai scalar
