@@ -503,6 +503,39 @@ class ReviewConfig {
   final int maxTranscriptChars;
 }
 
+/// Hermes gateway idle compaction (`170d9637`): sesi yang menganggur
+/// melewati ambang idle dikompaksi di latar per channel sehingga pesan
+/// pertama setelah idle panjang tidak menunggu ringkasan. Default off
+/// (panggilan LLM latar berbiaya) — aktifkan eksplisit via `enabled`.
+class IdleCompactionConfig {
+  const IdleCompactionConfig({
+    this.enabled = false,
+    this.afterSec = 3600,
+    this.tickSec = 60,
+    this.minMessages = 8,
+    this.minTokens = 1000,
+    this.channelOverrides = const {},
+  });
+
+  final bool enabled;
+
+  /// Sesi dianggap idle setelah sekian detik tanpa aktivitas; 0 = off global.
+  final int afterSec;
+
+  /// Periode housekeeping tick pemindai sesi idle.
+  final int tickSec;
+
+  /// Riwayat lebih pendek dari ini tidak layak diringkas.
+  final int minMessages;
+
+  /// Estimasi token riwayat di bawah ini tidak layak diringkas.
+  final int minTokens;
+
+  /// Override ambang per channel (`<channel>: detik`); `0` = off channel
+  /// itu; channel tanpa entri memakai [afterSec] global.
+  final Map<String, int> channelOverrides;
+}
+
 /// Hermes webhook outbound (`agent/webhook_outbound.py`): satu endpoint
 /// tujuan event runtime. `events` kosong = semua event; non-kosong = filter
 /// prefix tipe event. Secret kosong/null = POST tanpa header tanda tangan.
@@ -592,6 +625,7 @@ class TikoConfig {
     this.idleConsolidation = const IdleConsolidationCfg(),
     this.webhookOutbound = const [],
     this.review = const ReviewConfig(),
+    this.idleCompaction = const IdleCompactionConfig(),
   });
 
   final String profile;
@@ -677,6 +711,10 @@ class TikoConfig {
   /// Hermes background review (`auxiliary.background_review`): engine review
   /// latar setelah turn kasar — lihat [ReviewConfig].
   final ReviewConfig review;
+
+  /// Kompaksi idle latar per channel (Hermes `170d9637`) — lihat
+  /// [IdleCompactionConfig].
+  final IdleCompactionConfig idleCompaction;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1709,6 +1747,7 @@ class TikoConfig {
       hooks: hooksCfg,
       webhookOutbound: _parseWebhooks(issues, root: root),
       review: _parseReview(root),
+      idleCompaction: _parseIdleCompaction(root, issues),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2358,6 +2397,61 @@ class TikoConfig {
           intVal(sec['min_messages'], 4, min: 0),
       maxTranscriptChars:
           intVal(sec['max_transcript_chars'], 12000, min: 200),
+    );
+  }
+
+  /// Parser `idle_compaction:` (Hermes `170d9637`). Validasi non-fatal:
+  /// nilai scalar invalid memakai default; override channel non-int/np
+  /// dilompati dengan issue `fatal: false`.
+  static IdleCompactionConfig _parseIdleCompaction(
+    YamlMap root,
+    List<ConfigIssue> issues,
+  ) {
+    final sec = root['idle_compaction'];
+    if (sec == null) return const IdleCompactionConfig();
+    if (sec is! YamlMap) {
+      issues.add(const ConfigIssue(
+        'idle_compaction',
+        'harus berupa mapping',
+        fatal: false,
+      ));
+      return const IdleCompactionConfig();
+    }
+    bool boolVal(Object? v, bool def) => v is bool ? v : def;
+    int intVal(Object? v, int def) => v is int ? v : def;
+    final overrides = <String, int>{};
+    final rawOverrides = sec['channel_overrides'];
+    if (rawOverrides != null) {
+      if (rawOverrides is Map) {
+        for (final e in rawOverrides.entries) {
+          final channel = '${e.key}'.trim();
+          if (channel.isEmpty) continue;
+          final v = e.value;
+          if (v is int && v >= 0) {
+            overrides[channel] = v;
+          } else {
+            issues.add(ConfigIssue(
+              'idle_compaction.channel_overrides.$channel',
+              'harus integer >= 0 (detik; 0 = off)',
+              fatal: false,
+            ));
+          }
+        }
+      } else {
+        issues.add(const ConfigIssue(
+          'idle_compaction.channel_overrides',
+          'harus berupa mapping channel -> detik',
+          fatal: false,
+        ));
+      }
+    }
+    return IdleCompactionConfig(
+      enabled: boolVal(sec['enabled'], false),
+      afterSec: intVal(sec['after_sec'], 3600),
+      tickSec: intVal(sec['tick_sec'], 60),
+      minMessages: intVal(sec['min_messages'], 8),
+      minTokens: intVal(sec['min_tokens'], 1000),
+      channelOverrides: Map.unmodifiable(overrides),
     );
   }
 
