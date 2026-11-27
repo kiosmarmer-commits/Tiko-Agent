@@ -110,6 +110,8 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
             )
             .toList(),
       if (req.toolChoice != null) 'tool_choice': req.toolChoice,
+      if (req.serviceTier != null && req.serviceTier!.isNotEmpty)
+        'service_tier': req.serviceTier,
     };
   }
 
