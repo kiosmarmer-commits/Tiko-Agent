@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
+import 'bounded_error_body.dart';
 import 'openai_compat.dart';
 
 /// OpenAI **Responses API** adapter (`POST {base}/responses`) — Hermes-parity
@@ -144,7 +145,7 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
         .timeout(requestTimeout ?? const Duration(hours: 1));
     captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
-      final err = await response.stream.bytesToString();
+      final err = await readStreamedErrorBody(response);
       yield LlmError(
         'HTTP ${response.statusCode}: $err',
         code: '${response.statusCode}',
@@ -227,9 +228,11 @@ class OpenAiResponsesProvider extends OpenAiCompatProvider {
     Map<String, dynamic> body,
     Map<String, String> headers,
   ) async* {
+    final base = requestTimeout;
+    final hops = outputBudgetHops(body['max_output_tokens']);
     final response = await client
         .post(_responsesUri, headers: headers, body: jsonEncode(body))
-        .timeout(requestTimeout ?? const Duration(hours: 1));
+        .timeout(base == null ? const Duration(hours: 1) : base * hops);
     captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       yield LlmError(

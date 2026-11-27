@@ -5,6 +5,8 @@ import 'cancellation.dart';
 import 'empty_response_guard.dart';
 import 'repetition_guard.dart';
 import 'error_classifier.dart';
+import 'micro_compaction.dart';
+import 'stream_max_lifetime.dart';
 import 'interfaces.dart';
 import 'models.dart';
 import 'context_builder.dart';
@@ -30,12 +32,27 @@ class AgentConfig {
     this.maxWallClockSec = 300,
     this.maxToolCalls = 30,
     this.preferredTier,
+    this.microCompaction = false,
+    this.microCompactionKeepLastExchanges = 2,
+    this.streamMaxLifetimeSec = 0,
   });
 
   final int maxIterations;
   final int maxTokensPerTask;
   final int maxWallClockSec;
   final int maxToolCalls;
+
+  /// Hermes micro-compaction (`agent/micro_compaction.py`): kompresi bergulir
+  /// per-exchange di awal turn. OFF by default — tiap pass menulis ulang
+  /// prefix prompt dan memutus provider prompt cache.
+  final bool microCompaction;
+
+  /// Exchange terakhir yang selalu tetap panas pada micro-compaction.
+  final int microCompactionKeepLastExchanges;
+
+  /// Hermes stream max-lifetime (`agent/stream_max_lifetime.py`): cap
+  /// wall-clock total satu attempt stream dalam detik. 0 = off (default).
+  final int streamMaxLifetimeSec;
 
   /// When non-null, overrides the router-computed tier for this turn so
   /// callers (team runner, subagent) can pin a per-role model tier instead
@@ -223,6 +240,18 @@ class AgentLoop {
   /// Hermes empty-response guard: deteksi jawaban kosong deterministik dan
   /// budget retry sadar-biaya, direset tiap jawaban non-kosong.
   final EmptyResponseGuard _emptyGuard = EmptyResponseGuard();
+
+  /// Hermes micro-compaction (OFF by default — lihat [AgentConfig
+  /// .microCompaction]): kompresi bergulir per-exchange sebelum turn
+  /// dimulai. State ringkasan bertahan sepanjang umur loop instance.
+  late final MicroCompactor _microCompactor = MicroCompactor(
+    enabled: config.microCompaction,
+    keepLastExchanges: config.microCompactionKeepLastExchanges,
+  );
+  MicroCompactionStats? get lastMicroCompaction => _microCompactor.last;
+
+  /// Ringkasan bergulir micro-compaction untuk observability host.
+  String get microRollingSummary => _microCompactor.rollingSummary;
   String? get lastTurnEndReason => _lastTurnEndReason;
 
   /// Penjelasan bahasa manusia untuk [lastTurnEndReason] — dipakai host
@@ -334,6 +363,14 @@ class AgentLoop {
     var activeLlm = preferredLlm ?? route.llm;
     var activeProviderId =
         route.providerId.isEmpty ? route.llm.id : route.providerId;
+    if (config.microCompaction) {
+      try {
+        ctx = await _microCompactor.maybeMicroCompact(
+          ctx,
+          summarizer: synthLlm,
+        );
+      } catch (_) {} // fail-open: kompresi gagal ≠ turn gagal
+    }
 
     final sw = Stopwatch()..start();
     var success = true;
@@ -952,8 +989,24 @@ class AgentLoop {
     // interupsi yang jelas alih-alih 60k karakter echo.
     final watch = RunawayStreamWatch();
     var streamRunaway = false;
+    // Hermes stream max-lifetime: cap wall-clock TOTAL satu attempt stream.
+    // 0 = off (default); timer terpisah dari maxWallClockSec yang mencakup
+    // seluruh turn termasuk eksekusi tool.
+    final lifetime = config.streamMaxLifetimeSec > 0
+        ? StreamLifetime(cap: config.streamMaxLifetimeSec.toDouble())
+        : null;
     await for (final e in events) {
       if (streamRunaway) break;
+      if (lifetime != null) {
+        final exceeded = lifetime.exceeded(0);
+        if (exceeded != null) {
+          hasError = true;
+          resp.finishReason = 'error';
+          resp.errorMessage = streamLifetimeExceededMessage(exceeded, lifetime.cap);
+          buf.write('\n[error] ${resp.errorMessage}');
+          break;
+        }
+      }
       switch (e) {
         case LlmTextDelta(:final delta):
           if (watch.feed(delta)) {
