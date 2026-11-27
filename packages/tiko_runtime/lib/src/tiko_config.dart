@@ -576,6 +576,41 @@ class GraphRagCfg {
   final int maxNotes;
 }
 
+/// Fase 35 — inter-agent messaging AutoGen-style (audit §6 #14): group chat
+/// bergiliran dengan speaker selection + terminasi TERMINATE. Default off
+/// (panggilan LLM berbiaya per putaran) — aktifkan eksplisit via `enabled`.
+class GroupChatCfg {
+  const GroupChatCfg({
+    this.enabled = false,
+    this.maxRounds = 8,
+    this.maxCharsPerMessage = 4000,
+    this.maxTranscriptMessages = 20,
+    this.speakerSelection = 'round_robin',
+    this.maxAgents = 8,
+  })  : assert(maxRounds >= 1 && maxRounds <= 24),
+        assert(maxCharsPerMessage >= 200),
+        assert(maxTranscriptMessages >= 2),
+        assert(maxAgents >= 2 && maxAgents <= 12);
+
+  /// Default off — panggilan LLM berbiaya per putaran; aktifkan eksplisit.
+  final bool enabled;
+
+  /// Cap keras jumlah putaran percakapan.
+  final int maxRounds;
+
+  /// Truncation konten per pesan (keamanan konteks).
+  final int maxCharsPerMessage;
+
+  /// Jumlah pesan terakhir yang dikirim ke pembicara berikutnya.
+  final int maxTranscriptMessages;
+
+  /// 'round_robin' (deterministik, default) atau 'auto' (LLM, fail-open).
+  final String speakerSelection;
+
+  /// Cap jumlah anggota yang ikut percakapan (dari roster tim).
+  final int maxAgents;
+}
+
 /// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
 /// tanpa LLM, advisory-only. Default on.
 class TaskClassifierCfg {
@@ -723,6 +758,7 @@ class TikoConfig {
     this.deepSolve = const DeepSolveCfg(),
     this.taskClassifier = const TaskClassifierCfg(),
     this.graphRag = const GraphRagCfg(),
+    this.groupChat = const GroupChatCfg(),
   });
 
   final String profile;
@@ -824,6 +860,9 @@ class TikoConfig {
 
   /// Fase 34 — GraphRAG-lite (default off).
   final GraphRagCfg graphRag;
+
+  /// Fase 35 — inter-agent messaging AutoGen-style (default off).
+  final GroupChatCfg groupChat;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1861,6 +1900,7 @@ class TikoConfig {
       deepSolve: _parseDeepSolve(root),
       taskClassifier: _parseTaskClassifier(root),
       graphRag: _parseGraphRag(root),
+      groupChat: _parseGroupChat(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2565,6 +2605,28 @@ class TikoConfig {
           : '',
       maxHops: hops is int && hops >= 1 && hops <= 4 ? hops : 2,
       maxNotes: maxNotes is int && maxNotes >= 1 ? maxNotes : 500,
+    );
+  }
+
+  /// Parser `group_chat:` (fase 35, AutoGen-style). Fail-open: scalar
+  /// invalid memakai default tanpa menggagalkan start.
+  static GroupChatCfg _parseGroupChat(YamlMap root) {
+    final sec = root['group_chat'];
+    if (sec is! YamlMap) return const GroupChatCfg();
+    final rounds = sec['max_rounds'];
+    final chars = sec['max_chars_per_message'];
+    final transcript = sec['max_transcript_messages'];
+    final agents = sec['max_agents'];
+    final selection = sec['speaker_selection'];
+    return GroupChatCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxRounds: rounds is int && rounds >= 1 && rounds <= 24 ? rounds : 8,
+      maxCharsPerMessage:
+          chars is int && chars >= 200 ? chars : 4000,
+      maxTranscriptMessages:
+          transcript is int && transcript >= 2 ? transcript : 20,
+      speakerSelection: selection == 'auto' ? 'auto' : 'round_robin',
+      maxAgents: agents is int && agents >= 2 && agents <= 12 ? agents : 8,
     );
   }
 
