@@ -1,6 +1,7 @@
 library;
 
 export 'src/mock_provider.dart';
+export 'src/bounded_error_body.dart';
 export 'src/openai_compat.dart';
 export 'src/openai_responses.dart';
 export 'src/azure_openai.dart';

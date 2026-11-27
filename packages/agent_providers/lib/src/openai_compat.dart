@@ -5,6 +5,7 @@ import 'package:agent_core/agent_core.dart';
 import 'package:http/http.dart' as http;
 
 import 'credential_pool.dart';
+import 'bounded_error_body.dart';
 import 'model_discovery.dart';
 import 'prompt_cache.dart';
 
@@ -234,7 +235,7 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
         .timeout(timeout ?? const Duration(hours: 1));
     captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
-      final err = await response.stream.bytesToString();
+      final err = await readStreamedErrorBody(response);
       yield LlmError(
         'HTTP ${response.statusCode}: $err',
         code: '${response.statusCode}',
@@ -339,10 +340,11 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
     Map<String, dynamic> body,
     Map<String, String> headers,
   ) async* {
-    final timeout = _timeoutFor(body['model'] as String? ?? model);
+    final base = _timeoutFor(body['model'] as String? ?? model);
+    final hops = outputBudgetHops(body['max_tokens']);
     final response = await client
         .post(chatUri, headers: headers, body: jsonEncode(body))
-        .timeout(timeout ?? const Duration(hours: 1));
+        .timeout(base == null ? const Duration(hours: 1) : base * hops);
     captureRateLimit(response.headers);
     if (response.statusCode >= 400) {
       yield LlmError(
