@@ -70,6 +70,7 @@
 | Simpul vault/index | Implemented | Modul terpisah dari agent runtime utama |
 | Semantic code index + embeddings (S22) | Implemented | `code_semantic` + `tiko code-index` — hybrid BM25+cosine RRF atas indeks persisten `data/index/code-semantic.jsonl`; embedder provider `memory.embed` bila aktif, tanpa itu fallback hashing offline (dilabel jujur bukan model semantik); refresh inkremental hash sha256 per file; `code.index.enabled` default true |
 | ToT/LATS bounded deep-solve — tool `deep_solve` (Fase 30) | Implemented (opt-in) | `DeepSolveEngine` (tiko_runtime): expand → LLM judge `SCORE:/REASON:` → refine per level; budget keras `max_llm_calls`/`max_wall_clock_sec`/`max_tokens_per_call`, never-raises (degenerate ke kandidat terbaik); konfigurasi `deep_solve:` default **off** karena berbiaya LLM; event telemetry `deep_solve.done` bebas-konten; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Task classifier + algorithm router — advisory `task.mode` (Fase 31) | Implemented | `TaskClassifier` heuristik deterministik (tanpa LLM): 7 mode §7.2 (fast/tool/plan/deepReasoning/research/coding/knowledge) + keyword custom via config `task_classifier:`; event `task.mode` bebas-konten + `ChatRunResult.taskMode`; advisory-only, jalur eksekusi ReAct tidak berubah; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 

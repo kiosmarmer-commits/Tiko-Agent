@@ -17,6 +17,7 @@ import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'deep_solve.dart';
 import 'idle_consolidation.dart';
+import 'task_classifier.dart';
 import 'context_refs.dart';
 import 'attachment_ingest.dart';
 import 'context_file.dart';
@@ -80,6 +81,7 @@ class ChatRunResult {
     this.skillsUsed = const [],
     this.model = '',
     this.contextPressureTokens,
+    this.taskMode = '',
   });
   final String text;
   final bool success;
@@ -114,6 +116,29 @@ class ChatRunResult {
   /// anchored (anchor basah/absen) — host menampilkan heuristik saja.
   final int? contextPressureTokens;
 
+  /// Fase 31 (audit §7.2): mode tugas hasil classifier heuristik
+  /// (fast/tool/plan/deepReasoning/research/coding/knowledge) — advisory
+  /// telemetry, tidak mengubah jalur eksekusi. Kosong bila tidak
+  /// diklasifikasi (perintah internal / classifier off).
+  final String taskMode;
+
+  /// Salinan hasil dengan [taskMode] terisi (dipakai chatWithStatus setelah
+  /// klasifikasi, tanpa mengubah kontrak konstruktor const yang lama).
+  ChatRunResult withTaskMode(String mode) => ChatRunResult(
+        text: text,
+        success: success,
+        retryable: retryable,
+        tokensUsed: tokensUsed,
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        toolCallCount: toolCallCount,
+        toolCallTraces: toolCallTraces,
+        skillsUsed: skillsUsed,
+        model: model,
+        contextPressureTokens: contextPressureTokens,
+        taskMode: mode,
+      );
+
   Map<String, dynamic> toJson() => {
         'text': text,
         'success': success,
@@ -125,6 +150,7 @@ class ChatRunResult {
         'skills_used': skillsUsed,
         if (contextPressureTokens != null)
           'context_pressure_tokens': contextPressureTokens,
+        if (taskMode.isNotEmpty) 'task_mode': taskMode,
       };
 }
 
@@ -2413,6 +2439,26 @@ class TikoRuntime {
           });
         }
       }
+      // Fase 31 (audit §7.2): classifier heuristik task — advisory only.
+      // Perintah internal ("/…") tidak diklasifikasi; classifier off
+      // menghasilkan mode kosong. Telemetry bebas-konten (sinyal + panjang).
+      var taskMode = '';
+      if (config.taskClassifier.enabled && !internalCommand &&
+          !text.trim().startsWith('/')) {
+        try {
+          final assessment = TaskClassifier(config: config.taskClassifier)
+              .classify(prompt);
+          taskMode = assessment.mode.name;
+          events.emit('task.mode', {
+            'session_id': sessionId,
+            'mode': assessment.mode.name,
+            'signals': assessment.signals,
+            'input_chars': assessment.inputChars,
+          });
+        } catch (_) {
+          taskMode = '';
+        }
+      }
       final result = await _chatWithStatusCore(
         prompt,
         sessionId: sessionId,
@@ -2457,7 +2503,7 @@ class TikoRuntime {
           completionTokens: result.completionTokens,
         );
       }
-      return result;
+      return taskMode.isEmpty ? result : result.withTaskMode(taskMode);
     } catch (error) {
       turnInspector.fail(entry.id, error: _sanitizer.output('$error'));
       if (!internalCommand) {

@@ -559,6 +559,26 @@ class DeepSolveCfg {
   final int maxWallClockSec;
 }
 
+/// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
+/// tanpa LLM, advisory-only. Default on.
+class TaskClassifierCfg {
+  const TaskClassifierCfg({
+    this.enabled = true,
+    this.fastMaxChars = 200,
+    this.extraKeywords = const {},
+  }) : assert(fastMaxChars >= 0);
+
+  final bool enabled;
+
+  /// Input tanpa sinyal ≤ panjang ini → mode fast.
+  final int fastMaxChars;
+
+  /// Keyword tambahan per mode (key: coding/research/knowledge/plan/deep/tool).
+  final Map<String, List<String>> extraKeywords;
+
+  List<String> keywordsFor(String mode) => extraKeywords[mode] ?? const [];
+}
+
 /// Hermes gateway idle compaction (`170d9637`): sesi yang menganggur
 /// melewati ambang idle dikompaksi di latar per channel sehingga pesan
 /// pertama setelah idle panjang tidak menunggu ringkasan. Default off
@@ -684,6 +704,7 @@ class TikoConfig {
     this.idleCompaction = const IdleCompactionConfig(),
     this.rag = const RagConfig(),
     this.deepSolve = const DeepSolveCfg(),
+    this.taskClassifier = const TaskClassifierCfg(),
   });
 
   final String profile;
@@ -779,6 +800,9 @@ class TikoConfig {
 
   /// Fase 30 — ToT/LATS bounded deep-solve (default off).
   final DeepSolveCfg deepSolve;
+
+  /// Fase 31 — task classifier heuristik (advisory telemetry).
+  final TaskClassifierCfg taskClassifier;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1814,6 +1838,7 @@ class TikoConfig {
       idleCompaction: _parseIdleCompaction(root, issues),
       rag: _parseRag(root),
       deepSolve: _parseDeepSolve(root),
+      taskClassifier: _parseTaskClassifier(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2462,6 +2487,45 @@ class TikoConfig {
       maxLlmCalls: intVal(sec['max_llm_calls'], 8, min: 1, max: 64),
       maxTokensPerCall: intVal(sec['max_tokens_per_call'], 800, min: 64),
       maxWallClockSec: intVal(sec['max_wall_clock_sec'], 120, min: 5),
+    );
+  }
+
+  /// Parser `task_classifier:` (fase 31, audit §7.2). Fail-open: nilai
+  /// scalar/list invalid memakai default tanpa menggagalkan start.
+  static TaskClassifierCfg _parseTaskClassifier(YamlMap root) {
+    final sec = root['task_classifier'];
+    if (sec is! YamlMap) return const TaskClassifierCfg();
+    String listForKey(String yamlKey) {
+      final v = sec[yamlKey];
+      if (v is! YamlList) return '';
+      return v
+          .map((e) => '$e'.trim().toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .join('\u0000');
+    }
+    Map<String, List<String>> extras() {
+      final out = <String, List<String>>{};
+      const pairs = {
+        'coding': 'coding_keywords',
+        'research': 'research_keywords',
+        'knowledge': 'knowledge_keywords',
+        'plan': 'plan_keywords',
+        'deep': 'deep_keywords',
+        'tool': 'tool_keywords',
+      };
+      for (final entry in pairs.entries) {
+        final raw = listForKey(entry.value);
+        if (raw.isNotEmpty) {
+          out[entry.key] = raw.split('\u0000').toList();
+        }
+      }
+      return out;
+    }
+    final fastMax = sec['fast_max_chars'];
+    return TaskClassifierCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : true,
+      fastMaxChars: fastMax is int && fastMax >= 0 ? fastMax : 200,
+      extraKeywords: extras(),
     );
   }
 
