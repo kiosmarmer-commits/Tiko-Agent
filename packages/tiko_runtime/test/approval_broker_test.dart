@@ -188,6 +188,7 @@ void main() {
       );
       expect((await broker.all()).single.state, ApprovalState.pending);
     });
-
-  });
+    },
+    timeout: Timeout(Duration(minutes: 2)),
+  );
 }

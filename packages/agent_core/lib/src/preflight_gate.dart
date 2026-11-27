@@ -18,6 +18,7 @@
 import 'compactor.dart';
 import 'context_builder.dart';
 import 'interfaces.dart';
+import 'usage_anchor.dart';
 
 /// Gerbang pra-API untuk satu turn; state `lastPressure` di-reset tiap
 /// [AgentLoop.handle] agar blocker tidak membandingkan angka usang.
@@ -37,12 +38,39 @@ class PreflightGate {
   /// True bila pass terakhir diblokir karena progres tidak cukup.
   bool blockedInsufficientProgress = false;
 
+  /// Hermes usage anchor (C5): di-set [AgentLoop] sebelum tiap request.
+  /// Bila anchor fresh (prefix cocok), tekanan memakai angka ber-anchoring
+  /// (usage nyata + delta) alih-alih heuristik chars/4 penuh.
+  UsageAnchor? usageAnchor;
+
+  /// Harga token per-gambar terikat turn (C7) — dipakai estimator.
+  int imageTokenCost = defaultImageTokenCost;
+
   /// Estimasi tekanan request penuh (token): pesan + system prompt +
-  /// skema tool, ~4 char per token (konvensi estimasi repo).
-  static int estimatePressureTokens(AgentContext ctx) {
+  /// skema tool, ~4 char per token (konvensi estimasi repo). Bila [anchor]
+  /// diberikan dan masih cocok dengan transcript request, angka ber-
+  /// anchoring (usage nyata + delta estimasi) MENGgantikan heuristik penuh
+  /// — figur anchored adalah provider-exact dan tidak pernah di-floor
+  /// (Hermes `turn_request_assembly`: anchored override).
+  static int estimatePressureTokens(
+    AgentContext ctx, {
+    UsageAnchor? anchor,
+    int imageCost = defaultImageTokenCost,
+  }) {
+    final request = ctx.toRequest();
+    if (anchor != null) {
+      final anchored = anchor.anchoredContextTokens(
+        request.messages,
+        imageCost: imageCost,
+      );
+      if (anchored != null) return anchored;
+    }
     var chars = ctx.systemPrompt.length;
     for (final m in ctx.messages) {
       chars += m.content.length;
+      if (m.images != null) {
+        chars += m.images!.length * imageCost * 4;
+      }
       if (m.toolCalls != null) {
         for (final c in m.toolCalls!) {
           chars += c.name.length + c.id.length;
@@ -71,9 +99,24 @@ class PreflightGate {
     if (!enabled) {
       return PreflightVerdict(ctx: ctx, pressure: null, blocked: false);
     }
-    final pressure = estimatePressureTokens(ctx);
+    // C5: angka ber-anchoring (usage nyata + delta) menggantikan heuristik
+    // penuh bila anchor fresh; heuristik dipakai apa adanya bila tidak.
+    final anchoredPressure = usageAnchor?.anchoredContextTokens(
+      ctx.toRequest().messages,
+      imageCost: imageTokenCost,
+    );
+    final anchored = anchoredPressure != null;
+    final pressure = anchoredPressure ??
+        estimatePressureTokens(ctx, imageCost: imageTokenCost);
     final threshold = thresholdOf(compactor);
-    if (pressure < threshold) return PreflightVerdict(ctx: ctx, pressure: pressure, blocked: false);
+    if (pressure < threshold) {
+      return PreflightVerdict(
+        ctx: ctx,
+        pressure: pressure,
+        blocked: false,
+        anchored: anchored,
+      );
+    }
 
     // Blocker progres-tidak-cukup: bandingkan request terassembly utuh,
     // bukan pesan mentah. Pass berikutnya hanya diizinkan bila pass
@@ -91,13 +134,29 @@ class PreflightGate {
         llmOverride: llmOverride,
         trigger: 'preflight',
       );
-      final after = estimatePressureTokens(compacted);
+      // Kompresi menulis-ulang prefix → anchor menjadi kedaluwarsa;
+      // anchoredContextTokens akan gagal-closed dan jatuh ke heuristik.
+      final after = estimatePressureTokens(
+        compacted,
+        anchor: usageAnchor,
+        imageCost: imageTokenCost,
+      );
       lastPressure = after;
-      return PreflightVerdict(ctx: compacted, pressure: after, blocked: false);
+      return PreflightVerdict(
+        ctx: compacted,
+        pressure: after,
+        blocked: false,
+        anchored: anchored,
+      );
     } catch (_) {
       // Kompresi preflight gagal → lanjutkan request apa adanya; recovery
       // overflow di jalur provider tetap tersedia sebagai lapis kedua.
-      return PreflightVerdict(ctx: ctx, pressure: pressure, blocked: false);
+      return PreflightVerdict(
+        ctx: ctx,
+        pressure: pressure,
+        blocked: false,
+        anchored: anchored,
+      );
     }
   }
 }
@@ -108,6 +167,7 @@ class PreflightVerdict {
     required this.ctx,
     required this.pressure,
     required this.blocked,
+    this.anchored = false,
   });
 
   final AgentContext ctx;
@@ -118,4 +178,8 @@ class PreflightVerdict {
   /// True bila pass diblokir (progres tidak cukup) — request dikirim
   /// tanpa pass preflight tambahan.
   final bool blocked;
+
+  /// True bila tekanan pass ini ber-anchoring usage nyata (C5), bukan
+  /// heuristik chars/4.
+  final bool anchored;
 }

@@ -12,7 +12,9 @@ import 'interfaces.dart';
 import 'models.dart';
 import 'context_builder.dart';
 import 'compactor.dart';
+import 'image_token_cost.dart';
 import 'loop_detector.dart';
+import 'usage_anchor.dart';
 import 'edit_loop_guard.dart';
 import 'budget_guard.dart';
 import 'router.dart';
@@ -144,6 +146,8 @@ class AgentLoop {
     this.enableSelfConsistency = false,
     this.selfConsistencySamples = 3,
     this.autoReflectOnTools = 3,
+    this.usageAnchorStore,
+    this.imageTokenCosts,
     this.synthLlm,
     this.onCompactionEvent,
     this.skillEval = const SkillEvalConfig(),
@@ -177,6 +181,16 @@ class AgentLoop {
   /// args tersanitasi, status error, dan durasi. Kegagalan callback TIDAK
   /// diperbolehkan menghentikan turn (pemanggil wajib guard sendiri).
   final void Function(ToolCallTrace trace)? onToolTrace;
+
+  /// Hermes usage anchor (C5): persistence anchor per sesi (null = anchor
+  /// hanya hidup dalam turn). Direkomendasikan di host per-turn — tanpa ini
+  /// anchor tidak bertahan lintas turn.
+  final UsageAnchorStore? usageAnchorStore;
+
+  /// Hermes image token cost (C7): tabel harga per-gambar yang dipelajari
+  /// dari usage nyata provider (null = harga default flat, tanpa kalibrasi).
+  final ImageTokenCostStore? imageTokenCosts;
+
   final AgentConfig config;
   final String workspacePath;
   final void Function(
@@ -344,6 +358,28 @@ class AgentLoop {
 
   /// Hermes preflight gate: state per-turn, di-reset pada handle().
   PreflightGate? _preflight;
+
+  /// Hermes usage anchor (C5): pengukuran nyata provider terakhir + posisi
+  /// transcript yang dihargai; di-capture tiap respons dan dipersist per
+  /// sesi via [usageAnchorStore]. Loop dibangun per-turn di host — anchor
+  /// dipulihkan (dengan validasi fingerprint prefix) di request pertama.
+  UsageAnchor? _usageAnchor;
+
+  /// Harga token per-gambar terikat turn (C7): hasil kalibrasi runtime
+  /// meng-override tabel yang dipelajari sampai turn berakhir.
+  int? _imageCostOverride;
+
+  /// Sesi yang sedang diproses (untuk persist/pulih anchor).
+  String? _currentSessionId;
+
+  /// Tekanan konteks ber-anchoring pass preflight TERAKHIR turn ini
+  /// (null bila tidak pernah anchored). Getter host untuk observability.
+  int? _lastAnchoredPressure;
+  int? get lastAnchoredPressureTokens => _lastAnchoredPressure;
+
+  /// Anchor usage aktif turn ini (null = belum ada / sudah kedaluwarsa).
+  UsageAnchor? get usageAnchor => _usageAnchor;
+
   final _editGuard = EditLoopGuard();
 
   /// Cooperative cancellation token for the turn currently being handled.
@@ -436,6 +472,9 @@ class AgentLoop {
       );
       _budget.warnRatio = config.iterationWarnRatio;
       _preflight = PreflightGate(enabled: config.preflightCompaction);
+      _currentSessionId = session.id;
+      _imageCostOverride = null;
+      _lastAnchoredPressure = null;
 
       agentLoop:
       for (var i = 0; i < config.maxIterations; i++) {
@@ -1066,10 +1105,18 @@ class AgentLoop {
   /// Hermes fase-8: satu panggilan request lengkap — gerbang preflight
   /// (kompresi pra-API saat tekanan di atas ambang) lalu perbaikan
   /// transcript (buang tool result/call yatim) sebelum request dikirim.
+  /// Fase-9: gerbang preflight mendapat anchor usage (C5) dan harga
+  /// per-gambar terikat turn (C7); setelah respons, usage nyata dicatat
+  /// (re-anchor + kalibrasi gambar).
   Future<LlmResponse> _requestLlm(AgentContext ctx, LlmProvider llm) async {
     var useCtx = ctx;
     final preflight = _preflight;
     if (preflight != null) {
+      // C5: pulihkan anchor tersimpan pada request pertama turn (validasi
+      // fingerprint prefix; kedaluwarsa = dibuang, fail-closed).
+      _usageAnchor ??= _restoreUsageAnchor(ctx);
+      preflight.usageAnchor = _usageAnchor;
+      preflight.imageTokenCost = _boundImageCost(llm);
       try {
         final verdict = await preflight.run(
           useCtx,
@@ -1077,26 +1124,85 @@ class AgentLoop {
           llmOverride: llm,
         );
         useCtx = verdict.ctx;
+        _lastAnchoredPressure = verdict.anchored ? verdict.pressure : null;
       } catch (_) {} // gerbang pra-API tidak boleh menggagalkan turn
     }
     final request = useCtx.toRequest();
     final repaired = repairTranscript(request.messages);
+    final LlmResponse resp;
     if (repaired.length == request.messages.length) {
-      return _safeCollect(() => llm.chat(request));
-    }
-    return _safeCollect(
-      () => llm.chat(
-        ChatRequest(
-          messages: repaired,
-          tools: request.tools,
-          toolChoice: request.toolChoice,
-          maxTokens: request.maxTokens,
-          temperature: request.temperature,
-          stream: request.stream,
-          model: request.model,
+      resp = await _safeCollect(() => llm.chat(request));
+    } else {
+      resp = await _safeCollect(
+        () => llm.chat(
+          ChatRequest(
+            messages: repaired,
+            tools: request.tools,
+            toolChoice: request.toolChoice,
+            maxTokens: request.maxTokens,
+            temperature: request.temperature,
+            stream: request.stream,
+            model: request.model,
+          ),
         ),
-      ),
-    );
+      );
+    }
+    _observeUsage(repaired, resp, request.model ?? llm.id);
+    return resp;
+  }
+
+  /// Pulihkan anchor tersimpan untuk sesi berjalan; hanya dihormati bila
+  /// transcript masih membawa prefix yang dihargai (Hermes
+  /// `restore_usage_anchor`); bila tidak, blob basah dibuang supaya tidak
+  /// pernah menekan kompresi secara keliru.
+  UsageAnchor? _restoreUsageAnchor(AgentContext ctx) {
+    final store = usageAnchorStore;
+    final sessionId = _currentSessionId;
+    if (store == null || sessionId == null) return null;
+    try {
+      final anchor = store.load(sessionId);
+      if (anchor == null) return null;
+      if (anchor.matches(ctx.toRequest().messages)) return anchor;
+      store.save(sessionId, null);
+    } catch (_) {}
+    return null;
+  }
+
+  /// Harga token per-gambar efektif turn ini (C7): hasil kalibrasi runtime
+  /// > tabel yang dipelajari > harga default flat.
+  int _boundImageCost(LlmProvider llm) {
+    if (_imageCostOverride != null) return _imageCostOverride!;
+    return imageTokenCosts?.learnedFor(_lastModelUsed ?? llm.id) ??
+        defaultImageTokenCost;
+  }
+
+  /// Hermes fase-9: setelah satu respons terhargai — (1) kalibrasi harga
+  /// per-gambar dari residu (C7, memakai anchor SEBELUMNYA), lalu (2) re-
+  /// anchor ke usage respons ini (C5). Usage tidak bisa dipakai → anchor
+  /// lama dipertahankan (Hermes: caller keeps its anchor).
+  void _observeUsage(List<ChatMessage> priced, LlmResponse resp, String model) {
+    try {
+      final usage = resp.usage;
+      final pt = usage.prompt;
+      if (pt <= 0) return;
+      final store = imageTokenCosts;
+      if (store != null) {
+        final learned = store.calibrateFromUsage(
+          model: model,
+          promptTokens: pt,
+          anchor: _usageAnchor,
+          messages: priced,
+        );
+        if (learned != null) _imageCostOverride = learned;
+      }
+      final anchor = UsageAnchor.capture(pt, usage.completion, priced);
+      if (anchor != null) {
+        _usageAnchor = anchor;
+        usageAnchorStore?.save(_currentSessionId ?? '', anchor);
+      }
+    } catch (_) {
+      // Observability tidak boleh menggagalkan turn.
+    }
   }
 
   Future<LlmResponse> _safeCollect(
