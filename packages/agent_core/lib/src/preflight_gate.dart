@@ -17,7 +17,6 @@
 
 import 'compactor.dart';
 import 'context_builder.dart';
-import 'image_token_cost.dart';
 import 'interfaces.dart';
 import 'usage_anchor.dart';
 

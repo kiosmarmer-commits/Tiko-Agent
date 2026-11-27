@@ -24,6 +24,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'models.dart';
 
 /// Harga token per-gambar default sebelum kalibrasi dari usage nyata
@@ -59,16 +61,11 @@ int estimateMessagesTokensRough(
   return total;
 }
 
-/// FNV-1a 64-bit (murni Dart, deterministik lintas proses — hash stabil
-/// identitas pesan; kekuatan kripto tidak diperlukan untuk fingerprint).
-String _fnv1a64Hex(String input) {
-  var hash = 0xcbf29ce484222325;
-  for (final unit in input.codeUnits) {
-    hash = (hash ^ unit) * 0x100000001b3;
-  }
-  final big = BigInt.from(hash).toUnsigned(64);
-  return big.toRadixString(16).padLeft(16, '0');
-}
+/// SHA-256 hex (deterministik lintas proses dan platform — termasuk
+/// kompilasi Web; dart2js menolak literal integer 64-bit, jadi hash
+/// per-geser seperti FNV-1a 64 tidak aman di sini).
+String _stableHashHex(String input) =>
+    sha256.convert(utf8.encode(input)).toString();
 
 /// Digest stabil satu pesan atas field provider-visible yang di-round-trip
 /// store sesi byte-per-byte. Metadata tampilan (timestamp, row id) sengaja
@@ -88,7 +85,7 @@ String chatMessageFingerprint(ChatMessage m) {
               })
           .toList(),
   };
-  return _fnv1a64Hex(json.encode(payload));
+  return _stableHashHex(json.encode(payload));
 }
 
 String _pricedPrefixFingerprint(List<ChatMessage> messages, int baseCount) {
@@ -97,7 +94,7 @@ String _pricedPrefixFingerprint(List<ChatMessage> messages, int baseCount) {
     for (var i = 0; i < baseCount; i++)
       '${messages[i].role}:${chatMessageFingerprint(messages[i])}',
   ];
-  return _fnv1a64Hex(json.encode(fps));
+  return _stableHashHex(json.encode(fps));
 }
 
 /// Usage anchor: pengukuran nyata provider + posisi transcript yang dihargai.
