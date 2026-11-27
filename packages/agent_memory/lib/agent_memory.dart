@@ -16,6 +16,7 @@ export 'src/rag_pipeline.dart';
 export 'src/self_rag_controller.dart';
 export 'src/rag_benchmark.dart';
 export 'src/memory_layers.dart';
+export 'src/context_pager.dart';
 export 'src/curated_memory.dart';
 export 'src/memory_providers.dart';
 export 'src/cloud_memory_providers.dart';

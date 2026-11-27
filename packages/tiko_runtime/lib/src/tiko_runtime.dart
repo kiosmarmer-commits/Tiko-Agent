@@ -1201,6 +1201,13 @@ class TikoRuntime {
     }
 
     final sessionStore = FileSessionStore(path: p.join(dataDir, 'sessions.json'));
+    // Fase 36 (MemGPT-style control-flow paging): pager terikat store +
+    // layered memory; model mengendalikan page_out/page_in via tool.
+    final contextPager = ContextPager(
+      store: sessionStore,
+      memory: layeredMemory,
+      statePath: p.join(dataDir, 'context_paging_state.json'),
+    );
     final smartHomeTool = SmartHomeTool.fromEnvironment(effectiveEnv);
 
     final registry = ToolRegistry()
@@ -1270,6 +1277,7 @@ class TikoRuntime {
       ..register(RagIngestTool(rag))
       ..register(RagQueryTool(rag))
       ..register(LayeredMemoryTool(layeredMemory))
+      ..register(MemoryPageTool(contextPager))
       ..register(SessionSearchTool(sessionStore))
       ..register(HdcMemoryTool(hdcMemory))
       // D5 federated-lite: export/import skill antar instance (manual,
