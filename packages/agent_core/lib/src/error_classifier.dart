@@ -55,6 +55,29 @@ class ApiError {
 class ApiErrorClassifier {
   const ApiErrorClassifier._();
 
+  /// Pola Retry-After lintas provider: header/body `retry-after: N`,
+  /// `retry in Ns`, `try again in N seconds`, `please retry after N`.
+  static final _retryAfterBody = RegExp(
+    r'(?:retry[\s_-]*(?:after|in)|try again in)[^0-9]{0,24}(\d{1,6})',
+    caseSensitive: false,
+  );
+
+  /// Ambil `Retry-After` dalam detik dari kode status/pesan error
+  /// (Hermes `provider_retry_after_seconds`). Null bila tidak ada/
+  /// tidak valid — never raises.
+  static int? retryAfterSecondsFrom({String? code, String? message}) {
+    final sources = [if (code != null) code, if (message != null) message];
+    for (final src in sources) {
+      if (src.isEmpty) continue;
+      final match = _retryAfterBody.firstMatch(src);
+      if (match == null) continue;
+      final value = int.tryParse(match.group(1)!);
+      if (value == null || value <= 0) continue;
+      return value;
+    }
+    return null;
+  }
+
   /// Pola body/billing yang muncul lintas provider walau status bukan 402.
   static final _billingBody = RegExp(
     r'(insufficient[_ ]?(?:funds|quota|credits?)|billing|payment required|'

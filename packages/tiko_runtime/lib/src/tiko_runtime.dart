@@ -18,6 +18,7 @@ import 'idle_consolidation.dart';
 import 'context_refs.dart';
 import 'attachment_ingest.dart';
 import 'context_file.dart';
+import 'estop.dart';
 import 'event_hooks.dart';
 import 'script_repair_advisor.dart';
 import 'config_store.dart';
@@ -707,6 +708,11 @@ class TikoRuntime {
   late final CreditsTracker credits = CreditsTracker(
     dailyLimitUsd: config.dailyCreditLimitUsd,
   );
+
+  /// Hermes fase-8 `estop.py`: emergency stop global resumable untuk
+  /// pekerjaan BARU saja (sentinel `<dataDir>/ESTOP`); pekerjaan in-flight
+  /// tidak pernah dibunuh. Dienggikan via `/pause`, dilepas via `/resume`.
+  late final Estop estop = Estop(dataDir);
 
   /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
   /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
@@ -2426,6 +2432,28 @@ class TikoRuntime {
       );
     }
     try {
+      // /pause dan /resume harus selalu lolos gate ESTOP — /resume adalah
+      // satu-satunya jalan melepas jeda.
+      final trimmedInput = text.trim();
+      final isEstopCommand = trimmedInput == '/resume' ||
+          trimmedInput == '/pause' ||
+          trimmedInput.startsWith('/pause ');
+      if (!internalCommand && !isEstopCommand && estop.isEngaged()) {
+        // Hermes `estop.py`: pekerjaan BARU saja yang ditolak saat ESTOP
+        // engaged; pekerjaan in-flight tidak pernah dibunuh.
+        final reason = estop.readPayload()?['reason'];
+        events.emit('estop.blocked', {
+          'session': sessionId,
+          'channel': channel,
+          if (reason != null) 'reason': reason,
+        });
+        return const ChatRunResult(
+          text: '⏸️ Sistem sedang dijeda (ESTOP). Pesan baru ditolak; '
+              'pekerjaan yang sedang berjalan tidak diinterupsi. '
+              'Kirim /resume untuk melanjutkan.',
+          success: false,
+        );
+      }
       if (!internalCommand) {
         final learnRequest = LearnCommand.parse(text);
         if (learnRequest != null) {
@@ -2436,6 +2464,12 @@ class TikoRuntime {
             userKey: userKey,
             confirm: confirm,
           );
+        }
+        if (text.trim() == '/pause' || text.trim().startsWith('/pause ')) {
+          return _estopPauseCommand(text.trim());
+        }
+        if (text.trim() == '/resume') {
+          return _estopResumeCommand();
         }
         if (text.trim() == '/memory') {
           return _curatedMemoryStatus();
@@ -2551,6 +2585,9 @@ class TikoRuntime {
           maxTokensPerTask: resourceProfile == 'eco' ? 20000 : config.maxTokensPerTask,
           maxWallClockSec: resourceProfile == 'eco' ? 120 : config.maxWallClockSec,
           maxToolCalls: resourceProfile == 'eco' ? 12 : config.maxToolCalls,
+          turnLivenessTimeoutSec: config.agentTurnLivenessTimeoutSec,
+          preflightCompaction: config.agentPreflightCompaction,
+          retryWaitCapSec: config.agentRetryWaitCapSec,
         );
       final projCtx = resolveProjectContextFile(workspaceRoot: workspace);
       final loop = AgentLoop(
@@ -4567,6 +4604,45 @@ class TikoRuntime {
 
   /// `/usage` — pemakaian token 7 hari terakhir + rate-limit provider
   /// (header `x-ratelimit-*` yang berhasil ditangkap).
+  /// Hermes `estop.py` fase-8: `/pause [alasan]` — engage ESTOP.
+  ChatRunResult _estopPauseCommand(String trimmed) {
+    final reason = trimmed == '/pause'
+        ? null
+        : trimmed.substring('/pause '.length).trim();
+    try {
+      estop.engage(reason);
+    } catch (_) {
+      return const ChatRunResult(
+        text: 'Gagal menulis sentinel ESTOP — sistem tidak dijeda.',
+        success: false,
+      );
+    }
+    events.emit('estop.engaged', {
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
+    });
+    return ChatRunResult(
+      text: reason == null || reason.isEmpty
+          ? '⏸️ ESTOP dienggikan: pekerjaan baru ditolak sampai /resume. '
+              'Pekerjaan in-flight tidak diinterupsi.'
+          : '⏸️ ESTOP dienggikan (alasan: $reason): pekerjaan baru ditolak '
+              'sampai /resume. Pekerjaan in-flight tidak diinterupsi.',
+      success: true,
+    );
+  }
+
+  /// Hermes `estop.py` fase-8: `/resume` — lepas ESTOP.
+  ChatRunResult _estopResumeCommand() {
+    final engaged = estop.isEngaged();
+    estop.release();
+    if (engaged) events.emit('estop.released', {});
+    return ChatRunResult(
+      text: engaged
+          ? '▶️ ESTOP dilepas — pekerjaan baru diterima kembali.'
+          : 'ESTOP tidak sedang engaged.',
+      success: true,
+    );
+  }
+
   ChatRunResult _usageCommand(String sessionId) {
     final buf = StringBuffer('Pemakaian (7 hari terakhir):\n');
     try {
