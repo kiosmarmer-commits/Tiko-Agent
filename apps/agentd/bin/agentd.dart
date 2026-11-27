@@ -1280,6 +1280,7 @@ Future<void> main(List<String> args) async {
             'tools': rt.toolCatalog(),
             'mcp': rt.mcpSnapshot(),
             'hooks': rt.hookSnapshot(),
+            'idle_compaction': rt.idleCompactionSnapshot(),
           };
         },
         channelsProvider: () async => channelsSnapshot({

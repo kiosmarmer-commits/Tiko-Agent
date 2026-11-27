@@ -3295,6 +3295,14 @@ class TikoRuntime {
     return executor.snapshot();
   }
 
+  /// Snapshot kompaksi idle latar (Fase 25, Hermes `170d9637`): stat +
+  /// kebijakan efektif; `enabled: false` bila fitur dimatikan config.
+  Map<String, dynamic> idleCompactionSnapshot() {
+    final engine = idleCompaction;
+    if (engine == null) return {'enabled': false};
+    return engine.snapshot();
+  }
+
   /// Pastikan executor hidup (GUI CRUD hooks): sebelumnya executor hanya
   /// dibuat bila config punya aturan, sehingga aturan pertama dari GUI
   /// perlu executor baru yang langsung berlangganan EventBus.
