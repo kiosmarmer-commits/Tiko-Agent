@@ -25,6 +25,11 @@ class FtsIndex {
   /// id -> text.
   final Map<String, String> _docs = {};
 
+  /// Snapshot read-only id -> teks dokumen yang sudah dimuat — dipakai
+  /// `RagPipeline.restoreChunksFromLexicalIndex()` untuk rehidrasi metadata
+  /// chunk pasca-restart (RAG-01).
+  Map<String, String> get documents => Map.unmodifiable(_docs);
+
   Future<void> load() async {
     final f = File(path);
     if (!await f.exists()) return;

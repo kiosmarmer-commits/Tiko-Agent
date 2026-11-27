@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:agent_core/agent_core.dart';
@@ -259,6 +260,7 @@ class RagPipeline {
     this.chunker = const RagChunker(),
     this.expander = const QueryExpander(),
     this.maxConcurrency = 4,
+    this.onEmbedError,
   }) : assert(maxConcurrency >= 1 && maxConcurrency <= 16);
 
   final VectorIndex dense;
@@ -269,6 +271,13 @@ class RagPipeline {
 
   /// Batas konkurensi fan-out (embed/variant). 1 = sekuensial.
   final int maxConcurrency;
+
+  /// RAG-03 — telemetry kegagalan embedding (never-raises): dipanggil saat
+  /// `_safeEmbed` menelan exception agar operator bisa membedakan lexical
+  /// fallback dari embedding sukses. Tidak membawa isi teks (hanya meta).
+  /// Mutable karena host meng-wire-nya setelah pipeline dibangun (event bus
+  /// runtime belum tersedia saat `TikoRuntime.create()` membangun pipeline).
+  void Function(String meta, Object? error)? onEmbedError;
 
   final Map<String, RagChunk> _chunks = {};
 
@@ -283,6 +292,31 @@ class RagPipeline {
   Iterable<RagChunk> get chunks => _chunks.values;
 
   RagChunk? getChunk(String id) => _chunks[id];
+
+  /// RAG-01 — rehidrasi metadata chunk dari dokumen FTS yang dimuat disk
+  /// (jalur startup). Chunk direkonstruksi dari id stabil `<docId>#<index>`;
+  /// id malformed/legacy tanpa suffix dilewati tanpa crash. Non-destruktif:
+  /// chunk yang sudah ada tidak ditimpa. Return jumlah chunk yang dipulihkan.
+  ///
+  /// Batas sadar: meta asli dan cache `_chunkVectors` tidak ikut tersimpan
+  /// di FTS — meta dikosongkan dan semantic rerank pasca-restart berjalan
+  /// tanpa cached vector (dense index persisten tetap mengembalikan
+  /// kandidat). Re-embed on-demand menyusul (RAG-02).
+  int restoreChunksFromLexicalIndex() {
+    var restored = 0;
+    lexical.documents.forEach((id, text) {
+      if (_chunks.containsKey(id)) return;
+      final hash = id.lastIndexOf('#');
+      if (hash <= 0 || hash == id.length - 1) return;
+      final index = int.tryParse(id.substring(hash + 1));
+      if (index == null || index < 0) return;
+      final docId = id.substring(0, hash);
+      if (docId.isEmpty || text.trim().isEmpty) return;
+      _chunks[id] = RagChunk(id: id, docId: docId, text: text, index: index);
+      restored++;
+    });
+    return restored;
+  }
 
   /// Chunks [text], indexes each chunk in both the vector index (when an
   /// embedder is available) and the lexical index. Returns the chunks.
@@ -315,6 +349,7 @@ class RagPipeline {
         });
       }
     }
+    await _saveLexicalQuietly();
     return chunks;
   }
 
@@ -332,6 +367,19 @@ class RagPipeline {
       } else if (dense is SqliteVecIndex) {
         await (dense as SqliteVecIndex).remove(id);
       }
+    }
+    await _saveLexicalQuietly();
+  }
+
+  /// Persist indeks lexical pasca-ingest/remove (RAG-01) sehingga metadata
+  /// bisa direhidrasi setelah restart tanpa menunggu shutdown. Gagal I/O
+  /// tidak menggagalkan ingest (indeks in-memory tetap valid).
+  Future<void> _saveLexicalQuietly() async {
+    try {
+      await lexical.save();
+    } catch (e) {
+      // ignore: avoid_print
+      stderr.writeln('rag_pipeline: lexical.save gagal: $e');
     }
   }
 
@@ -446,7 +494,8 @@ class RagPipeline {
     if (embed == null) return const [];
     try {
       return await embed(text);
-    } catch (_) {
+    } catch (e) {
+      onEmbedError?.call('chars:${text.length}', e);
       return const [];
     }
   }

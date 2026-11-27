@@ -34,7 +34,7 @@ Provider mock punya pemilih behavior (`providers.chat.scenario`): plain | assist
 ## 3. Retrieval algoritma
 
 - SQLite path: FTS5/BM25 candidate dan vector candidate bila embedding tersedia, lalu Reciprocal Rank Fusion (RRF, `k=60`).
-- Vector index yang dibuat oleh runtime saat snapshot: `BruteForceVectorIndex`.
+- Vector index yang dibuat oleh runtime: fallback awal `BruteForceVectorIndex`, dan **`SqliteVecIndex(sqlite.db)` sebagai durable default bila SQLite tersedia** (lihat docs/04 §3).
 - Tanpa embedding, jalur lexical/FTS tetap sumber utama; vector search tidak berjalan otomatis.
 - ContextBuilder mengambil hingga lima memory hits untuk prompt dan membungkus memory sebagai `untrusted_data`.
 
