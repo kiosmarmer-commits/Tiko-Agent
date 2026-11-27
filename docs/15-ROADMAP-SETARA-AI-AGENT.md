@@ -24,6 +24,7 @@
 | F7 — Keunggulan kompondensal | Eval harness, cost observability | ✅ selesai | eval gate offline-first di CI + ledger cost per user/channel/day (PR #166) — lihat §8 |
 | F8 — Otonomi aman bertingkat | Profil security + approval-remember | ✅ selesai | `security.profile` (strict/standard/trusted_workspace) + mode `guided` + `risk_overrides` + approval-remember session/workspace — lihat §9 |
 | F9 — Rekomendasi benchmark agent | Retrieval, streaming compat, verifier, self-improvement | ✅ selesai | `code_search` BM25-lite hybrid + compat SSE token-level + usage token nyata + `verify_project auto` language-aware + `tiko eval harvest` — lihat §10 |
+| F10 — Penutup gap defer eksplisit (S20) | computer_use, SWE-bench replay, VS Code ext, usage split | ✅ selesai | `agent.computer_use` (xdotool/scrot argv-array, default off) + `tiko eval swebench` + `editors/vscode-tiko/` + token usage end-to-end — lihat §11 |
 
 ## 2. Fase F1 — Daya eksekusi nyata
 

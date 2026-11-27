@@ -141,6 +141,7 @@ class IdleCompactionEngine {
         'enabled': config.enabled,
         'after_sec': config.afterSec,
         'tick_sec': config.tickSec,
+        'channel_overrides': config.channelOverrides,
         'ticks': ticks,
         'attempted': attempted,
         'compacted': compacted,

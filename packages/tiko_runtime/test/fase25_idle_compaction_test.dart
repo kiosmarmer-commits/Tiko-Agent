@@ -1,7 +1,10 @@
 // Fase 25 (Hermes `170d9637` gateway idle compaction): sesi idle melewati
 // ambang dikompaksi di latar per channel — latch per aktivitas, skip sesi
 // sibuk, override channel (0 = off), default config off, gate admission.
+import 'dart:io';
+
 import 'package:agent_core/agent_core.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 import 'package:tiko_runtime/tiko_runtime.dart';
 
@@ -302,4 +305,61 @@ idle_compaction:
       expect(eng.attempted, 1);
     });
   });
+
+  group('runtime wiring idle compaction', () {
+    late Directory temp;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('fase25_rt_');
+    });
+
+    tearDown(() {
+      temp.deleteSync(recursive: true);
+    });
+
+    Future<String> _prepare(String idleSection) async {
+      final ws = temp.path;
+      final configDir = Directory(p.join(ws, 'config'))..createSync();
+      final config = File(p.join(configDir.path, 'agent.yaml'));
+      await config.writeAsString('''
+profile: default
+workspace: $ws
+storage:
+  data_dir: ${p.join(ws, 'data')}
+providers:
+  default_chat: mock
+  chat:
+    mock:
+      type: mock
+$idleSection
+''');
+      return config.path;
+    }
+
+    test('enabled: engine terpasang + snapshot terekspos', () async {
+      final configPath = await _prepare('''
+idle_compaction:
+  enabled: true
+  after_sec: 600
+  channel_overrides:
+    cli: 120
+''');
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      expect(rt.idleCompaction, isNotNull);
+      final snap = rt.idleCompactionSnapshot();
+      expect(snap['enabled'], isTrue);
+      expect(snap['after_sec'], 600);
+      expect((snap['channel_overrides'] as Map)['cli'], 120);
+    });
+
+    test('default: engine null + snapshot jujur disabled', () async {
+      final configPath = await _prepare('');
+      final rt = await TikoRuntime.create(configPath: configPath);
+      addTearDown(rt.close);
+      expect(rt.idleCompaction, isNull);
+      expect(rt.idleCompactionSnapshot(), {'enabled': false});
+    });
+  });
+
 }
