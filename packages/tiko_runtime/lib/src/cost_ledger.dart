@@ -81,6 +81,10 @@ class CostLedger {
 
   int get length => _entries.length;
 
+  /// Salinan entri (terlama → terbaru) untuk agregator laporan seperti
+  /// insights; tanpa salinan dalam agar murah dan konsisten dengan JSONL.
+  List<CostEntry> get entries => List.unmodifiable(_entries);
+
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;

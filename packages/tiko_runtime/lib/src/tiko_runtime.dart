@@ -49,6 +49,7 @@ part 'research_pdf.dart';
 part 'scheduler_extended.dart';
 part 'a2ui_research.dart';
 part 'cost_ledger.dart';
+part 'insights.dart';
 part 'eval_gate.dart';
 part 'benchmark_replay.dart';
 part 'approval_rules.dart';
@@ -2561,6 +2562,10 @@ class TikoRuntime {
         if (text.trim() == '/context') {
           return _contextCommand(sessionId);
         }
+        if (text.trim() == '/insights' ||
+            text.trim().startsWith('/insights ')) {
+          return await _insightsCommand(text.trim());
+        }
         final botCmd = _parseBotCommand(text);
         if (botCmd != null) {
           return await _botCommand(botCmd, sessionId: sessionId);
@@ -4869,6 +4874,33 @@ class TikoRuntime {
       buf.writeln('Usage akun provider: tidak tersedia.');
     }
     return ChatRunResult(text: buf.toString(), success: true);
+  }
+
+  /// Hermes parity: `agent/insights.py` — `/insights [days]` merender
+  /// laporan insight dari ledger biaya (default 30 hari, clamp 1–365).
+  Future<ChatRunResult> _insightsCommand(String trimmed) async {
+    final argRaw = trimmed == '/insights'
+        ? ''
+        : trimmed.substring('/insights '.length).trim();
+    var days = 30;
+    if (argRaw.isNotEmpty) {
+      final parsed = int.tryParse(argRaw);
+      if (parsed == null || parsed < 1) {
+        return ChatRunResult(
+          text: 'Argumen hari tidak valid: "$argRaw". '
+              'Gunakan bilangan bulat >= 1 (mis. /insights 7).',
+          success: false,
+        );
+      }
+      days = parsed > 365 ? 365 : parsed;
+    }
+    try {
+      await costLedger.load();
+    } catch (_) {
+      // Ledger gagal dimuat: generate tetap jalan dengan entri kosong.
+    }
+    final report = insightsGenerate(costLedger, days: days);
+    return ChatRunResult(text: insightsFormatTerminal(report), success: true);
   }
 
   /// Hermes fase-10 `checkpoints/manager.py`: catat batch checkpoint turn
