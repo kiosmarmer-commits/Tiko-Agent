@@ -135,7 +135,7 @@ void main() {
       final (restored, failed) = store.restore(ws.path, [evil]);
       expect(restored, isEmpty);
       expect(failed, ['../evil.txt']);
-      expect(File('${ws.parent!.path}/evil.txt').existsSync(), isFalse);
+      expect(File('${ws.parent.path}/evil.txt').existsSync(), isFalse);
     });
 
     test('oversize → null snapshot (fail-open)', () {
