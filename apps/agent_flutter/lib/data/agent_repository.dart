@@ -139,6 +139,13 @@ abstract class AgentRepository {
 
   /// Live push event runtime via WebSocket admin feed (GUI-P2-06).
   Stream<Map<String, dynamic>> runtimeEvents();
+
+  /// LEARN-01: feedback 👍/👎 tingkat turn (session) — skill metrics
+  /// durabel + ledger self-evolution.
+  Future<Map<String, dynamic>> sendSessionFeedback(
+    String sessionKey,
+    bool positive,
+  );
 }
 
 /// Implementasi HTTP di atas [AgentApiClient]; menerjemahkan kegagalan
@@ -159,6 +166,13 @@ class HttpAgentRepository implements AgentRepository {
       throw ApiError.network(e.message);
     }
   }
+
+  @override
+  Future<Map<String, dynamic>> sendSessionFeedback(
+    String sessionKey,
+    bool positive,
+  ) =>
+      _guard(() => _client.sendSessionFeedback(sessionKey, positive));
 
   @override
   Future<bool> health() => _guard(_client.health);
