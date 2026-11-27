@@ -2566,6 +2566,14 @@ class TikoRuntime {
             text.trim().startsWith('/insights ')) {
           return await _insightsCommand(text.trim());
         }
+        final planTask = parsePlanCommand(text);
+        if (planTask != null) {
+          // Hermes `plan_prompt.py` + `_hm_rewrite_turn_to_prompt`: /plan
+          // ditulis-ulang menjadi prompt plan mode lalu dijalankan sebagai
+          // turn biasa — system prompt dan riwayat tidak disentuh
+          // (prompt-cache safe; seperti /learn).
+          text = buildPlanPrompt(planTask);
+        }
         final botCmd = _parseBotCommand(text);
         if (botCmd != null) {
           return await _botCommand(botCmd, sessionId: sessionId);

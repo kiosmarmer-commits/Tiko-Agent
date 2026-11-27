@@ -31,7 +31,7 @@ class SlashCommandRegistry {
     SlashCommand(name: 'memory', description: 'Kelola memori jangka panjang'),
     SlashCommand(name: 'model', description: 'Ganti model/tier provider'),
     SlashCommand(name: 'pause', description: 'Jeda sistem (ESTOP) untuk pekerjaan baru', usage: '[alasan]'),
-    SlashCommand(name: 'plan', description: 'Mode rencana (plan/execute)'),
+    SlashCommand(name: 'plan', description: 'Tulis rencana markdown (plan mode)', usage: '[tugas]'),
     SlashCommand(name: 'resume', description: 'Lepas jeda sistem (ESTOP)'),
     SlashCommand(name: 'session', description: 'Info/switch sesi'),
     SlashCommand(name: 'skills', description: 'Daftar skill terpasang'),
