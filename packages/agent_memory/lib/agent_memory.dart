@@ -11,6 +11,7 @@ export 'src/sqlite_vec_index.dart';
 export 'src/file_session_store.dart';
 export 'src/safe_memory_store.dart';
 export 'src/rag_pipeline.dart';
+export 'src/self_rag_controller.dart';
 export 'src/memory_layers.dart';
 export 'src/curated_memory.dart';
 export 'src/memory_providers.dart';

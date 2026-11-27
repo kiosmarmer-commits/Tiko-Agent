@@ -71,9 +71,14 @@ search:
 
 `packages/agent_memory/lib/src/rag_pipeline.dart` menambahkan pipeline RAG penuh di atas backend di atas: chunking paragraph-aware dengan overlap (`RagChunker`), query expansion deterministik (`QueryExpander`), hybrid retrieval dense+BM25 dengan Reciprocal Rank Fusion (`HybridRetriever`, `k=60`), dan perakitan konteks bersitasi (`RagPipeline.retrieve()`). Rincian ada di `ADVANCED-AGENT-FEATURES-2026-11-10.md`.
 
+Status keandalan (audit 2026-11-28, lihat docs/18):
+
+- **RAG-01 rehidrasi** — ingest/remove kini mem-persist indeks lexical segera (`_saveLexicalQuietly`), dan `TikoRuntime.create()` memanggil `restoreChunksFromLexicalIndex()` sehingga metadata chunk pulih dari FTS pasca-restart tanpa re-ingest. Batas: meta asli dan cache `_chunkVectors` tidak direhidrasi (re-embed on-demand menyusul, RAG-02).
+- **Self-RAG evidence gate** — `SelfRagController` menilai relevansi hasil retrieval sebelum blok "Konteks relevan dari indeks dokumen:" masuk system prompt (`RuntimeContext`, config `rag.evidence_gate`, default on). Event telemetry bebas-konten: `rag.evidence_gate`, `rag.embed_failed` (RAG-03).
+
 ## 9. Memori berlapis (baru)
 
-`packages/agent_memory/lib/src/memory_layers.dart` menambahkan `LayeredMemory`: layer episodic/semantic/procedural, skor efektif importance × retention Ebbinghaus × access boost, konsolidasi episodic → semantic, dan forgetting di bawah `decayFloor`. Modul ini berdiri sendiri dari `MemoryStore` SQLite/JSON; integrasi ke runtime dapat dilakukan tanpa mengubah kontrak store yang ada.
+`packages/agent_memory/lib/src/memory_layers.dart` menambahkan `LayeredMemory`: layer episodic/semantic/procedural, skor efektif importance × retention Ebbinghaus × access boost, konsolidasi episodic → semantic, dan forgetting di bawah `decayFloor`. Modul ini **sudah ter-wire ke runtime**: `TikoRuntime.layeredMemory` dan `RuntimeContext._retrievedContext()` memasukkan blok "Memori berlapis relevan" ke prompt per-turn.
 
 ## 10. Batasan
 

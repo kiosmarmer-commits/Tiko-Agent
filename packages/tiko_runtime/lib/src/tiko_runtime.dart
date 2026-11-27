@@ -1095,6 +1095,9 @@ class TikoRuntime {
       lexical: ragFts,
       embedder: embedder,
     );
+    // RAG-01 (audit 2026-11-28 §6.1): rehidrasi metadata chunk dari FTS yang
+    // baru dimuat disk sehingga retrieve() tidak kosong pasca-restart.
+    rag.restoreChunksFromLexicalIndex();
 
     // S22 — indeks kode semantik persisten (default enabled): memakai
     // embedder memory.embed bila aktif, selain itu fallback hashing offline.
@@ -1424,6 +1427,16 @@ class TikoRuntime {
     // Fase E — A2UI surface bridge: kaitkan event bus runtime setelah rt
     // tersedia (pola sama dengan approvals/DeepResearchTool).
     rt.a2ui = A2uiToolBridge(dataDir: dataDir, onEvent: rt.events.emit);
+    // RAG-03 (audit 2026-11-28 §6.3): telemetry kegagalan embedding —
+    // event bebas-konten (hanya meta panjang char), never-raises.
+    rt.ragPipeline.onEmbedError = (meta, error) {
+      try {
+        rt.events.emit('rag.embed_failed', {
+          'meta': meta,
+          'error': '$error',
+        });
+      } catch (_) {}
+    };
     // Fase F3 (docs/15 §4): probe log read-only + ringkasan run terakhir.
     rt.registry.register(LogProbeTool(
       logsDir: abs(cfg.logsDir),
@@ -2780,6 +2793,19 @@ class TikoRuntime {
           toolSubsetThreshold: config.toolSubsetThreshold,
           toolSubsetK: config.toolSubsetK,
           errorRecallBlock: errorRecallBlock,
+          // Self-RAG evidence gate (audit 2026-11-28 §8.2): konteks RAG
+          // lemah tidak pernah masuk prompt; event keputusan bebas-konten.
+          selfRagGate: config.rag.evidenceGate
+              ? SelfRagController(
+                  minCoverage: config.rag.evidenceGateMinCoverage,
+                  maxQueryChars: config.rag.evidenceGateMaxQueryChars,
+                )
+              : null,
+          onRagGate: (assessment) {
+            try {
+              events.emit('rag.evidence_gate', assessment.toJson());
+            } catch (_) {}
+          },
         ),
         compactor: config.contextCompaction
             ? Compactor(

@@ -289,6 +289,8 @@ class RuntimeContext extends ContextBuilder {
     this.botPersona,
     this.toolSubsetThreshold = 24,
     this.toolSubsetK = 20,
+    this.selfRagGate,
+    this.onRagGate,
   });
   final ToolRegistry registry;
   final Set<String>? toolFilter;
@@ -318,6 +320,14 @@ class RuntimeContext extends ContextBuilder {
   /// the model can pull the remaining schemas on demand.
   final int toolSubsetThreshold;
   final int toolSubsetK;
+
+  /// Self-RAG evidence gate (audit 2026-11-28 §8.2): null = perilaku lama
+  /// (semua hasil retrieval langsung masuk prompt).
+  final SelfRagController? selfRagGate;
+
+  /// Telemetry keputusan gate (never-raises di pemanggil); payload bebas-konten
+  /// dari [SelfRagAssessment.toJson].
+  final void Function(SelfRagAssessment assessment)? onRagGate;
 
   @override
   Future<AgentContext> build(
@@ -447,6 +457,19 @@ class RuntimeContext extends ContextBuilder {
     if (rag != null) {
       try {
         final result = await rag.retrieve(query, k: 4);
+        final gate = selfRagGate;
+        if (gate != null) {
+          final assessment = gate.assess(
+            query: query,
+            hits: result.hits,
+            context: result.context,
+            embedderConfigured: rag.embedder != null,
+          );
+          try {
+            onRagGate?.call(assessment);
+          } catch (_) {}
+          if (!assessment.accepted) return blocks.join('\n\n');
+        }
         if (result.context.isNotEmpty) {
           blocks.add(
             'Konteks relevan dari indeks dokumen:\n${result.context}\n'

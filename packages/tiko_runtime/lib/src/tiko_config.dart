@@ -503,6 +503,27 @@ class ReviewConfig {
   final int maxTranscriptChars;
 }
 
+/// Hermes Self-RAG evidence gate (audit 2026-11-28 §8.2): konfigurasi gerbang
+/// relevansi konteks RAG sebelum disuntikkan ke system prompt. Default on —
+/// konteks lemah (false positive BM25) tidak pernah masuk prompt.
+class RagConfig {
+  const RagConfig({
+    this.evidenceGate = true,
+    this.evidenceGateMinCoverage = 0.25,
+    this.evidenceGateMaxQueryChars = 1000,
+  });
+
+  /// Gerbang Self-RAG aktif; `false` mengembalikan perilaku lama
+  /// (semua hasil retrieval langsung masuk prompt).
+  final bool evidenceGate;
+
+  /// Ambang coverage lexical minimum (0..1) bila embedder tak terkonfigurasi.
+  final double evidenceGateMinCoverage;
+
+  /// Query lebih panjang dari ini dianggap bukan query knowledge (ditolak).
+  final int evidenceGateMaxQueryChars;
+}
+
 /// Hermes gateway idle compaction (`170d9637`): sesi yang menganggur
 /// melewati ambang idle dikompaksi di latar per channel sehingga pesan
 /// pertama setelah idle panjang tidak menunggu ringkasan. Default off
@@ -626,6 +647,7 @@ class TikoConfig {
     this.webhookOutbound = const [],
     this.review = const ReviewConfig(),
     this.idleCompaction = const IdleCompactionConfig(),
+    this.rag = const RagConfig(),
   });
 
   final String profile;
@@ -715,6 +737,9 @@ class TikoConfig {
   /// Kompaksi idle latar per channel (Hermes `170d9637`) — lihat
   /// [IdleCompactionConfig].
   final IdleCompactionConfig idleCompaction;
+
+  /// Hermes Self-RAG evidence gate (audit 2026-11-28 §8.2).
+  final RagConfig rag;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1748,6 +1773,7 @@ class TikoConfig {
       webhookOutbound: _parseWebhooks(issues, root: root),
       review: _parseReview(root),
       idleCompaction: _parseIdleCompaction(root, issues),
+      rag: _parseRag(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2375,6 +2401,30 @@ class TikoConfig {
       ));
     }
     return out;
+  }
+
+  /// Parser config `rag` (audit 2026-11-28 §8.2). Fail-open: nilai scalar
+  /// invalid memakai default tanpa menggagalkan start.
+  static RagConfig _parseRag(YamlMap root) {
+    final sec = root['rag'];
+    if (sec is! YamlMap) return const RagConfig();
+    bool boolVal(Object? v, bool def) => v is bool ? v : def;
+    int intVal(Object? v, int def, {int? min}) {
+      if (v is int && (min == null || v >= min)) return v;
+      return def;
+    }
+    final rawCoverage = sec['evidence_gate_min_coverage'];
+    final coverage = rawCoverage is num &&
+            rawCoverage >= 0 &&
+            rawCoverage <= 1
+        ? rawCoverage.toDouble()
+        : 0.25;
+    return RagConfig(
+      evidenceGate: boolVal(sec['evidence_gate'], true),
+      evidenceGateMinCoverage: coverage,
+      evidenceGateMaxQueryChars:
+          intVal(sec['evidence_gate_max_query_chars'], 1000, min: 1),
+    );
   }
 
   /// Hermes background review: parser config `review` (mapping opsional).

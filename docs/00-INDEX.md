@@ -1,8 +1,8 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `e5db409` pada branch `codex/tiko-gui-cli-audit` (PR #199; status merge lihat GitHub).
+**Source snapshot:** commit `3a35be0` pada branch `main` (merge PR #215; status merge lihat GitHub).
 
-**Terakhir diperbarui:** 26 November 2026.
+**Terakhir diperbarui:** 28 November 2026.
 
 **Aturan status:** source code dan test adalah bukti utama. “Tersedia sebagai library” tidak sama dengan “terhubung ke runtime/user command”. Status CI harus dibaca dari [GitHub Actions](https://github.com/kiosmarmer-commits/Tiko-Agent/actions).
 
@@ -24,9 +24,10 @@
 | 12 | [11-CHAT-UX-MODERN.md](11-CHAT-UX-MODERN.md) | Audit dan rancangan UX chat modern (markdown+copy, attachment, artifact panel, status strip) |
 | 13 | [12-HERMES-FITUR-BERIKUTNYA.md](12-HERMES-FITUR-BERIKUTNYA.md) | Pemetaan fitur Hermes → Tiko (discovery, hooks, cron, dsb.) |
 | 14 | [14-A2UI-GENERATIVE-UI.md](14-A2UI-GENERATIVE-UI.md) | Fase E — A2UI generative-UI (E1–E7 terimplementasi: model/validasi, tool `render_a2ui`, bridge + store, REST, renderer chat, CLI `tiko surface*`, halaman Surface, ApprovalSheet, surface riset + DAG team run, aksi `open_url` allowlist host) |
-| 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F8 selesai; prinsip additive, status per fase) |
+| 15 | [15-ROADMAP-SETARA-AI-AGENT.md](15-ROADMAP-SETARA-AI-AGENT.md) | Roadmap setara/unggul vs AI agent lain (F1–F10 selesai; prinsip additive, status per fase) |
 | 16 | [16-AUDIT-RESPONSIVE-ACCESSIBILITY.md](16-AUDIT-RESPONSIVE-ACCESSIBILITY.md) | Snapshot audit responsive/accessibility historis; checklist perangkat yang belum diverifikasi tetap berguna |
 | 17 | [17-AUDIT-GUI-CLI-UX-2026-11-26.md](17-AUDIT-GUI-CLI-UX-2026-11-26.md) | Catatan terbaru perbaikan GUI/CLI PR #199, kontrak JSON, status verifikasi, dan klaim lama yang usang |
+| 18 | [18-AUDIT-PAPER-2026-11-28.md](18-AUDIT-PAPER-2026-11-28.md) | Implementasi audit riset paper 2026-11-28 (RAG-01 rehidrasi, Self-RAG gate) dan daftar item yang di-defer |
 
 ## Status implementasi
 
