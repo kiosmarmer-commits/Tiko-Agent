@@ -533,6 +533,9 @@ class TikoConfig {
     this.agentAutoTitle = true,
     this.agentTitleModelUpgrade = false,
     this.dailyCreditLimitUsd = 0.0,
+    this.agentTurnLivenessTimeoutSec = 600,
+    this.agentRetryWaitCapSec = 90,
+    this.agentPreflightCompaction = true,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -712,6 +715,20 @@ class TikoConfig {
 
   /// Hermes `credits_tracker`: limit pengeluaran USD per hari UTC (0 = off).
   final double dailyCreditLimitUsd;
+
+  /// Hermes turn liveness (`agent.turn_liveness.timeout_s`, default 600s):
+  /// batas tanpa progres sebelum turn macet di-abort supaya sesi terbebas.
+  /// 0 = off.
+  final int agentTurnLivenessTimeoutSec;
+
+  /// Hermes `retry_utils.LIVE_RETRY_WAIT_CAP_S` (default 90s): cooldown
+  /// Retry-After di atas cap ini mengakhiri turn dengan pesan jelas.
+  final int agentRetryWaitCapSec;
+
+  /// Hermes preflight gate (`agent.turn_preflight_gate.py`): kompresi
+  /// pra-API tiap iterasi saat tekanan request di atas ambang. Default on
+  /// seperti Hermes; matikan via `agent.preflight_compaction: false`.
+  final bool agentPreflightCompaction;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1674,6 +1691,21 @@ class TikoConfig {
       dailyCreditLimitUsd: root['agent'] is YamlMap
           ? _creditLimitUsd((root['agent'] as YamlMap)['daily_credit_limit_usd'])
           : 0.0,
+      agentTurnLivenessTimeoutSec: root['agent'] is YamlMap
+          ? _positiveIntSec(
+              (root['agent'] as YamlMap)['turn_liveness_timeout_sec'],
+              600,
+            )
+          : 600,
+      agentRetryWaitCapSec: root['agent'] is YamlMap
+          ? _positiveIntSec(
+              (root['agent'] as YamlMap)['retry_wait_cap_sec'],
+              90,
+            )
+          : 90,
+      agentPreflightCompaction: root['agent'] is YamlMap
+          ? (root['agent'] as YamlMap)['preflight_compaction'] != false
+          : true,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue
@@ -1819,6 +1851,13 @@ class TikoConfig {
   static double _creditLimitUsd(Object? v) {
     if (v is num && v >= 0 && v.isFinite) return v.toDouble();
     return 0.0;
+  }
+
+  /// Knob durasi detik yang aman: num finite >= 0 dipakai apa adanya
+  /// (0 mematikan fitur), selain itu fallback ke default — never-raises.
+  static int _positiveIntSec(Object? v, int defaultSec) {
+    if (v is num && v >= 0 && v.isFinite) return v.toInt();
+    return defaultSec;
   }
 
   static DecisionConfig _parseDecision(YamlMap sec, List<ConfigIssue> issues) {

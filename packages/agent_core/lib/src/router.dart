@@ -168,6 +168,41 @@ class Router {
   final Map<String, ProviderHealth> health = {};
   final List<Map<String, dynamic>> _fallbackEvents = [];
 
+  /// Hermes cooldown eksplisit (B8): provider yang kena rate-limit dengan
+  /// Retry-After dilarang dipilih lagi sampai batas waktu berakhir —
+  /// fallback chain dan pemilihan primer sama-sama menghormatinya.
+  final Map<String, DateTime> _cooldowns = {};
+
+  /// Set cooldown [duration] untuk [providerId] dari sekarang. Durasi <= 0
+  /// menghapus cooldown (clear eksplisit).
+  void setCooldown(String providerId, Duration duration) {
+    if (duration <= Duration.zero) {
+      _cooldowns.remove(providerId);
+      return;
+    }
+    _cooldowns[providerId] = DateTime.now().toUtc().add(duration);
+  }
+
+  /// True bila provider masih dalam masa cooldown. Never-raises.
+  bool isCoolingDown(String providerId) {
+    final until = _cooldowns[providerId];
+    return until != null && until.isAfter(DateTime.now().toUtc());
+  }
+
+  /// Sisa cooldown provider dalam detik (0 bila tidak sedang cooling).
+  double cooldownRemainingSec(String providerId) {
+    final until = _cooldowns[providerId];
+    if (until == null) return 0;
+    final left = until.difference(DateTime.now().toUtc()).inMilliseconds / 1000.0;
+    return left < 0 ? 0 : left;
+  }
+
+  /// Snapshot cooldown untuk observability host (id → sisa detik).
+  Map<String, double> cooldownSnapshot() => {
+        for (final id in _cooldowns.keys)
+          if (isCoolingDown(id)) id: cooldownRemainingSec(id),
+      };
+
 
   ProviderHealth _h(String id) =>
       health.putIfAbsent(id, () => ProviderHealth(clock: clock));
@@ -311,22 +346,29 @@ class Router {
     // an alternative; counting here as well used to open the circuit twice
     // for a single request failure.
     LlmProvider? selected;
-    for (final id in decision.fallbackIds) {
-      if (id == failedId || exclude.contains(id)) continue;
-      final candidate = providers[id];
-      if (candidate != null && _h(id).tryAcquire()) {
-        selected = candidate;
-        break;
+    // Provider dalam masa cooldown rate-limit dilewati pada pass pertama;
+    // bila SEMUA kandidat cooling, pass kedua fail-open agar turn tetap
+    // berusaha (cooldown bukan circuit breaker).
+    for (final pass in const [1, 2]) {
+      for (final id in decision.fallbackIds) {
+        if (id == failedId || exclude.contains(id)) continue;
+        if (pass == 1 && isCoolingDown(id)) continue;
+        final candidate = providers[id];
+        if (candidate != null && _h(id).tryAcquire()) {
+          selected = candidate;
+          break;
+        }
       }
-    }
-    if (selected == null) {
+      if (selected != null) break;
       for (final entry in providers.entries) {
         if (entry.key == failedId || exclude.contains(entry.key)) continue;
+        if (pass == 1 && isCoolingDown(entry.key)) continue;
         if (_h(entry.key).tryAcquire()) {
           selected = entry.value;
           break;
         }
       }
+      if (selected != null) break;
     }
     final event = <String, dynamic>{
       'from': failedId,
@@ -374,14 +416,21 @@ class Router {
     // is only an observation and is not safe as an admission decision.
     String? best;
     var bestScore = -1.0;
-    for (final id in providers.keys) {
-      final s = _score(id, needTools: tier >= 2);
-      if (s > bestScore && _h(id).selectable) {
-        bestScore = s;
-        best = id;
+    // Pass 1: tanpa provider yang sedang cooldown rate-limit; pass 2
+    // fail-open bila semuanya cooling.
+    for (final pass in const [1, 2]) {
+      best = null;
+      bestScore = -1.0;
+      for (final id in providers.keys) {
+        if (pass == 1 && isCoolingDown(id)) continue;
+        final s = _score(id, needTools: tier >= 2);
+        if (s > bestScore && _h(id).selectable) {
+          bestScore = s;
+          best = id;
+        }
       }
+      if (best != null && _h(best).tryAcquire()) return best;
     }
-    if (best != null && _h(best).tryAcquire()) return best;
 
     // All configured providers are open or their half-open probe is already
     // in flight. Never route to an open breaker as a last-resort bypass.

@@ -18,7 +18,10 @@ import 'budget_guard.dart';
 import 'router.dart';
 import 'metrics.dart';
 import 'skills.dart';
+import 'preflight_gate.dart';
 import 'skill_synthesis.dart';
+import 'transcript_repair.dart';
+import 'turn_liveness.dart';
 import 'plan_execute.dart';
 import 'trajectory.dart';
 import 'trace.dart';
@@ -36,6 +39,10 @@ class AgentConfig {
     this.microCompaction = false,
     this.microCompactionKeepLastExchanges = 2,
     this.streamMaxLifetimeSec = 0,
+    this.turnLivenessTimeoutSec = 600,
+    this.preflightCompaction = true,
+    this.retryWaitCapSec = 90,
+    this.iterationWarnRatio,
   });
 
   final int maxIterations;
@@ -54,6 +61,25 @@ class AgentConfig {
   /// Hermes stream max-lifetime (`agent/stream_max_lifetime.py`): cap
   /// wall-clock total satu attempt stream dalam detik. 0 = off (default).
   final int streamMaxLifetimeSec;
+
+  /// Hermes turn liveness (`agent/turn_liveness.py`): batas tanpa progres
+  /// (bukan wall-clock total) dalam detik sebelum stream yang macet
+  /// di-abort supaya sesi terbebas. Default 600s menyala seperti Hermes;
+  /// 0 = off.
+  final int turnLivenessTimeoutSec;
+
+  /// Hermes preflight gate (`agent/turn_preflight_gate.py`): gerbang
+  /// tekanan pra-API tiap iterasi — estimasi request penuh, kompresi
+  /// preflight saat di atas ambang, blocker progres-tidak-cukup.
+  final bool preflightCompaction;
+
+  /// Hermes `free_tier_cooldown_ends_turn`: cooldown Retry-After (detik)
+  /// di atas cap ini mengakhiri turn dengan pesan jelas alih-alih menunggu.
+  final int retryWaitCapSec;
+
+  /// Hermes `iteration_budget.py`: rasio (0,1) peringatan sisa iterasi;
+  /// null = peringatan off.
+  final double? iterationWarnRatio;
 
   /// When non-null, overrides the router-computed tier for this turn so
   /// callers (team runner, subagent) can pin a per-role model tier instead
@@ -226,6 +252,12 @@ class AgentLoop {
   List<String> _lastSkillsUsed = const [];
   List<String> get lastSkillsUsed => _lastSkillsUsed;
 
+  /// Hermes `iteration_budget.py`: observability budget iterasi turn
+  /// terakhir untuk host (usage, peringatan mendekati cap).
+  int get iterationsUsed => _budget.iterationsUsed;
+  int get iterationsRemaining => _budget.iterationsRemaining;
+  bool get iterationNearLimit => _budget.nearLimit;
+
   /// Total tokens reported by providers during the most recent handle() call.
   int get lastTokensUsed => _budget.tokensUsed;
 
@@ -309,6 +341,9 @@ class AgentLoop {
 
   final _loopDetector = LoopDetector();
   final _budget = BudgetGuard();
+
+  /// Hermes preflight gate: state per-turn, di-reset pada handle().
+  PreflightGate? _preflight;
   final _editGuard = EditLoopGuard();
 
   /// Cooperative cancellation token for the turn currently being handled.
@@ -399,6 +434,8 @@ class AgentLoop {
         maxWallClockSec: config.maxWallClockSec,
         maxToolCalls: config.maxToolCalls,
       );
+      _budget.warnRatio = config.iterationWarnRatio;
+      _preflight = PreflightGate(enabled: config.preflightCompaction);
 
       agentLoop:
       for (var i = 0; i < config.maxIterations; i++) {
@@ -425,9 +462,23 @@ class AgentLoop {
 
         final callSw = Stopwatch()..start();
         initialProviderAttempted = true;
-        var resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+        var resp = await _requestLlm(ctx, activeLlm);
         var isErr = resp.finishReason == 'error';
         final attemptedProviders = <String>{activeProviderId};
+        if (isErr && resp.errorCode == llmErrorCodeTurnLiveness) {
+          // Hermes turn_liveness: stream macet tanpa progres di-abort agar
+          // sesi terbebas — TIDAK diikuti fallback chain (provider lain
+          // besar kemungkinan macet dengan cara yang sama).
+          _lastTurnEndReason = turnEndReasonLivenessAbort;
+          success = false;
+          try {
+            await reply(
+              m,
+              turnLivenessAbortMessage(config.turnLivenessTimeoutSec),
+            );
+          } catch (_) {} // best-effort
+          break agentLoop;
+        }
         if (isErr) {
           // Klasifikasi + recovery chain satu kali di provider yang sama
           // (Hermes turn_recovery/turn_overflow): overflow → kompres konteks
@@ -457,9 +508,43 @@ class AgentLoop {
                 ctx = compactor.pruneToolResults(ctx);
               } catch (_) {} // recovery best-effort
             } else {
+              // Hermes free_tier_cooldown_ends_turn + retry_utils: cooldown
+              // Retry-After di atas cap diakhiri dengan pesan jelas alih-
+              // alih menunggu; di bawah cap → backoff singkat + cooldown
+              // eksplisit supaya fallback chain melewatinya.
+              final retryAfter =
+                  ApiErrorClassifier.retryAfterSecondsFrom(
+                code: resp.errorCode,
+                message: resp.errorMessage ?? resp.text,
+              );
+              if (retryAfter != null &&
+                  retryAfter > config.retryWaitCapSec) {
+                router.setCooldown(
+                  activeProviderId,
+                  Duration(seconds: retryAfter),
+                );
+                _lastTurnEndReason = 'cooldown_ends_turn';
+                success = false;
+                try {
+                  await reply(
+                    m,
+                    'Provider $activeProviderId kena rate limit dengan '
+                    'cooldown ${retryAfter}s — menunggu tidak praktis, '
+                    'turn diakhiri. Coba lagi nanti.',
+                  );
+                } catch (_) {} // best-effort
+                break agentLoop;
+              }
               await Future<void>.delayed(_rateLimitBackoff);
+              router.setCooldown(
+                activeProviderId,
+                retryAfter != null
+                    ? Duration(seconds: retryAfter)
+                    : Duration(
+                        milliseconds: _rateLimitBackoff.inMilliseconds),
+              );
             }
-            resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+            resp = await _requestLlm(ctx, activeLlm);
             isErr = resp.finishReason == 'error';
           }
         }
@@ -478,7 +563,7 @@ class AgentLoop {
             activeProviderId = next.id;
             attemptedProviders.add(activeProviderId);
             final fallbackSw = Stopwatch()..start();
-            resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+            resp = await _requestLlm(ctx, activeLlm);
             isErr = resp.finishReason == 'error';
             if (isErr) {
               router.recordFailure(activeProviderId, resp.text);
@@ -514,7 +599,7 @@ class AgentLoop {
             final budget = _emptyGuard.retryBudget();
             while (!_emptyGuard.deterministicEmpty &&
                 _emptyGuard.attempts <= budget) {
-              resp = await _safeCollect(() => activeLlm.chat(ctx.toRequest()));
+              resp = await _requestLlm(ctx, activeLlm);
               if (resp.toolCalls.isNotEmpty || resp.text.trim().isNotEmpty) {
                 break;
               }
@@ -978,6 +1063,42 @@ class AgentLoop {
     );
   }
 
+  /// Hermes fase-8: satu panggilan request lengkap — gerbang preflight
+  /// (kompresi pra-API saat tekanan di atas ambang) lalu perbaikan
+  /// transcript (buang tool result/call yatim) sebelum request dikirim.
+  Future<LlmResponse> _requestLlm(AgentContext ctx, LlmProvider llm) async {
+    var useCtx = ctx;
+    final preflight = _preflight;
+    if (preflight != null) {
+      try {
+        final verdict = await preflight.run(
+          useCtx,
+          compactor: compactor,
+          llmOverride: llm,
+        );
+        useCtx = verdict.ctx;
+      } catch (_) {} // gerbang pra-API tidak boleh menggagalkan turn
+    }
+    final request = useCtx.toRequest();
+    final repaired = repairTranscript(request.messages);
+    if (repaired.length == request.messages.length) {
+      return _safeCollect(() => llm.chat(request));
+    }
+    return _safeCollect(
+      () => llm.chat(
+        ChatRequest(
+          messages: repaired,
+          tools: request.tools,
+          toolChoice: request.toolChoice,
+          maxTokens: request.maxTokens,
+          temperature: request.temperature,
+          stream: request.stream,
+          model: request.model,
+        ),
+      ),
+    );
+  }
+
   Future<LlmResponse> _safeCollect(
     Stream<LlmEvent> Function() openStream,
   ) async {
@@ -1012,7 +1133,25 @@ class AgentLoop {
     final lifetime = config.streamMaxLifetimeSec > 0
         ? StreamLifetime(cap: config.streamMaxLifetimeSec.toDouble())
         : null;
-    await for (final e in events) {
+    // Hermes turn liveness (B4): stream yang berhenti mengirim event tanpa
+    // error > timeout di-abort (LlmError kode `turn_liveness`) supaya turn
+    // tidak menggantung selamanya dan sesi terbebas.
+    Stream<LlmEvent> source = events;
+    if (config.turnLivenessTimeoutSec > 0) {
+      final livenessTimeout =
+          Duration(seconds: config.turnLivenessTimeoutSec);
+      source = events.timeout(
+        livenessTimeout,
+        onTimeout: (sink) => sink.add(
+          LlmError(
+            turnLivenessAbortMessage(config.turnLivenessTimeoutSec),
+            code: llmErrorCodeTurnLiveness,
+          ),
+        ),
+      );
+    }
+    var livenessAbort = false;
+    await for (final e in source) {
       if (streamRunaway) break;
       if (lifetime != null) {
         final exceeded = lifetime.exceeded(0);
@@ -1043,7 +1182,11 @@ class AgentLoop {
           resp.errorCode = code;
           resp.errorMessage = message;
           buf.write('\n[error] $message');
+          if (code == llmErrorCodeTurnLiveness) {
+            livenessAbort = true;
+          }
       }
+      if (livenessAbort) break;
     }
     if (streamRunaway) {
       hasError = false;

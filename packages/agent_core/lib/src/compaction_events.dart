@@ -17,6 +17,7 @@ const compactionKinds = {'summarize', 'micro_summarize', 'prune_tool_results'};
 const compactionTriggers = {
   'manual',
   'turn_start_threshold',
+  'preflight',
   'overflow',
   'unknown',
 };

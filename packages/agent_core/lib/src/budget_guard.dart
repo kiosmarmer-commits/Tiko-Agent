@@ -1,3 +1,4 @@
+import 'iteration_budget.dart';
 import 'models.dart';
 
 /// Tracks iteration / token / wall-clock / tool-call budgets (ALG-10).
@@ -72,4 +73,37 @@ class BudgetGuard {
     }
     return false;
   }
+
+  // Hermes fase-8 (`iteration_budget.py`): iterasi programmatic yang tidak
+  // memakan progres eksternal di-refund agar tidak makan budget.
+
+  /// Iterasi yang sudah dikonsumsi pada handle() aktif.
+  int get iterationsUsed => _iterations;
+
+  /// Sisa iterasi sebelum cap (0 bila sudah tercapai).
+  int get iterationsRemaining {
+    final left = _maxIterations - _iterations;
+    return left > 0 ? left : 0;
+  }
+
+  /// Rasio peringatan (0,1) — di-set via reset([warnRatio]); null = off.
+  double? warnRatio;
+
+  /// True bila sisa iterasi sudah di bawah porsi peringatan dari cap.
+  bool get nearLimit {
+    final ratio = warnRatio;
+    if (ratio == null || _maxIterations <= 0) return false;
+    return iterationsRemaining <= (_maxIterations * ratio).floor() &&
+        iterationsRemaining > 0;
+  }
+
+  /// Kembalikan satu iterasi yang tidak memakan progres eksternal.
+  void refundIteration() {
+    if (_iterations > 0) _iterations -= 1;
+  }
+
+  /// Validasi rasio peringatan dengan [normalizeIterationWarnRatio]
+  /// (never-raises, null = off).
+  static double? normalizedWarnRatio(Object? value) =>
+      normalizeIterationWarnRatio(value);
 }
