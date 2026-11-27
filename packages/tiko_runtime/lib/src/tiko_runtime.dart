@@ -72,6 +72,7 @@ class ChatRunResult {
     this.toolCallTraces = const [],
     this.skillsUsed = const [],
     this.model = '',
+    this.contextPressureTokens,
   });
   final String text;
   final bool success;
@@ -101,6 +102,11 @@ class ChatRunResult {
   /// diketahui) — dipakai untuk estimasi biaya usage.
   final String model;
 
+  /// Hermes fase-9 usage anchor (C5): tekanan konteks BER-ANCHORING (usage
+  /// nyata + delta) pass preflight terakhir turn ini; null bila tidak pernah
+  /// anchored (anchor basah/absen) — host menampilkan heuristik saja.
+  final int? contextPressureTokens;
+
   Map<String, dynamic> toJson() => {
         'text': text,
         'success': success,
@@ -110,6 +116,8 @@ class ChatRunResult {
         if (completionTokens > 0) 'completion_tokens': completionTokens,
         'tool_call_count': toolCallCount,
         'skills_used': skillsUsed,
+        if (contextPressureTokens != null)
+          'context_pressure_tokens': contextPressureTokens,
       };
 }
 
@@ -713,6 +721,23 @@ class TikoRuntime {
   /// pekerjaan BARU saja (sentinel `<dataDir>/ESTOP`); pekerjaan in-flight
   /// tidak pernah dibunuh. Dienggikan via `/pause`, dilepas via `/resume`.
   late final Estop estop = Estop(dataDir);
+
+  /// Hermes fase-9 `usage_anchor.py` (C5): persistence anchor usage per
+  /// sesi di `<dataDir>/usage_anchor/` — loop dibangun per-turn, anchor
+  /// harus bertahan lintas turn agar tekanan konteks tetap ber-anchoring.
+  late final UsageAnchorStore usageAnchorStore =
+      UsageAnchorStore(p.join(dataDir, 'usage_anchor'));
+
+  /// Hermes fase-9 `image_token_cost.py` (C7): tabel harga token per-gambar
+  /// yang dipelajari dari usage nyata provider, persisten di
+  /// `<dataDir>/cache/image_token_costs.json`.
+  late final ImageTokenCostStore imageTokenCosts = ImageTokenCostStore(
+    path: p.join(dataDir, 'cache', 'image_token_costs.json'),
+  );
+
+  /// Hermes fase-9 `account_usage_cache.py` (C6): snapshot usage langganan
+  /// akun per provider (cache in-memory + throttle refresh + staleness).
+  final AccountUsageCache accountUsage = AccountUsageCache();
 
   /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
   /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
@@ -2657,6 +2682,10 @@ class TikoRuntime {
         onCompactionEvent: (e) =>
             events.emit('context.compaction_record', e.toJson()),
         shouldStop: () => safety.stopRequested,
+        // Hermes fase-9 (C5/C7): anchor usage per sesi + harga per-gambar
+        // yang dipelajari — estimasi tekanan preflight & observability.
+        usageAnchorStore: usageAnchorStore,
+        imageTokenCosts: imageTokenCosts,
         config: configOverride ?? defaultConfig,
         editLoopVerify: config.agentEditLoopVerify,
         // P1-4: sanitize each delta before it reaches a live chat message;
@@ -2869,6 +2898,7 @@ class TikoRuntime {
         toolCallTraces: loop.lastToolCalls,
         skillsUsed: loop.lastSkillsUsed,
         model: loop.lastModelUsed ?? '',
+        contextPressureTokens: loop.lastAnchoredPressureTokens,
       );
       // Hermes fase-7 `title_generator` tahap 2: upgrade judul dengan satu
       // panggilan model kecil. Di-await DALAM lock agar bebas race dengan
@@ -4686,6 +4716,30 @@ class TikoRuntime {
       for (final line in rl) {
         buf.writeln('- $line');
       }
+    }
+    // Hermes fase-9 `account_usage_cache` (C6): usage langganan akun dari
+    // cache snapshot (refresh latar belakang bila fetcher terdaftar).
+    // Snapshot basah dirender "usang" — tidak pernah tampil sebagai gauge
+    // live; snapshot tanpa window tidak pernah disimpan.
+    try {
+      for (final provider in _router.providers.keys) {
+        unawaited(accountUsage.refreshIfDue(provider));
+      }
+      final acctLines = formatAccountUsageLines(
+        accountUsage.cachedAll(),
+        now: DateTime.now(),
+        isStale: (s) => accountUsage.snapshotIsStale(s, now: DateTime.now()),
+      );
+      if (acctLines.isEmpty) {
+        buf.writeln('Usage akun provider: belum ada snapshot.');
+      } else {
+        buf.writeln('Usage akun provider:');
+        for (final line in acctLines) {
+          buf.writeln('- $line');
+        }
+      }
+    } catch (_) {
+      buf.writeln('Usage akun provider: tidak tersedia.');
     }
     return ChatRunResult(text: buf.toString(), success: true);
   }
