@@ -4,6 +4,7 @@ import 'package:agent_core/agent_core.dart';
 import 'package:path/path.dart' as p;
 
 import 'path_safety.dart';
+import 'file_safety.dart';
 
 /// grep - regex search across workspace files (read-only, low risk).
 ///
@@ -116,6 +117,9 @@ class GrepTool implements Tool {
           queue.add(entry);
           continue;
         }
+        // Hermes file_safety: file sensitif tidak pernah dipindai — isi
+        // rahasia (.env, kunci, store kredensial) tidak masuk konteks.
+        if (isSensitiveBasename(name)) continue;
         if (globRegex != null && !globRegex.hasMatch(name)) continue;
         final file = File(entry.path);
         String text;

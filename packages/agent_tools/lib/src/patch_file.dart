@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
+import 'file_safety.dart';
 import 'path_safety.dart';
 
 import 'checkpoint.dart';
@@ -62,6 +63,12 @@ class PatchFileTool implements Tool {
         content: 'path tidak valid atau di luar workspace',
         isError: true,
       );
+    }
+    // Hermes file_safety (fase-12): file kredensial/state runtime tidak
+    // pernah dipatch agent — denial jelas + jejak audit.
+    final denial = writeDenial(rel);
+    if (denial != null) {
+      return ToolResult(callId: '', content: denial, isError: true);
     }
     final file = File(resolved);
     if (!await file.exists()) {
