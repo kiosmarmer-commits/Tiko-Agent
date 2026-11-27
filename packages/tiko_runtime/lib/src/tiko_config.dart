@@ -611,6 +611,27 @@ class GroupChatCfg {
   final int maxAgents;
 }
 
+/// Fase 37 — LATM maker/user tool-generation pipeline (audit §6 #16):
+/// maker LLM mendesain tool reusable + contract tests; default off
+/// (panggilan LLM + eksekusi sandbox).
+class ToolMakerCfg {
+  const ToolMakerCfg({
+    this.enabled = false,
+    this.maxTests = 8,
+    this.maxCommandParts = 12,
+  })  : assert(maxTests >= 1 && maxTests <= 16),
+        assert(maxCommandParts >= 2 && maxCommandParts <= 32);
+
+  /// Default off — panggilan LLM maker + eksekusi sandbox; aktifkan eksplisit.
+  final bool enabled;
+
+  /// Cap jumlah contract tests per tool hasil maker.
+  final int maxTests;
+
+  /// Cap jumlah bagian command sandbox.
+  final int maxCommandParts;
+}
+
 /// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
 /// tanpa LLM, advisory-only. Default on.
 class TaskClassifierCfg {
@@ -759,6 +780,7 @@ class TikoConfig {
     this.taskClassifier = const TaskClassifierCfg(),
     this.graphRag = const GraphRagCfg(),
     this.groupChat = const GroupChatCfg(),
+    this.toolMaker = const ToolMakerCfg(),
   });
 
   final String profile;
@@ -863,6 +885,9 @@ class TikoConfig {
 
   /// Fase 35 — inter-agent messaging AutoGen-style (default off).
   final GroupChatCfg groupChat;
+
+  /// Fase 37 — LATM maker/user pipeline (default off).
+  final ToolMakerCfg toolMaker;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1901,6 +1926,7 @@ class TikoConfig {
       taskClassifier: _parseTaskClassifier(root),
       graphRag: _parseGraphRag(root),
       groupChat: _parseGroupChat(root),
+      toolMaker: _parseToolMaker(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2605,6 +2631,21 @@ class TikoConfig {
           : '',
       maxHops: hops is int && hops >= 1 && hops <= 4 ? hops : 2,
       maxNotes: maxNotes is int && maxNotes >= 1 ? maxNotes : 500,
+    );
+  }
+
+  /// Parser `tool_maker:` (fase 37, LATM). Fail-open: scalar invalid
+  /// memakai default tanpa menggagalkan start.
+  static ToolMakerCfg _parseToolMaker(YamlMap root) {
+    final sec = root['tool_maker'];
+    if (sec is! YamlMap) return const ToolMakerCfg();
+    final tests = sec['max_tests'];
+    final parts = sec['max_command_parts'];
+    return ToolMakerCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxTests: tests is int && tests >= 1 && tests <= 16 ? tests : 8,
+      maxCommandParts:
+          parts is int && parts >= 2 && parts <= 32 ? parts : 12,
     );
   }
 

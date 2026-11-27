@@ -18,6 +18,7 @@ import 'runtime_lock.dart';
 import 'deep_solve.dart';
 import 'graph_rag_tool.dart';
 import 'group_chat.dart';
+import 'tool_maker_pipeline.dart';
 import 'idle_consolidation.dart';
 import 'raptor_tool.dart';
 import 'skill_benchmark.dart';
@@ -1783,6 +1784,34 @@ class TikoRuntime {
                 )
                 .then((r) => r.toJson()),
       ));
+    }
+    // Fase 37 (LATM maker/user): pipeline tool_maker hanya bila config
+    // enabled DAN ada LLM auxiliar (fail-closed); contract tests tetap
+    // lewat ToolForge + sandbox yang sama dengan NEW-12.
+    if (cfg.toolMaker.enabled && rt.registry.get('tool_maker') == null) {
+      final makerLlm = rt.auxiliaryLlm();
+      if (makerLlm != null) {
+        rt.registry.register(ToolMakerTool(
+          pipeline: ToolMakerPipeline(
+            forge: ToolForge(sandbox: sandbox),
+            makerTurn: (prompt) async {
+              final request = ChatRequest(
+                messages: [ChatMessage(role: 'user', content: prompt)],
+                stream: false,
+                temperature: 0.0,
+                maxTokens: 2000,
+              );
+              final response = await makerLlm.chat(request).first;
+              return response is LlmTextDelta ? response.delta : null;
+            },
+            hasTool: (name) => rt.registry.get(name) != null,
+            registerTool: rt.registry.register,
+            maxTests: cfg.toolMaker.maxTests,
+            maxCommandParts: cfg.toolMaker.maxCommandParts,
+            emitEvent: rt.events.emit,
+          ),
+        ));
+      }
     }
     // Fase 35 (inter-agent messaging AutoGen-style): tool `group_chat`
     // hanya bila config enabled — panggilan LLM berbiaya per putaran.
