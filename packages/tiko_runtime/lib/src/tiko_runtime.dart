@@ -739,6 +739,20 @@ class TikoRuntime {
   /// akun per provider (cache in-memory + throttle refresh + staleness).
   final AccountUsageCache accountUsage = AccountUsageCache();
 
+  /// Hermes fase-10 `agent/checkpoints/`: snapshot file pra-mutasi untuk
+  /// `/undo`. In-memory, store dibagikan lintas turn (loop dibangun
+  /// per-turn), jail root = [workspace].
+  final CheckpointStore checkpointStore = CheckpointStore();
+
+  /// Riwayat batch checkpoint per sesi (terbaru terakhir, cap ketat
+  /// [_maxCheckpointBatchesPerSession]) — in-memory, tidak persisten.
+  final Map<String, List<List<FileCheckpoint>>> _checkpointBatches = {};
+  static const int _maxCheckpointBatchesPerSession = 20;
+
+  /// Breakdown konteks turn terakhir per sesi untuk `/context` — cap 200
+  /// sesi, evict key pertama (FIFO) saat penuh.
+  final Map<String, ContextBreakdownResult> _contextBreakdowns = {};
+
   /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
   /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
   /// identik tanpa menghilangkan gate.
@@ -2516,6 +2530,12 @@ class TikoRuntime {
         if (text.trim() == '/usage') {
           return _usageCommand(sessionId);
         }
+        if (text.trim() == '/undo') {
+          return _undoCommand(sessionId);
+        }
+        if (text.trim() == '/context') {
+          return _contextCommand(sessionId);
+        }
         final botCmd = _parseBotCommand(text);
         if (botCmd != null) {
           return await _botCommand(botCmd, sessionId: sessionId);
@@ -2686,6 +2706,7 @@ class TikoRuntime {
         // yang dipelajari — estimasi tekanan preflight & observability.
         usageAnchorStore: usageAnchorStore,
         imageTokenCosts: imageTokenCosts,
+        checkpointStore: checkpointStore,
         config: configOverride ?? defaultConfig,
         editLoopVerify: config.agentEditLoopVerify,
         // P1-4: sanitize each delta before it reaches a live chat message;
@@ -2859,6 +2880,28 @@ class TikoRuntime {
             overrideProvider ?? botStore.botFor(sessionId)?.model,
         preferredLlm: preferredLlm,
       );
+      // Hermes fase-10: simpan batch checkpoint turn ini untuk `/undo`
+      // dan breakdown konteks untuk `/context`.
+      try {
+        final cps = loop.lastTurnCheckpoints;
+        if (cps.isNotEmpty) {
+          recordCheckpointBatch(session.id, cps);
+          events.emit('checkpoint.created', {
+            'session': session.id,
+            'files': cps.length,
+          });
+        }
+      } catch (_) {} // best-effort: undo adalah fitur, bukan jalur kritis
+      try {
+        final bd = loop.lastContextBreakdown;
+        if (bd != null) {
+          if (_contextBreakdowns.length >= 200 &&
+              !_contextBreakdowns.containsKey(session.id)) {
+            _contextBreakdowns.remove(_contextBreakdowns.keys.first);
+          }
+          _contextBreakdowns[session.id] = bd;
+        }
+      } catch (_) {} // best-effort
       var answer = replies.join('\n');
       final curatedReport = await memoryNudge.processReply(answer);
       if (curatedReport.cleanedReply != null) {
@@ -4742,6 +4785,82 @@ class TikoRuntime {
       buf.writeln('Usage akun provider: tidak tersedia.');
     }
     return ChatRunResult(text: buf.toString(), success: true);
+  }
+
+  /// Hermes fase-10 `checkpoints/manager.py`: catat batch checkpoint turn
+  /// ke ledger sesi (terbatas [_maxCheckpointBatchesPerSession], evict
+  /// tertua). Publik agar wrapper/integrasi yang membawa checkpoint dari
+  /// loop sendiri tetap bisa memakai `/undo`.
+  void recordCheckpointBatch(String sessionId, List<FileCheckpoint> batch) {
+    if (batch.isEmpty) return;
+    final batches = _checkpointBatches.putIfAbsent(sessionId, () => []);
+    batches.add(List.of(batch));
+    while (batches.length > _maxCheckpointBatchesPerSession) {
+      batches.removeAt(0);
+    }
+  }
+
+  /// Hermes fase-10 `checkpoints/undo_hint.py`: `/undo` — pulihkan file
+  /// dari batch checkpoint terakhir turn yang berhasil. Perintah in-memory
+  /// yang berjalan ANTARA turn (sebelum SessionLock turn baru diambil),
+  /// sehingga tidak ada mutasi file paralel: aman tanpa lock tambahan.
+  ChatRunResult _undoCommand(String sessionId) {
+    final batches = _checkpointBatches[sessionId];
+    if (batches == null || batches.isEmpty) {
+      return const ChatRunResult(
+        text: 'Tidak ada checkpoint untuk dibatalkan (/undo).\n'
+            'Checkpoint dibuat otomatis sebelum tool mutasi file '
+            '(write_file/patch_file) pada turn berjalan.',
+        success: false,
+      );
+    }
+    final batch = batches.removeLast();
+    try {
+      final (restored, failed) = checkpointStore.restore(workspace, batch);
+      events.emit('checkpoint.restored', {
+        'session': sessionId,
+        'restored': restored,
+        'failed': failed,
+      });
+      final buf = StringBuffer(
+        '↩️ Undo: ${restored.length} file dipulihkan'
+        '${failed.isEmpty ? '' : ', ${failed.length} gagal'}:\n',
+      );
+      for (final path in restored) {
+        buf.writeln('- ✓ $path');
+      }
+      for (final path in failed) {
+        buf.writeln('- ✗ $path (gagal dipulihkan)');
+      }
+      return ChatRunResult(
+        text: buf.toString().trim(),
+        success: failed.isEmpty,
+      );
+    } catch (e) {
+      return ChatRunResult(
+        text: 'Undo gagal: $e',
+        success: false,
+      );
+    }
+  }
+
+  /// Hermes fase-10 `context_breakdown.py`: `/context` — breakdown jendela
+  /// konteks turn terakhir sesi ini (kategori + occupancy ber-anchoring
+  /// bila anchor fresh).
+  ChatRunResult _contextCommand(String sessionId) {
+    final breakdown = _contextBreakdowns[sessionId];
+    if (breakdown == null) {
+      return const ChatRunResult(
+        text: 'Breakdown konteks belum tersedia — jalankan satu turn dulu, '
+            'lalu /context.',
+        success: false,
+      );
+    }
+    final buf = StringBuffer('Breakdown konteks (estimasi):\n');
+    for (final line in ContextBreakdown.formatLines(breakdown)) {
+      buf.writeln('- $line');
+    }
+    return ChatRunResult(text: buf.toString().trim(), success: true);
   }
 
   /// `/memory` — tampilkan isi memori terkurasi + pemakaian anggaran.

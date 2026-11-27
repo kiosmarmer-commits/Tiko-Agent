@@ -12,6 +12,8 @@ import 'interfaces.dart';
 import 'models.dart';
 import 'context_builder.dart';
 import 'compactor.dart';
+import 'checkpoints.dart';
+import 'context_breakdown.dart';
 import 'image_token_cost.dart';
 import 'loop_detector.dart';
 import 'usage_anchor.dart';
@@ -148,6 +150,7 @@ class AgentLoop {
     this.autoReflectOnTools = 3,
     this.usageAnchorStore,
     this.imageTokenCosts,
+    this.checkpointStore,
     this.synthLlm,
     this.onCompactionEvent,
     this.skillEval = const SkillEvalConfig(),
@@ -190,6 +193,11 @@ class AgentLoop {
   /// Hermes image token cost (C7): tabel harga per-gambar yang dipelajari
   /// dari usage nyata provider (null = harga default flat, tanpa kalibrasi).
   final ImageTokenCostStore? imageTokenCosts;
+
+  /// Hermes checkpoints (fase-10): snapshot file SEBELUM mutasi (write_file/
+  /// patch_file) sehingga host bisa menyediakan `/undo`. Null = tanpa
+  /// checkpoint (mutasi tetap berjalan, tanpa kemampuan undo).
+  final CheckpointStore? checkpointStore;
 
   final AgentConfig config;
   final String workspacePath;
@@ -380,6 +388,16 @@ class AgentLoop {
   /// Anchor usage aktif turn ini (null = belum ada / sudah kedaluwarsa).
   UsageAnchor? get usageAnchor => _usageAnchor;
 
+  /// Hermes checkpoints (fase-10): snapshot file pre-mutasi turn berjalan
+  /// (batch berurutan); host mendorongnya ke ledger per sesi untuk `/undo`.
+  List<FileCheckpoint> _turnCheckpoints = const [];
+  List<FileCheckpoint> get lastTurnCheckpoints => _turnCheckpoints;
+
+  /// Hermes context breakdown (fase-10): breakdown kategori konteks turn
+  /// terakhir (system/tools/percakapan/gambar + occupancy anchored).
+  ContextBreakdownResult? _lastContextBreakdown;
+  ContextBreakdownResult? get lastContextBreakdown => _lastContextBreakdown;
+
   final _editGuard = EditLoopGuard();
 
   /// Cooperative cancellation token for the turn currently being handled.
@@ -450,6 +468,16 @@ class AgentLoop {
     var activeLlm = preferredLlm ?? route.llm;
     var activeProviderId =
         route.providerId.isEmpty ? route.llm.id : route.providerId;
+    // Fase-10: pulihkan anchor tersimpan sejak awal turn (validasi prefix)
+    // supaya breakdown konteks & preflight pertama sudah ber-anchoring.
+    _usageAnchor ??= _restoreUsageAnchor(initialContext);
+    try {
+      _lastContextBreakdown = ContextBreakdown.compute(
+        initialContext,
+        anchor: _usageAnchor,
+        imageCost: _boundImageCost(activeLlm),
+      );
+    } catch (_) {} // breakdown bukan keharusan turn
     if (config.microCompaction) {
       try {
         ctx = await _microCompactor.maybeMicroCompact(
@@ -475,6 +503,7 @@ class AgentLoop {
       _currentSessionId = session.id;
       _imageCostOverride = null;
       _lastAnchoredPressure = null;
+      _turnCheckpoints = const [];
 
       agentLoop:
       for (var i = 0; i < config.maxIterations; i++) {
@@ -778,6 +807,30 @@ class AgentLoop {
         // ToolContext.cancelToken and should stop early on their own).
         for (final call in allowed) {
           onToolCallStart?.call(call);
+        }
+        // Hermes checkpoints (fase-10): snapshot file pre-mutasi SEBELUM
+        // eksekusi batch — /undo memulihkan keadaan pra-turn. Fail-open:
+        // snapshot gagal tidak pernah memblokir tool.
+        final cpStore = checkpointStore;
+        if (cpStore != null && allowed.isNotEmpty) {
+          try {
+            final batch = cpStore.snapshotBatch(
+              workspacePath,
+              [
+                for (final call in allowed)
+                  if (_mutationToolNames.contains(call.name))
+                    (
+                      call.name,
+                      call.args['path'] is String
+                          ? call.args['path'] as String
+                          : null,
+                    ),
+              ],
+            );
+            if (batch.isNotEmpty) {
+              _turnCheckpoints = [..._turnCheckpoints, ...batch];
+            }
+          } catch (_) {}
         }
         final runner = ParallelToolRunner(executor);
         final executed = await cancel.guard(
