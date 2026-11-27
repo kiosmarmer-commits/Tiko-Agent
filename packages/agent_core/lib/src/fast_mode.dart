@@ -20,7 +20,6 @@
 // alih-alih membaca kata asing sebagai normal.
 library;
 
-import 'interfaces.dart';
 import 'models.dart';
 
 const String fastTierPriority = 'priority';
