@@ -70,6 +70,7 @@ class ChatRunResult {
     this.toolCallCount = 0,
     this.toolCallTraces = const [],
     this.skillsUsed = const [],
+    this.model = '',
   });
   final String text;
   final bool success;
@@ -94,6 +95,10 @@ class ChatRunResult {
   /// Slugs of skills whose use was recorded during the turn. Hosts route
   /// user feedback 👍/👎 back to these via SkillRegistry.applyFeedback.
   final List<String> skillsUsed;
+
+  /// Hermes fase-7: model terpilih router untuk turn ini (kosong bila tak
+  /// diketahui) — dipakai untuk estimasi biaya usage.
+  final String model;
 
   Map<String, dynamic> toJson() => {
         'text': text,
@@ -696,6 +701,12 @@ class TikoRuntime {
 
   /// F7 (docs/15 §8) — ledger biaya/token per turn (durabel, JSONL).
   final CostLedger costLedger;
+
+  /// Hermes fase-7 `credits_tracker`: akumulasi biaya USD harian + limit
+  /// opsional (`agent.daily_credit_limit_usd`, 0 = off).
+  late final CreditsTracker credits = CreditsTracker(
+    dailyLimitUsd: config.dailyCreditLimitUsd,
+  );
 
   /// F8.2 (docs/15 §9) — aturan approval yang diingat user setelah
   /// konfirmasi manual ("ingat aksi ini?"); menurunkan frekuensi prompt
@@ -2275,6 +2286,9 @@ class TikoRuntime {
           durationMs: entry.endedAt == null
               ? 0
               : entry.endedAt!.difference(DateTime.parse(entry.startedAt)).inMilliseconds,
+          model: result.model,
+          promptTokens: result.promptTokens,
+          completionTokens: result.completionTokens,
         );
       }
       return result;
@@ -2303,8 +2317,16 @@ class TikoRuntime {
     int tokensUsed = 0,
     int toolCalls = 0,
     int durationMs = 0,
+    String model = '',
+    int promptTokens = 0,
+    int completionTokens = 0,
   }) async {
     try {
+      final estimate = estimateCostUsd(
+        model: model.isEmpty ? null : model,
+        promptTokens: promptTokens > 0 ? promptTokens : tokensUsed,
+        completionTokens: completionTokens,
+      );
       final entry = CostEntry(
         ts: DateTime.now().toUtc(),
         session: session.length > 128 ? session.substring(0, 128) : session,
@@ -2314,8 +2336,23 @@ class TikoRuntime {
         toolCalls: toolCalls,
         success: success,
         durationMs: durationMs,
+        model: estimate.status == costStatusEstimated ? estimate.model : '',
+        costUsd: estimate.usd,
       );
       await costLedger.record(entry);
+      credits.recordCost(estimate.usd);
+      if (credits.consumeWarnSignal()) {
+        events.emit('credits.warn', {
+          'spent_usd': credits.spentToday,
+          'limit_usd': config.dailyCreditLimitUsd,
+        });
+      }
+      if (credits.exceeded) {
+        events.emit('credits.exceeded', {
+          'spent_usd': credits.spentToday,
+          'limit_usd': config.dailyCreditLimitUsd,
+        });
+      }
     } catch (e) {
       events.emit('cost.record_failed', {'error': '$e'});
     }
@@ -2434,6 +2471,29 @@ class TikoRuntime {
         channel: channel,
         userKey: userKey,
       );
+      // Hermes fase-7 `title_generator` tahap 1: judul instant deterministik
+      // dari pesan pembuka user — ditulis sebelum model dipanggil, tidak
+      // bisa gagal, tidak pernah menimpa judul yang sudah ada.
+      var autoTitleDerived = '';
+      if (!internalCommand &&
+          config.agentAutoTitle &&
+          (session.title == null || session.title!.isEmpty) &&
+          isTitleableUserMessage(text)) {
+        final derived = deriveTitle(text);
+        if (derived != null) {
+          try {
+            final renamed = await sessions.rename(session.id, derived);
+            if (renamed) {
+              autoTitleDerived = derived;
+              events.emit('session.titled', {
+                'session': session.id,
+                'title': derived,
+                'source': 'derived',
+              });
+            }
+          } catch (_) {} // best-effort
+        }
+      }
       final boundBot = botStore.botFor(sessionId);
       if (!internalCommand && boundBot != null) {
         final bot = boundBot;
@@ -2531,6 +2591,12 @@ class TikoRuntime {
                   'session': sessionId,
                   ...stats.toJson(),
                 }),
+                // Hermes compaction events: record v1 bebas-konten per
+                // attempt/rewrite riwayat (summarize + prune tool-result).
+                onCompactionEvent: (e) => events.emit(
+                  'context.compaction_record',
+                  e.toJson(),
+                ),
               )
             : Compactor(enabled: false),
         gate: _TirithPreGate(
@@ -2551,6 +2617,8 @@ class TikoRuntime {
         // FR-01: reuse the first configured provider for skill-synthesis
         // reflection; AgentLoop falls back to the naive draft when absent.
         synthLlm: auxiliaryLlm(),
+        onCompactionEvent: (e) =>
+            events.emit('context.compaction_record', e.toJson()),
         shouldStop: () => safety.stopRequested,
         config: configOverride ?? defaultConfig,
         editLoopVerify: config.agentEditLoopVerify,
@@ -2763,7 +2831,30 @@ class TikoRuntime {
         toolCallCount: loop.lastToolCalls.length,
         toolCallTraces: loop.lastToolCalls,
         skillsUsed: loop.lastSkillsUsed,
+        model: loop.lastModelUsed ?? '',
       );
+      // Hermes fase-7 `title_generator` tahap 2: upgrade judul dengan satu
+      // panggilan model kecil. Di-await DALAM lock agar bebas race dengan
+      // rename user; guard answer-shaped menjaga jawaban model tidak menjadi
+      // judul; provenance derived < llm — hanya mengisi judul turunan.
+      if (autoTitleDerived.isNotEmpty && config.agentTitleModelUpgrade) {
+        final aux = auxiliaryLlm();
+        if (aux != null) {
+          try {
+            final upgraded = await upgradeTitleWithLlm(aux, text);
+            if (upgraded != null && upgraded != autoTitleDerived) {
+              final renamed = await sessions.rename(session.id, upgraded);
+              if (renamed) {
+                events.emit('session.titled', {
+                  'session': session.id,
+                  'title': upgraded,
+                  'source': 'llm',
+                });
+              }
+            }
+          } catch (_) {} // best-effort — judul tetap versi derived
+        }
+      }
       _rememberSessionSkills(session.id, result.skillsUsed);
       unawaited(_checkTokenAnomaly(session, result));
       unawaited(_runIdleConsolidation(session.id));
@@ -4485,8 +4576,23 @@ class TikoRuntime {
         '- turn: ${total['turns'] ?? 0}, token: ${total['tokens_used'] ?? 0}, '
         'tool calls: ${total['tool_calls'] ?? 0}',
       );
+      final costUsd = total['cost_usd'];
+      if (costUsd is num) {
+        buf.writeln('- biaya (estimasi rate card): ${formatCostLabel(costUsd.toDouble())}');
+      }
     } catch (_) {
       buf.writeln('- ledger biaya tidak tersedia');
+    }
+    if (config.dailyCreditLimitUsd > 0) {
+      final remaining = credits.remaining;
+      buf.writeln(
+        '- kredit hari ini: ${formatCostLabel(credits.spentToday)} / '
+        '${formatCostLabel(config.dailyCreditLimitUsd)}'
+        '${credits.exceeded ? ' — LIMIT HARIAN TERLAMPAUI' : ''}',
+      );
+      if (remaining != null) {
+        buf.writeln('- sisa kredit: ${formatCostLabel(remaining)}');
+      }
     }
     buf.writeln(
       'Anggaran per turn: max_iter=${config.maxIterations}, '

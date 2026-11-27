@@ -530,6 +530,9 @@ class TikoConfig {
     this.agentIdeIntegration = false,
     this.agentComputerUse = false,
     this.agentErrorRecall = true,
+    this.agentAutoTitle = true,
+    this.agentTitleModelUpgrade = false,
+    this.dailyCreditLimitUsd = 0.0,
     this.memoryNudgeIntervalTurns = 10,
     this.memoryCuratedCharBudget = 3575,
     this.interruptRedirect = true,
@@ -695,6 +698,20 @@ class TikoConfig {
   /// ContextBuilder menarik maks 3 kecocokan dari ErrorMemoryStore per turn
   /// (read-only; matikan dengan `error_recall: false`).
   final bool agentErrorRecall;
+
+  /// Hermes `title_generator`: judul sesi otomatis instant-deterministik.
+  /// Judul yang diketik user tidak pernah ditimpa.
+  final bool agentAutoTitle;
+
+  /// Hermes `title_generator` tahap 2 (upgrade LLM kecil). **Default false**
+  /// — deviasi sadar dari Hermes (default true): aux Tiko selalu berbagi
+  /// endpoint dengan provider utama (BreakerLlmProvider di atas provider
+  /// pertama router), dan Hermes sendiri menghindari panggilan judul
+  /// serentak ke endpoint yang sama satu-slot (#117296).
+  final bool agentTitleModelUpgrade;
+
+  /// Hermes `credits_tracker`: limit pengeluaran USD per hari UTC (0 = off).
+  final double dailyCreditLimitUsd;
 
   final int maxIterations;
   final int maxTokensPerTask;
@@ -1649,6 +1666,14 @@ class TikoConfig {
       agentErrorRecall: root['agent'] is YamlMap
           ? (root['agent'] as YamlMap)['error_recall'] != false
           : true,
+      agentAutoTitle: root['agent'] is YamlMap
+          ? (root['agent'] as YamlMap)['auto_title'] != false
+          : true,
+      agentTitleModelUpgrade: root['agent'] is YamlMap &&
+          (root['agent'] as YamlMap)['title_model_upgrade'] == true,
+      dailyCreditLimitUsd: root['agent'] is YamlMap
+          ? _creditLimitUsd((root['agent'] as YamlMap)['daily_credit_limit_usd'])
+          : 0.0,
       falApiKeyRef:
           falKeyValue is String && falKeyValue.startsWith('env:')
               ? falKeyValue
@@ -1788,6 +1813,12 @@ class TikoConfig {
   static int _compactorSoftTokens(Object? v) {
     if (v is int && v >= 256) return v;
     return 6000;
+  }
+
+  /// Parsing aman limit kredit harian USD; nilai invalid → 0 (off).
+  static double _creditLimitUsd(Object? v) {
+    if (v is num && v >= 0 && v.isFinite) return v.toDouble();
+    return 0.0;
   }
 
   static DecisionConfig _parseDecision(YamlMap sec, List<ConfigIssue> issues) {

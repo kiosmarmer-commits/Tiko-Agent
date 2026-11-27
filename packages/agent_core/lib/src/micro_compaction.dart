@@ -5,6 +5,7 @@
 /// pernah diserap (alternasi role aman, teks user tetap verbatim).
 library;
 
+import 'compaction_events.dart';
 import 'context_builder.dart';
 import 'interfaces.dart';
 import 'models.dart';
@@ -55,6 +56,7 @@ class MicroCompactor {
     this.maxSummaryTokens = 1500,
     this.defragThresholdTokens = 2000,
     this.clock,
+    this.onCompactionEvent,
   });
 
   /// False menonaktifkan penuh (default Hermes) — ctx dilewati tanpa diubah.
@@ -69,6 +71,10 @@ class MicroCompactor {
   final int defragThresholdTokens;
 
   final double Function()? clock;
+
+  /// Hermes compaction events: record `micro_summarize` per pass yang
+  /// benar-benar menyerap exchange (committed). Never-raises.
+  final CompactionEventCallback? onCompactionEvent;
 
   String _rollingSummary = '';
   int _cursor = 0;
@@ -164,6 +170,23 @@ class MicroCompactor {
     if (absorbed.isEmpty) {
       return ctx;
     }
+
+    final tokensBefore = messages.fold<int>(0, (s, m) => s + m.content.length) ~/ 4;
+    final outLen = messages.length - absorbed.length + 1;
+    try {
+      onCompactionEvent?.call(CompactionEvent(
+        kind: 'micro_summarize',
+        trigger: 'turn_start_threshold',
+        method: usedLlm ? 'llm_summary' : 'deterministic_fallback',
+        outcome: 'committed',
+        tokensBefore: tokensBefore,
+        tokensAfter: (tokensBefore - absorbedChars ~/ 4) + _rollingSummary.length ~/ 4,
+        messagesBefore: messages.length,
+        messagesAfter: outLen,
+        durationMs: 0,
+        ts: DateTime.now().toUtc(),
+      ));
+    } catch (_) {}
 
     final out = <ChatMessage>[];
     var markerWritten = false;

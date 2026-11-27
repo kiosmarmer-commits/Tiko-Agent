@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'cancellation.dart';
+import 'compaction_events.dart';
 import 'empty_response_guard.dart';
 import 'repetition_guard.dart';
 import 'error_classifier.dart';
@@ -118,6 +119,7 @@ class AgentLoop {
     this.selfConsistencySamples = 3,
     this.autoReflectOnTools = 3,
     this.synthLlm,
+    this.onCompactionEvent,
     this.skillEval = const SkillEvalConfig(),
     this.editLoopVerify = false,
     this.onTextDelta,
@@ -187,6 +189,10 @@ class AgentLoop {
   /// When null, successful turns are compiled with the heuristic fallback.
   final LlmProvider? synthLlm;
 
+  /// Hermes compaction events: sink record `hermes.compaction` v1 dari
+  /// micro-compaction dan kompresi batch/prune turn ini. Never-raises.
+  final CompactionEventCallback? onCompactionEvent;
+
   /// FR-01: S_eval weights and threshold for auto skill drafting.
   final SkillEvalConfig skillEval;
 
@@ -197,6 +203,11 @@ class AgentLoop {
   /// Explainability payload of the most recent routing decision.
   Map<String, dynamic>? _lastRouteExplain;
   Map<String, dynamic>? get lastRouteExplain => _lastRouteExplain;
+
+  /// Model yang dipilih router untuk turn terakhir (kosong bila tak
+  /// diketahui) — dipakai host untuk estimasi biaya usage.
+  String? _lastModelUsed;
+  String? get lastModelUsed => _lastModelUsed;
 
   final List<String> _lastToolNames = [];
   /// Actual tools whose adapters ran in this loop (used by golden/e2e tests).
@@ -247,6 +258,7 @@ class AgentLoop {
   late final MicroCompactor _microCompactor = MicroCompactor(
     enabled: config.microCompaction,
     keepLastExchanges: config.microCompactionKeepLastExchanges,
+    onCompactionEvent: onCompactionEvent,
   );
   MicroCompactionStats? get lastMicroCompaction => _microCompactor.last;
 
@@ -346,6 +358,10 @@ class AgentLoop {
       return;
     }
     _lastRouteExplain = route.toJson();
+    final routeModel = route.model;
+    if (routeModel != null && routeModel.isNotEmpty) {
+      _lastModelUsed = routeModel;
+    }
     if (route.risk == 'critical') {
       _lastTurnEndReason = 'critical_risk';
       router.releaseProbe(route.providerId);
@@ -436,6 +452,7 @@ class AgentLoop {
                 ctx = await compactor.maybeCompact(
                   ctx,
                   llmOverride: activeLlm,
+                  trigger: 'overflow',
                 );
                 ctx = compactor.pruneToolResults(ctx);
               } catch (_) {} // recovery best-effort
