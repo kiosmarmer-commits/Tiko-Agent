@@ -12,6 +12,7 @@ import 'probe.dart';
 import 'ssrf.dart';
 import 'web_search.dart';
 import 'path_safety.dart';
+import 'file_safety.dart';
 import 'archive_tool.dart';
 import 'verify_tool.dart';
 import 'sandbox.dart';
@@ -429,6 +430,12 @@ class ReadFileTool implements Tool {
         isError: true,
       );
     }
+    // Hermes file_safety (fase-12): file rahasia tidak pernah masuk
+    // konteks — env proyek, kunci, dan store kredensial diblokir.
+    final readBlock = readBlockError(rel);
+    if (readBlock != null) {
+      return ToolResult(callId: '', content: readBlock, isError: true);
+    }
     final file = File(resolved);
     if (!await file.exists()) {
       return ToolResult(
@@ -566,6 +573,12 @@ class WriteFileTool implements Tool {
         content: 'Path di luar workspace',
         isError: true,
       );
+    }
+    // Hermes file_safety (fase-12): file kredensial/state runtime tidak
+    // pernah ditulis agent — denial jelas + jejak audit.
+    final denial = writeDenial(rel);
+    if (denial != null) {
+      return ToolResult(callId: '', content: denial, isError: true);
     }
     final file = File(resolved);
     final backupPath = PathSafety.resolveInRoot(workspaceRoot, '$rel.bak');

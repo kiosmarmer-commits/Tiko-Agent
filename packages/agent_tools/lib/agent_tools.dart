@@ -89,3 +89,4 @@ export 'src/render_a2ui_tool.dart';
 export 'src/script_repair.dart';
 export 'src/skill_local_install.dart';
 export 'src/termux_tool.dart';
+export 'src/file_safety.dart';
