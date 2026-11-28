@@ -30,7 +30,8 @@ void main() {
       expect(
           grouped,
           {AppRoute.tasks, AppRoute.skills, AppRoute.bots, AppRoute.providers,
-              AppRoute.plugins, AppRoute.channels, AppRoute.automations,
+              AppRoute.plugins, AppRoute.channels, AppRoute.smartHome,
+              AppRoute.automations,
               AppRoute.security, AppRoute.audit, AppRoute.artifacts,
               AppRoute.surfaces, AppRoute.sessions, AppRoute.memory,
               AppRoute.events, AppRoute.logs, AppRoute.hooks,

@@ -373,6 +373,50 @@ class AgentApiClient {
 
   /// Channels setup (GUI-P1-07): status channel gateway + nama env
   /// (read-only).
+  /// Smart-home (F6, docs/15 §7): daftar provider terkonfigurasi.
+  /// 501 berarti host tidak mengonfigurasi smart-home (fail-closed).
+  Future<Map<String, dynamic>> fetchSmartHomeProviders() async {
+    final res = await _http
+        .get(_u('/v1/smart-home'), headers: _headers)
+        .timeout(const Duration(seconds: 10));
+    _throwIf(res, 'smart-home');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Daftar perangkat ternormalisasi; [provider] opsional untuk filter.
+  Future<Map<String, dynamic>> fetchSmartHomeDevices({String? provider}) async {
+    final uri = _u('/v1/smart-home/devices').replace(
+      queryParameters: {
+        if (provider != null && provider.isNotEmpty) 'provider': provider,
+      },
+    );
+    final res = await _http
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    _throwIf(res, 'smart-home devices');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Eksekusi perintah perangkat (endpoint mutasi ber-token; approval gate
+  /// tetap berjalan di runtime). [command] wajib objek non-kosong.
+  Future<Map<String, dynamic>> executeSmartHome(
+    String provider,
+    String deviceId,
+    Map<String, dynamic> command,
+  ) async {
+    final res = await _http
+        .post(
+          _u('/v1/smart-home/devices/'
+              '${Uri.encodeComponent(provider)}/'
+              '${Uri.encodeComponent(deviceId)}/execute'),
+          headers: _headers,
+          body: jsonEncode(command),
+        )
+        .timeout(const Duration(seconds: 20));
+    _throwIf(res, 'smart-home execute');
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> fetchChannels() async {
     final res = await _http
         .get(_u('/v1/channels'), headers: _headers)
