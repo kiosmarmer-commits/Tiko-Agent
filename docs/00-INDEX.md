@@ -75,6 +75,7 @@
 | RAPTOR-lite — index hierarkis ringkasan (Fase 33) | Implemented (opt-in) | `RaptorTree` deterministik tanpa LLM (agent_memory): clustering greedy Jaccard ≥0.15 + summary ekstraktif TF, query lexical berbobot bonus level atas, save/load JSON; tool `raptor` (build/query/status) persist `data/raptor/tree.json`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | GraphRAG-lite — graf pengetahuan + komunitas (Fase 34) | Implemented (opt-in) | `GraphRagIndex` (simpul_core): CSR + Louvain, query BFS `max_hops` decay 0.6 + scoring komunitas global, konteks `[n] source`; tool `graph_query` scan vault + build otomatis; config `graph_rag:` default **off**, `vault_dir` wajib; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | Inter-agent messaging umum — group chat AutoGen-style (Fase 35) | Implemented (opt-in) | `GroupChatRunner` (tiko_runtime): transkrip bersama + speaker selection round-robin/auto (LLM, fail-open) + terminasi marker `TERMINATE` + cap `max_rounds` + sintesis summarizer; tool `group_chat`; config `group_chat:` default **off**; kontras `bot_team` (DAG paralel); lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| MemGPT-style control-flow paging (Fase 36) | Implemented | `ContextPager` (agent_memory): page-out deterministik pesan luar window → episodic (idempoten fingerprint FNV-1a, state persist bounded); page-in on-demand via tool `memory_page` (kontrol di tangan model, filter tag paged + binding sesi + overlap lexical wajib); data asli tetap utuh di session store; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 
