@@ -5,6 +5,7 @@ export 'src/vector_index.dart';
 export 'src/persistent_store.dart';
 export 'src/fts_index.dart';
 export 'src/chunk_vector_cache.dart';
+export 'src/raptor_tree.dart';
 export 'src/sqlite_store.dart';
 export 'src/archive.dart';
 export 'src/drift_schema.dart';

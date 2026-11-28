@@ -559,6 +559,23 @@ class DeepSolveCfg {
   final int maxWallClockSec;
 }
 
+/// Fase 34 — GraphRAG-lite (audit §6 #13): pipeline query graph simpul ke
+/// agent utama. Default off + butuh vault_dir — khusus pengguna simpul.
+class GraphRagCfg {
+  const GraphRagCfg({
+    this.enabled = false,
+    this.vaultDir = '',
+    this.maxHops = 2,
+    this.maxNotes = 500,
+  })  : assert(maxHops >= 1 && maxHops <= 4),
+        assert(maxNotes >= 1);
+
+  final bool enabled;
+  final String vaultDir;
+  final int maxHops;
+  final int maxNotes;
+}
+
 /// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
 /// tanpa LLM, advisory-only. Default on.
 class TaskClassifierCfg {
@@ -705,6 +722,7 @@ class TikoConfig {
     this.rag = const RagConfig(),
     this.deepSolve = const DeepSolveCfg(),
     this.taskClassifier = const TaskClassifierCfg(),
+    this.graphRag = const GraphRagCfg(),
   });
 
   final String profile;
@@ -803,6 +821,9 @@ class TikoConfig {
 
   /// Fase 31 — task classifier heuristik (advisory telemetry).
   final TaskClassifierCfg taskClassifier;
+
+  /// Fase 34 — GraphRAG-lite (default off).
+  final GraphRagCfg graphRag;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1839,6 +1860,7 @@ class TikoConfig {
       rag: _parseRag(root),
       deepSolve: _parseDeepSolve(root),
       taskClassifier: _parseTaskClassifier(root),
+      graphRag: _parseGraphRag(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2526,6 +2548,23 @@ class TikoConfig {
       enabled: sec['enabled'] is bool ? sec['enabled'] as bool : true,
       fastMaxChars: fastMax is int && fastMax >= 0 ? fastMax : 200,
       extraKeywords: extras(),
+    );
+  }
+
+  /// Parser `graph_rag:` (fase 34, GraphRAG-lite). Fail-open.
+  static GraphRagCfg _parseGraphRag(YamlMap root) {
+    final sec = root['graph_rag'];
+    if (sec is! YamlMap) return const GraphRagCfg();
+    final hops = sec['max_hops'];
+    final maxNotes = sec['max_notes'];
+    final vaultDir = sec['vault_dir'];
+    return GraphRagCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      vaultDir: vaultDir is String && vaultDir.trim().isNotEmpty
+          ? vaultDir.trim()
+          : '',
+      maxHops: hops is int && hops >= 1 && hops <= 4 ? hops : 2,
+      maxNotes: maxNotes is int && maxNotes >= 1 ? maxNotes : 500,
     );
   }
 

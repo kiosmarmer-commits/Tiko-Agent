@@ -54,6 +54,7 @@ export 'src/learn.dart';
 export 'src/feedback.dart';
 export 'src/golden.dart';
 export 'src/eval_harness.dart';
+export 'src/api_bank_eval.dart';
 export 'src/config.dart';
 export 'src/metrics.dart';
 export 'src/plan_execute.dart';
