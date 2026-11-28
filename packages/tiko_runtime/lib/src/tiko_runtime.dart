@@ -49,6 +49,12 @@ import 'routine.dart';
 import 'meeting_notes.dart';
 import 'authorization_memory.dart';
 import 'review_learnings.dart';
+import 'proactive_checkins.dart';
+import 'tool_package.dart';
+import 'final_claim_critic.dart';
+import 'curriculum.dart';
+import 'sop_templates.dart';
+import 'swe_pipeline.dart';
 import 'onboarding.dart';
 import 'character_card.dart';
 import 'team_tool.dart';
@@ -131,6 +137,23 @@ class ChatRunResult {
   /// telemetry, tidak mengubah jalur eksekusi. Kosong bila tidak
   /// diklasifikasi (perintah internal / classifier off).
   final String taskMode;
+
+  /// Salinan hasil dengan teks final terganti (dipakai CRITIC gate Fase 46:
+  /// anotasi disclosure pada jawaban tanpa mengubah kontrak turn lainnya).
+  ChatRunResult withText(String nextText) => ChatRunResult(
+        text: nextText,
+        success: success,
+        retryable: retryable,
+        tokensUsed: tokensUsed,
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        toolCallCount: toolCallCount,
+        toolCallTraces: toolCallTraces,
+        skillsUsed: skillsUsed,
+        model: model,
+        contextPressureTokens: contextPressureTokens,
+        taskMode: taskMode,
+      );
 
   /// Salinan hasil dengan [taskMode] terisi (dipakai chatWithStatus setelah
   /// klasifikasi, tanpa mengubah kontrak konstruktor const yang lama).
@@ -765,6 +788,17 @@ class TikoRuntime {
 
   /// Fase 40 — antrian review learnings; null bila config off.
   ReviewLearningsStore? reviewLearningsStore;
+
+  /// Fase 44 — engine check-in proaktif; null bila config off. Tick
+  /// dipicu host (scheduler/Timer) via [ProactiveCheckinEngine.tick].
+  ProactiveCheckinEngine? proactiveCheckins;
+
+  /// Fase 45 — registry def tool buatan yang terpasang via tool_package
+  /// (dipakai export/list); selalu diinisialisasi bila config on.
+  final List<ForgedToolDef> forgedPackageDefs = [];
+
+  /// Fase 46 — final-claim critic; null bila config off.
+  FinalClaimCritic? finalClaimCritic;
 
   /// Indeks + laporan run riset otomatis (Fase D): `tiko research` /
   /// REST `/v1/research/runs`; tersimpan di `<dataDir>/research/`.
@@ -1929,6 +1963,135 @@ class TikoRuntime {
         },
       ));
     }
+    // Fase 44 (proactive check-ins): engine + tool hanya bila config
+    // enabled — mengirim pesan tanpa diminta; tick dipicu host.
+    if (cfg.proactiveCheckins.enabled &&
+        rt.registry.get('checkins') == null) {
+      final engine = ProactiveCheckinEngine(
+        dataDir: dataDir,
+        idleMinutes: cfg.proactiveCheckins.idleMinutes,
+        maxPerSessionPerDay: cfg.proactiveCheckins.maxPerSessionPerDay,
+        maxSessionsPerTick: cfg.proactiveCheckins.maxSessionsPerTick,
+        listIdleSessions: () async {
+          final infos = await rt.sessions.list();
+          return [
+            for (final info in infos)
+              if (!info.archived)
+                ProactiveCheckinTarget(
+                  sessionId: info.id,
+                  channel: info.channel,
+                  userKey: info.userKey,
+                  lastActivity: info.updatedAt,
+                  title: info.title,
+                ),
+          ];
+        },
+        send: null,
+        emitEvent: rt.events.emit,
+      );
+      await engine.load();
+      rt.proactiveCheckins = engine;
+      rt.registry.register(ProactiveCheckinTool(engine: engine));
+    }
+    // Fase 45 (marketplace skill packages): export/import paket tool buatan
+    // ber-checksum; hanya bila config enabled — impor mengeksekusi command.
+    if (cfg.toolPackage.enabled && rt.registry.get('tool_package') == null) {
+      rt.registry.register(ToolPackageTool(
+        installedDefs: () => [
+          for (final tool in rt.registry.all)
+            if (tool is ForgedTool) tool.def,
+          ...rt.forgedPackageDefs,
+        ],
+        runTests: (def) => ToolForge(sandbox: sandbox).runContractTests(def),
+        install: (def) {
+          if (rt.registry.get(def.name) != null) return false;
+          rt.registry.register(
+              ForgedTool(def: def, forge: ToolForge(sandbox: sandbox)));
+          return true;
+        },
+        hasTool: (name) => rt.registry.get(name) != null,
+        maxTools: cfg.toolPackage.maxTools,
+      ));
+    }
+    // Fase 46 (CRITIC final-claim gate): tool review deterministik selalu
+    // terdaftar (risk low); gate pada jawaban final hanya bila config on.
+    if (rt.registry.get('critic') == null) {
+      rt.registry.register(const CriticTool());
+    }
+    if (cfg.critic.enabled && rt.finalClaimCritic == null) {
+      final judge = cfg.critic.mode == 'llm' ? rt.auxiliaryLlm() : null;
+      rt.finalClaimCritic = FinalClaimCritic(
+        judge: judge == null
+            ? null
+            : (prompt) async {
+                final request = ChatRequest(
+                  messages: [ChatMessage(role: 'user', content: prompt)],
+                  stream: false,
+                  temperature: 0.0,
+                  maxTokens: 400,
+                );
+                final response = await judge.chat(request).first;
+                return response is LlmTextDelta ? response.delta : null;
+              },
+      );
+    }
+    // Fase 47 (curriculum Voyager): kurikulum skill deterministik — selalu
+    // terdaftar (pola meeting_notes), risk low.
+    if (rt.registry.get('curriculum') == null) {
+      final curriculumStore = CurriculumStore(
+        path: p.join(dataDir, 'curriculum.json'),
+      );
+      await curriculumStore.load();
+      rt.registry.register(CurriculumTool(
+        curriculum: SkillCurriculum(
+          store: curriculumStore,
+          emitEvent: rt.events.emit,
+        ),
+      ));
+    }
+    // Fase 48 (SOP templates MetaGPT-style): store + tool selalu terdaftar;
+    // `execute` via bot team hanya bila callback tersedia (LLM-heavy).
+    if (rt.registry.get('sop') == null) {
+      final sopStore = SopStore(path: p.join(dataDir, 'sop_templates.json'));
+      await sopStore.ensureSeeded();
+      rt.registry.register(SopTool(
+        store: sopStore,
+        runTeam: (goal, sopMd) =>
+            rt.runBotTeam(goal: goal, verifyCommand: null).then((r) => r.toJson()),
+      ));
+    }
+    // Fase 49 (SWE pipeline lanjutan): tool swe_fix hanya bila config
+    // enabled — menjalankan turn LLM berulang + verifikasi nyata.
+    if (cfg.swe.enabled && rt.registry.get('swe_fix') == null) {
+      rt.registry.register(SweFixTool(
+        pipeline: SwePipeline(
+          maxIterations: cfg.swe.maxIterations,
+          runTurn: (prompt) => rt
+              .chatWithStatus(
+                prompt,
+                sessionId:
+                    'swe:${DateTime.now().millisecondsSinceEpoch}',
+                channel: 'internal',
+                userKey: 'swe',
+              )
+              .then((r) => r.text),
+          verify: (command) async {
+            final outcome = await runVerification(
+              command,
+              workspacePath: workspace,
+              sandbox: sandbox,
+              unsandboxedFallback: true,
+              timeout: const Duration(seconds: 180),
+            );
+            return SweVerifyResult(
+              ok: outcome.ok,
+              exitCode: outcome.exitCode,
+              output: outcome.output,
+            );
+          },
+        ),
+      ));
+    }
     final snap = ResourceMonitor.capture(dataDir: dataDir);
     rt.lastResources = snap;
     rt.resourceProfile = snap.profile;
@@ -2724,7 +2887,32 @@ class TikoRuntime {
           completionTokens: result.completionTokens,
         );
       }
-      return taskMode.isEmpty ? result : result.withTaskMode(taskMode);
+      var finalResult = taskMode.isEmpty ? result : result.withTaskMode(taskMode);
+      final critic = finalClaimCritic;
+      if (critic != null &&
+          !internalCommand &&
+          finalResult.success &&
+          finalResult.text.trim().isNotEmpty) {
+        try {
+          final report = await critic.review(
+            answer: finalResult.text,
+            workspaceRoot: workspace,
+          );
+          events.emit('critic.review', {
+            'claims_checked': report.findings.length,
+            'flagged': report.flagged.length,
+            'ok': report.ok,
+          });
+          if (!report.ok) {
+            finalResult = finalResult.withText(
+              '${finalResult.text}\n\n---\n${report.toMarkdown()}',
+            );
+          }
+        } catch (_) {
+          // fail-open: kegagalan critic tidak menggagalkan jawaban.
+        }
+      }
+      return finalResult;
     } catch (error) {
       turnInspector.fail(entry.id, error: _sanitizer.output('$error'));
       if (!internalCommand) {

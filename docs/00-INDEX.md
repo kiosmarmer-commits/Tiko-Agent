@@ -1,6 +1,6 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `b9ff9d7` pada branch `main` (merge PR #223; status merge lihat GitHub).
+**Source snapshot:** commit `ecf9d1e` pada branch `main` (merge PR #224; status merge lihat GitHub).
 
 **Terakhir diperbarui:** 28 November 2026.
 
@@ -83,6 +83,12 @@
 | Team Bot sharing & per-person permission (Fase 41) | Implemented | `BotProfile.owner`/`sharedWith`/`canUse`: bot ber-owner hanya bisa dipakai owner atau userKey yang di-share (fail-closed, backward-compatible bot lama tetap publik); `/bot share|unshare <id> <userkey>`; REST create/update bot menerima `owner`/`shared_with`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | X/Twitter gateway — polling mentions & balasan (Fase 42) | Implemented (opt-in, daemon) | `XGateway implements Gateway` (agent_gateway): polling X API v2 `users/:id/mentions` → `InboundMessage` channel `x`, dedupe bounded + snowflake id compare, balasan POST `/2/tweets` reply `in_reply_to_tweet_id` clip 280; allowlist kosong fail-closed (drop semua) dan daemon wajib `X_BEARER_TOKEN`/`X_BOT_USER_ID`/`X_ALLOW`; env `X_POLL_SEC` opsional; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | Meeting notes deterministik (Fase 43) | Implemented | `MeetingNotesParser` + tool `meeting_notes` (tiko_runtime, risk low, selalu terdaftar): transkrip → notulen Markdown/JSON tanpa LLM (peserta, keputusan, tindak lanjut dengan owner inline/fallback pembicara, pertanyaan terbuka), wrap line diakumulasi ke pembicara sebelumnya, path file dijail `PathSafety`, opsional save `meetings/`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Proactive check-ins (Fase 44) | Implemented (opt-in) | `ProactiveCheckinEngine` (tiko_runtime): tick deterministik (agentd timer 1 menit) menawarkan bantuan ke sesi idle, budget `max_per_session_per_day`/`max_sessions_per_tick`, pesan content-free; delivery via event `checkin.proposed` → gateway channel tujuan; tool `checkins`; config `proactive_checkins:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Marketplace skill packages — ToolForge export/import (Fase 45) | Implemented (opt-in) | `ToolPackager` + tool `tool_package` (tiko_runtime, risk high): paket manifest JSON tool `made_*` ber-checksum sha256 kanonik; import fail-closed berlapis (checksum, namespace `made_`, contract tests wajib lulus, dry-run opsional); config `tool_package:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| CRITIC final-claim gate (Fase 46) | Implemented (opt-in) | `FinalClaimCritic` (tiko_runtime): verifikasi deterministik klaim jawaban final (file path via PathSafety, klaim sukses tanpa bukti ditandai) + mode `llm` opsional; anotasi disclosure + event `critic.review` bila config `critic:` on (default **off**); tool `critic` review manual selalu terdaftar risk low; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Automatic curriculum — Voyager-style (Fase 47) | Implemented | `SkillCurriculum` + tool `curriculum` (tiko_runtime, risk low, selalu terdaftar): kurikulum skill deterministik dari pass-rate benchmark EVAL-02, terlemah dulu, level naik hanya lewat latihan lulus; persist `data/curriculum.json`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| SOP templates — MetaGPT-style (Fase 48) | Implemented | `SopStore` + tool `sop` (tiko_runtime, risk medium): template roles+steps+outputs, seed 2 SOP generik, render rencana Markdown deterministik tanpa LLM, `execute` opsional via bot team; persist `data/sop_templates.json`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| SWE pipeline lanjutan (Fase 49) | Implemented (opt-in) | `SweLocalizer` + `SwePipeline` + tool `swe_fix` (tiko_runtime, risk high): issue → localize deterministik (token match, bounded) → edit turn → validate argv-exec, umpan balik kegagalan lintas iterasi (1–8); config `swe:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 

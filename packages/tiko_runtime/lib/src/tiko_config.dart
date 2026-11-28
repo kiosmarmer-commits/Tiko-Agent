@@ -700,6 +700,72 @@ class ReviewLearningsCfg {
   final int maxLearningsPerBot;
 }
 
+/// Fase 44 — Proactive check-ins (paritas Grok Bot): bot menawarkan bantuan
+/// pada sesi idle, dipicu tick deterministik. Default off — mengirim pesan
+/// tanpa diminta; aktifkan eksplisit.
+class ProactiveCheckinCfg {
+  const ProactiveCheckinCfg({
+    this.enabled = false,
+    this.idleMinutes = 30,
+    this.maxPerSessionPerDay = 2,
+    this.maxSessionsPerTick = 10,
+  })  : assert(idleMinutes >= 1 && idleMinutes <= 10080),
+        assert(maxPerSessionPerDay >= 1 && maxPerSessionPerDay <= 20),
+        assert(maxSessionsPerTick >= 1 && maxSessionsPerTick <= 100);
+
+  /// Default off — kirim pesan proaktif butuh persetujuan operator.
+  final bool enabled;
+
+  /// Sesi dianggap idle setelah sekian menit tanpa aktivitas.
+  final int idleMinutes;
+
+  /// Budget anti-spam: maks check-in per sesi per hari.
+  final int maxPerSessionPerDay;
+
+  /// Cap sesi yang dilayani per tick scheduler.
+  final int maxSessionsPerTick;
+}
+
+/// Fase 45 — Marketplace skill packages: export/import paket tool buatan
+/// (`made_*`) ber-checksum. Default off — impor mengeksekusi command nyata.
+class ToolPackageCfg {
+  const ToolPackageCfg({this.enabled = false, this.maxTools = 32})
+      : assert(maxTools >= 1 && maxTools <= 128);
+
+  /// Default off — aktifkan eksplisit.
+  final bool enabled;
+
+  /// Cap jumlah tool per paket.
+  final int maxTools;
+}
+
+/// Fase 46 — CRITIC universal final-claim gate: periksa klaim jawaban final
+/// sebelum diserahkan. Default off — mengubah jawaban user; aktifkan
+/// eksplisit. Mode `llm` berbiaya tambahan.
+class CriticCfg {
+  const CriticCfg({this.enabled = false, this.mode = 'deterministic'})
+      : assert(mode == 'deterministic' || mode == 'llm');
+
+  /// Default off — aktifkan eksplisit.
+  final bool enabled;
+
+  /// `deterministic` (default) atau `llm` (judge auxiliar tambahan).
+  final String mode;
+}
+
+/// Fase 49 — SWE pipeline lanjutan (issue → localize → edit → validate).
+/// Default off — turn LLM berulang + verifikasi nyata.
+class SweCfg {
+  const SweCfg({this.enabled = false, this.maxIterations = 3})
+      : assert(maxIterations >= 1 && maxIterations <= 8);
+
+  /// Default off — aktifkan eksplisit.
+  final bool enabled;
+
+  /// Cap iterasi fix per run.
+  final int maxIterations;
+}
+
 /// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
 /// tanpa LLM, advisory-only. Default on.
 class TaskClassifierCfg {
@@ -852,6 +918,10 @@ class TikoConfig {
     this.routine = const RoutineCfg(),
     this.authorizationMemory = const AuthorizationMemoryCfg(),
     this.reviewLearnings = const ReviewLearningsCfg(),
+    this.proactiveCheckins = const ProactiveCheckinCfg(),
+    this.toolPackage = const ToolPackageCfg(),
+    this.critic = const CriticCfg(),
+    this.swe = const SweCfg(),
   });
 
   final String profile;
@@ -968,6 +1038,18 @@ class TikoConfig {
 
   /// Fase 40 — review learnings queue (default off).
   final ReviewLearningsCfg reviewLearnings;
+
+  /// Fase 44 — check-in proaktif sesi idle.
+  final ProactiveCheckinCfg proactiveCheckins;
+
+  /// Fase 45 — paket tool buatan ber-checksum.
+  final ToolPackageCfg toolPackage;
+
+  /// Fase 46 — final-claim critic gate.
+  final CriticCfg critic;
+
+  /// Fase 49 — SWE pipeline lanjutan.
+  final SweCfg swe;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -2010,6 +2092,10 @@ class TikoConfig {
       routine: _parseRoutine(root),
       authorizationMemory: _parseAuthorizationMemory(root),
       reviewLearnings: _parseReviewLearnings(root),
+      proactiveCheckins: _parseProactiveCheckins(root),
+      toolPackage: _parseToolPackage(root),
+      critic: _parseCritic(root),
+      swe: _parseSwe(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2754,6 +2840,56 @@ class TikoConfig {
               learnings <= 256
           ? learnings
           : 64,
+    );
+  }
+
+  /// Parser `proactive_checkins:` (fase 44). Fail-open.
+  static ProactiveCheckinCfg _parseProactiveCheckins(YamlMap root) {
+    final sec = root['proactive_checkins'];
+    if (sec is! YamlMap) return const ProactiveCheckinCfg();
+    final idle = sec['idle_minutes'];
+    final perDay = sec['max_per_session_per_day'];
+    final perTick = sec['max_sessions_per_tick'];
+    return ProactiveCheckinCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      idleMinutes: idle is int && idle >= 1 && idle <= 10080 ? idle : 30,
+      maxPerSessionPerDay:
+          perDay is int && perDay >= 1 && perDay <= 20 ? perDay : 2,
+      maxSessionsPerTick:
+          perTick is int && perTick >= 1 && perTick <= 100 ? perTick : 10,
+    );
+  }
+
+  /// Parser `tool_package:` (fase 45). Fail-open.
+  static ToolPackageCfg _parseToolPackage(YamlMap root) {
+    final sec = root['tool_package'];
+    if (sec is! YamlMap) return const ToolPackageCfg();
+    final max = sec['max_tools'];
+    return ToolPackageCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxTools: max is int && max >= 1 && max <= 128 ? max : 32,
+    );
+  }
+
+  /// Parser `critic:` (fase 46). Fail-open.
+  static CriticCfg _parseCritic(YamlMap root) {
+    final sec = root['critic'];
+    if (sec is! YamlMap) return const CriticCfg();
+    final mode = '${sec['mode'] ?? ''}'.trim();
+    return CriticCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      mode: mode == 'llm' ? 'llm' : 'deterministic',
+    );
+  }
+
+  /// Parser `swe:` (fase 49). Fail-open.
+  static SweCfg _parseSwe(YamlMap root) {
+    final sec = root['swe'];
+    if (sec is! YamlMap) return const SweCfg();
+    final iters = sec['max_iterations'];
+    return SweCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxIterations: iters is int && iters >= 1 && iters <= 8 ? iters : 3,
     );
   }
 

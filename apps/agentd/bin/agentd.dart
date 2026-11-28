@@ -755,6 +755,33 @@ Future<void> main(List<String> args) async {
   stdout.writeln(
     'Scheduler aktif (dikelola TikoRuntime; delivery ack + retry)',
   );
+  // Fase 44 (proactive check-ins): tick deterministik tiap menit bila
+  // config `proactive_checkins:` enabled; delivery pesan lewat gateway
+  // channel tujuan dari event `checkin.proposed` (content-free + template).
+  final checkinEngine = rt.proactiveCheckins;
+  if (checkinEngine != null) {
+    Timer.periodic(const Duration(minutes: 1), (_) {
+      checkinEngine.tick().catchError((_) {
+        // never-raises di engine; jaring pengaman terakhir.
+      });
+    });
+    rt.events.stream.listen((event) {
+      if (event.type != 'checkin.proposed') return;
+      final channel = '${event.data['channel'] ?? ''}';
+      final sessionKey = '${event.data['session_id'] ?? ''}';
+      final message = '${event.data['message'] ?? ''}';
+      if (channel.isEmpty || sessionKey.isEmpty || message.isEmpty) return;
+      final target = gatewayForChannel(channel);
+      if (target == null) return;
+      target
+          .send(OutboundMessage(sessionKey: sessionKey, text: message))
+          .catchError((_) {
+        // gagal kirim tidak boleh membunuh daemon.
+      });
+    });
+    stdout.writeln('Proactive check-ins aktif (tick tiap 1 menit)');
+  }
+
 
   final webhooks = (wa != null || slackGw != null || lineGw != null)
       ? WebhookEndpoint(
