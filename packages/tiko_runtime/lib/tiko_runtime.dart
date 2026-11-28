@@ -33,6 +33,7 @@ export 'src/graph_rag_tool.dart';
 export 'src/group_chat.dart';
 export 'src/tool_maker_pipeline.dart';
 export 'src/routine.dart';
+export 'src/meeting_notes.dart';
 export 'src/authorization_memory.dart';
 export 'src/review_learnings.dart';
 export 'src/idle_consolidation.dart';

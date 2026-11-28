@@ -1,6 +1,6 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `44f368d` pada branch `main` (merge PR #222; status merge lihat GitHub).
+**Source snapshot:** commit `b9ff9d7` pada branch `main` (merge PR #223; status merge lihat GitHub).
 
 **Terakhir diperbarui:** 28 November 2026.
 
@@ -81,6 +81,8 @@
 | AuthorizationMemory — smart approvals dengan TTL (Fase 39) | Implemented (opt-in) | `AuthorizationMemory` (tiko_runtime): approval disetujui dicatat sebagai otorisasi (tool + hash args + scope sesi/global) ber-TTL; aksi sama berikutnya melewati approval, `never_cache_tools` selalu fail-closed; tool `authz` (list/revoke/clear); config `authorization_memory:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | Review learnings queue — pelajaran bot wajib approve (Fase 40) | Implemented (opt-in) | `ReviewLearningsStore` + tool `review_learnings` (tiko_runtime): pelajaran hasil interaksi bot diantrikan, hanya `approve` owner yang menulis ke `BotProfile.learnings` (cap per bot) yang disuntik setelah persona; config `review_learnings:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | Team Bot sharing & per-person permission (Fase 41) | Implemented | `BotProfile.owner`/`sharedWith`/`canUse`: bot ber-owner hanya bisa dipakai owner atau userKey yang di-share (fail-closed, backward-compatible bot lama tetap publik); `/bot share|unshare <id> <userkey>`; REST create/update bot menerima `owner`/`shared_with`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| X/Twitter gateway — polling mentions & balasan (Fase 42) | Implemented (opt-in, daemon) | `XGateway implements Gateway` (agent_gateway): polling X API v2 `users/:id/mentions` → `InboundMessage` channel `x`, dedupe bounded + snowflake id compare, balasan POST `/2/tweets` reply `in_reply_to_tweet_id` clip 280; allowlist kosong fail-closed (drop semua) dan daemon wajib `X_BEARER_TOKEN`/`X_BOT_USER_ID`/`X_ALLOW`; env `X_POLL_SEC` opsional; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Meeting notes deterministik (Fase 43) | Implemented | `MeetingNotesParser` + tool `meeting_notes` (tiko_runtime, risk low, selalu terdaftar): transkrip → notulen Markdown/JSON tanpa LLM (peserta, keputusan, tindak lanjut dengan owner inline/fallback pembicara, pertanyaan terbuka), wrap line diakumulasi ke pembicara sebelumnya, path file dijail `PathSafety`, opsional save `meetings/`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 

@@ -46,6 +46,7 @@ import 'memory_nudge.dart';
 import 'turn_redirect.dart';
 import 'bot_mode.dart';
 import 'routine.dart';
+import 'meeting_notes.dart';
 import 'authorization_memory.dart';
 import 'review_learnings.dart';
 import 'onboarding.dart';
@@ -1875,6 +1876,11 @@ class TikoRuntime {
           },
         ),
       ));
+    }
+    // Fase 43 (meeting bot): notulen rapat deterministik tanpa LLM —
+    // terdaftar selalu (pola memory_page), risiko low.
+    if (rt.registry.get('meeting_notes') == null) {
+      rt.registry.register(MeetingNotesTool());
     }
     // Fase 39 (smart approvals): memori otorisasi hanya bila config enabled
     // — mengubah semantik approval, jadi default off (fail-closed).

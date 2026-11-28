@@ -41,5 +41,6 @@ export 'src/webhook_signature.dart';
 export 'src/webhook_endpoint.dart';
 export 'src/skill_api.dart';
 export 'src/resilient_gateway.dart';
+export 'src/x_gateway.dart';
 export 'src/delivery_ledger.dart';
 export 'src/smart_home.dart';
