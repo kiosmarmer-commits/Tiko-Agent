@@ -17,6 +17,7 @@ import 'smart_home_tool.dart';
 import 'runtime_lock.dart';
 import 'deep_solve.dart';
 import 'graph_rag_tool.dart';
+import 'group_chat.dart';
 import 'idle_consolidation.dart';
 import 'raptor_tool.dart';
 import 'skill_benchmark.dart';
@@ -50,6 +51,7 @@ import 'team_tool.dart';
 part 'tiko_runtime_internals.dart';
 part 'code_loop.dart';
 part 'bot_team.dart';
+part 'group_chat_wiring.dart';
 part 'research.dart';
 part 'research_pdf.dart';
 part 'scheduler_extended.dart';
@@ -1770,6 +1772,24 @@ class TikoRuntime {
                   teamId: teamId,
                   verifyCommand: verifyCommand,
                   maxConcurrency: maxConcurrency ?? 4,
+                )
+                .then((r) => r.toJson()),
+      ));
+    }
+    // Fase 35 (inter-agent messaging AutoGen-style): tool `group_chat`
+    // hanya bila config enabled — panggilan LLM berbiaya per putaran.
+    if (cfg.groupChat.enabled && rt.registry.get('group_chat') == null) {
+      rt.registry.register(GroupChatTool(
+        starter: ({
+          required String goal,
+          String? teamId,
+          int? maxRounds,
+        }) =>
+            rt
+                .runGroupChat(
+                  goal: goal,
+                  teamId: teamId,
+                  maxRounds: maxRounds,
                 )
                 .then((r) => r.toJson()),
       ));
