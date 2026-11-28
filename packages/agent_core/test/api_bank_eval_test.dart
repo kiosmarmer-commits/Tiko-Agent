@@ -1,7 +1,28 @@
 import 'dart:io';
 
 import 'package:agent_core/agent_core.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+/// CI menjalankan `dart test packages/agent_core/test` dari root repo;
+/// cari fixture dengan walk-up agar tidak tergantung working directory.
+String _fixtureContent() {
+  var dir = Directory.current.absolute.path;
+  for (var i = 0; i < 8; i++) {
+    for (final candidate in [
+      p.join(dir, 'test', 'fixtures', 'api_bank_mini.jsonl'),
+      p.join(dir, 'packages', 'agent_core', 'test', 'fixtures',
+          'api_bank_mini.jsonl'),
+    ]) {
+      final f = File(candidate);
+      if (f.existsSync()) return f.readAsStringSync();
+    }
+    final parent = p.dirname(dir);
+    if (parent == dir) break;
+    dir = parent;
+  }
+  throw StateError('fixture api_bank_mini.jsonl tidak ditemukan');
+}
 
 void main() {
   const adapter = ApiBankAdapter();
@@ -34,7 +55,7 @@ bukan json
   });
 
   test('APIBANK-3: harness end-to-end — pass dan fail', () async {
-    final content = File('test/fixtures/api_bank_mini.jsonl').readAsStringSync();
+    final content = _fixtureContent();
     final evals = adapter.fromJsonl(content);
     expect(evals, hasLength(3));
     final refresh = evals.firstWhere((e) => e.id == 'apibank-003');
