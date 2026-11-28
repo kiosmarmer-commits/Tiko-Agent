@@ -41,6 +41,8 @@ oleh runtime/daemon saat start (variabel yang sudah ada di shell tetap menang).
 
 - Git.
 - Dart SDK minimal sesuai constraint root `pubspec.yaml`: `^3.8.0`. CI snapshot memakai Dart 3.13.4.
+- Client Flutter (`apps/agent_flutter`) butuh Dart `^3.11.0` (karena `shared_preferences
+  2.5.6`) — praktisnya Flutter 3.47.5 atau lebih baru, sama dengan snapshot CI.
 - Flutter SDK hanya untuk menjalankan client Flutter; CI snapshot memakai Flutter 3.47.5.
 - Ollama atau API provider hanya bila ingin menggunakan model nyata. Provider `mock` cukup untuk smoke awal.
 - Untuk isolasi proses tool/MCP, host perlu sandbox OS yang didukung; tanpa itu fitur yang mensyaratkan sandbox harus fail-closed/tidak tersedia.
