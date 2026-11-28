@@ -761,9 +761,13 @@ Future<void> main(List<String> args) async {
   final checkinEngine = rt.proactiveCheckins;
   if (checkinEngine != null) {
     Timer.periodic(const Duration(minutes: 1), (_) {
-      checkinEngine.tick().catchError((_) {
-        // never-raises di engine; jaring pengaman terakhir.
-      });
+      unawaited(() async {
+        try {
+          await checkinEngine.tick();
+        } catch (_) {
+          // never-raises di engine; jaring pengaman terakhir.
+        }
+      }());
     });
     rt.events.stream.listen((event) {
       if (event.type != 'checkin.proposed') return;
