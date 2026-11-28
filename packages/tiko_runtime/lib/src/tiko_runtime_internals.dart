@@ -467,7 +467,7 @@ class RuntimeContext extends ContextBuilder {
           );
           try {
             onRagGate?.call(assessment);
-          } catch (_) {}
+          } catch (_) {} // best-effort
           if (!assessment.accepted) return blocks.join('\n\n');
         }
         if (result.context.isNotEmpty) {

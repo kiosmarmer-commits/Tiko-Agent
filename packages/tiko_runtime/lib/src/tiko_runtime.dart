@@ -677,7 +677,7 @@ class TikoRuntime {
         verdict: 'applied',
         resultSummary: 'actor=$actor skills=${slugs.join(',')}',
       );
-    } catch (_) {}
+    } catch (_) {} // best-effort
     events.emit('feedback.turn', {
       'session': sessionId,
       'positive': positive,
@@ -1550,7 +1550,7 @@ class TikoRuntime {
           'meta': meta,
           'error': '$error',
         });
-      } catch (_) {}
+      } catch (_) {} // best-effort
     };
     // Fase F3 (docs/15 §4): probe log read-only + ringkasan run terakhir.
     rt.registry.register(LogProbeTool(
@@ -3301,7 +3301,7 @@ class TikoRuntime {
           onRagGate: (assessment) {
             try {
               events.emit('rag.evidence_gate', assessment.toJson());
-            } catch (_) {}
+            } catch (_) {} // best-effort
           },
         ),
         compactor: config.contextCompaction
@@ -3516,7 +3516,7 @@ class TikoRuntime {
                   sessionId: sess.id,
                   actor: 'approval:${req.id}',
                 );
-              } catch (_) {}
+              } catch (_) {} // best-effort
             }());
           }
           final tok = capabilities.issue(CapabilityToken.mint(
@@ -4133,7 +4133,7 @@ class TikoRuntime {
             try {
               collect(Map<String, dynamic>.from(
                   jsonDecode(line) as Map));
-            } catch (_) {}
+            } catch (_) {} // best-effort
           }
         } catch (_) {} // best-effort: file corrupt/partial
       }
@@ -6358,7 +6358,7 @@ class TikoRuntime {
             jobs.recordSuccess(job.id);
             try {
               await jobOutputs.record(job.id, digest);
-            } catch (_) {}
+            } catch (_) {} // best-effort
             if (deliver != null) {
               await jobs.awaitDelivery(
                 job.id,
@@ -6398,7 +6398,7 @@ class TikoRuntime {
             try {
               a2ui.ingest(
                   message.sessionKey, researchRunSurfaceMessages(record));
-            } catch (_) {}
+            } catch (_) {} // best-effort
             if (deliver != null) {
               await jobs.awaitDelivery(
                 job.id,
@@ -6558,7 +6558,7 @@ class TikoRuntime {
     } catch (_) {} // best-effort
     try {
       await selfEvolution?.stop();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       await layeredMemory.save(p.join(dataDir, 'layered_memory.json'));
     } catch (e) {

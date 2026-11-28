@@ -41,7 +41,7 @@ class OpenRouterProvider implements LlmProvider {
         provider: id,
         clock: () => DateTime.now().microsecondsSinceEpoch / 1e6,
       ));
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   @override

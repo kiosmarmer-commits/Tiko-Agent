@@ -202,7 +202,7 @@ class Compactor {
         durationMs: 0,
         ts: DateTime.now().toUtc(),
       ));
-    } catch (_) {}
+    } catch (_) {} // best-effort
     return AgentContext(
       messages: next,
       tools: ctx.tools,
@@ -289,7 +289,7 @@ class Compactor {
           durationMs: 0,
           ts: DateTime.now().toUtc(),
         ));
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
 
     final messagesBefore = ctx.messages.length;
@@ -349,7 +349,7 @@ class Compactor {
     lastCompaction = stats;
     try {
       onCompaction?.call(stats);
-    } catch (_) {}
+    } catch (_) {} // best-effort
     try {
       onCompactionEvent?.call(CompactionEvent(
         kind: 'summarize',
@@ -363,7 +363,7 @@ class Compactor {
         durationMs: 0,
         ts: DateTime.now().toUtc(),
       ));
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     return AgentContext(
       messages: compacted,

@@ -107,7 +107,7 @@ class CompactionEventSink {
       while (_records.length > capacity) {
         _records.removeAt(0);
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   List<CompactionEvent> get records => List.unmodifiable(_records);

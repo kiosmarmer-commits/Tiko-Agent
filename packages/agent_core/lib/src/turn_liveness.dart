@@ -140,7 +140,7 @@ class ActivityClock {
     for (final listener in List.of(_stamps)) {
       try {
         listener(snapshot);
-      } catch (_) {} // listener tidak boleh menggagalkan stamp
+      } catch (_) {} // best-effort: listener tidak boleh menggagalkan stamp
     }
   }
 

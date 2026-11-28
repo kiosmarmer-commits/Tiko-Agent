@@ -186,7 +186,7 @@ class MicroCompactor {
         durationMs: 0,
         ts: DateTime.now().toUtc(),
       ));
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     final out = <ChatMessage>[];
     var markerWritten = false;

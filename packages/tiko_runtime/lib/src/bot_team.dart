@@ -902,7 +902,7 @@ extension BotTeamWiring on TikoRuntime {
       // Laporan adalah data terbaik — kegagalan filesystem tidak boleh
       // menggagalkan hasil orkestra yang sudah selesai dihitung.
       await botTeamStore.saveRunReport(result.toJson());
-    } catch (_) {}
+    } catch (_) {} // best-effort
     return result;
   }
 

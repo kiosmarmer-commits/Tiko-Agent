@@ -113,7 +113,7 @@ class ContextBreakdown {
           totalTokens = anchoredTotal;
           anchored = true;
         }
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
     return ContextBreakdownResult(
       systemPromptTokens: systemPromptTokens,

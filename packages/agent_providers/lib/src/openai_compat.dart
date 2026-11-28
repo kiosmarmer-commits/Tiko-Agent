@@ -74,7 +74,7 @@ class OpenAiCompatProvider implements LlmProvider, ModelDiscovery {
         provider: id,
         clock: () => _clock,
       ));
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   /// When set, stable system prefixes are tracked cross-session and the

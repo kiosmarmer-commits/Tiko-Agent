@@ -123,7 +123,7 @@ class A2uiToolBridge {
             .toList(),
       }));
       tmp.renameSync(_indexPath);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   void _prune([DateTime? now]) {
@@ -137,7 +137,7 @@ class A2uiToolBridge {
       if (record != null) {
         try {
           File(_fileFor(record.sessionKey, id)).deleteSync();
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
     while (_index.length > maxStored) {
@@ -145,7 +145,7 @@ class A2uiToolBridge {
       final record = _index.remove(oldest);
       try {
         if (record != null) File(_fileFor(record.sessionKey, oldest)).deleteSync();
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
   }
 
@@ -212,7 +212,7 @@ class A2uiToolBridge {
       tmp.writeAsStringSync(
           const JsonEncoder.withIndent('  ').convert(record.renderBody));
       tmp.renameSync(file.path);
-    } catch (_) {}
+    } catch (_) {} // best-effort
     _persistIndex();
   }
 
@@ -221,7 +221,7 @@ class A2uiToolBridge {
     try {
       File(_fileFor(record?.sessionKey ?? sessionKey, surfaceId))
           .deleteSync();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     _persistIndex();
   }
 
@@ -246,7 +246,7 @@ class A2uiToolBridge {
     if (record == null) return false;
     try {
       File(_fileFor(record.sessionKey, surfaceId)).deleteSync();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     _persistIndex();
     onEvent?.call('surface.deleted', {
       'surfaceId': surfaceId,
