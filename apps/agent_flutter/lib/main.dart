@@ -43,6 +43,7 @@ import 'ui/security_view.dart';
 import 'ui/skills_view.dart';
 import 'ui/settings_store.dart';
 import 'ui/settings_view.dart';
+import 'ui/smart_home_view.dart';
 
 import 'ui/theme.dart';
 import 'ui/tiko_mark.dart';
@@ -525,7 +526,7 @@ class _AgentAppState extends State<AgentApp> {
       final reports = await repo.teamRuns();
       if (!mounted) return;
       setState(() => teamRunsSnapshot = reports);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 
   /// Mission Control (swarm mode): muat snapshot live run tim + polling
@@ -1333,6 +1334,8 @@ class _AgentAppState extends State<AgentApp> {
           error: adminError,
           onRefresh: refreshAdmin,
         );
+      case AppRoute.smartHome:
+        return SmartHomePage(repo: repo, online: chat.online);
       case AppRoute.automations:
         return AutomationPage(
           snapshot: jobsSnapshot,
@@ -1710,6 +1713,52 @@ class _ChatPageState extends State<_ChatPage> {
   /// (chat_artifact_panel.dart); karakter berisiko dilewati fail-closed.
   List<String> _collectFileRefs(String text) => collectFileRefs(text);
 
+  /// Pratinjau gambar lampiran user (`message['attachments']` JSON daftar
+  /// {name, mime, data_base64}). Hanya mime image/* yang dirender; JSON
+  /// rusak/base64 invalid di-fail-open jadi tanpa thumbnail.
+  List<Widget> _attachmentThumbnails(Map<String, String> message, int i) {
+    final raw = message['attachments'];
+    if (raw == null || raw.isEmpty) return const [];
+    final List<dynamic> parsed;
+    try {
+      parsed = jsonDecode(raw) as List<dynamic>;
+    } catch (_) {
+      return const [];
+    }
+    final thumbnails = <Widget>[];
+    for (var j = 0; j < parsed.length; j++) {
+      final entry = parsed[j];
+      if (entry is! Map) continue;
+      final mime = '${entry['mime'] ?? ''}';
+      if (!mime.startsWith('image/')) continue;
+      final bytes = () {
+        try {
+          return base64Decode('${entry['data_base64'] ?? ''}');
+        } catch (_) {
+          return null;
+        }
+      }();
+      if (bytes == null || bytes.isEmpty) continue;
+      thumbnails.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(SimpulTheme.radiusSmall),
+            child: Image.memory(
+              key: Key('img-attachment-$i-$j'),
+              bytes,
+              width: 180,
+              height: 130,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+    }
+    return thumbnails;
+  }
+
   /// C3: kartu file yang disentuh tool turn aktif (`message['files']` berupa
   /// daftar {path, changed}); wiring sumbernya menyusul di C4 (WS frames).
   List<Widget> _fileCards(Map<String, String> message, int i) {
@@ -2023,9 +2072,18 @@ class _ChatPageState extends State<_ChatPage> {
                                           );
                                         },
                                   )
-                                : SelectableText(
-                                    (message['text'] ?? '').toString(),
-                                    style: SimpulTheme.body,
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: user
+                                        ? CrossAxisAlignment.end
+                                        : CrossAxisAlignment.start,
+                                    children: [
+                                      ..._attachmentThumbnails(message, i),
+                                      SelectableText(
+                                        (message['text'] ?? '').toString(),
+                                        style: SimpulTheme.body,
+                                      ),
+                                    ],
                                   ),
                           ),
                           ..._fileCards(message, i),
@@ -2376,6 +2434,15 @@ class _ComposerState extends State<_Composer> {
     return [for (final d in parentDirsOf(files)) (d, d)];
   }
 
+  /// Sisipkan newline pada posisi caret (Shift+Enter) tanpa mengirim pesan.
+  void _insertNewline() {
+    final caret = _caret;
+    c.value = c.value.copyWith(
+      text: c.text.replaceRange(caret, caret, '\n'),
+      selection: TextSelection.collapsed(offset: caret + 1),
+    );
+  }
+
   void _removeContextRef(ContextRefToken token) {
     final text = removeRange(c.text, token.start, token.end);
     final collapsed = text.replaceAll(RegExp(r'\s{2,}'), ' ');
@@ -2655,6 +2722,13 @@ class _ComposerState extends State<_Composer> {
                         Expanded(
                           child: CallbackShortcuts(
                             bindings: {
+                              // Shift+Enter menyisipkan newline agar prompt
+                              // multi-baris bisa diketik; Enter polos tetap
+                              // mengirim lewat onSubmitted.
+                              SingleActivator(
+                                LogicalKeyboardKey.enter,
+                                shift: true,
+                              ): _insertNewline,
                               SingleActivator(
                                 LogicalKeyboardKey.enter,
                                 control: true,

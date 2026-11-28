@@ -134,10 +134,20 @@ class ChatController extends ChangeNotifier {
     activityPhase = AgentActivityPhase.submitting;
     // C2 Chat-UX: lampiran ditampilkan jujur sebagai ringkasan di gelembung
     // user (isi file nyata diekspansi runtime menjadi konteks `[lampiran:]`).
+    // Gambar juga disimpan sebagai data URI agar bubble user menampilkan
+    // pratinjau thumbnail, bukan hanya nama file.
     final label = attachments.isEmpty
         ? t
         : '$t\n📎 ${attachments.map((a) => a.name).join(', ')}';
-    messages.add({'role': 'user', 'text': label});
+    messages.add({
+      'role': 'user',
+      'text': label,
+      if (attachments.isNotEmpty)
+        'attachments': jsonEncode([
+          for (final a in attachments)
+            {'name': a.name, 'mime': a.mime, 'data_base64': a.dataBase64},
+        ]),
+    });
     messages.add({'role': 'assistant', 'text': '…'});
     notifyListeners();
     final aiIndex = messages.length - 1;
@@ -480,7 +490,20 @@ class ChatController extends ChangeNotifier {
   /// Memuat transcript sesi dari daemon dan mengganti isi chat. Dipakai saat
   /// pengguna memilih sesi lama di halaman Sessions, sehingga riwayat
   /// percakapan terlihat kembali, bukan sekadar chat kosong.
+  ///
+  /// Ditolak saat turn masih berjalan: mengganti isi chat di tengah streaming
+  /// menggeser index bubble jawaban aktif dan merusak turn yang berjalan.
   Future<void> openSession(String sessionKey, {int limit = 200}) async {
+    if (busy) {
+      messages.add({
+        'role': 'system',
+        'text':
+            'Tidak dapat membuka sesi lain saat turn masih berjalan. '
+                'Hentikan turn atau tunggu selesai.',
+      });
+      notifyListeners();
+      return;
+    }
     try {
       final list = await repo.sessionMessages(sessionKey, limit: limit);
       messages

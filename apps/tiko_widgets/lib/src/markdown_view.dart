@@ -30,9 +30,24 @@ class MdParagraph extends MarkdownBlock {
 }
 
 class MdList extends MarkdownBlock {
-  const MdList({required this.ordered, required this.items});
+  const MdList({
+    required this.ordered,
+    required this.items,
+    this.checked = const [],
+  });
   final bool ordered;
   final List<String> items;
+
+  /// Task list (GFM): per item `null` = bullet biasa, `false` = kotak kosong
+  /// `[ ]`, `true` = kotak terisi `[x]`. Panjang boleh lebih pendek dari
+  /// [items] — sisanya dianggap bullet biasa.
+  final List<bool?> checked;
+}
+
+class MdImage extends MarkdownBlock {
+  const MdImage({required this.url, required this.alt});
+  final String url;
+  final String alt;
 }
 
 class MdQuote extends MarkdownBlock {
@@ -57,6 +72,19 @@ final RegExp _bullet = RegExp(r'^\s*[-*]\s+(.*)$');
 final RegExp _ordered = RegExp(r'^\s*\d+[.)]\s+(.*)$');
 final RegExp _tableSep = RegExp(r'^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$');
 final RegExp _fence = RegExp(r'^(```|~~~)\s*([A-Za-z0-9_+#.-]*)\s*$');
+final RegExp _imageLine = RegExp(r'^!\[(.*?)\]\(([^)\s]+)\)$');
+final RegExp _taskOpen = RegExp(r'^\[ \]\s+');
+final RegExp _taskDone = RegExp(r'^\[[xX]\]\s+');
+
+/// Task list (GFM): `null` = bukan task, `false`/`true` = status kotak.
+bool? _taskState(String item) {
+  if (_taskOpen.hasMatch(item)) return false;
+  if (_taskDone.hasMatch(item)) return true;
+  return null;
+}
+
+String _stripTaskMarker(String item) =>
+    item.replaceFirst(_taskOpen, '').replaceFirst(_taskDone, '');
 
 /// Parse teks markdown menjadi blok-blok render. Tidak pernah throw —
 /// baris yang tak dikenal masuk paragraf teks mentah.
@@ -111,25 +139,36 @@ List<MarkdownBlock> parseMarkdownBlocks(String source) {
       final items = <String>[
         (ordered ? orderedMatch! : bulletMatch).group(1)!.trim(),
       ];
+      final checked = <bool?>[_taskState(items.first)];
       i++;
       while (i < lines.length && lines[i].trim().isNotEmpty) {
         final continuation = lines[i].trim();
         final nextBullet = _bullet.firstMatch(lines[i]);
         final nextOrdered = _ordered.firstMatch(lines[i]);
         if (nextBullet != null && !ordered) {
-          items.add(nextBullet.group(1)!.trim());
+          final raw = nextBullet.group(1)!.trim();
+          items.add(raw);
+          checked.add(_taskState(raw));
           i++;
           continue;
         }
         if (nextOrdered != null && ordered) {
-          items.add(nextOrdered.group(1)!.trim());
+          final raw = nextOrdered.group(1)!.trim();
+          items.add(raw);
+          checked.add(_taskState(raw));
           i++;
           continue;
         }
         items[items.length - 1] = '${items.last} $continuation';
         i++;
       }
-      blocks.add(MdList(ordered: ordered, items: items));
+      // Task state dihitung sebelum lanjutan baris digabung, jadi lepaskan
+      // penanda `[ ]`/`[x]` dari teks item di sini.
+      blocks.add(MdList(
+        ordered: ordered,
+        items: [for (final item in items) _stripTaskMarker(item)],
+        checked: checked,
+      ));
       continue;
     }
     if (line.trimLeft().startsWith('>')) {
@@ -161,6 +200,15 @@ List<MarkdownBlock> parseMarkdownBlocks(String source) {
         continue;
       }
     }
+    final imageLine = _imageLine.firstMatch(line.trim());
+    if (imageLine != null) {
+      blocks.add(MdImage(
+        url: imageLine.group(2)!,
+        alt: imageLine.group(1)?.trim() ?? '',
+      ));
+      i++;
+      continue;
+    }
     final paragraph = <String>[line.trim()];
     i++;
     while (i < lines.length &&
@@ -169,6 +217,7 @@ List<MarkdownBlock> parseMarkdownBlocks(String source) {
         _bullet.firstMatch(lines[i]) == null &&
         _ordered.firstMatch(lines[i]) == null &&
         _fence.firstMatch(lines[i]) == null &&
+        _imageLine.firstMatch(lines[i].trim()) == null &&
         !lines[i].trimLeft().startsWith('>')) {
       paragraph.add(lines[i].trim());
       i++;
@@ -188,12 +237,18 @@ List<String> splitTableRow(String line) {
 }
 
 final RegExp _inline = RegExp(
-  r'(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\[(.+?)\]\(([^)\s]+)\))',
+  r'(\*\*(.+?)\*\*)'
+  r'|(\*(.+?)\*)'
+  r'|(`(.+?)`)'
+  r'|(!\[(.+?)\]\(([^)\s]+)\))'
+  r'|(\[(.+?)\]\(([^)\s]+)\))'
+  r'|(~~(.+?)~~)',
   dotAll: true,
 );
 
 /// Ubah teks dengan markup inline menjadi [TextSpan] beranak:
-/// `**bold**`, `*italic*`, `` `code` ``, `[label](url)`.
+/// `**bold**`, `*italic*`, `` `code` ``, `[label](url)`, `![alt](url)`
+/// (dirender [WidgetSpan] gambar dengan fallback teks), dan `~~strike~~`.
 TextSpan buildInlineSpans(
   String text, {
   required TextStyle base,
@@ -219,10 +274,35 @@ TextSpan buildInlineSpans(
     } else if (m.group(5) != null) {
       spans.add(TextSpan(text: m.group(6), style: codeStyle));
     } else if (m.group(7) != null) {
+      final url = m.group(9)!;
+      final alt = m.group(8) ?? '';
+      spans.add(WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220, maxWidth: 420),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Text(
+                alt.isEmpty ? '[gambar gagal dimuat]' : '[gambar: $alt]',
+                style: base.copyWith(fontStyle: FontStyle.italic),
+              ),
+            ),
+          ),
+        ),
+      ));
+    } else if (m.group(10) != null) {
       spans.add(TextSpan(
-        text: m.group(8),
+        text: m.group(11),
         style: linkStyle,
         recognizer: null,
+      ));
+    } else if (m.group(13) != null) {
+      spans.add(TextSpan(
+        text: m.group(14),
+        style: base.copyWith(decoration: TextDecoration.lineThrough),
       ));
     }
     last = m.end;
@@ -300,7 +380,7 @@ class TikoMarkdownView extends StatelessWidget {
             style: base.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.onSurfaceVariant),
           ),
         );
-      case MdList(:final ordered, :final items):
+      case MdList(:final ordered, :final items, :final checked):
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -313,10 +393,19 @@ class TikoMarkdownView extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 22,
-                      child: Text(
-                        ordered ? '${i + 1}.' : '\u2022',
-                        style: base.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
+                      child: i < checked.length && checked[i] != null
+                          ? Icon(
+                              checked[i] == true
+                                  ? Icons.check_box_outlined
+                                  : Icons.check_box_outline_blank_outlined,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            )
+                          : Text(
+                              ordered ? '${i + 1}.' : '\u2022',
+                              style: base.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant),
+                            ),
                     ),
                     Expanded(
                       child: SelectableText.rich(
@@ -332,6 +421,21 @@ class TikoMarkdownView extends StatelessWidget {
                 ),
               ),
           ],
+        );
+      case MdImage(:final url, :final alt):
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320, maxWidth: 560),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Text(
+                alt.isEmpty ? '[gambar gagal dimuat]' : '[gambar: $alt]',
+                style: base.copyWith(fontStyle: FontStyle.italic),
+              ),
+            ),
+          ),
         );
       case MdTable(:final header, :final rows):
         return Container(

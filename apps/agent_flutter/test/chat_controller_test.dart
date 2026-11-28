@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:agent_flutter/agent_api_client.dart';
@@ -203,6 +204,39 @@ void main() {
     expect(controller.messages.last['text'], 'hasil lampiran');
   });
 
+  test('lampiran gambar tersimpan di bubble user untuk pratinjau thumbnail',
+      () async {
+    final client = _FakeAgentApiClient()
+      ..streamHandler = (_) async* {
+        yield {'type': 'text', 'text': 'oke'};
+        yield {'type': 'done'};
+      };
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    await controller.send('lihat gambar ini', attachments: [
+      ChatAttachmentPayload(
+        name: 'foto.png',
+        mime: 'image/png',
+        dataBase64: 'aGVsbG8=',
+      ),
+      ChatAttachmentPayload(
+        name: 'catatan.txt',
+        mime: 'text/plain',
+        dataBase64: 'aGVsbG8=',
+      ),
+    ]);
+
+    final userMessage = controller.messages.firstWhere(
+      (m) => m['role'] == 'user',
+    );
+    expect(userMessage['attachments'], isNotNull);
+    final parsed = jsonDecode(userMessage['attachments']!) as List;
+    expect(parsed, hasLength(2));
+    expect((parsed.first as Map)['mime'], 'image/png');
+    expect((parsed.first as Map)['data_base64'], 'aGVsbG8=');
+  });
+
   test('C4: frame chat.tool* mengisi trace dan kartu file otomatis muncul',
       () async {
     final client = _FakeAgentApiClient()
@@ -274,5 +308,39 @@ void main() {
     await controller.stop();
 
     expect(controller.stopRequested, isFalse);
+  });
+
+  test('openSession ditolak saat turn masih berjalan', () async {
+    final gate = StreamController<Map<String, dynamic>>();
+    addTearDown(gate.close);
+    final client = _FakeAgentApiClient()..streamHandler = (_) => gate.stream;
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    final turn = controller.send('halo');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(controller.busy, isTrue);
+    final snapshot = List<Map<String, String>>.of(controller.messages);
+
+    await controller.openSession('flutter:old');
+
+    expect(controller.messages.length, snapshot.length + 1);
+    expect(controller.messages.last['role'], 'system');
+    expect(controller.messages.last['text'], contains('turn masih berjalan'));
+    expect(controller.messages.take(snapshot.length), snapshot);
+
+    await gate.close();
+    await turn;
+    expect(controller.busy, isFalse);
+  });
+
+  test('openSession saat idle tetap memuat transcript', () async {
+    final client = _FakeAgentApiClient();
+    final controller = ChatController(HttpAgentRepository(client));
+    addTearDown(controller.dispose);
+
+    await controller.openSession('flutter:old');
+
+    expect(controller.busy, isFalse);
   });
 }

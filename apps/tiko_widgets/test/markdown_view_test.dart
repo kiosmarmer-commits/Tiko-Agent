@@ -39,9 +39,26 @@ void main() {
       final bullet = blocks[0] as MdList;
       expect(bullet.ordered, isFalse);
       expect(bullet.items, ['satu dua lanjutan']);
+      expect(bullet.checked, [null]);
       final ordered = blocks[1] as MdList;
       expect(ordered.ordered, isTrue);
       expect(ordered.items, ['pertama', 'kedua']);
+    });
+
+    test('task list GFM: [ ] dan [x] terdeteksi, marker dibuang dari teks', () {
+      final blocks = parseMarkdownBlocks(
+          '- [ ] beli kopi\n- [x] bayar listrik\n- biasa');
+      final list = blocks.single as MdList;
+      expect(list.items, ['beli kopi', 'bayar listrik', 'biasa']);
+      expect(list.checked, [false, true, null]);
+    });
+
+    test('gambar standalone menjadi blok MdImage', () {
+      final blocks = parseMarkdownBlocks(
+          '![logo tiko](https://contoh.dev/logo.png)');
+      final image = blocks.single as MdImage;
+      expect(image.url, 'https://contoh.dev/logo.png');
+      expect(image.alt, 'logo tiko');
     });
 
     test('tabel sederhana', () {
@@ -101,6 +118,35 @@ void main() {
       );
       final all = span.children!.map((c) => (c as TextSpan).text).join('');
       expect(all, 'buka ** saja / pakai tanpa penutup');
+    });
+
+    test('strikethrough ~~teks~~ dan link tidak tertukar', () {
+      final span = buildInlineSpans(
+        '~~hapus~~ dan [label](https://x.dev) ![alt](https://x.dev/i.png)',
+        base: base,
+        codeStyle: code,
+        linkStyle: link,
+      );
+      final spans = span.children!;
+      final strike = spans.map((c) => c is TextSpan ? c : null).nonNulls
+          .singleWhere((s) => s.text == 'hapus');
+      expect(strike.style!.decoration, TextDecoration.lineThrough);
+      expect(spans.map((c) => c is TextSpan ? c.text : null), contains('label'));
+      expect(spans.whereType<WidgetSpan>(), hasLength(1));
+    });
+
+    test('link biasa tidak ikut tertelan pola gambar', () {
+      final span = buildInlineSpans(
+        '[label](https://x.dev)',
+        base: base,
+        codeStyle: code,
+        linkStyle: link,
+      );
+      expect(span.children!.whereType<WidgetSpan>(), isEmpty);
+      expect(
+        span.children!.map((c) => c is TextSpan ? c.text : null),
+        contains('label'),
+      );
     });
   });
 
