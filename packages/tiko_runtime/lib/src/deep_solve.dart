@@ -345,7 +345,7 @@ class DeepSolveEngine {
   void _emit(String type, Map<String, dynamic> data) {
     try {
       _events?.emit(type, data);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 }
 

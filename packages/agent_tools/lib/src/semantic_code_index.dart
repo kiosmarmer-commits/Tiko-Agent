@@ -672,7 +672,7 @@ class SemanticCodeIndexer {
       try {
         final t = File(tmp);
         if (t.existsSync()) t.deleteSync();
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
   }
 

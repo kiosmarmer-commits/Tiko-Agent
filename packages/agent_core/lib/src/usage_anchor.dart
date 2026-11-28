@@ -250,6 +250,6 @@ class UsageAnchorStore {
         flush: true,
       );
       tmp.renameSync(f.path);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 }

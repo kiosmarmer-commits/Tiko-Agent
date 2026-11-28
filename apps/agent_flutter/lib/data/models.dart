@@ -1516,3 +1516,54 @@ class HookStatInfo {
         lastAt: map['last_at'] as String?,
       );
 }
+
+/// Snapshot provider smart-home terkonfigurasi host (F6, `GET /v1/smart-home`).
+class SmartHomeSnapshot {
+  const SmartHomeSnapshot({this.providers = const []});
+
+  final List<String> providers;
+
+  factory SmartHomeSnapshot.fromMap(Map<String, dynamic> map) =>
+      SmartHomeSnapshot(
+        providers: [
+          for (final p in map['providers'] as List? ?? const []) '$p',
+        ],
+      );
+}
+
+/// Satu perangkat smart-home ternormalisasi (F6, `GET /v1/smart-home/devices`).
+/// Shape mengikuti `SmartDevice.toJson` di agent_gateway.
+class SmartDeviceInfo {
+  const SmartDeviceInfo({
+    required this.id,
+    required this.name,
+    required this.provider,
+    this.category,
+    this.online,
+    this.capabilities = const [],
+    this.state = const {},
+  });
+
+  final String id;
+  final String name;
+  final String provider;
+  final String? category;
+  final bool? online;
+  final List<String> capabilities;
+  final Map<String, Object?> state;
+
+  factory SmartDeviceInfo.fromMap(Map<String, dynamic> map) => SmartDeviceInfo(
+        id: '${map['id'] ?? ''}',
+        name: '${map['name'] ?? ''}',
+        provider: '${map['provider'] ?? ''}',
+        category: map['category'] as String?,
+        online: map['online'] as bool?,
+        capabilities: [
+          for (final c in map['capabilities'] as List? ?? const []) '$c',
+        ],
+        state: {
+          for (final e in (map['state'] as Map? ?? const {}).entries)
+            '${e.key}': e.value,
+        },
+      );
+}

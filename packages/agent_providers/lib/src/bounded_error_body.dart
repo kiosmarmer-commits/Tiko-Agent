@@ -68,7 +68,7 @@ Future<String> readStreamedErrorBody(
         finished = true;
         try {
           await sub?.cancel();
-        } catch (_) {}
+        } catch (_) {} // best-effort
       },
     );
   } catch (_) {

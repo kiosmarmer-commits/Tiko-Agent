@@ -62,6 +62,13 @@ abstract class AgentRepository {
   Future<HooksSnapshot> deleteHook(int index);
   Future<Map<String, dynamic>> testHook(int index);
   Future<ChannelsSnapshot> channels();
+  Future<SmartHomeSnapshot> smartHome();
+  Future<List<SmartDeviceInfo>> smartHomeDevices({String? provider});
+  Future<Map<String, dynamic>> smartHomeExecute(
+    String provider,
+    String deviceId,
+    Map<String, dynamic> command,
+  );
   Future<JobsSnapshot> jobs();
   Future<SecuritySnapshot> security();
   Future<AuditQueryResult> audit({
@@ -359,6 +366,29 @@ class HttpAgentRepository implements AgentRepository {
   @override
   Future<ChannelsSnapshot> channels() async =>
       ChannelsSnapshot.fromMap(await _guard(_client.fetchChannels));
+
+  @override
+  Future<SmartHomeSnapshot> smartHome() async =>
+      SmartHomeSnapshot.fromMap(await _guard(_client.fetchSmartHomeProviders));
+
+  @override
+  Future<List<SmartDeviceInfo>> smartHomeDevices({String? provider}) async {
+    final map = await _guard(
+      () => _client.fetchSmartHomeDevices(provider: provider),
+    );
+    return [
+      for (final d in map['devices'] as List? ?? const [])
+        SmartDeviceInfo.fromMap(Map<String, dynamic>.from(d as Map)),
+    ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> smartHomeExecute(
+    String provider,
+    String deviceId,
+    Map<String, dynamic> command,
+  ) =>
+      _guard(() => _client.executeSmartHome(provider, deviceId, command));
 
   @override
   Future<SecuritySnapshot> security() async => SecuritySnapshot.fromMap(

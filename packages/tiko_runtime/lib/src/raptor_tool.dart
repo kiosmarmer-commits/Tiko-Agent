@@ -155,6 +155,6 @@ class RaptorTool extends Tool {
   void _emit(String type, Map<String, dynamic> data) {
     try {
       onEvent?.call(type, data);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 }

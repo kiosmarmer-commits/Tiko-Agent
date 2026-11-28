@@ -143,7 +143,7 @@ class ActivityTracker {
       await tmp.copy(file.path);
       try {
         await tmp.delete();
-      } catch (_) {}
+      } catch (_) {} // best-effort
     }
   }
 }

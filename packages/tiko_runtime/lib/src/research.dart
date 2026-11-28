@@ -1161,7 +1161,7 @@ extension ResearchWiring on TikoRuntime {
       if (mirrorKanban && kanbanId.isNotEmpty) {
         try {
           await tracker!.fail(kanbanId, '$e');
-        } catch (_) {}
+        } catch (_) {} // best-effort
       }
     }
     return record;

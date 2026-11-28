@@ -534,14 +534,14 @@ class AgentLoop {
         anchor: _usageAnchor,
         imageCost: _boundImageCost(activeLlm),
       );
-    } catch (_) {} // breakdown bukan keharusan turn
+    } catch (_) {} // best-effort: breakdown bukan keharusan turn
     if (config.microCompaction) {
       try {
         ctx = await _microCompactor.maybeMicroCompact(
           ctx,
           summarizer: synthLlm,
         );
-      } catch (_) {} // fail-open: kompresi gagal ≠ turn gagal
+      } catch (_) {} // best-effort: fail-open: kompresi gagal ≠ turn gagal
     }
 
     final sw = Stopwatch()..start();
@@ -930,7 +930,7 @@ class AgentLoop {
             if (batch.isNotEmpty) {
               _turnCheckpoints = [..._turnCheckpoints, ...batch];
             }
-          } catch (_) {}
+          } catch (_) {} // best-effort
         }
         final runner = ParallelToolRunner(executor);
         final executed = await cancel.guard(
@@ -1144,7 +1144,7 @@ class AgentLoop {
         provider: activeProviderId,
         model: _modelFor(route, activeLlm),
       );
-    } catch (_) {}
+    } catch (_) {} // best-effort
 
     // ignore: discarded_futures
     trajectory?.logTurn(
@@ -1278,7 +1278,7 @@ class AgentLoop {
         );
         useCtx = verdict.ctx;
         _lastAnchoredPressure = verdict.anchored ? verdict.pressure : null;
-      } catch (_) {} // gerbang pra-API tidak boleh menggagalkan turn
+      } catch (_) {} // best-effort: gerbang pra-API tidak boleh menggagalkan turn
     }
     if (config.imageEviction) {
       useCtx = _withImageEviction(useCtx);
@@ -1327,7 +1327,7 @@ class AgentLoop {
       if (anchor == null) return null;
       if (anchor.matches(ctx.toRequest().messages)) return anchor;
       store.save(sessionId, null);
-    } catch (_) {}
+    } catch (_) {} // best-effort
     return null;
   }
 

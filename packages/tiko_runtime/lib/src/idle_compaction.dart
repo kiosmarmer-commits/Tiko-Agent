@@ -111,7 +111,7 @@ class IdleCompactionEngine {
             channel: info.channel,
             userKey: info.userKey,
           );
-        } catch (_) {}
+        } catch (_) {} // best-effort
         if (ok) {
           compacted++;
         } else {

@@ -322,7 +322,7 @@ class SkillBenchmark {
       if (decoded is Map<String, dynamic>) {
         return SkillBenchmarkReport.fromJson(decoded);
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
     return null;
   }
 }

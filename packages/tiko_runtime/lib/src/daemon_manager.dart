@@ -218,7 +218,7 @@ class DaemonManager {
     // yang dibaca lengkap.
     try {
       await log.flush();
-    } catch (_) {}
+    } catch (_) {} // best-effort
     final tail = tailLog(logPath);
     final detail = exitedBeforeReady
         ? 'proses daemon berakhir sebelum siap; log terakhir:\n${tail ?? '(log kosong)'}'

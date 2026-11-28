@@ -28,6 +28,8 @@ jobs:
           python3 -m compileall -q scripts tools/mock_mcp_server
       - name: Resolve workspace dependencies
         run: dart pub get
+      - name: Audit empty-catch (A8)
+        run: python3 scripts/audit_empty_catch.py .
       - name: Static analysis (strict release gate)
         shell: bash
         run: |

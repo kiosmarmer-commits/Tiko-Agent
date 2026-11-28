@@ -64,6 +64,6 @@ class Estop {
     try {
       final f = File(path);
       if (f.existsSync()) f.deleteSync();
-    } catch (_) {} // never-raises; isEngaged() yang jadi sumber kebenaran
+    } catch (_) {} // best-effort: never-raises; isEngaged() yang jadi sumber kebenaran
   }
 }

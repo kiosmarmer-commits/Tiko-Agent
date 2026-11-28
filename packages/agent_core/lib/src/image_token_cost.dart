@@ -63,7 +63,7 @@ class ImageTokenCostStore {
           }
         });
       }
-    } catch (_) {}
+    } catch (_) {} // best-effort
     return _learned;
   }
 
@@ -130,6 +130,6 @@ class ImageTokenCostStore {
       final tmp = File('$path.tmp');
       tmp.writeAsStringSync(json.encode(_learned), flush: true);
       tmp.renameSync(path);
-    } catch (_) {}
+    } catch (_) {} // best-effort
   }
 }
