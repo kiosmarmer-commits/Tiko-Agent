@@ -632,6 +632,74 @@ class ToolMakerCfg {
   final int maxCommandParts;
 }
 
+/// Fase 38 — Routines (paritas Grok Bot "observe → retain → rerun"): rekam
+/// langkah tool-call sukses menjadi resep deterministik yang bisa dijalankan
+/// ulang tanpa LLM. Default off — replay mengeksekusi tool nyata.
+class RoutineCfg {
+  const RoutineCfg({
+    this.enabled = false,
+    this.maxSteps = 64,
+    this.maxArgsChars = 2000,
+  })  : assert(maxSteps >= 1 && maxSteps <= 256),
+        assert(maxArgsChars >= 64);
+
+  /// Default off — replay mengeksekusi tool nyata; aktifkan eksplisit.
+  final bool enabled;
+
+  /// Cap jumlah langkah per resep (resep panjang tidak aman direplay).
+  final int maxSteps;
+
+  /// Truncation nilai string argumen saat perekaman.
+  final int maxArgsChars;
+}
+
+/// Fase 39 — AuthorizationMemory (paritas Grok Bot "smarter approvals"):
+/// mengingat aksi (tool + hash argumen) yang sudah di-approve agar approval
+/// sama tidak ditanyakan berulang dalam jendela TTL. Default off — mengubah
+/// semantik approval; aktifkan eksplisit.
+class AuthorizationMemoryCfg {
+  const AuthorizationMemoryCfg({
+    this.enabled = false,
+    this.ttlMinutes = 60,
+    this.maxEntries = 256,
+    this.neverCacheTools = const ['tool_maker', 'spawn_subagent', 'routine'],
+  })  : assert(ttlMinutes >= 5 && ttlMinutes <= 10080),
+        assert(maxEntries >= 1 && maxEntries <= 2000);
+
+  /// Default off — approval tetap selalu ditanyakan; aktifkan eksplisit.
+  final bool enabled;
+
+  /// Umur otorisasi tersimpan (menit).
+  final int ttlMinutes;
+
+  /// Cap jumlah entry tersimpan (yang tertua dibuang).
+  final int maxEntries;
+
+  /// Tool yang tidak boleh diotorisasi otomatis (fail-closed permanen).
+  final List<String> neverCacheTools;
+}
+
+/// Fase 40 — Review learnings queue (paritas Grok Bot "Review learnings"):
+/// pelajaran bot diantrikan dan wajib approve owner sebelum masuk memori
+/// bot. Default off — tool hanya terdaftar bila operator mengaktifkan.
+class ReviewLearningsCfg {
+  const ReviewLearningsCfg({
+    this.enabled = false,
+    this.maxProposals = 200,
+    this.maxLearningsPerBot = 64,
+  })  : assert(maxProposals >= 1 && maxProposals <= 1000),
+        assert(maxLearningsPerBot >= 1 && maxLearningsPerBot <= 256);
+
+  /// Default off — aktifkan eksplisit via `enabled`.
+  final bool enabled;
+
+  /// Cap jumlah proposal tersimpan di antrian.
+  final int maxProposals;
+
+  /// Cap pelajaran approved per bot.
+  final int maxLearningsPerBot;
+}
+
 /// Fase 31 — classifier heuristik task (audit 2026-11-28 §7.2): deterministik,
 /// tanpa LLM, advisory-only. Default on.
 class TaskClassifierCfg {
@@ -781,6 +849,9 @@ class TikoConfig {
     this.graphRag = const GraphRagCfg(),
     this.groupChat = const GroupChatCfg(),
     this.toolMaker = const ToolMakerCfg(),
+    this.routine = const RoutineCfg(),
+    this.authorizationMemory = const AuthorizationMemoryCfg(),
+    this.reviewLearnings = const ReviewLearningsCfg(),
   });
 
   final String profile;
@@ -888,6 +959,15 @@ class TikoConfig {
 
   /// Fase 37 — LATM maker/user pipeline (default off).
   final ToolMakerCfg toolMaker;
+
+  /// Fase 38 — routines (default off).
+  final RoutineCfg routine;
+
+  /// Fase 39 — smart approvals authorization memory (default off).
+  final AuthorizationMemoryCfg authorizationMemory;
+
+  /// Fase 40 — review learnings queue (default off).
+  final ReviewLearningsCfg reviewLearnings;
   final DecisionConfig decision;
   final MemoryEmbedConfig memoryEmbed;
 
@@ -1927,6 +2007,9 @@ class TikoConfig {
       graphRag: _parseGraphRag(root),
       groupChat: _parseGroupChat(root),
       toolMaker: _parseToolMaker(root),
+      routine: _parseRoutine(root),
+      authorizationMemory: _parseAuthorizationMemory(root),
+      reviewLearnings: _parseReviewLearnings(root),
       memoryNudgeIntervalTurns:
           intOf(memorySec['nudge_interval_turns'], 10),
       memoryCuratedCharBudget:
@@ -2614,6 +2697,63 @@ class TikoConfig {
       enabled: sec['enabled'] is bool ? sec['enabled'] as bool : true,
       fastMaxChars: fastMax is int && fastMax >= 0 ? fastMax : 200,
       extraKeywords: extras(),
+    );
+  }
+
+  /// Parser `routine:` (fase 38, Grok-style routines). Fail-open: scalar
+  /// invalid memakai default tanpa menggagalkan start.
+  static RoutineCfg _parseRoutine(YamlMap root) {
+    final sec = root['routine'];
+    if (sec is! YamlMap) return const RoutineCfg();
+    final steps = sec['max_steps'];
+    final chars = sec['max_args_chars'];
+    return RoutineCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxSteps: steps is int && steps >= 1 && steps <= 256 ? steps : 64,
+      maxArgsChars: chars is int && chars >= 64 ? chars : 2000,
+    );
+  }
+
+  /// Parser `authorization_memory:` (fase 39, smart approvals). Fail-open.
+  static AuthorizationMemoryCfg _parseAuthorizationMemory(YamlMap root) {
+    final sec = root['authorization_memory'];
+    if (sec is! YamlMap) return const AuthorizationMemoryCfg();
+    final ttl = sec['ttl_minutes'];
+    final max = sec['max_entries'];
+    final never = sec['never_cache_tools'];
+    final neverTools = <String>[];
+    if (never is List) {
+      for (final item in never) {
+        if (item is String && item.trim().isNotEmpty) {
+          neverTools.add(item.trim());
+        }
+      }
+    }
+    return AuthorizationMemoryCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      ttlMinutes: ttl is int && ttl >= 5 && ttl <= 10080 ? ttl : 60,
+      maxEntries: max is int && max >= 1 && max <= 2000 ? max : 256,
+      neverCacheTools: neverTools,
+    );
+  }
+
+  /// Parser `review_learnings:` (fase 40, review learnings queue). Fail-open.
+  static ReviewLearningsCfg _parseReviewLearnings(YamlMap root) {
+    final sec = root['review_learnings'];
+    if (sec is! YamlMap) return const ReviewLearningsCfg();
+    final proposals = sec['max_proposals'];
+    final learnings = sec['max_learnings_per_bot'];
+    return ReviewLearningsCfg(
+      enabled: sec['enabled'] is bool ? sec['enabled'] as bool : false,
+      maxProposals:
+          proposals is int && proposals >= 1 && proposals <= 1000
+              ? proposals
+              : 200,
+      maxLearningsPerBot: learnings is int &&
+              learnings >= 1 &&
+              learnings <= 256
+          ? learnings
+          : 64,
     );
   }
 

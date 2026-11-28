@@ -1,6 +1,6 @@
 # Indeks Dokumentasi Tiko-Agent
 
-**Source snapshot:** commit `3a35be0` pada branch `main` (merge PR #215; status merge lihat GitHub).
+**Source snapshot:** commit `44f368d` pada branch `main` (merge PR #222; status merge lihat GitHub).
 
 **Terakhir diperbarui:** 28 November 2026.
 
@@ -77,6 +77,10 @@
 | Inter-agent messaging umum — group chat AutoGen-style (Fase 35) | Implemented (opt-in) | `GroupChatRunner` (tiko_runtime): transkrip bersama + speaker selection round-robin/auto (LLM, fail-open) + terminasi marker `TERMINATE` + cap `max_rounds` + sintesis summarizer; tool `group_chat`; config `group_chat:` default **off**; kontras `bot_team` (DAG paralel); lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | MemGPT-style control-flow paging (Fase 36) | Implemented | `ContextPager` (agent_memory): page-out deterministik pesan luar window → episodic (idempoten fingerprint FNV-1a, state persist bounded); page-in on-demand via tool `memory_page` (kontrol di tangan model, filter tag paged + binding sesi + overlap lexical wajib); data asli tetap utuh di session store; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 | LATM maker/user tool-generation pipeline (Fase 37) | Implemented (opt-in) | `ToolMakerPipeline` (tiko_runtime): maker LLM auxiliar terpisah mendesain `ForgedToolDef` namespace `made_` → contract tests via `ToolForge` (reuse NEW-12, fail-closed) → instalasi registry; tool `tool_maker`; config `tool_maker:` default **off**; permission gate tetap berlaku; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Routines — rekam & replay langkah tool-call (Fase 38) | Implemented (opt-in) | `RoutineRecorder`/`RoutineRunner`/`RoutineStore` (tiko_runtime): langkah tool-call sukses direkam per sesi menjadi resep deterministik persist `data/routines/<id>.json`, replay fail-fast/dry-run/continue_on_error tanpa LLM; tool `routine`; config `routine:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| AuthorizationMemory — smart approvals dengan TTL (Fase 39) | Implemented (opt-in) | `AuthorizationMemory` (tiko_runtime): approval disetujui dicatat sebagai otorisasi (tool + hash args + scope sesi/global) ber-TTL; aksi sama berikutnya melewati approval, `never_cache_tools` selalu fail-closed; tool `authz` (list/revoke/clear); config `authorization_memory:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Review learnings queue — pelajaran bot wajib approve (Fase 40) | Implemented (opt-in) | `ReviewLearningsStore` + tool `review_learnings` (tiko_runtime): pelajaran hasil interaksi bot diantrikan, hanya `approve` owner yang menulis ke `BotProfile.learnings` (cap per bot) yang disuntik setelah persona; config `review_learnings:` default **off**; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
+| Team Bot sharing & per-person permission (Fase 41) | Implemented | `BotProfile.owner`/`sharedWith`/`canUse`: bot ber-owner hanya bisa dipakai owner atau userKey yang di-share (fail-closed, backward-compatible bot lama tetap publik); `/bot share|unshare <id> <userkey>`; REST create/update bot menerima `owner`/`shared_with`; lihat [docs/18](18-AUDIT-PAPER-2026-11-28.md) |
 
 ## Kontrak dokumentasi
 

@@ -45,6 +45,9 @@ import 'self_evolution.dart';
 import 'memory_nudge.dart';
 import 'turn_redirect.dart';
 import 'bot_mode.dart';
+import 'routine.dart';
+import 'authorization_memory.dart';
+import 'review_learnings.dart';
 import 'onboarding.dart';
 import 'character_card.dart';
 import 'team_tool.dart';
@@ -750,6 +753,17 @@ class TikoRuntime {
   /// Tim bot persisten + laporan run orkestra (Fase C): `tiko team` /
   /// REST `/v1/teams`; tersimpan di `<dataDir>/teams/`.
   final BotTeamStore botTeamStore;
+
+  /// Fase 38 — perekam langkah tool-call untuk routines; null bila config
+  /// `routine:` off.
+  RoutineRecorder? routineRecorder;
+
+  /// Fase 39 — memori otorisasi smart approvals; null bila config
+  /// `authorization_memory:` off (approval selalu ditanyakan).
+  AuthorizationMemory? authorizationMemory;
+
+  /// Fase 40 — antrian review learnings; null bila config off.
+  ReviewLearningsStore? reviewLearningsStore;
 
   /// Indeks + laporan run riset otomatis (Fase D): `tiko research` /
   /// REST `/v1/research/runs`; tersimpan di `<dataDir>/research/`.
@@ -1831,6 +1845,84 @@ class TikoRuntime {
                 .then((r) => r.toJson()),
       ));
     }
+    // Fase 38 (routines): rekam + replay langkah tool-call; hanya bila
+    // config enabled — replay mengeksekusi tool nyata.
+    if (cfg.routine.enabled && rt.registry.get('routine') == null) {
+      final routineStore = RoutineStore(dataDir: dataDir);
+      await routineStore.load();
+      final recorder = RoutineRecorder(
+        maxSteps: cfg.routine.maxSteps,
+        maxArgsChars: cfg.routine.maxArgsChars,
+      );
+      rt.routineRecorder = recorder;
+      rt.registry.register(RoutineTool(
+        store: routineStore,
+        recorder: recorder,
+        runner: RoutineRunner(
+          store: routineStore,
+          maxSteps: cfg.routine.maxSteps,
+          emitEvent: rt.events.emit,
+          executeStep: (step, ctx) async {
+            final tool = rt.registry.get(step.tool);
+            if (tool == null) {
+              return const ToolResult(
+                callId: '',
+                content: 'tool tidak terdaftar untuk replay routine.',
+                isError: true,
+              );
+            }
+            return tool.run(step.args, ctx);
+          },
+        ),
+      ));
+    }
+    // Fase 39 (smart approvals): memori otorisasi hanya bila config enabled
+    // — mengubah semantik approval, jadi default off (fail-closed).
+    if (cfg.authorizationMemory.enabled &&
+        rt.registry.get('authz') == null) {
+      final authzMemory = AuthorizationMemory(
+        path: p.join(dataDir, 'authorization_memory.json'),
+        ttl: Duration(minutes: cfg.authorizationMemory.ttlMinutes),
+        maxEntries: cfg.authorizationMemory.maxEntries,
+        neverCacheTools:
+            Set.of(cfg.authorizationMemory.neverCacheTools),
+      );
+      await authzMemory.load();
+      rt.authorizationMemory = authzMemory;
+      rt.registry.register(AuthorizationTool(memory: authzMemory));
+    }
+    // Fase 40 (review learnings): antrian pelajaran bot wajib approve
+    // owner; approve menulis ke memori bot via callback fail-closed.
+    if (cfg.reviewLearnings.enabled &&
+        rt.registry.get('review_learnings') == null) {
+      final learnStore = ReviewLearningsStore(
+        path: p.join(dataDir, 'review_learnings.json'),
+        maxProposals: cfg.reviewLearnings.maxProposals,
+      );
+      await learnStore.load();
+      rt.reviewLearningsStore = learnStore;
+      rt.registry.register(ReviewLearningsTool(
+        store: learnStore,
+        onApproved: (proposal) async {
+          if (proposal.botId.isEmpty || rt.botStore.get(proposal.botId) == null) {
+            return false;
+          }
+          await rt.botStore.update(proposal.botId, (b) {
+            final next = List.of(b.learnings)..add(proposal.content);
+            if (next.length > cfg.reviewLearnings.maxLearningsPerBot) {
+              next.removeRange(
+                  0, next.length - cfg.reviewLearnings.maxLearningsPerBot);
+            }
+            return b.copyWith(learnings: next);
+          });
+          rt.events.emit('bot.learned', {
+            'bot': proposal.botId,
+            'proposal': proposal.id,
+          });
+          return true;
+        },
+      ));
+    }
     final snap = ResourceMonitor.capture(dataDir: dataDir);
     rt.lastResources = snap;
     rt.resourceProfile = snap.profile;
@@ -2859,7 +2951,7 @@ class TikoRuntime {
         }
         final botCmd = _parseBotCommand(text);
         if (botCmd != null) {
-          return await _botCommand(botCmd, sessionId: sessionId);
+          return await _botCommand(botCmd, sessionId: sessionId, userKey: userKey);
         }
         final pluginCmd = _parsePluginCommand(text);
         if (pluginCmd != null) {
@@ -2897,6 +2989,20 @@ class TikoRuntime {
       final boundBot = botStore.botFor(sessionId);
       if (!internalCommand && boundBot != null) {
         final bot = boundBot;
+        // Fase 41 — per-person permission: bot dengan owner hanya boleh
+        // dipakai owner atau userKey yang di-share (fail-closed).
+        if (!bot.canUse(userKey)) {
+          events.emit('bot.access_denied', {
+            'bot': bot.id,
+            'session': sessionId,
+            'user': userKey,
+          });
+          return ChatRunResult(
+            text: 'Bot "${bot.id}" tidak dibagikan ke Anda — turn ditolak '
+                'fail-closed. Minta owner: /bot share ${bot.id} <userkey>.',
+            success: false,
+          );
+        }
         if (bot.toolAllowlist.isEmpty) {
           return ChatRunResult(
             text: 'Bot "${bot.id}" belum memiliki tool allowlist — '
@@ -2970,8 +3076,10 @@ class TikoRuntime {
           expander: ContextExpander(workspaceRoot: workspace),
           toolFilter: toolFilter,
           // P1-2: Use the explicit personaPrompt parameter if provided,
-          // otherwise fall back to the bot's persona.
-          personaPrompt: personaPrompt ?? botStore.botFor(sessionId)?.persona,
+          // otherwise fall back to the bot's persona. Fase 40: pelajaran
+          // bot hasil review learnings disuntik setelah persona.
+          personaPrompt:
+              personaPrompt ?? _botPersonaFor(botStore.botFor(sessionId)),
           reflectionEngine: reflectionEngine,
           ragPipeline: ragPipeline,
           layeredMemory: layeredMemory,
@@ -3077,6 +3185,18 @@ class TikoRuntime {
             result.isError,
             detail: result.isError ? result.content : null,
           );
+          // Fase 38 (routines): rekam langkah sukses saat sesi sedang
+          // merekam — resep hanya berisi langkah terverifikasi tidak-error.
+          final routineRecorder = this.routineRecorder;
+          if (routineRecorder != null &&
+              routineRecorder.isRecording(session.id)) {
+            routineRecorder.record(
+              session.id,
+              call.name,
+              call.args,
+              isError: result.isError,
+            );
+          }
           evidence.recordCall(result.callId, call.name, result.content);
           unawaited(plugins.dispatchAfterToolCall(
             ToolHookInput(
@@ -3108,6 +3228,40 @@ class TikoRuntime {
         reply: (msg, out) async => replies.add(out),
         confirm: (call, sess) async {
           final risk = registry.get(call.name)?.spec.risk ?? 'high';
+          // Fase 39 (smart approvals): otorisasi tersimpan yang masih aktif
+          // untuk (tool, hash args, sesi) melewati approval — tool never-cache
+          // dan entry kedaluwarsa tetap fail-closed.
+          final authz = authorizationMemory;
+          final argsHash = stableArgsHash(Map<String, dynamic>.from(call.args)
+            ..removeWhere((key, _) => key.startsWith('_')));
+          if (authz != null) {
+            final check = authz.check(
+              tool: call.name,
+              argsHash: argsHash,
+              sessionId: sess.id,
+            );
+            if (check.authorized) {
+              final tok = capabilities.issue(CapabilityToken.mint(
+                sessionId: sess.id,
+                tool: call.name,
+                operations: [CapabilityToken.operationForTool(call.name)],
+                roots: CapabilityToken.boundRoots(
+                  call.name,
+                  call.args,
+                  workspaceRoot: workspace,
+                ),
+                domains: CapabilityToken.boundDomains(call.name, call.args),
+                arguments: call.args,
+              ));
+              call.args['_capability_id'] = tok.id;
+              events.emit('approval.auto_authorized', {
+                'tool': call.name,
+                'session': sess.id,
+                'expires_at': check.entry?.expiresAt.toIso8601String(),
+              });
+              return true;
+            }
+          }
           final req = await approvals.create(session: sess, call: call, risk: risk);
           events.emit('approval.pending', req.toJson());
 
@@ -3156,6 +3310,20 @@ class TikoRuntime {
           if (!ok) {
             events.emit('approval.denied', {'id': req.id, 'tool': call.name});
             return false;
+          }
+          // Fase 39: approval disetujui → simpan otorisasi (best-effort;
+          // kegagalan disk tidak memengaruhi keputusan turn ini).
+          if (authz != null) {
+            unawaited(() async {
+              try {
+                await authz.grant(
+                  tool: call.name,
+                  argsHash: argsHash,
+                  sessionId: sess.id,
+                  actor: 'approval:${req.id}',
+                );
+              } catch (_) {}
+            }());
           }
           final tok = capabilities.issue(CapabilityToken.mint(
             sessionId: sess.id,
@@ -4538,10 +4706,27 @@ class TikoRuntime {
     return _BotToolGate(base, Set.of(bot.toolAllowlist));
   }
 
+  /// Fase 40 — persona bot + pelajaran hasil review learnings (approved).
+  /// Persona kosong tanpa pelajaran mengembalikan null (tanpa persona).
+  String? _botPersonaFor(BotProfile? bot) {
+    if (bot == null) return null;
+    if (bot.learnings.isEmpty) {
+      return bot.persona.isEmpty ? null : bot.persona;
+    }
+    final buf = StringBuffer();
+    if (bot.persona.isNotEmpty) buf.writeln(bot.persona);
+    buf.write('Pelajaran yang disetujui owner:\n');
+    for (final learning in bot.learnings) {
+      buf.writeln('- $learning');
+    }
+    return buf.toString().trim();
+  }
+
   /// `/bot` — Bot Mode: persona persisten per chat (Hermes-parity).
   Future<ChatRunResult> _botCommand(
     _BotCommand cmd, {
     required String sessionId,
+    String userKey = 'local',
   }) async {
     switch (cmd.sub) {
       case 'list':
@@ -4564,7 +4749,7 @@ class TikoRuntime {
         }
         buf.write('\nAktifkan: /bot use <id> · nonaktif: /bot off · '
             'detail: /bot show <id> · allowlist tool: /bot allow <id> <tool> '
-            '· impor card: /bot import <path>');
+            '· impor card: /bot import <path> · bagikan: /bot share <id> <user>');
         return ChatRunResult(text: buf.toString(), success: true);
 
       case 'new':
@@ -4767,6 +4952,20 @@ class TikoRuntime {
             retryable: true,
           );
         }
+        // Fase 41 — per-person permission: hanya owner atau userKey yang
+        // di-share yang boleh mengaktifkan bot (fail-closed).
+        if (!botStore.get(cmd.id)!.canUse(userKey)) {
+          events.emit('bot.access_denied', {
+            'bot': cmd.id,
+            'session': sessionId,
+            'user': userKey,
+          });
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" tidak dibagikan ke Anda. '
+                'Minta owner menjalankan: /bot share ${cmd.id} <userkey>.',
+            success: false,
+          );
+        }
         await botStore.bind(sessionId, cmd.id);
         events.emit('bot.activated', {'bot': cmd.id, 'session': sessionId});
         final bot = botStore.get(cmd.id)!;
@@ -4791,6 +4990,67 @@ class TikoRuntime {
           success: true,
         );
 
+      case 'share':
+      case 'unshare':
+        // Fase 41 — Team Bot sharing (paritas Grok Bot 1.0): bagikan bot
+        // ke userKey lain. Hanya owner bot (atau bot publik) yang boleh
+        // membagikan; bot tanpa owner bisa dibagikan siapa pun.
+        final target = botStore.get(cmd.id);
+        if (target == null || cmd.rest.isEmpty) {
+          return ChatRunResult(
+            text: cmd.rest.isEmpty
+                ? 'Pemakaian: /bot ${cmd.sub} <id> <userkey>'
+                : 'Bot "${cmd.id}" tidak dikenal.',
+            success: false,
+            retryable: true,
+          );
+        }
+        if (target.owner.isNotEmpty && target.owner != userKey) {
+          return ChatRunResult(
+            text: 'Hanya owner "${target.owner}" yang boleh membagikan '
+                'bot "${cmd.id}".',
+            success: false,
+          );
+        }
+        final shareUser = cmd.rest.trim();
+        if (cmd.sub == 'share') {
+          if (target.sharedWith.contains(shareUser) || shareUser == target.owner) {
+            return ChatRunResult(
+              text: 'Bot "${cmd.id}" sudah dibagikan ke "$shareUser".',
+              success: true,
+            );
+          }
+          await botStore.update(
+            cmd.id,
+            (b) => b.copyWith(
+              sharedWith: [...b.sharedWith, shareUser],
+            ),
+          );
+          events.emit('bot.shared', {'bot': cmd.id, 'user': shareUser});
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" dibagikan ke "$shareUser". '
+                'Sesi dengan userKey itu kini bisa /bot use ${cmd.id}.',
+            success: true,
+          );
+        }
+        if (!target.sharedWith.contains(shareUser)) {
+          return ChatRunResult(
+            text: 'Bot "${cmd.id}" tidak dibagikan ke "$shareUser".',
+            success: false,
+          );
+        }
+        await botStore.update(
+          cmd.id,
+          (b) => b.copyWith(
+            sharedWith: b.sharedWith.where((u) => u != shareUser).toList(),
+          ),
+        );
+        events.emit('bot.unshared', {'bot': cmd.id, 'user': shareUser});
+        return ChatRunResult(
+          text: 'Bot "${cmd.id}" tidak lagi dibagikan ke "$shareUser".',
+          success: true,
+        );
+
       case 'show':
         final bot = botStore.get(cmd.id);
         if (bot == null) {
@@ -4806,6 +5066,9 @@ class TikoRuntime {
             'dibuat: ${b.createdAt.toIso8601String()}\n'
             'tool allowlist: '
             '${b.toolAllowlist.isEmpty ? '(kosong — turn ditolak fail-closed)' : b.toolAllowlist.join(', ')}\n'
+            'owner: ${b.owner.isEmpty ? '(publik)' : b.owner}\n'
+            'shared with: ${b.sharedWith.isEmpty ? '-' : b.sharedWith.join(', ')}\n'
+            'pelajaran: ${b.learnings.isEmpty ? '-' : b.learnings.length}\n'
             'persona:\n${b.persona.isEmpty ? '(kosong)' : b.persona}');
         return ChatRunResult(text: buf.toString(), success: true);
 
@@ -4828,7 +5091,7 @@ class TikoRuntime {
         return ChatRunResult(
           text: 'Sub-perintah /bot tidak dikenal: ${cmd.sub}. '
               'Gunakan: list, new, persona, model, allow, import, use, off, show, '
-              'delete.',
+              'share, unshare, delete.',
           success: false,
           retryable: true,
         );
