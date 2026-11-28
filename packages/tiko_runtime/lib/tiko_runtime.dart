@@ -31,6 +31,7 @@ export 'src/skill_benchmark.dart';
 export 'src/task_classifier.dart';
 export 'src/graph_rag_tool.dart';
 export 'src/group_chat.dart';
+export 'src/tool_maker_pipeline.dart';
 export 'src/idle_consolidation.dart';
 export 'src/raptor_tool.dart';
 export 'src/context_refs.dart';
