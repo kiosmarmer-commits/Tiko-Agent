@@ -331,6 +331,36 @@ Future<void> main(List<String> args) async {
     stdout.writeln('Telegram aktif');
   }
 
+  // Fase 42 — X (Twitter) mentions polling + reply (X API v2).
+  // Fail-closed: token + bot user id + allowlist author wajib.
+  final xBearer = Platform.environment['X_BEARER_TOKEN'];
+  final xBotUser = Platform.environment['X_BOT_USER_ID'];
+  if (xBearer != null && xBearer.isNotEmpty) {
+    if (xBotUser == null || xBotUser.isEmpty) {
+      stderr.writeln('X_BOT_USER_ID wajib saat X_BEARER_TOKEN diatur');
+      exit(1);
+    }
+    final xAllow = (Platform.environment['X_ALLOW'] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    if (xAllow.isEmpty) {
+      stderr.writeln('X_ALLOW wajib (author id yang boleh memicu agent)');
+      exit(1);
+    }
+    final xGateway = XGateway(
+      bearerToken: xBearer,
+      botUserId: xBotUser,
+      allowedUserIds: xAllow,
+      pollIntervalSec:
+          int.tryParse(Platform.environment['X_POLL_SEC'] ?? '') ?? 60,
+    );
+    addGateway(xGateway);
+    await xGateway.start();
+    stdout.writeln('X (Twitter) aktif');
+  }
+
   // WhatsApp + Slack webhooks (inbound via HttpApiServer, HMAC-verified).
   final waPhoneId = Platform.environment['WHATSAPP_PHONE_NUMBER_ID'];
   final waAccessToken = Platform.environment['WHATSAPP_ACCESS_TOKEN'];
