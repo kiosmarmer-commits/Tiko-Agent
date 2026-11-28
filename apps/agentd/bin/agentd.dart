@@ -1138,6 +1138,7 @@ Future<void> main(List<String> args) async {
             persona: (body['persona'] as String?) ?? '',
             model: body['model'] as String?,
             greeting: (body['greeting'] as String?) ?? '',
+            owner: (body['owner'] as String?)?.trim() ?? '',
           );
           final allowlist = (body['tool_allowlist'] as List?)
               ?.cast<String>()
@@ -1161,6 +1162,12 @@ Future<void> main(List<String> args) async {
             toolAllowlist: (body['tool_allowlist'] as List?)
                 ?.cast<String>()
                 .toList(),
+            owner: (body['owner'] as String?)?.trim(),
+            clearOwner: body.containsKey('owner') &&
+                (body['owner'] as String?)?.trim().isEmpty == true,
+            sharedWith: (body['shared_with'] as List?)?.cast<String>(),
+            clearSharedWith: body.containsKey('shared_with') &&
+                (body['shared_with'] as List?)?.isEmpty == true,
           );
           final saved = await rt.botStore.update(id, (_) => updated);
           return saved.toJson();

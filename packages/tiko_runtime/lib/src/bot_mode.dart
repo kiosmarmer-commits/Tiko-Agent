@@ -15,6 +15,9 @@ class BotProfile {
     this.model,
     this.greeting = '',
     this.toolAllowlist = const [],
+    this.owner = '',
+    this.sharedWith = const [],
+    this.learnings = const [],
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now().toUtc(),
@@ -30,8 +33,29 @@ class BotProfile {
   /// berarti belum diatur: turn ditolak fail-closed, bukan mewarisi semua
   /// tool host (sama dengan semantik BotRouter di agent_core).
   final List<String> toolAllowlist;
+
+  /// Fase 41 — pemilik bot (userKey). Kosong = tanpa batas kepemilikan
+  /// (kompatibel backward: bot lama tetap bisa dipakai siapa pun).
+  final String owner;
+
+  /// Fase 41 — userKey lain yang diizinkan memakai bot ini.
+  final List<String> sharedWith;
+
+  /// Fase 40 — pelajaran hasil review learnings yang sudah di-approve
+  /// owner; terbatas jumlahnya agar persona injection tetap ramping.
+  final List<String> learnings;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// True bila [userKey] boleh mengaktifkan bot ini. Owner kosong berarti
+  /// bot publik (backward-compatible); selain itu owner atau anggota
+  /// [sharedWith] saja.
+  bool canUse(String userKey) {
+    if (owner.isEmpty) return true;
+    if (userKey.isEmpty) return false;
+    if (userKey == owner) return true;
+    return sharedWith.contains(userKey);
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -40,6 +64,9 @@ class BotProfile {
         'model': model,
         'greeting': greeting,
         'tool_allowlist': toolAllowlist,
+        'owner': owner,
+        'shared_with': sharedWith,
+        'learnings': learnings,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -51,6 +78,9 @@ class BotProfile {
         model: json['model'] as String?,
         greeting: json['greeting'] as String? ?? '',
         toolAllowlist: _parseAllowlist(json['tool_allowlist']),
+        owner: json['owner'] is String ? json['owner'] as String : '',
+        sharedWith: _parseAllowlist(json['shared_with']),
+        learnings: _parseAllowlist(json['learnings']),
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
         updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? ''),
       );
@@ -63,6 +93,11 @@ class BotProfile {
     String? greeting,
     List<String>? toolAllowlist,
     bool clearToolAllowlist = false,
+    String? owner,
+    bool clearOwner = false,
+    List<String>? sharedWith,
+    bool clearSharedWith = false,
+    List<String>? learnings,
   }) =>
       BotProfile(
         id: id,
@@ -73,6 +108,11 @@ class BotProfile {
         toolAllowlist: clearToolAllowlist
             ? const []
             : (toolAllowlist ?? this.toolAllowlist),
+        owner: clearOwner ? '' : (owner ?? this.owner),
+        sharedWith: clearSharedWith
+            ? const []
+            : (sharedWith ?? this.sharedWith),
+        learnings: learnings ?? this.learnings,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
@@ -156,6 +196,7 @@ class BotStore {
     String persona = '',
     String? model,
     String greeting = '',
+    String owner = '',
   }) async {
     final profile = BotProfile(
       id: id,
@@ -163,6 +204,7 @@ class BotStore {
       persona: persona,
       model: model,
       greeting: greeting,
+      owner: owner,
     );
     _profiles[id] = profile;
     await _writeProfile(profile);
